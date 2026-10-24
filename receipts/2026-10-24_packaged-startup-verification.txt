@@ -1,0 +1,154 @@
+Packaged Electron startup crash: 2026-10-24 (JST)
+
+ROOT CAUSE
+Electron 44.9.0 compares the resolved helper executable path byte-for-byte
+against paths derived from CFBundleName before launching child processes.
+Original CFBundleName used NFC (デ = U+30C7; UTF-8 e3 83 87), while the
+helper executable paths used NFD (テ U+30C6 + U+3099; UTF-8 e3 83 86 e3 82 99).
+MakeAbsoluteFilePath resolved the actual NFD filename, so CHECK_EQ(program,
+child_path) in ElectronBrowserClient::AppendExtraCommandLineSwitches failed.
+The silent brk #0 / exit 133 is this failed comparison, not the concurrently
+running DNS resolver. LLDB captured both differing strings at that branch.
+
+Primary source (Electron v44.9.0, lines 517-548):
+https://github.com/electron/electron/blob/v44.9.0/shell/browser/electron_browser_client.cc#L517-L548
+Helper path construction:
+https://github.com/electron/electron/blob/v44.9.0/shell/app/electron_main_delegate_mac.mm#L27-L60
+
+CONTROLLED EXPERIMENTS
+1. Original saved Japanese bundle, unchanged application main.js: exit 133.
+2. Same original bundle with minimal app.asar (no VOICEVOX/fetch/sysctl,
+   protocol registration, BrowserWindow, or app.getPath): MINIMAL ENTER,
+   then exit 133, before MINIMAL READY.
+3. Same minimal bundle, re-signed in both cases; ONLY CFBundleName normalized
+   to NFD: exit 0, MINIMAL ENTER then MINIMAL READY.
+4. Same original full app, ONLY CFBundleName normalized to NFD and re-signed:
+   exit 0, H.264/AAC MP4, duration 3.547667 seconds.
+5. Changing only the main executable to ASCII, retaining original NFC
+   CFBundleName and NFD helpers: still exit 133.
+6. The partially edited current bundle had productName YukkuriEditor but
+   extendInfo.CFBundleName in Japanese: exit 133 with FATAL "Unable to find
+   helper app". Aligning only CFBundleName to YukkuriEditor launched for
+   the full 12-second observation (timeout exit 124).
+
+EXCLUDED CAUSES
+Source and initial current packaged Electron Framework were byte-identical:
+dff15be79e4a24dc573823d3fad6875535577b316364a5b94b39ef4b7cadb902
+Both used Electron 44.9.0, with identical fuses:
+RunAsNode=enabled; EnableCookieEncryption=disabled;
+EnableNodeOptionsEnvironmentVariable=enabled; EnableNodeCliInspectArguments=enabled;
+EnableEmbeddedAsarIntegrityValidation=disabled; OnlyLoadAppFromAsar=disabled;
+LoadBrowserProcessSpecificV8Snapshot=disabled; GrantFileProtocolExtraPrivileges=enabled.
+The saved original framework was re-signed, so its full hash differed, but its
+Mach-O UUID and framework version matched. Original saved app.asar main.js
+and current packaged app.asar main.js both exactly matched project main.js.
+macOS log show returned no useful app entries. LLDB, minimal reproduction,
+and the one-field normalization experiment established the failure condition.
+
+FIX
+package.json:
+- productName is Japanese in NFD, written as ゆっくりエテ\u3099ィタ to make
+  the combining dakuten explicit. Keep it NFD when editing the product name.
+- Remove the independent CFBundleName override; electron-builder now derives
+  the bundle/helper/executable names consistently from that same productName.
+- Keep user-visible CFBundleDisplayName as the conventional Japanese NFC name.
+- mac.identity="-", hardenedRuntime=false, notarize=false for local ad-hoc signing.
+- Keep the existing files allowlist; vendor/ remains excluded.
+No application JavaScript, HTML, CSS, or package-lock.json changed.
+
+BUILD
+npm run dist: exit 0 (electron-builder 26.18.0, Electron 44.9.0, mac arm64).
+Notarization explicitly skipped. No upload or publishing was performed.
+
+FINAL PACKAGED SMOKE (requested executable and output path)
+YE_SMOKE_OUT=/private/tmp/claude-501/-Users-USER------------/07529bfa-5715-4444-bf9c-c37229b6ab4d/scratchpad/pkg-smoke.mp4 ELECTRON_ENABLE_LOGGING=1 timeout 180 "dist/mac-arm64/ゆっくりエディタ.app/Contents/MacOS/ゆっくりエディタ" 2>&1 | grep SMOKE
+[57110:1024/200628.434928:INFO:CONSOLE:836] "SMOKE clips [["voice","ゆっくりしていってね",1.74],["voice","ずんだもんなのだ",1.6],["text","テスト",2]]", source: file:///Users/USER/%E9%96%8B%E7%99%BA/%E3%82%A2%E3%83%95%E3%82%9A%E3%83%AA%E3%82%B1%E3%83%BC%E3%82%B7%E3%83%A7%E3%83%B3/yukkuri-editor/dist/mac-arm64/%E3%82%86%E3%81%A3%E3%81%8F%E3%82%8A%E3%82%A8%E3%83%86%E3%82%99%E3%82%A3%E3%82%BF.app/Contents/Resources/app.asar/renderer.js (836)
+PACKAGE_PIPE_EXIT=0 0 0 (app / grep / tee)
+stream|codec_name=h264
+stream|codec_name=aac
+format|duration=3.509667
+
+SOURCE SMOKE
+YE_SMOKE_OUT=/private/tmp/claude-501/-Users-USER------------/07529bfa-5715-4444-bf9c-c37229b6ab4d/scratchpad/source-smoke.mp4 ELECTRON_ENABLE_LOGGING=1 timeout 180 npx --no-install electron . 2>&1 | grep SMOKE
+[58832:1024/200648.669922:INFO:CONSOLE:836] "SMOKE clips [["voice","ゆっくりしていってね",1.74],["voice","ずんだもんなのだ",1.6],["text","テスト",2]]", source: file:///Users/USER/%E9%96%8B%E7%99%BA/%E3%82%A2%E3%83%95%E3%82%9A%E3%83%AA%E3%82%B1%E3%83%BC%E3%82%B7%E3%83%A7%E3%83%B3/yukkuri-editor/renderer.js (836)
+SOURCE_PIPE_EXIT=0 0 0 (app / grep / tee)
+stream|codec_name=h264
+stream|codec_name=aac
+format|duration=3.534667
+
+SIGNATURE AND DMG
+codesign --verify --deep --strict "dist/mac-arm64/ゆっくりエディタ.app": exit 0
+Verbose validation: valid on disk; satisfies its Designated Requirement.
+Identifier=jp.local.yukkuri-editor; Signature=adhoc; arch=arm64.
+/Users/USER/開発/アプリケーション/yukkuri-editor/dist/YukkuriEditor-0.1.0-arm64.dmg: 129109673 bytes
+hdiutil verify: checksum is VALID.
+
+FINAL HELPER PATH CHECK
+CFBundleName: '\u3086\u3063\u304f\u308a\u30a8\u30c6\u3099\u30a3\u30bf'
+ゆっくりエディタ Helper: exists=True, byte_equal_realpath=True
+ゆっくりエディタ Helper (GPU): exists=True, byte_equal_realpath=True
+ゆっくりエディタ Helper (Renderer): exists=True, byte_equal_realpath=True
+ゆっくりエディタ Helper (Plugin): exists=True, byte_equal_realpath=True
+
+LLDB CAPTURE OF THE ACTUAL FAILED PATH COMPARISON
+(lldb) target create ".startup-debug/Minimal.app/Contents/MacOS/ゆっくりエディタ"
+Current executable set to '/Users/USER/開発/アプリケーション/yukkuri-editor/.startup-debug/Minimal.app/Contents/MacOS/ゆっくりエディタ' (arm64).
+(lldb) run
+2026-10-24 20:05:27.158830+0900 ゆっくりエディタ[44480:3649958] [Connection] Unable to get remoteObjectProxy, error: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-10-24 20:05:27.159187+0900 ゆっくりエディタ[44480:3649958] [Application] Error registering app with AppIntents framework: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+MINIMAL ENTER
+Process 44480 launched: '/Users/USER/開発/アプリケーション/yukkuri-editor/.startup-debug/Minimal.app/Contents/MacOS/ゆっくりエディタ' (arm64)
+Process 44480 stopped
+* thread #1, name = 'CrBrowserMain', queue = 'com.apple.main-thread', stop reason = EXC_BREAKPOINT (code=1, subcode=0x10ef6b1b4)
+       frame #0: 0x000000010ef6b1b4 Electron Framework`___lldb_unnamed_symbol_2ba4ac0 + 1222388
+Electron Framework`node::AsyncWrap::~AsyncWrap:
+->  0x10ef6b1b4 <+955828>: brk    #0
+    0x10ef6b1b8 <+955832>: hlt    #0
+    0x10ef6b1bc <+955836>: brk    #0x1
+    0x10ef6b1c0 <+955840>: ldr    x0, [sp, #0x50]
+Target 0: (ゆっくりエディタ) stopped.
+(lldb) memory read --format c --count 240 `*(char**)($fp-0x48)`
+0x11400362d80: /Users/USER/\xe9\x96\x8b\xe7\x99\xba/\xe3\x82\xa2\xe3\x83\x95\xe3\x82\x9a\xe3\x83\xaa\xe3\x82
+0x11400362da0: \xb1\xe3\x83\xbc\xe3\x82\xb7\xe3\x83\xa7\xe3\x83\xb3/yukkuri-editor/.st
+0x11400362dc0: artup-debug/Minimal.app/Contents
+0x11400362de0: /Frameworks/\xe3\x82\x86\xe3\x81\xa3\xe3\x81\x8f\xe3\x82\x8a\xe3\x82\xa8\xe3\x83\x86\xe3\x82
+0x11400362e00: \x99\xe3\x82\xa3\xe3\x82\xbf Helper.app/Contents/MacO
+0x11400362e20: S/\xe3\x82\x86\xe3\x81\xa3\xe3\x81\x8f\xe3\x82\x8a\xe3\x82\xa8\xe3\x83\x86\xe3\x82\x99\xe3\x82\xa3\xe3\x82\xbf He
+0x11400362e40: lper\0\0\0\xe2\0\0\0\0\x01\0\0\0\0\0\0\0\06:\x80\xff\xff\xff\xff\xff\xc9\xc5\x7f
+0x11400362e60: \0\0\0\0\0\0\0\0\x03\0\0\0\0\0\0\0
+(lldb) memory read --format c --count 240 `*(char**)($fp-0x68)`
+0x11400362cb0: /Users/USER/\xe9\x96\x8b\xe7\x99\xba/\xe3\x82\xa2\xe3\x83\x95\xe3\x82\x9a\xe3\x83\xaa\xe3\x82
+0x11400362cd0: \xb1\xe3\x83\xbc\xe3\x82\xb7\xe3\x83\xa7\xe3\x83\xb3/yukkuri-editor/.st
+0x11400362cf0: artup-debug/Minimal.app/Contents
+0x11400362d10: /Frameworks/\xe3\x82\x86\xe3\x81\xa3\xe3\x81\x8f\xe3\x82\x8a\xe3\x82\xa8\xe3\x83\x87\xe3\x82
+0x11400362d30: \xa3\xe3\x82\xbf Helper.app/Contents/MacOS/\xe3
+0x11400362d50: \x82\x86\xe3\x81\xa3\xe3\x81\x8f\xe3\x82\x8a\xe3\x82\xa8\xe3\x83\x87\xe3\x82\xa3\xe3\x82\xbf Helper\0p
+0x11400362d70: /\0\0\0\0\0\0\0\0\0\0\0\x01\0\0\0/Users/USER/\xe9\x96\x8b\xe7\x99
+0x11400362d90: \xba/\xe3\x82\xa2\xe3\x83\x95\xe3\x82\x9a\xe3\x83\xaa\xe3\x82
+(lldb) process kill
+Process 44480 exited with status = 9 (0x00000009) killed
+
+BUILD OUTPUT
+
+> yukkuri-editor@0.1.0 dist
+> electron-builder --mac dmg --arm64
+
+  • electron-builder  version=26.18.0 os=27.2.0
+  • loaded configuration  file=package.json ("build" field)
+  • executing @electron/rebuild  electronVersion=44.9.0 arch=arm64 buildFromSource=false workspaceRoot=/Users/USER/開発/アプリケーション/yukkuri-editor projectDir=./ appDir=./
+  • installing native dependencies  arch=arm64
+  • completed installing native dependencies
+  • packaging       platform=darwin arch=arm64 electron=44.9.0 appOutDir=dist/mac-arm64
+  • downloaded      label=electron progress=100%
+  • downloaded electron zip extracted successfully  output=/Users/USER/開発/アプリケーション/yukkuri-editor/dist/mac-arm64
+  • searching for node modules  pm=npm searchDir=/Users/USER/開発/アプリケーション/yukkuri-editor
+  • no node modules found in collection, trying next search directory  pm=npm searchDir=/Users/USER/開発/アプリケーション/yukkuri-editor
+  • searching for node modules  pm=traversal searchDir=/Users/USER/開発/アプリケーション/yukkuri-editor
+  • using manual traversal of node_modules to build dependency tree
+  • no node modules found in collection, trying next search directory  pm=traversal searchDir=/Users/USER/開発/アプリケーション/yukkuri-editor
+  • no node modules returned while searching directories  searchDirectories=[""]
+  • default Electron icon is used  reason=application icon is not set
+  • signing         file=dist/mac-arm64/ゆっくりエディタ.app platform=darwin type=distribution identityName=- identityHash=none provisioningProfile=none
+  • skipped macOS notarization  reason=`notarize` options were set explicitly `false`
+  • building        target=DMG arch=arm64 file=dist/YukkuriEditor-0.1.0-arm64.dmg
+  • building block map  blockMapFile=dist/YukkuriEditor-0.1.0-arm64.dmg.blockmap
