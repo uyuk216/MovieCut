@@ -250,6 +250,7 @@ ipcMain.handle('finish-export', async (_e, webmBytes, outPath, fps, codec) => {
   const ffmpeg = requireFfmpeg(); // 先に確認(なければ一時ファイルも作らない)
   const tmp = path.join(os.tmpdir(), `yukkuri-export-${Date.now()}.webm`);
   fs.writeFileSync(tmp, Buffer.from(webmBytes));
+  try {
   await new Promise((resolve, reject) => {
     const p = spawn(ffmpeg, ['-y', '-i', tmp, '-r', String(fps), ...(VT_ARGS[codec] ?? VT_ARGS.h264), '-pix_fmt', 'yuv420p', '-c:a', 'aac_at', '-b:a', '256k', '-movflags', '+faststart', outPath], {
       env: { ...process.env, PATH: `${path.dirname(ffmpeg)}:/opt/homebrew/bin:/usr/local/bin:${process.env.PATH}` },
@@ -259,8 +260,10 @@ ipcMain.handle('finish-export', async (_e, webmBytes, outPath, fps, codec) => {
     p.on('error', (e) => reject(e));
     p.on('close', (code) => (code === 0 ? resolve() : reject(new Error(err.slice(-600)))));
   });
-  fs.unlinkSync(tmp);
-  shell.showItemInFolder(outPath);
+  } finally {
+    fs.rmSync(tmp, { force: true }); // 失敗しても一時ファイルを残さない
+  }
+  if (!process.env.YE_SMOKE_OUT) shell.showItemInFolder(outPath);
   return outPath;
 });
 

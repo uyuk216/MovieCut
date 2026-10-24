@@ -70,6 +70,7 @@ function getImage(p) {
 function getVideo(clip) {
   let v = videos.get(clip.id);
   if (!v || v.dataset.src !== clip.src) {
+    if (v) disposeVideo(clip.id); // 素材が変わったら古い要素を捨てる
     v = document.createElement('video');
     v.dataset.src = clip.src;
     v.crossOrigin = 'anonymous';
@@ -86,6 +87,15 @@ function getVideo(clip) {
   }
   return v;
 }
+
+// 動画の要素を片付ける(消したクリップや新規・読み込みで残さない)
+function disposeVideo(id) {
+  const v = videos.get(id);
+  if (!v) return;
+  try { v.pause(); v._gain?.disconnect(); v.removeAttribute('src'); v.load(); } catch {}
+  videos.delete(id);
+}
+function disposeAllVideos() { [...videos.keys()].forEach(disposeVideo); }
 
 async function getBuffer(p) {
   if (buffers.has(p)) return buffers.get(p);
@@ -147,6 +157,7 @@ async function regenerateVoice(clip) {
   try {
     clip.src = await synth(ch, clip.text);
     clip.duration = (await getBuffer(clip.src)).duration + 0.15;
+    clip.offset = 0; // 新しい音声は頭から(前の音声の切り詰め位置を引きずらない)
     status('');
   } catch (e) { status('音声エラー: ' + e.message); }
   renderAll();
@@ -278,12 +289,17 @@ function syncVideosPaused() {
 // ---------- 再生 ----------
 let sources = [];
 let clockBase = 0, tBase = 0, raf = 0, onEnded = null;
+let playGen = 0, starting = false, exporting = false; // 読み込み待ちの間に stop/seek/連打されても二重に鳴らさない
 
 async function play(fromT = t, until = projectEnd()) {
-  if (playing) return;
-  await actx.resume();
+  if (playing || starting) return;
+  starting = true;
+  const gen = ++playGen;
+  await actx.resume().catch(() => {});
   // 音声を先に読み込んでおく
   await Promise.all(allClips().filter((c) => c.type === 'audio' || c.type === 'voice').map((c) => getBuffer(c.src).catch(() => null)));
+  if (gen !== playGen) return; // 待っている間に止められた
+  starting = false;
   playing = true;
   $('#btn-play').textContent = '⏸';
   t = fromT;
@@ -300,6 +316,7 @@ async function play(fromT = t, until = projectEnd()) {
     s.connect(g).connect(master);
     const delay = Math.max(0, c.start - fromT);
     const into = (c.offset ?? 0) + Math.max(0, fromT - c.start);
+    if (into >= buf.duration) continue; // 素材の長さを超えた位置からは鳴らさない
     s.start(clockBase + delay, into, Math.max(0, c.duration - Math.max(0, fromT - c.start)));
     sources.push(s);
   }
@@ -324,6 +341,7 @@ async function play(fromT = t, until = projectEnd()) {
 }
 
 function stop() {
+  playGen++; starting = false;
   if (!playing) return;
   playing = false;
   cancelAnimationFrame(raf);
@@ -336,12 +354,14 @@ function stop() {
 }
 
 function seek(nt) {
+  if (exporting) return;
   t = Math.max(0, nt);
   if (playing) { stop(); play(t); } else { syncVideosPaused(); draw(); }
 }
 
 // ---------- タイムライン ----------
 function renderTimeline() {
+  const tl = $('#timeline'), sx = tl.scrollLeft, sy = tl.scrollTop; // 作り直してもスクロール位置を保つ
   const end = Math.max(projectEnd() + 30, 60);
   const width = end * pps;
   const ruler = $('#ruler');
@@ -371,6 +391,8 @@ function renderTimeline() {
     for (const c of tr.clips) body.appendChild(clipEl(c));
     tracksEl.appendChild(row);
   });
+  tl.scrollLeft = sx; tl.scrollTop = sy;
+  if (!playing) syncVideosPaused(); // 止まっている間は、動かした動画の絵も合わせる
   draw();
 }
 
@@ -406,6 +428,7 @@ function snapTime(time, self) {
 function startDrag(e, c, mode) {
   e.preventDefault();
   e.stopPropagation();
+  document.activeElement?.blur?.(); // 入力途中の欄を確定してから作り直す(preventDefault で blur されないため)
   select(c.id);
   const x0 = e.clientX, start0 = c.start, dur0 = c.duration, off0 = c.offset ?? 0;
   const srcLen = c.type === 'video' || c.type === 'audio' || c.type === 'voice' ? c.srcDuration ?? Infinity : Infinity;
@@ -425,9 +448,12 @@ function startDrag(e, c, mode) {
       const ne = snapTime(start0 + Math.max(0.05, dur0 + dt), c);
       c.duration = Math.min(Math.max(0.05, ne - start0), srcLen - off0);
     } else {
+      const timed = c.type === 'video' || c.type === 'audio' || c.type === 'voice'; // 画像・文字は素材の時間軸がない
       const ns = snapTime(Math.min(start0 + dur0 - 0.05, Math.max(0, start0 + dt)), c);
-      const d = Math.max(-off0, ns - start0);
-      c.start = start0 + d; c.duration = dur0 - d; c.offset = off0 + d;
+      // 吸着で最小の長さを割らないよう上限も押さえる。素材の頭(offset 0)より左へは広げられない
+      const d = Math.min(dur0 - 0.05, Math.max(timed ? Math.max(-off0, -start0) : -start0, ns - start0));
+      c.start = start0 + d; c.duration = dur0 - d;
+      if (timed) c.offset = off0 + d;
     }
     renderTimeline();
   };
@@ -438,6 +464,7 @@ function startDrag(e, c, mode) {
 
 $('#timeline').addEventListener('mousedown', (e) => {
   if (e.target.closest('.clip, .track-head')) return;
+  document.activeElement?.blur?.();
   const rect = $('#timeline').getBoundingClientRect();
   const x = e.clientX - rect.left + $('#timeline').scrollLeft - 90;
   if (x < 0) return;
@@ -491,8 +518,8 @@ function renderProps() {
   if (!c) { box.innerHTML = '<p class="hint">クリップを選ぶと設定が出ます。</p>'; return; }
   const set = (k) => (v) => (c[k] = v);
   box.append(
-    field('開始(秒)', +c.start.toFixed(3), set('start'), { type: 'number', step: 0.01 }),
-    field('長さ(秒)', +c.duration.toFixed(3), set('duration'), { type: 'number', step: 0.01 }),
+    field('開始(秒)', +c.start.toFixed(3), (v) => (c.start = Math.max(0, v)), { type: 'number', step: 0.01 }),
+    field('長さ(秒)', +c.duration.toFixed(3), (v) => (c.duration = Math.max(0.05, v)), { type: 'number', step: 0.01 }),
   );
   if (c.type === 'voice') {
     box.append(
@@ -529,13 +556,14 @@ function renderProps() {
 
 // ---------- キャラクター ----------
 let speakers = [];
-async function loadSpeakers() {
+async function loadSpeakers(retried = false) {
   try {
     speakers = await window.api.voicevoxSpeakers(project.voicevoxUrl);
     status(`VOICEVOX につながりました(${speakers.length}キャラ)`);
   } catch {
     status('VOICEVOX を起動しています…');
-    if (await window.api.voicevoxLaunch()) return loadSpeakers();
+    // 起動し直すのは1回だけ(設定した URL がつながらないときに無限に繰り返さない)
+    if (!retried && await window.api.voicevoxLaunch()) return loadSpeakers(true);
     status('VOICEVOX が見つからないか起動できません(未インストールなら右下の案内を見てください)');
   }
   renderChars();
@@ -564,7 +592,13 @@ function renderCharProps(ch) {
   box.append(
     field('名前', ch.name, set('name')),
     field('字幕の縁の色', ch.color, set('color'), { type: 'color' }),
-    field('音声エンジン', ch.engine, (v) => { ch.engine = v; renderCharProps(ch); renderChars(); }, { options: [['voicevox', 'VOICEVOX'], ['aquestalk', 'ゆっくり (AquesTalk)']] }),
+    field('音声エンジン', ch.engine, (v) => {
+      ch.engine = v;
+      // エンジンごとに「速さ」の単位が違う(VOICEVOX は 1 が標準、ゆっくりは 100)ので、切り替え時に合わせる
+      if (v === 'voicevox') { if (!(ch.speed <= 5)) ch.speed = 1; ch.pitch ??= 0; ch.intonation ??= 1; ch.speaker ??= 3; }
+      else { if (!(ch.speed > 5)) ch.speed = 100; ch.voice ||= aqPresets[0] ?? 'れいむ'; }
+      renderCharProps(ch); renderChars();
+    }, { options: [['voicevox', 'VOICEVOX'], ['aquestalk', 'ゆっくり (AquesTalk)']] }),
   );
   if (ch.engine === 'voicevox') {
     const opts = speakers.flatMap((s) => s.styles.map((st) => [st.id, `${s.name}（${st.name}）`]));
@@ -602,10 +636,15 @@ function renderCharProps(ch) {
   del.textContent = 'このキャラを消す';
   del.className = 'wide';
   del.onclick = () => {
-    if (!confirm(`${ch.name} を消しますか？`)) return;
+    if (project.characters.length <= 1) return alert('最後の1人は消せません(台本からの音声作成に必要です)');
+    const mine = allClips().filter((c) => c.type === 'voice' && c.charId === ch.id);
+    if (!confirm(`${ch.name} を消しますか？` + (mine.length ? `\nこのキャラのセリフ ${mine.length} 個もタイムラインから消えます。` : ''))) return;
+    stop();
+    for (const tr of project.tracks) tr.clips = tr.clips.filter((c) => !(c.type === 'voice' && c.charId === ch.id));
+    if (mine.some((c) => c.id === selectedClipId)) selectedClipId = null;
     project.characters = project.characters.filter((c) => c !== ch);
     selectedCharId = project.characters[0]?.id;
-    renderChars(); renderProps(); draw();
+    renderAll();
   };
   box.append(
     imgBtn('立ち絵(口閉じ)', 'imgClosed'), imgBtn('立ち絵(口開き)', 'imgOpen'), r,
@@ -632,7 +671,9 @@ const kindOf = (p) => {
   return 'video';
 };
 
+const MEDIA_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'mp3', 'wav', 'm4a', 'aac', 'ogg', 'mp4', 'mov', 'webm', 'm4v'];
 async function addMedia(paths) {
+  paths = paths.filter((p) => MEDIA_EXT.includes(p.split('.').pop().toLowerCase())); // ドロップされた関係ない種類のファイルは無視
   for (const p of paths) {
     const type = kindOf(p);
     const dur = type === 'image' ? 5 : await probeDuration(p, type === 'audio' ? 'audio' : 'video');
@@ -672,6 +713,7 @@ function deleteSelected() {
   const tr = trackOf(selectedClipId);
   if (!tr) return;
   tr.clips = tr.clips.filter((c) => c.id !== selectedClipId);
+  disposeVideo(selectedClipId);
   selectedClipId = null;
   renderAll();
 }
@@ -680,12 +722,12 @@ $('#btn-split').onclick = splitAtPlayhead;
 $('#btn-delete').onclick = deleteSelected;
 $('#btn-add-track').onclick = () => { project.tracks.push({ id: uid(), name: `レイヤー${project.tracks.length + 1}`, clips: [] }); renderTimeline(); };
 $('#btn-script').onclick = scriptToTimeline;
-$('#btn-play').onclick = () => (playing ? stop() : play(t >= projectEnd() ? 0 : t));
+$('#btn-play').onclick = () => { if (exporting) return; if (playing || starting) stop(); else play(t >= projectEnd() ? 0 : t); };
 $('#btn-home').onclick = () => seek(0);
 $('#zoom').oninput = (e) => { pps = +e.target.value; renderTimeline(); };
 
 document.addEventListener('keydown', (e) => {
-  if (e.target.matches('input, textarea, select')) return;
+  if (exporting || e.target.matches('input, textarea, select')) return;
   if (e.code === 'Space') { e.preventDefault(); $('#btn-play').click(); }
   else if (e.key === 's' && !e.metaKey) splitAtPlayhead();
   else if (e.key === 'Delete' || e.key === 'Backspace') deleteSelected();
@@ -703,10 +745,14 @@ async function saveProject() {
 async function openProject() {
   const r = await window.api.loadProject();
   if (!r) return;
+  let loaded;
+  try { loaded = JSON.parse(r.json); } catch (e) { return alert('プロジェクトを読めませんでした:\n' + e.message); }
   stop();
-  project = { ...newProject(), ...JSON.parse(r.json) };
+  project = { ...newProject(), ...loaded };
+  if (!project.characters?.length) project.characters = newProject().characters;
+  if (!project.tracks?.length) project.tracks = newProject().tracks;
   projectPath = r.path;
-  videos.clear();
+  disposeAllVideos();
   selectedClipId = null;
   selectedCharId = project.characters[0]?.id;
   t = 0;
@@ -719,7 +765,7 @@ $('#btn-save').onclick = saveProject;
 $('#btn-open').onclick = openProject;
 $('#btn-new').onclick = () => {
   if (!confirm('今のプロジェクトを閉じて新しく始めますか？')) return;
-  stop(); project = newProject(); projectPath = null; selectedClipId = null; selectedCharId = project.characters[0].id; t = 0;
+  stop(); disposeAllVideos(); project = newProject(); projectPath = null; selectedClipId = null; selectedCharId = project.characters[0].id; t = 0;
   resizeCanvas(); renderAll();
 };
 
@@ -761,12 +807,24 @@ $('#btn-popout').onclick = () => {
 
 // ---------- 書き出し ----------
 async function exportVideo() {
+  if (exporting) return;
   const end = projectEnd();
   if (end <= 0) return alert('タイムラインが空です');
+  exporting = true;
+  try { await exportVideoInner(end); } finally { exporting = false; overlay(null); }
+}
+async function exportVideoInner(end) {
   const out = window.api.smokeOut ?? (await window.api.chooseExportPath());
   if (!out) return;
   stop();
-  await Promise.all(allClips().filter((c) => c.type === 'voice' || c.type === 'audio').map((c) => getBuffer(c.src)));
+  try {
+    await actx.resume(); // 録音の音声が止まったままにならないように、録り始める前に動かしておく
+    await Promise.all(allClips().filter((c) => c.type === 'voice' || c.type === 'audio').map((c) => getBuffer(c.src)));
+  } catch (e) {
+    console.log('SMOKE export error', e.message);
+    return alert('音声素材を読み込めませんでした:\n' + e.message);
+  }
+  t = 0; syncVideosPaused(); draw(); // 録り始めの絵を先頭にそろえる
   const stream = new MediaStream([...canvas.captureStream(project.fps).getVideoTracks(), ...recordDest.stream.getAudioTracks()]);
   // 一時ファイルは画質を落とさないよう高いビットレートで録る(最終の圧縮は VideoToolbox)
   const pixels = project.width * project.height;
@@ -782,6 +840,7 @@ async function exportVideo() {
   clearInterval(progress);
   rec.stop();
   await done;
+  stream.getVideoTracks().forEach((tr) => tr.stop()); // captureStream を毎回解放する
   overlay('MP4 に変換中…(M5 のハードウェアエンコーダを使っています)');
   try {
     const bytes = new Uint8Array(await new Blob(chunks, { type: 'video/webm' }).arrayBuffer());
@@ -790,7 +849,7 @@ async function exportVideo() {
   } catch (e) {
     console.log('SMOKE export error', e.message);
     alert('変換に失敗しました:\n' + e.message);
-  } finally { overlay(null); }
+  }
 }
 $('#btn-export').onclick = exportVideo;
 
