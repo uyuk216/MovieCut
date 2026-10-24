@@ -15,17 +15,17 @@
     <button id="btn-media">素材を追加</button>
     <button id="btn-text">テキスト</button>
     <button id="btn-blur">ぼかし範囲</button>
+    <span class="sep"></span>
     <button id="btn-split" title="S">分割</button>
     <button id="btn-delete" title="Delete">削除</button>
-    <span class="sep"></span>
+    <span id="status"></span>
     <button id="btn-settings">設定</button>
     <button id="btn-export" class="primary">MP4 書き出し</button>
-    <span id="status"></span>
   </header>
 
   <main id="workspace">
     <aside id="left">
-      <section>
+      <section class="chars">
         <h3>キャラクター <button id="btn-add-char" class="small">＋</button></h3>
         <div id="char-list"></div>
       </section>
@@ -53,10 +53,13 @@
     </aside>
   </main>
 
+  <div id="tl-resize" title="ドラッグで高さを変える"></div>
+
   <footer id="timeline-area">
     <div id="tl-tools">
       <button id="btn-add-track" class="small">＋レイヤー</button>
-      <label>拡大 <input id="zoom" type="range" min="10" max="400" value="80" /></label>
+      <label>拡大 <input id="zoom" type="range" min="5" max="400" value="40" /></label>
+      <button id="btn-fit" class="small">全体表示</button>
       <label><input id="snap" type="checkbox" checked /> 吸着</label>
     </div>
     <div id="timeline"><div id="ruler"></div><div id="tracks"></div><div id="playhead"></div></div>
@@ -77,7 +80,7 @@
         <label>幅 <input id="set-w" type="number" /></label>
         <label>高さ <input id="set-h" type="number" /></label>
         <label>FPS <input id="set-fps" type="number" /></label>
-        <label>背景色 <input id="set-bg" type="color" /></label>
+        <label>背景色 <input id="set-bg" type="color" /> <select id="set-bg-preset"><option value="#000000">黒</option><option value="#ffffff">白</option><option value="#00b140">緑（クロマキー）</option><option value="custom">自由</option></select></label>
         <label>書き出し形式 <select id="set-codec">
           <option value="h264">H.264（どこでも再生できる）</option>
           <option value="hevc">HEVC（同じ画質で小さい・4K向け）</option>

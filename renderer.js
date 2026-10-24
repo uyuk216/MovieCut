@@ -18,7 +18,7 @@ const AQP_COMMAND = '/Applications/AquesTalkPlayer.app/Contents/MacOS/AquesTalkP
 const KYOKO_COMMAND = 'say -v Kyoko -o {out} --data-format=LEI16@24000 {text}';
 function newProject() {
   return {
-    width: 1920, height: 1080, fps: 60, bg: '#00b140', codec: 'h264',
+    width: 1920, height: 1080, fps: 60, bg: '#000000', codec: 'h264',
     voicevoxUrl: 'http://127.0.0.1:50021',
     // AquesTalkPlayer Mac版(ネイティブ)。入っていなければ起動時に Kyoko へ切り替える
     aquestalkCommand: AQP_COMMAND,
@@ -40,7 +40,7 @@ let selectedClipId = null;
 let selectedCharId = project.characters[0].id;
 let t = 0;
 let playing = false;
-let pps = 80; // 1秒あたりの画素数
+let pps = 40; // 1秒あたりの画素数
 
 // ---------- 素材キャッシュ ----------
 const images = new Map(); // path -> HTMLImageElement
@@ -376,12 +376,13 @@ function seek(nt) {
 // ---------- タイムライン ----------
 function renderTimeline() {
   const tl = $('#timeline'), sx = tl.scrollLeft, sy = tl.scrollTop; // 作り直してもスクロール位置を保つ
-  const end = Math.max(projectEnd() + 30, 60);
+  const end = Math.max(projectEnd() + 10, 30);
   const width = end * pps;
   const ruler = $('#ruler');
   ruler.style.width = width + 'px';
   ruler.innerHTML = '';
-  const step = pps >= 150 ? 1 : pps >= 40 ? 5 : pps >= 20 ? 10 : 30;
+  // 目盛りの間隔が約70px以上になる最小の区切りを選ぶ
+  const step = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600].find((x) => x * pps >= 70) ?? 1200;
   for (let s = 0; s <= end; s += step) {
     const d = document.createElement('div');
     d.className = 'tick';
@@ -395,9 +396,9 @@ function renderTimeline() {
   project.tracks.forEach((tr, ti) => {
     const row = document.createElement('div');
     row.className = 'track';
-    row.innerHTML = `<div class="track-head">${esc(tr.name)}<br>
+    row.innerHTML = `<div class="track-head"><span class="tn">${esc(tr.name)}</span><div class="tg">
       <label><input type="checkbox" data-k="hidden" ${tr.hidden ? 'checked' : ''}>隠す</label>
-      <label><input type="checkbox" data-k="muted" ${tr.muted ? 'checked' : ''}>消音</label></div>
+      <label><input type="checkbox" data-k="muted" ${tr.muted ? 'checked' : ''}>消音</label></div></div>
       <div class="track-body" style="width:${width}px"></div>`;
     row.querySelectorAll('input').forEach((cb) => (cb.onchange = () => { tr[cb.dataset.k] = cb.checked; draw(); }));
     const body = row.querySelector('.track-body');
@@ -405,6 +406,7 @@ function renderTimeline() {
     for (const c of tr.clips) body.appendChild(clipEl(c));
     tracksEl.appendChild(row);
   });
+  $('#playhead').style.height = ruler.offsetHeight + tracksEl.offsetHeight + 'px'; // スクロールした全高に届かせる
   tl.scrollLeft = sx; tl.scrollTop = sy;
   if (!playing) syncVideosPaused(); // 止まっている間は、動かした動画の絵も合わせる
   draw();
@@ -758,7 +760,49 @@ $('#btn-add-track').onclick = () => { project.tracks.push({ id: uid(), name: `�
 $('#btn-script').onclick = scriptToTimeline;
 $('#btn-play').onclick = () => { if (exporting) return; if (playing || starting) stop(); else play(t >= projectEnd() ? 0 : t); };
 $('#btn-home').onclick = () => seek(0);
-$('#zoom').oninput = (e) => { pps = +e.target.value; renderTimeline(); };
+// 拡大率を変える。anchorX(タイムライン内のpx)の時刻を動かさない
+function setZoom(v, anchorX) {
+  const z = $('#zoom'), tl = $('#timeline');
+  const nv = Math.min(+z.max, Math.max(+z.min, v));
+  const ax = anchorX ?? 90;
+  const time = (ax + tl.scrollLeft - 90) / pps;
+  pps = nv; z.value = String(nv);
+  renderTimeline();
+  tl.scrollLeft = Math.max(0, time * pps + 90 - ax);
+}
+$('#zoom').oninput = (e) => setZoom(+e.target.value);
+// 全体表示: 動画の長さ(最短10秒)が見えている幅に収まる拡大率にする
+$('#btn-fit').onclick = () => {
+  const tl = $('#timeline');
+  setZoom((tl.clientWidth - 90 - 12) / Math.max(10, projectEnd()));
+  tl.scrollLeft = 0;
+};
+// スクロールバーが無いので、ホイールで動かせるようにする
+$('#timeline').addEventListener('wheel', (e) => {
+  const tl = $('#timeline');
+  if (e.ctrlKey || e.metaKey) { // ピンチ(ctrl付きwheel)とCtrl/Cmd+ホイールで拡大縮小
+    e.preventDefault();
+    setZoom(pps * Math.exp(-e.deltaY * 0.01), e.clientX - tl.getBoundingClientRect().left);
+  } else if (e.deltaX === 0 && e.deltaY !== 0 && tl.scrollHeight <= tl.clientHeight) {
+    tl.scrollLeft += e.deltaY; // 縦に動けないときは普通のホイールで横へ(Shift+ホイールはChromiumが横にする)
+  }
+}, { passive: false });
+// タイムラインの高さをドラッグで変える(localStorageに覚える)
+{
+  const area = document.documentElement;
+  const apply = (h) => area.style.setProperty('--tl-h', Math.round(Math.min(innerHeight * 0.55, Math.max(160, h))) + 'px');
+  try { const h = +localStorage.getItem('tlHeight'); if (h) apply(h); } catch {}
+  $('#tl-resize').addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    const handle = $('#tl-resize'); handle.classList.add('drag');
+    const move = (ev) => apply(innerHeight - ev.clientY);
+    const up = () => {
+      handle.classList.remove('drag'); removeEventListener('mousemove', move); removeEventListener('mouseup', up);
+      try { localStorage.setItem('tlHeight', parseInt(area.style.getPropertyValue('--tl-h'), 10)); } catch {}
+    };
+    addEventListener('mousemove', move); addEventListener('mouseup', up);
+  });
+}
 
 document.addEventListener('keydown', (e) => {
   if (exporting || e.target.matches('input, textarea, select')) return;
@@ -806,12 +850,19 @@ $('#btn-new').onclick = () => {
 // ---------- 設定 ----------
 $('#btn-settings').onclick = () => {
   $('#set-w').value = project.width; $('#set-h').value = project.height; $('#set-fps').value = project.fps;
-  $('#set-bg').value = project.bg; $('#set-vv').value = project.voicevoxUrl; $('#set-aq').value = project.aquestalkCommand;
+  $('#set-bg').value = project.bg; bgPresetFromColor(); $('#set-vv').value = project.voicevoxUrl; $('#set-aq').value = project.aquestalkCommand;
   $('#set-codec').value = project.codec;
   const key = `${project.width}x${project.height}`;
   $('#set-size').value = [...$('#set-size').options].some((o) => o.value === key) ? key : 'custom';
   $('#dlg-settings').showModal();
 };
+// 背景色の候補(選ぶと色が入り、色を直接いじると「自由」になる)
+function bgPresetFromColor() {
+  const sel = $('#set-bg-preset'), c = $('#set-bg').value.toLowerCase();
+  sel.value = [...sel.options].some((o) => o.value === c) ? c : 'custom';
+}
+$('#set-bg-preset').onchange = (e) => { if (e.target.value !== 'custom') $('#set-bg').value = e.target.value; };
+$('#set-bg').oninput = () => { $('#set-bg-preset').value = 'custom'; };
 $('#set-size').onchange = (e) => {
   if (e.target.value === 'custom') return;
   const [w, h] = e.target.value.split('x');

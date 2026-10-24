@@ -44,6 +44,8 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 1400,
     height: 900,
+    minWidth: 1100,
+    minHeight: 700,
     ...(saved ?? {}),
     title: 'ゆっくりエディタ',
     backgroundColor: '#1e1f24',
