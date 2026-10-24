@@ -232,7 +232,20 @@ function draw() {
       if (!active(c)) continue;
       ctx.save();
       ctx.globalAlpha = c.opacity ?? 1;
-      if (c.type === 'image' || c.type === 'video') {
+      // ぼかし(クリップごと)。save/restore の内側なので他のクリップには漏れない
+      if (c.blur > 0 && ['image', 'video', 'text'].includes(c.type)) ctx.filter = `blur(${Math.min(100, c.blur)}px)`;
+      if (c.type === 'blur') {
+        // ぼかし範囲: ここまでに描いたキャンバス(下のレイヤー)を、図形の内側だけぼかして描き直す。
+        // 制限: 立ち絵・字幕はトラックの後に描くので、ぼかし範囲では隠せない(トラック上のクリップだけが対象)
+        const bw = (c.w ?? 0.3) * W, bh = (c.h ?? 0.3) * H, bx = (c.x ?? 0.5) * W, by = (c.y ?? 0.5) * H;
+        ctx.beginPath();
+        if (c.shape === 'ellipse') ctx.ellipse(bx, by, bw / 2, bh / 2, 0, 0, Math.PI * 2);
+        else ctx.rect(bx - bw / 2, by - bh / 2, bw, bh);
+        ctx.clip();
+        ctx.globalAlpha = 1;
+        ctx.filter = `blur(${Math.max(0, c.strength ?? 24)}px)`;
+        ctx.drawImage(canvas, 0, 0);
+      } else if (c.type === 'image' || c.type === 'video') {
         const el = c.type === 'image' ? getImage(c.src) : getVideo(c);
         const w0 = c.type === 'image' ? el?.naturalWidth : el.videoWidth;
         const h0 = c.type === 'image' ? el?.naturalHeight : el.videoHeight;
@@ -247,6 +260,7 @@ function draw() {
         speaking.set(c.charId, c);
         if (c.subtitle) subtitles.push(c);
       }
+      ctx.filter = 'none';
       ctx.restore();
     }
   }
@@ -399,6 +413,7 @@ function renderTimeline() {
 function clipLabel(c) {
   if (c.type === 'voice') return `${charById(c.charId)?.name ?? '?'}: ${c.text}`;
   if (c.type === 'text') return `T ${c.text}`;
+  if (c.type === 'blur') return 'ぼかし範囲';
   return c.src.split('/').pop();
 }
 
@@ -546,6 +561,18 @@ function renderProps() {
     r.append(field('横位置', c.x ?? 0.5, set('x'), { type: 'number', step: 0.01, live: true }), field('縦位置', c.y ?? 0.5, set('y'), { type: 'number', step: 0.01, live: true }));
     box.append(r, field('不透明度', c.opacity ?? 1, set('opacity'), { type: 'range', step: 0.01, live: true }));
     box.lastChild.querySelector('input').max = 1;
+    box.append(field('ぼかし', c.blur ?? 0, set('blur'), { type: 'range', step: 1, live: true }));
+    box.lastChild.querySelector('input').max = 100;
+  }
+  if (c.type === 'blur') {
+    const r1 = document.createElement('div'); r1.className = 'row';
+    r1.append(field('中心 横', c.x ?? 0.5, set('x'), { type: 'number', step: 0.01, live: true }), field('中心 縦', c.y ?? 0.5, set('y'), { type: 'number', step: 0.01, live: true }));
+    const r2 = document.createElement('div'); r2.className = 'row';
+    r2.append(field('幅', c.w ?? 0.3, set('w'), { type: 'number', step: 0.01, live: true }), field('高さ', c.h ?? 0.3, set('h'), { type: 'number', step: 0.01, live: true }));
+    box.append(r1, r2,
+      field('強さ(px)', c.strength ?? 24, set('strength'), { type: 'number', step: 1, live: true }),
+      field('形', c.shape ?? 'rect', set('shape'), { options: [['rect', '四角'], ['ellipse', '楕円']] }),
+    );
   }
   if (c.type === 'image' || c.type === 'video') box.append(field('拡大', c.scale ?? 1, set('scale'), { type: 'number', step: 0.05, live: true }));
   if (c.type === 'video' || c.type === 'audio') {
@@ -695,6 +722,13 @@ document.addEventListener('drop', (e) => {
 $('#btn-text').onclick = () => {
   const tr = project.tracks[project.tracks.length - 1];
   const c = { id: uid(), type: 'text', text: 'テキスト', start: t, duration: 3, x: 0.5, y: 0.15, fontSize: 96, color: '#ffffff', outline: '#000000', font: FONTS[0], opacity: 1 };
+  tr.clips.push(c);
+  select(c.id);
+};
+
+$('#btn-blur').onclick = () => {
+  const tr = project.tracks[project.tracks.length - 1];
+  const c = { id: uid(), type: 'blur', start: t, duration: 3, x: 0.5, y: 0.5, w: 0.3, h: 0.3, strength: 24, shape: 'rect' };
   tr.clips.push(c);
   select(c.id);
 };
@@ -892,6 +926,7 @@ loadSpeakers().then(async () => {
   $('#script').value = '霊夢: ゆっくりしていってね\nずんだもん: ずんだもんなのだ';
   await scriptToTimeline();
   project.tracks[4].clips.push({ id: uid(), type: 'text', text: 'テスト', start: 0, duration: 2, x: 0.5, y: 0.2, fontSize: 120, color: '#ffffff', outline: '#000000', font: FONTS[0], opacity: 1 });
+  if (window.api.smokeBlur) project.tracks[project.tracks.length - 1].clips.push({ id: uid(), type: 'blur', start: 0, duration: 2, x: 0.5, y: 0.15, w: 0.5, h: 0.25, strength: 30, shape: 'rect' });
   console.log('SMOKE clips', JSON.stringify(allClips().map((c) => [c.type, c.text, +c.duration.toFixed(2)])));
   await exportVideo();
   window.api.quit();

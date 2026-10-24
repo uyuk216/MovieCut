@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('api', {
   depsStatus: invoke('deps-status'),
   displays: invoke('displays'),
   smokeOut: process.env.YE_SMOKE_OUT || null,
+  smokeBlur: process.env.YE_SMOKE_BLUR === '1',
   quit: () => ipcRenderer.invoke('quit'),
   pathOf: (file) => webUtils.getPathForFile(file),
 });
