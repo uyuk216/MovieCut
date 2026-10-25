@@ -15,7 +15,7 @@ extension ProjectModel {
         return true
     }
 
-    /// 「再生位置より前を切り落とす」(⌥[)。
+    /// 「再生位置より前を切り落とす」(⌥⌘[)。
     @discardableResult
     func trimSelectedBeforePlayhead() -> Bool {
         guard let id = selectedClipId, !isLocked, let p = ClipEditing.trimBefore(in: project, clipId: id, at: currentTime) else { return false }
@@ -23,7 +23,7 @@ extension ProjectModel {
         return true
     }
 
-    /// 「再生位置より後ろを切り落とす」(⌥])。
+    /// 「再生位置より後ろを切り落とす」(⌥⌘])。
     @discardableResult
     func trimSelectedAfterPlayhead() -> Bool {
         guard let id = selectedClipId, !isLocked, let p = ClipEditing.trimAfter(in: project, clipId: id, at: currentTime) else { return false }
@@ -31,7 +31,7 @@ extension ProjectModel {
         return true
     }
 
-    /// 「すき間を詰めて削除」(⇧⌫): 同じレイヤーの後ろのクリップを左へ詰める。選択は外れる。
+    /// 「すき間を詰めて削除」(⌥⌘⌫): 同じレイヤーの後ろのクリップを左へ詰める。選択は外れる。
     @discardableResult
     func rippleDeleteSelected() -> Bool {
         guard let id = selectedClipId, !isLocked, let p = ClipEditing.rippleDelete(in: project, clipId: id) else { return false }
@@ -107,7 +107,7 @@ extension ProjectModel {
         MarkerEditing.nearest(in: project, to: currentTime, tolerance: markerTolerance)
     }
 
-    /// 「マーカーを追加」(⌥⌘M): 再生位置に「マーカーN」。同じ場所にもう在るときは足さない。
+    /// 「マーカーを追加」(⌃⌘M): 再生位置に「マーカーN」。同じ場所にもう在るときは足さない。
     @discardableResult
     func addMarkerAtPlayhead() -> String? {
         guard !isLocked, markerNearPlayhead == nil else { return nil }

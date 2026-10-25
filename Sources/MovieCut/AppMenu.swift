@@ -194,19 +194,19 @@ enum AppMenuSpec {
         [MenuItemSpec(command: .split, title: "クリップを分割", shortcut: nil, enabled: s.canEdit && s.canSplit, checked: nil, hint: "S"),
          MenuItemSpec(command: .duplicate, title: "クリップを複製", shortcut: cmd("d"), enabled: s.canEdit && s.hasSelection, checked: nil),
          MenuItemSpec(command: .delete, title: "クリップを削除", shortcut: nil, enabled: s.canEdit && s.hasSelection, checked: nil, hint: "⌫"),
-         MenuItemSpec(command: .rippleDelete, title: "すき間を詰めて削除", shortcut: MenuShortcut(key: .delete, modifiers: .shift), enabled: s.canEdit && s.hasSelection, checked: nil)]
+         MenuItemSpec(command: .rippleDelete, title: "すき間を詰めて削除", shortcut: MenuShortcut(key: .delete, modifiers: [.option, .command]), enabled: s.canEdit && s.hasSelection, checked: nil)]
     }
 
     static func clipTrim(_ s: MenuState) -> [MenuItemSpec] {
-        [MenuItemSpec(command: .trimBefore, title: "再生位置より前を切り落とす", shortcut: MenuShortcut(key: "[", modifiers: .option), enabled: s.canEdit && s.canTrim, checked: nil),
-         MenuItemSpec(command: .trimAfter, title: "再生位置より後ろを切り落とす", shortcut: MenuShortcut(key: "]", modifiers: .option), enabled: s.canEdit && s.canTrim, checked: nil)]
+        [MenuItemSpec(command: .trimBefore, title: "再生位置より前を切り落とす", shortcut: MenuShortcut(key: "[", modifiers: [.option, .command]), enabled: s.canEdit && s.canTrim, checked: nil),
+         MenuItemSpec(command: .trimAfter, title: "再生位置より後ろを切り落とす", shortcut: MenuShortcut(key: "]", modifiers: [.option, .command]), enabled: s.canEdit && s.canTrim, checked: nil)]
     }
 
     static func clipNavigate(_ s: MenuState) -> [MenuItemSpec] {
-        [MenuItemSpec(command: .prevClip, title: "前のクリップを選択", shortcut: MenuShortcut(key: .leftArrow, modifiers: .option), enabled: s.canEdit && s.hasPrevClip, checked: nil),
-         MenuItemSpec(command: .nextClip, title: "次のクリップを選択", shortcut: MenuShortcut(key: .rightArrow, modifiers: .option), enabled: s.canEdit && s.hasNextClip, checked: nil),
-         MenuItemSpec(command: .moveLayerUp, title: "選択クリップを上のレイヤーへ", shortcut: MenuShortcut(key: .upArrow, modifiers: .option), enabled: s.canEdit && s.canMoveUp, checked: nil),
-         MenuItemSpec(command: .moveLayerDown, title: "選択クリップを下のレイヤーへ", shortcut: MenuShortcut(key: .downArrow, modifiers: .option), enabled: s.canEdit && s.canMoveDown, checked: nil)]
+        [MenuItemSpec(command: .prevClip, title: "前のクリップを選択", shortcut: MenuShortcut(key: "[", modifiers: .command), enabled: s.canEdit && s.hasPrevClip, checked: nil),
+         MenuItemSpec(command: .nextClip, title: "次のクリップを選択", shortcut: MenuShortcut(key: "]", modifiers: .command), enabled: s.canEdit && s.hasNextClip, checked: nil),
+         MenuItemSpec(command: .moveLayerUp, title: "選択クリップを上のレイヤーへ", shortcut: MenuShortcut(key: "[", modifiers: [.shift, .command]), enabled: s.canEdit && s.canMoveUp, checked: nil),
+         MenuItemSpec(command: .moveLayerDown, title: "選択クリップを下のレイヤーへ", shortcut: MenuShortcut(key: "]", modifiers: [.shift, .command]), enabled: s.canEdit && s.canMoveDown, checked: nil)]
     }
 
     static func clipLayerAndVoice(_ s: MenuState) -> [MenuItemSpec] {
@@ -248,8 +248,8 @@ enum AppMenuSpec {
     static func gotoNeighbours(_ s: MenuState) -> [MenuItemSpec] {
         [MenuItemSpec(command: .prevEdit, title: "前のクリップの境目へ", shortcut: opt(.leftArrow, command: true), enabled: s.canEdit && s.hasPrevEdit, checked: nil),
          MenuItemSpec(command: .nextEdit, title: "次のクリップの境目へ", shortcut: opt(.rightArrow, command: true), enabled: s.canEdit && s.hasNextEdit, checked: nil),
-         MenuItemSpec(command: .prevLine, title: "前のセリフへ", shortcut: MenuShortcut(key: .leftArrow, modifiers: .control), enabled: s.canEdit && s.hasPrevLine, checked: nil),
-         MenuItemSpec(command: .nextLine, title: "次のセリフへ", shortcut: MenuShortcut(key: .rightArrow, modifiers: .control), enabled: s.canEdit && s.hasNextLine, checked: nil)]
+         MenuItemSpec(command: .prevLine, title: "前のセリフへ", shortcut: MenuShortcut(key: .leftArrow, modifiers: [.control, .command]), enabled: s.canEdit && s.hasPrevLine, checked: nil),
+         MenuItemSpec(command: .nextLine, title: "次のセリフへ", shortcut: MenuShortcut(key: .rightArrow, modifiers: [.control, .command]), enabled: s.canEdit && s.hasNextLine, checked: nil)]
     }
 
     static func gotoTime(_ s: MenuState) -> MenuItemSpec {
@@ -257,7 +257,7 @@ enum AppMenuSpec {
     }
 
     static func markerItems(_ s: MenuState) -> [MenuItemSpec] {
-        [MenuItemSpec(command: .addMarker, title: "マーカーを追加", shortcut: opt("m", command: true), enabled: s.canEdit && !s.markerAtPlayhead, checked: nil),
+        [MenuItemSpec(command: .addMarker, title: "マーカーを追加", shortcut: MenuShortcut(key: "m", modifiers: [.control, .command]), enabled: s.canEdit && !s.markerAtPlayhead, checked: nil),
          MenuItemSpec(command: .renameMarker, title: "マーカーを名前変更…", shortcut: nil, enabled: s.canEdit && s.markerAtPlayhead, checked: nil),
          MenuItemSpec(command: .prevMarker, title: "前のマーカーへ", shortcut: opt(.upArrow, command: true), enabled: s.canEdit && s.hasPrevMarker, checked: nil),
          MenuItemSpec(command: .nextMarker, title: "次のマーカーへ", shortcut: opt(.downArrow, command: true), enabled: s.canEdit && s.hasNextMarker, checked: nil),

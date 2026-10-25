@@ -50,9 +50,9 @@ final class MenuM7Tests: XCTestCase {
         ])
         XCTAssertEqual(groups.map { $0.map(\.shortcut) }, [
             [sc("t", [.command, .shift]), sc("b", [.command, .shift])],
-            [nil, sc("d", .command), nil, sc(.delete, .shift)],
-            [sc("[", .option), sc("]", .option)],
-            [sc(.leftArrow, .option), sc(.rightArrow, .option), sc(.upArrow, .option), sc(.downArrow, .option)],
+            [nil, sc("d", .command), nil, sc(.delete, [.option, .command])],
+            [sc("[", [.option, .command]), sc("]", [.option, .command])],
+            [sc("[", .command), sc("]", .command), sc("[", [.shift, .command]), sc("]", [.shift, .command])],
             [sc("l", [.command, .shift]), sc("r", [.command, .option])],
         ])
         XCTAssertEqual(groups[1].map(\.hint), ["S", nil, "⌫", nil], "分割・削除は通常キー(KeyRouter)なのでヒントだけ")
@@ -64,11 +64,11 @@ final class MenuM7Tests: XCTestCase {
         XCTAssertEqual(AppMenuSpec.gotoEnds(s).map(\.hint), ["Home", "End"])
         XCTAssertEqual(AppMenuSpec.gotoEnds(s).map(\.shortcut), [nil, nil])
         XCTAssertEqual(AppMenuSpec.gotoNeighbours(s).map(\.title), ["前のクリップの境目へ", "次のクリップの境目へ", "前のセリフへ", "次のセリフへ"])
-        XCTAssertEqual(AppMenuSpec.gotoNeighbours(s).map(\.shortcut), [sc(.leftArrow, [.option, .command]), sc(.rightArrow, [.option, .command]), sc(.leftArrow, .control), sc(.rightArrow, .control)])
+        XCTAssertEqual(AppMenuSpec.gotoNeighbours(s).map(\.shortcut), [sc(.leftArrow, [.option, .command]), sc(.rightArrow, [.option, .command]), sc(.leftArrow, [.control, .command]), sc(.rightArrow, [.control, .command])])
         XCTAssertEqual(AppMenuSpec.gotoTime(s).title, "時間を指定して移動…")
         XCTAssertEqual(AppMenuSpec.gotoTime(s).shortcut, sc("j", .command))
         XCTAssertEqual(AppMenuSpec.markerItems(s).map(\.title), ["マーカーを追加", "マーカーを名前変更…", "前のマーカーへ", "次のマーカーへ", "マーカーを削除", "すべてのマーカーを消去"])
-        XCTAssertEqual(AppMenuSpec.markerItems(s).map(\.shortcut), [sc("m", [.option, .command]), nil, sc(.upArrow, [.option, .command]), sc(.downArrow, [.option, .command]), nil, nil])
+        XCTAssertEqual(AppMenuSpec.markerItems(s).map(\.shortcut), [sc("m", [.control, .command]), nil, sc(.upArrow, [.option, .command]), sc(.downArrow, [.option, .command]), nil, nil])
     }
 
     func testExportMenuAndStatusItemToggleSpec() {
