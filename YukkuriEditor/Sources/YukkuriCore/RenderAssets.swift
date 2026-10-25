@@ -13,6 +13,8 @@ public final class RenderAssets {
     private var missingEnvelopes: Set<String> = []
     private var generators: [String: AVAssetImageGenerator] = [:]
     private var missingVideos: Set<String> = []
+    private var exportMode = false
+    private var sequentials: [String: SequentialVideoFrames] = [:]
 
     public init() {}
 
@@ -65,8 +67,39 @@ public final class RenderAssets {
         return env
     }
 
-    /// 動画の time 秒のフレーム。パスごとに generator を持つ。
+    /// 書き出しモード: 動画フレームを AVAssetReader で前から順に読む(時刻が戻ったときだけ generator)。
+    public func beginExportMode() {
+        lock.lock(); exportMode = true; lock.unlock()
+    }
+
+    /// 書き出しモードを終えて、読み取り用のリソースを手放す。
+    public func endExportMode() {
+        lock.lock()
+        exportMode = false
+        let seqs = sequentials
+        sequentials = [:]
+        lock.unlock()
+        seqs.values.forEach { $0.close() }
+    }
+
+    /// 動画の time 秒のフレーム。通常はパスごとに generator、書き出しモードでは順次読み。
     public func videoFrame(path: String, time: Double) -> CGImage? {
+        lock.lock()
+        if exportMode, !missingVideos.contains(path) {
+            var seq = sequentials[path]
+            if seq == nil {
+                seq = SequentialVideoFrames(url: URL(fileURLWithPath: path)) { [unowned self] t in self.generatorFrame(path: path, time: t) }
+                sequentials[path] = seq
+            }
+            lock.unlock()
+            return seq?.frame(at: time)
+        }
+        lock.unlock()
+        return generatorFrame(path: path, time: time)
+    }
+
+    /// AVAssetImageGenerator で任意時刻のフレームを取る(正確・低速)。
+    func generatorFrame(path: String, time: Double) -> CGImage? {
         lock.lock()
         if missingVideos.contains(path) { lock.unlock(); return nil }
         var gen = generators[path]

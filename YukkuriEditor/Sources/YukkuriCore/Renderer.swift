@@ -138,7 +138,7 @@ public struct Renderer {
             let w = w0 * fit, h = h0 * fit
             drawCG(ctx, im, CGRect(x: c.xOrDefault * W - w / 2, y: c.yOrDefault * H - h / 2, width: w, height: h))
         case .text:
-            drawText(c.text ?? "", x: c.xOrDefault * W, y: c.yOrDefault * H, size: c.fontSize ?? 80, color: c.colorOrDefault, font: c.fontOrDefault, outline: c.outlineOrDefault, ctx: ctx)
+            drawText(c.text ?? "", x: c.xOrDefault * W, y: c.yOrDefault * H, size: c.fontSize ?? 80, color: c.colorOrDefault, font: c.fontOrDefault, outline: c.outlineOrDefault, ctx: ctx, cacheable: c.opacityOrDefault >= 1 || c.blurOrDefault > 0)
         default:
             break
         }
@@ -188,36 +188,121 @@ public struct Renderer {
     // MARK: 文字
 
     /// renderer.js drawText と同じ: 中央寄せ・複数行(行間 size*1.2)・縁(0.22)→白(0.1)→塗り。
-    func drawText(_ text: String, x: Double, y: Double, size: Double, color: String, font: String, outline: String, ctx: CGContext) {
+    /// cacheable(不透明度 1)のときは、行ごとにビットマップへ一度だけ描いて、以後はそれを貼る(書き出しの高速化)。
+    /// ビットマップには小数部の位置も含めて描くので、直接描いたときと同じ見た目になる。
+    func drawText(_ text: String, x: Double, y: Double, size: Double, color: String, font: String, outline: String, ctx: CGContext, cacheable: Bool = true) {
         guard size > 0 else { return }
         let lines = text.components(separatedBy: "\n")
         let fillC = parseHexColor(color) ?? parseHexColor("#ffffff")!
         let outC = parseHexColor(outline) ?? parseHexColor("#000000")!
-        let white = parseHexColor("#ffffff")!
-        let f = TextFont(name: font, size: size)
+        let f = TextCache.font(name: font, size: size)
         for (i, ln) in lines.enumerated() {
             let yy = y + (Double(i) - Double(lines.count - 1) / 2) * size * 1.2
-            let line = f.layout(ln)
+            let line = TextCache.layout(f, font: font, line: ln)
             // textBaseline = middle: 基準線は (ascent - descent) / 2 だけ下
             let baseline = yy + (f.ascent - f.descent) / 2
-            ctx.saveGState()
-            ctx.translateBy(x: CGFloat(x - line.width / 2), y: CGFloat(baseline))
-            ctx.scaleBy(x: 1, y: -1)  // グリフは y 上向きなので戻す
-            ctx.setLineJoin(.round)
-            // 疑似ボールドは輪郭を太らせる(各パスの線幅に extra を足す)
-            let extra = f.syntheticBoldExtra
-            ctx.addPath(line.path)
-            ctx.setLineWidth(CGFloat(size * 0.22 + extra)); ctx.setStrokeColor(outC); ctx.strokePath()
-            ctx.addPath(line.path)
-            ctx.setLineWidth(CGFloat(size * 0.1 + extra)); ctx.setStrokeColor(white); ctx.strokePath()
-            ctx.addPath(line.path)
-            ctx.setFillColor(fillC); ctx.fillPath()
-            if extra > 0 {
-                ctx.addPath(line.path)
-                ctx.setLineWidth(CGFloat(extra)); ctx.setStrokeColor(fillC); ctx.strokePath()
+            let ox = x - line.width / 2
+            if cacheable, !line.path.isEmpty {
+                let ix = floor(ox), iy = floor(baseline)
+                let fx = ox - ix, fy = baseline - iy
+                let key = "\(font)|\(size)|\(ln)|\(color)|\(outline)|\(fx)|\(fy)"
+                if let bm = TextCache.bitmap(key: key, build: { Renderer.rasterizeLine(line, f, size: size, fill: fillC, outline: outC, fx: fx, fy: fy) }) {
+                    drawCG(ctx, bm.image, CGRect(x: ix + bm.x, y: iy + bm.y, width: Double(bm.image.width), height: Double(bm.image.height)))
+                    continue
+                }
             }
+            ctx.saveGState()
+            ctx.translateBy(x: CGFloat(ox), y: CGFloat(baseline))
+            Renderer.paintLine(line, f, size: size, fill: fillC, outline: outC, ctx: ctx)
             ctx.restoreGState()
         }
+    }
+
+    /// 原点(基準線の左端)に移動済みの ctx(左上原点)へ 1 行を描く。
+    static func paintLine(_ line: (path: CGPath, width: Double), _ f: TextFont, size: Double, fill: CGColor, outline: CGColor, ctx: CGContext) {
+        let white = parseHexColor("#ffffff")!
+        ctx.saveGState()
+        ctx.scaleBy(x: 1, y: -1)  // グリフは y 上向きなので戻す
+        ctx.setLineJoin(.round)
+        // 疑似ボールドは輪郭を太らせる(各パスの線幅に extra を足す)
+        let extra = f.syntheticBoldExtra
+        ctx.addPath(line.path)
+        ctx.setLineWidth(CGFloat(size * 0.22 + extra)); ctx.setStrokeColor(outline); ctx.strokePath()
+        ctx.addPath(line.path)
+        ctx.setLineWidth(CGFloat(size * 0.1 + extra)); ctx.setStrokeColor(white); ctx.strokePath()
+        ctx.addPath(line.path)
+        ctx.setFillColor(fill); ctx.fillPath()
+        if extra > 0 {
+            ctx.addPath(line.path)
+            ctx.setLineWidth(CGFloat(extra)); ctx.setStrokeColor(fill); ctx.strokePath()
+        }
+        ctx.restoreGState()
+    }
+
+    /// 1 行を透明なビットマップに描く。原点(基準線の左端)から小数部 (fx, fy) ずれた位置で描き、
+    /// 戻り値の x, y は「整数化した原点からのビットマップ左上のずれ」。
+    static func rasterizeLine(_ line: (path: CGPath, width: Double), _ f: TextFont, size: Double, fill: CGColor, outline: CGColor, fx: Double, fy: Double) -> (image: CGImage, x: Double, y: Double)? {
+        let bb = line.path.boundingBoxOfPath
+        guard !bb.isNull, !bb.isInfinite else { return nil }
+        let pad = (size * 0.22 + f.syntheticBoldExtra) / 2 + 3
+        // y 下向きの局所座標(原点 = 基準線の左端)
+        let minX = floor(bb.minX - pad + fx), maxX = ceil(bb.maxX + pad + fx)
+        let minY = floor(-bb.maxY - pad + fy), maxY = ceil(-bb.minY + pad + fy)
+        let w = Int(maxX - minX), h = Int(maxY - minY)
+        guard w > 0, h > 0, w * h <= 16_000_000,
+              let c = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0, space: sRGB, bitmapInfo: bitmapInfo) else { return nil }
+        c.interpolationQuality = .high
+        c.translateBy(x: 0, y: CGFloat(h))
+        c.scaleBy(x: 1, y: -1)
+        c.translateBy(x: CGFloat(-minX + fx), y: CGFloat(-minY + fy))
+        paintLine(line, f, size: size, fill: fill, outline: outline, ctx: c)
+        guard let img = c.makeImage() else { return nil }
+        return (img, minX, minY)
+    }
+}
+
+// MARK: - 文字のキャッシュ
+
+/// フォントとグリフ輪郭のキャッシュ。書き出しでは同じ文字を毎コマ描くので、CoreText のレイアウトを使い回す。
+enum TextCache {
+    private static let lock = NSLock()
+    private static var fonts: [String: TextFont] = [:]
+    private static var layouts: [String: (path: CGPath, width: Double)] = [:]
+
+    private static var bitmaps: [String: (image: CGImage, x: Double, y: Double)] = [:]
+
+    static func bitmap(key: String, build: () -> (image: CGImage, x: Double, y: Double)?) -> (image: CGImage, x: Double, y: Double)? {
+        lock.lock()
+        if let b = bitmaps[key] { lock.unlock(); return b }
+        lock.unlock()
+        guard let b = build() else { return nil }
+        lock.lock()
+        if bitmaps.count >= 48 { bitmaps.removeAll() }  // 編集中に位置や文字が変わり続けても増えすぎないように
+        bitmaps[key] = b
+        lock.unlock()
+        return b
+    }
+
+    static func font(name: String, size: Double) -> TextFont {
+        let key = "\(name)|\(size)"
+        lock.lock(); defer { lock.unlock() }
+        if let f = fonts[key] { return f }
+        let f = TextFont(name: name, size: size)
+        fonts[key] = f
+        return f
+    }
+
+    static func layout(_ f: TextFont, font: String, line: String) -> (path: CGPath, width: Double) {
+        let key = "\(font)|\(f.size)|\(line)"
+        lock.lock()
+        if let l = layouts[key] { lock.unlock(); return l }
+        lock.unlock()
+        let l = f.layout(line)
+        lock.lock()
+        if layouts.count > 512 { layouts.removeAll() }  // 編集で文字が変わり続けても増えすぎないように
+        layouts[key] = l
+        lock.unlock()
+        return l
     }
 }
 
