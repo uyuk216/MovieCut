@@ -1,0 +1,113 @@
+{
+ "width": 3840,
+ "height": 2160,
+ "fps": 60,
+ "bg": "#000000",
+ "codec": "hevc",
+ "voicevoxUrl": "http://127.0.0.1:50021",
+ "aquestalkCommand": "/Applications/AquesTalkPlayer.app/Contents/MacOS/AquesTalkPlayer -P {voice} -T {text} -W {out}",
+ "characters": [
+  {
+   "id": "vco9c7j8",
+   "name": "霊夢",
+   "engine": "aquestalk",
+   "voice": "れいむ",
+   "speed": 100,
+   "color": "#e8384f",
+   "imgClosed": null,
+   "imgOpen": null,
+   "x": 0.18,
+   "y": 0.72,
+   "scale": 1,
+   "flip": true,
+   "alwaysShow": true
+  },
+  {
+   "id": "jkfyiuq5",
+   "name": "魔理沙",
+   "engine": "aquestalk",
+   "voice": "まりさ",
+   "speed": 100,
+   "color": "#f2c53d",
+   "imgClosed": null,
+   "imgOpen": null,
+   "x": 0.82,
+   "y": 0.72,
+   "scale": 1,
+   "flip": false,
+   "alwaysShow": true
+  },
+  {
+   "id": "1x4n8me9",
+   "name": "ずんだもん",
+   "engine": "voicevox",
+   "speaker": 3,
+   "speed": 1,
+   "pitch": 0,
+   "intonation": 1,
+   "color": "#7ac943",
+   "imgClosed": null,
+   "imgOpen": null,
+   "x": 0.82,
+   "y": 0.72,
+   "scale": 1,
+   "flip": false,
+   "alwaysShow": true
+  }
+ ],
+ "tracks": [
+  {
+   "id": "jdqrsyab",
+   "name": "レイヤー1",
+   "clips": [
+    {
+     "id": "dcckleee",
+     "type": "voice",
+     "start": 0,
+     "duration": 1.1295,
+     "offset": 0,
+     "src": "/private/tmp/claude-501/-Users-USER------------/07529bfa-5715-4444-bf9c-c37229b6ab4d/scratchpad/menu-check-userdata/voices/d92a85f4a0f15292da03d7635ed6eff987853470.wav",
+     "text": "テストです",
+     "charId": "vco9c7j8",
+     "volume": 1,
+     "subtitle": true,
+     "fontSize": 128,
+     "font": "Hiragino Maru Gothic ProN"
+    }
+   ]
+  },
+  {
+   "id": "oj4aw2wd",
+   "name": "レイヤー2",
+   "clips": []
+  },
+  {
+   "id": "k3vgxeus",
+   "name": "レイヤー3",
+   "clips": []
+  },
+  {
+   "id": "tg7ivdrc",
+   "name": "レイヤー4",
+   "clips": []
+  },
+  {
+   "id": "hkj1db9r",
+   "name": "レイヤー5",
+   "clips": [
+    {
+     "id": "l91vo3uv",
+     "type": "blur",
+     "start": 0,
+     "duration": 3,
+     "x": 0.5,
+     "y": 0.5,
+     "w": 0.3,
+     "h": 0.3,
+     "strength": 48,
+     "shape": "rect"
+    }
+   ]
+  }
+ ]
+}

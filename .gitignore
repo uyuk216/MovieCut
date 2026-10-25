@@ -5,3 +5,7 @@ vendor/
 *.m4a
 *.mp4
 .DS_Store
+.build/
+*.xcodeproj
+YukkuriEditor/.swiftpm/
+YukkuriEditor/build/

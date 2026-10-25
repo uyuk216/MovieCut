@@ -1,0 +1,45 @@
+import Foundation
+
+extension Project {
+    public static func decode(from data: Data) throws -> Project {
+        try JSONDecoder().decode(Project.self, from: data)
+    }
+
+    /// キーを並べ替え、整形して書き出す。"/" をエスケープしない(パスが読みやすい)。
+    public func encoded() throws -> Data {
+        let e = JSONEncoder()
+        e.outputFormatting = [.sortedKeys, .prettyPrinted, .withoutEscapingSlashes]
+        return try e.encode(self)
+    }
+
+    public static func load(from url: URL) throws -> Project {
+        try decode(from: Data(contentsOf: url))
+    }
+
+    public func save(to url: URL) throws {
+        try encoded().write(to: url, options: .atomic)
+    }
+
+    /// 解像度を変えたとき、文字やぼかしの大きさが見た目で変わらないように
+    /// 面積比の平方根で fontSize / blur / strength を掛け直す(renderer.js scaleForResolution と同じ)。
+    /// width / height 自体も更新する。位置や幅・高さは 0〜1 の割合なので変えない。
+    public func scaledForResolution(newWidth: Int, newHeight: Int) -> Project {
+        var p = self
+        let k = (Double(newWidth) * Double(newHeight) / (Double(width) * Double(height))).squareRoot()
+        p.width = newWidth
+        p.height = newHeight
+        guard k.isFinite, k > 0, abs(k - 1) >= 1e-6 else { return p }
+        for ti in p.tracks.indices {
+            for ci in p.tracks[ti].clips.indices {
+                var c = p.tracks[ti].clips[ci]
+                if (c.type == .text || c.type == .voice), let f = c.fontSize, f != 0 {
+                    c.fontSize = max(8, (f * k).rounded())
+                }
+                if let b = c.blur, b > 0 { c.blur = (b * k).rounded() }
+                if c.type == .blur, let s = c.strength, s > 0 { c.strength = (s * k).rounded() }
+                p.tracks[ti].clips[ci] = c
+            }
+        }
+        return p
+    }
+}
