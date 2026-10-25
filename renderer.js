@@ -885,17 +885,31 @@ document.addEventListener('keydown', (e) => {
   else if (e.key === 'Delete' || e.key === 'Backspace') deleteSelected();
   else if (e.key === 'ArrowLeft') seek(t - 1 / project.fps);
   else if (e.key === 'ArrowRight') seek(t + 1 / project.fps);
-  else if (e.metaKey && e.key === 's') { e.preventDefault(); saveProject(); }
-  else if (e.metaKey && e.key === 'o') { e.preventDefault(); openProject(); }
+  // Cmd+S / Cmd+O などはメニューのショートカットが受ける(ここでも受けると二重に動く)
 });
 
 // ---------- 保存・読み込み ----------
-async function saveProject() {
-  const p = await window.api.saveProject(JSON.stringify(project, null, 1), projectPath);
-  if (p) { projectPath = p; status('保存しました: ' + p.split('/').pop()); }
+// 未保存の変更の検出: 保存・読み込み・新規の直後の内容を覚えておき、定期的に比べる
+let savedSnap = JSON.stringify(project);
+let dirty = false;
+const isDirty = () => JSON.stringify(project) !== savedSnap;
+function markClean(snap = JSON.stringify(project)) { savedSnap = snap; dirty = false; pushUi(); }
+
+// forceDialog が true なら保存先を必ず選ばせる(別名で保存)。終わったら main に結果を知らせる(閉じる前の保存確認が待っている)
+async function saveProject(forceDialog = false) {
+  let ok = false;
+  try {
+    const snap = JSON.stringify(project); // 保存中に編集されても、その分は未保存のまま残す
+    const p = await window.api.saveProject(JSON.stringify(project, null, 1), forceDialog ? null : projectPath);
+    if (p) { projectPath = p; markClean(snap); status('保存しました: ' + p.split('/').pop()); ok = true; }
+  } finally { window.api.notifySaved(ok); }
+  return ok;
 }
-async function openProject() {
-  const r = await window.api.loadProject();
+// p があればそのファイルを、なければ「開く…」のダイアログで選ばせる
+async function openProject(p) {
+  if (isDirty() && !confirm('保存していない変更があります。破棄して開きますか？')) return;
+  let r;
+  try { r = typeof p === 'string' ? await window.api.loadProjectPath(p) : await window.api.loadProject(); } catch (e) { return alert('ファイルを開けませんでした:\n' + e.message); }
   if (!r) return;
   let loaded;
   try { loaded = JSON.parse(r.json); } catch (e) { return alert('プロジェクトを読めませんでした:\n' + e.message); }
@@ -912,13 +926,15 @@ async function openProject() {
   renderAll();
   loadSpeakers();
   Promise.all(allClips().filter((c) => c.type === 'voice' || c.type === 'audio').map((c) => getBuffer(c.src).catch(() => null))).then(draw);
+  markClean();
 }
-$('#btn-save').onclick = saveProject;
-$('#btn-open').onclick = openProject;
+$('#btn-save').onclick = () => saveProject();
+$('#btn-open').onclick = () => openProject();
 $('#btn-new').onclick = () => {
-  if (!confirm('今のプロジェクトを閉じて新しく始めますか？')) return;
+  if (isDirty() && !confirm('保存していない変更があります。破棄して新しく始めますか？')) return;
   stop(); disposeAllVideos(); project = newProject(); projectPath = null; selectedClipId = null; selectedCharId = project.characters[0].id; t = 0;
   resizeCanvas(); renderAll();
+  detectAquesTalk().then(markClean, markClean); // 新規でも起動時と同じく、環境に合わせた声のコマンドにそろえてから「保存済み」とする
 };
 
 // ---------- 設定 ----------
@@ -985,7 +1001,7 @@ async function exportVideo() {
   eb.classList.add('busy'); eb.textContent = '書き出し中…';
   document.querySelectorAll('#toolbar button:not(#btn-export), #transport button, #res-select').forEach((b) => (b.disabled = true));
   try { await exportVideoInner(end); } finally {
-    exporting = false; overlay(null);
+    exporting = false; overlay(null); window.api.exportProgress(-1);
     eb.classList.remove('busy'); eb.textContent = 'MP4 書き出し';
     document.querySelectorAll('#toolbar button, #transport button, #res-select').forEach((b) => (b.disabled = false));
   }
@@ -1011,7 +1027,10 @@ async function exportVideoInner(end) {
   const done = new Promise((r) => (rec.onstop = r));
   overlay('書き出し中… 0%');
   rec.start(1000);
-  const progress = setInterval(() => overlay(`書き出し中… ${Math.min(100, Math.round((t / end) * 100))}%\n(動画の長さと同じだけ時間がかかります)`), 250);
+  const progress = setInterval(() => {
+    overlay(`書き出し中… ${Math.min(100, Math.round((t / end) * 100))}%\n(動画の長さと同じだけ時間がかかります)`);
+    window.api.exportProgress(Math.min(1, t / end)); // Dock のアイコンの進み具合
+  }, 250);
   await new Promise((resolve) => { onEnded = resolve; play(0, end); });
   onEnded = null;
   clearInterval(progress);
@@ -1023,6 +1042,7 @@ async function exportVideoInner(end) {
     const bytes = new Uint8Array(await new Blob(chunks, { type: 'video/webm' }).arrayBuffer());
     await window.api.finishExport(bytes, out, project.fps, project.codec);
     status('書き出しました: ' + out.split('/').pop());
+    window.api.exportFinished(); // 別のアプリを見ているときは Dock が跳ねて知らせる
   } catch (e) {
     console.log('SMOKE export error', e.message);
     alert('変換に失敗しました:\n' + e.message);
@@ -1059,11 +1079,60 @@ async function showDeps() {
   $('#deps-close').onclick = () => (box.hidden = true);
 }
 
+// ---------- メニュー(main の menu.js)との連絡 ----------
+// メニューの項目は、ツールバーのボタンと同じ関数を呼ぶ
+function handleMenuAction({ id, arg }) {
+  if (exporting) { if (id === 'save') window.api.notifySaved(false); return; } // 書き出し中は編集系を受けない(ボタンも無効になっている)
+  switch (id) {
+    case 'new': $('#btn-new').click(); break;
+    case 'open': openProject(); break;
+    case 'open-path': openProject(arg); break;
+    case 'save': saveProject(); break;
+    case 'save-as': saveProject(true); break;
+    case 'add-media': $('#btn-media').click(); break;
+    case 'export': exportVideo(); break;
+    case 'settings': $('#btn-settings').click(); break;
+    case 'split': splitAtPlayhead(); break;
+    case 'delete': deleteSelected(); break;
+    case 'add-text': $('#btn-text').click(); break;
+    case 'add-blur': $('#btn-blur').click(); break;
+    case 'add-char': $('#btn-add-char').click(); break;
+    case 'make-voices': $('#btn-script').click(); break;
+    case 'play': $('#btn-play').click(); break;
+    case 'home': $('#btn-home').click(); break;
+    case 'step-back': seek(t - 1 / project.fps); break;
+    case 'step-forward': seek(t + 1 / project.fps); break;
+    case 'zoom-in': setZoom(pps * 1.25); break;
+    case 'zoom-out': setZoom(pps / 1.25); break;
+    case 'zoom-fit': $('#btn-fit').click(); break;
+    case 'set-resolution': { const [w, h] = String(arg).split('x'); applyVideoSize(w, h); break; }
+    case 'set-codec': project.codec = arg === 'hevc' ? 'hevc' : 'h264'; break;
+    case 'set-bg': project.bg = String(arg); draw(); break;
+    case 'popout': $('#btn-popout').click(); break;
+  }
+  checkDirty();
+}
+
+// メニューの有効/チェック状態と窓のタイトルのために、変わったときだけ main へ知らせる
+let lastUi = '';
+function pushUi() {
+  const s = { width: project.width, height: project.height, codec: project.codec, bg: project.bg, hasSelection: !!findClip(selectedClipId), dirty, projectPath };
+  const j = JSON.stringify(s);
+  if (j !== lastUi) { lastUi = j; window.api.pushUiState(s); }
+}
+function checkDirty() { dirty = isDirty(); pushUi(); }
+setInterval(pushUi, 300);
+setInterval(checkDirty, 1500);
+
 resizeCanvas();
 renderAll();
+window.api.onMenuAction(handleMenuAction);
+window.api.rendererReady(); // ここから main はダブルクリックで開かれたファイルを渡してよい
+pushUi();
 showDeps().catch(() => {});
 loadSpeakers().then(async () => {
   await detectAquesTalk();
+  markClean(); // 起動直後の補正(声のコマンド)は変更とみなさない
   // 動作確認用: YE_SMOKE_OUT を付けて起動すると、台本→音声→書き出しを自動で行って終わる
   if (!window.api.smokeOut) return;
   // YE_SMOKE_SIZE=WxH / YE_SMOKE_CODEC=h264|hevc で、台本の前にサイズとコーデックを決める

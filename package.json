@@ -21,6 +21,7 @@
     },
     "files": [
       "main.js",
+      "menu.js",
       "preload.js",
       "renderer.js",
       "index.html",
@@ -29,6 +30,13 @@
       "package.json",
       "LICENSE*.md",
       "docs/**/*"
+    ],
+    "fileAssociations": [
+      {
+        "ext": "ymproj",
+        "name": "ゆっくりエディタ プロジェクト",
+        "role": "Editor"
+      }
     ],
     "mac": {
       "target": [
