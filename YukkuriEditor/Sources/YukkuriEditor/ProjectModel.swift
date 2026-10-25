@@ -73,6 +73,8 @@ final class ProjectModel: ObservableObject {
         didSet { projectRevision &+= 1 }
     }
     private(set) var projectRevision = 0
+    /// ドラッグ中の編集の出発点(M4a。ドラッグの間は Undo に積まず、離したときに 1 回だけ登録する)。
+    var gestureBase: Project?
     @Published var selectedClipId: String?
     @Published var selectedCharId: String?
     @Published var currentTime: Double = 0
@@ -152,6 +154,8 @@ final class ProjectModel: ObservableObject {
     private func replace(with new: Project, name: String) {
         let old = project
         project = new
+        // Undo / Redo でクリップが無くなったら、選択も外す
+        if let id = selectedClipId, !new.allClips.contains(where: { $0.id == id }) { selectedClipId = nil }
         playback?.projectDidChange()   // 編集したら再生は止める
         let um = effectiveUndoManager
         um.beginUndoGrouping()
@@ -192,6 +196,10 @@ final class ProjectModel: ObservableObject {
             .stepBack: { [weak self] in guard let m = self, !m.isLocked else { return false }; m.playback.step(frames: -1); return true },
             .stepForward: { [weak self] in guard let m = self, !m.isLocked else { return false }; m.playback.step(frames: 1); return true },
             .toStart: { [weak self] in guard let m = self, !m.isLocked else { return false }; m.playback.goToStart(); return true },
+            // 分割 / 削除 / 選択解除は、ドキュメントのウィンドウが前面のときだけ(別画面の Esc は別画面が閉じる)
+            .split: { [weak self] in guard let m = self, !m.isLocked, m.window?.isKeyWindow == true, m.canSplit else { return false }; return m.splitSelected() },
+            .delete: { [weak self] in guard let m = self, !m.isLocked, m.window?.isKeyWindow == true, m.selectedClip != nil else { return false }; return m.deleteSelected() },
+            .deselect: { [weak self] in guard let m = self, m.window?.isKeyWindow == true, m.selectedClipId != nil else { return false }; m.selectedClipId = nil; return true },
         ]
         keyRouter.install()
         playback.warmUp()

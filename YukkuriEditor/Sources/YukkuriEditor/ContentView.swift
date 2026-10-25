@@ -80,6 +80,12 @@ struct ContentView: View {
             Button("OK") { model.errorMessage = nil }
         } message: { Text(model.errorMessage ?? "") }
         .background(WindowAccessor { w in model.window = w })
+        .onDrop(of: [.fileURL], isTargeted: nil) { providers in
+            // タイムライン以外にドロップされたとき: 再生ヘッドの位置に置く(タイムライン上は TimelineCanvas が受ける)
+            DropLoader.loadFileURLs(providers) { urls in
+                Task { @MainActor in await model.addMedia(urls: urls) }
+            }
+        }
         .onAppear {
             model.undoManager = undoManager
             model.fileURL = fileURL
@@ -122,19 +128,23 @@ struct ToolbarBar: View {
     var body: some View {
         HStack(spacing: 8) {
             Group {
-                Button("素材を追加") {}
-                Button("テキスト") {}
-                Button("ぼかし範囲") {}
+                Button("素材を追加") { model.chooseAndAddMedia() }
+                    .help("画像・動画・音声を再生ヘッドの位置に追加(Finder からのドラッグ&ドロップも可)")
+                Button("テキスト") { model.addTextClip() }
+                    .help("一番上のレイヤーに文字を追加")
+                Button("ぼかし範囲") { model.addBlurClip() }
+                    .help("一番上のレイヤーにぼかし範囲を追加")
             }
-            .disabled(true)
-            .help("M4 で実装します")
+            .disabled(model.isLocked)
             Divider().frame(height: 18)
             Group {
-                Button("分割") {}
-                Button("削除") {}
+                Button("分割") { model.splitSelected() }
+                    .disabled(model.isLocked || !model.canSplit)
+                    .help("選択中のクリップを再生ヘッドで分割(S)")
+                Button("削除") { model.deleteSelected() }
+                    .disabled(model.isLocked || model.selectedClip == nil)
+                    .help("選択中のクリップを削除(Delete)")
             }
-            .disabled(true)
-            .help("M4 で実装します")
             Spacer(minLength: 12)
             Text(statusLine)
                 .font(.callout)
@@ -485,5 +495,27 @@ struct SettingsSheet: View {
         }
         .padding(20)
         .frame(width: 520)
+    }
+}
+
+// MARK: - ドロップされたファイルの取り出し
+
+enum DropLoader {
+    /// NSItemProvider から file URL を取り出す(順番はそのまま)。取り出せる物があれば true。
+    static func loadFileURLs(_ providers: [NSItemProvider], completion: @escaping ([URL]) -> Void) -> Bool {
+        let list = providers.filter { $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) }
+        guard !list.isEmpty else { return false }
+        var urls = [URL?](repeating: nil, count: list.count)
+        let group = DispatchGroup()
+        let lock = NSLock()
+        for (i, p) in list.enumerated() {
+            group.enter()
+            _ = p.loadObject(ofClass: URL.self) { url, _ in
+                lock.withLock { urls[i] = url }
+                group.leave()
+            }
+        }
+        group.notify(queue: .main) { completion(urls.compactMap { $0 }) }
+        return true
     }
 }

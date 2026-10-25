@@ -24,6 +24,14 @@ import YukkuriCore
 /// - `YE_DEBUG_SEEK_TEST=1`   1 秒再生 → 2.5 秒へシーク → 0.5 秒待つ、で時計が追従するか確かめて `seek-test: … ok=…` を出して終了する。
 ///   (プロジェクトの長さが 3.5 秒以上ないと確かめられない)
 /// - `YE_DEBUG_DRAWTIME=<N>`  タイムラインを N 回描き直して、1 回あたりの描画時間(ms)を `timeline-draw: …` に出す。
+/// - `YE_DEBUG_EDIT="move:<idx>:<dt>[:<行>];trimL:<idx>:<dt>;trimR:<idx>:<dt>;split:<idx>@<t>;delete:<idx>;text;blur;media:<path>"`
+///   タイムライン編集(M4a)を ; 区切りで順に実行する。UI と同じ関数(タイムラインのドラッグ処理 / `splitSelected` / `deleteSelected` /
+///   `addTextClip` / `addBlurClip` / `addMedia`)を通る。<idx> は全クリップ(レイヤー順)の番号(前の操作の結果に対しての番号)、<dt> は秒、
+///   move の <行> は移動先のレイヤー番号(省略で同じレイヤー)、split は再生ヘッドを <t> に置いてから分割する。
+///   終わったら全クリップの `edit: T<レイヤー> #<番号> <種類> start= dur= off=` と Undo の状態を標準出力に出す。
+///   `YE_SNAPSHOT_DIR` も付けると、その結果の画面を撮る(`YE_DEBUG_SELECT_CLIP` / `YE_DEBUG_TIME` は編集のあとに効く)。
+/// - `YE_DEBUG_HOLD_DRAG=<move|trimL|trimR>:<idx>:<dt>[:<行>]` ドラッグを途中(マウスを離す前)の状態で止める。吸着の案内線が写る。
+///   `YE_DEBUG_EDIT` と `YE_DEBUG_SELECT_CLIP` / `YE_DEBUG_TIME` のあとに実行され、再生ヘッドの時刻が吸着の候補になる。
 /// - `YE_DEBUG_SECOND=1`      別画面ウィンドウを開き、`YE_SNAPSHOT_DIR` があれば `<dir>/second.png` にも書く(`window.png` と同時)。
 @MainActor
 final class DebugHooks {
@@ -33,7 +41,7 @@ final class DebugHooks {
 
     private var active: Bool {
         ["YE_SNAPSHOT_DIR", "YE_DEBUG_SIZE", "YE_DEBUG_SCRIPT", "YE_DEBUG_EXPORT", "YE_DEBUG_SHEET", "YE_DEBUG_ZOOM", "YE_DEBUG_WINDOW", "YE_DEBUG_SELECT_CLIP",
-         "YE_DEBUG_TIME", "YE_DEBUG_PLAY", "YE_DEBUG_SEEK_TEST", "YE_DEBUG_DRAWTIME", "YE_DEBUG_SECOND"].contains { env[$0] != nil }
+         "YE_DEBUG_TIME", "YE_DEBUG_PLAY", "YE_DEBUG_SEEK_TEST", "YE_DEBUG_DRAWTIME", "YE_DEBUG_SECOND", "YE_DEBUG_EDIT", "YE_DEBUG_HOLD_DRAG"].contains { env[$0] != nil }
     }
 
     func appDidLaunch() {
@@ -80,11 +88,21 @@ final class DebugHooks {
         }
         if env["YE_DEBUG_SHEET"] == "settings" { model.showSettings = true }
         if let z = env["YE_DEBUG_ZOOM"].flatMap(Double.init) { model.pps = TimelineLayout.clampPps(z) }
+        if let spec = env["YE_DEBUG_EDIT"] {
+            await settle(model)
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            await runEdits(spec, model)
+        }
         if let i = env["YE_DEBUG_SELECT_CLIP"].flatMap(Int.init) {
             let clips = model.project.allClips
             if clips.indices.contains(i) { model.selectedClipId = clips[i].id }
         }
         if let t = env["YE_DEBUG_TIME"].flatMap(Double.init) { model.currentTime = t }
+        if let spec = env["YE_DEBUG_HOLD_DRAG"] {
+            await settle(model)
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            holdDrag(spec, model)
+        }
 
         if env["YE_DEBUG_PLAY"] != nil || env["YE_DEBUG_SEEK_TEST"] != nil {
             await runPlaybackDebug(model)
@@ -137,6 +155,74 @@ final class DebugHooks {
         while !(model.previewFrameCount > 0 && model.previewIdle) && waited < 30 {
             try? await Task.sleep(nanoseconds: 50_000_000); waited += 0.05
         }
+    }
+
+    // MARK: タイムライン編集の検証
+
+    private func dragMode(_ s: String) -> TimelineCanvas.DragMode? {
+        switch s { case "move": return .move; case "trimL": return .trimLeft; case "trimR": return .trimRight; default: return nil }
+    }
+
+    /// "move:0:1.3[:2]" 形式。
+    private func parseDrag(_ spec: String, _ model: ProjectModel) -> (id: String, mode: TimelineCanvas.DragMode, dt: Double, row: Int?)? {
+        let f = spec.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
+        guard f.count >= 3, let mode = dragMode(f[0]), let i = Int(f[1]), let dt = Double(f[2]) else { return nil }
+        let clips = model.project.allClips
+        guard clips.indices.contains(i) else { return nil }
+        return (clips[i].id, mode, dt, f.count > 3 ? Int(f[3]) : nil)
+    }
+
+    private func holdDrag(_ spec: String, _ model: ProjectModel) {
+        guard let canvas = findCanvas(model.window?.contentView), let d = parseDrag(spec, model) else { Self.out("hold-drag: 指定が読めません: \(spec)"); return }
+        canvas.debugDrag(clipId: d.id, mode: d.mode, deltaT: d.dt, targetTrack: d.row, hold: true)
+        Self.out(String(format: "hold-drag: %@ guides=%@", spec, canvas.snapGuides.map { String(format: "%.3f", $0) }.joined(separator: ",")))
+        dumpClips(model, label: "hold-drag")
+    }
+
+    private func dumpClips(_ model: ProjectModel, label: String) {
+        for (ti, tr) in model.project.tracks.enumerated() {
+            for (ci, c) in tr.clips.enumerated() {
+                Self.out(String(format: "%@: T%d #%d %@ start=%.3f dur=%.3f off=%.3f", label, ti, ci, c.type.rawValue, c.start, c.duration, c.offset))
+            }
+        }
+    }
+
+    private func runEdits(_ spec: String, _ model: ProjectModel) async {
+        let canvas = findCanvas(model.window?.contentView)
+        for raw in spec.split(separator: ";").map({ $0.trimmingCharacters(in: .whitespaces) }) where !raw.isEmpty {
+            let head = raw.split(separator: ":", maxSplits: 1).first.map(String.init) ?? raw
+            let nth: (String) -> Int? = { Int($0) }
+            switch head {
+            case "move", "trimL", "trimR":
+                guard let canvas, let d = parseDrag(raw, model) else { Self.out("edit: 指定が読めません: \(raw)"); continue }
+                canvas.debugDrag(clipId: d.id, mode: d.mode, deltaT: d.dt, targetTrack: d.row)
+            case "split":
+                // split:<idx>@<t>
+                let body = raw.dropFirst("split:".count).split(separator: "@").map(String.init)
+                let clips = model.project.allClips
+                guard body.count == 2, let i = nth(body[0]), let t = Double(body[1]), clips.indices.contains(i) else { Self.out("edit: 指定が読めません: \(raw)"); continue }
+                model.selectedClipId = clips[i].id
+                model.currentTime = t
+                Self.out("edit: split → \(model.splitSelected())")
+            case "delete":
+                let clips = model.project.allClips
+                guard let i = nth(String(raw.dropFirst("delete:".count))), clips.indices.contains(i) else { Self.out("edit: 指定が読めません: \(raw)"); continue }
+                model.selectedClipId = clips[i].id
+                Self.out("edit: delete → \(model.deleteSelected())")
+            case "text": _ = model.addTextClip()
+            case "blur": _ = model.addBlurClip()
+            case "media":
+                let path = String(raw.dropFirst("media:".count))
+                let ids = await model.addMedia(urls: [URL(fileURLWithPath: path)])
+                Self.out("edit: media \(path) → \(ids.count) 個")
+            default:
+                Self.out("edit: 知らない操作: \(raw)")
+            }
+            canvas?.syncFromModel()
+        }
+        dumpClips(model, label: "edit")
+        let um = model.effectiveUndoManager
+        Self.out("edit: canUndo=\(um.canUndo) canRedo=\(um.canRedo) selected=\(model.selectedClipId ?? "-")")
     }
 
     // MARK: 再生の検証

@@ -3,8 +3,8 @@ import AppKit
 /// ウィンドウ全体のキー操作。入力欄にフォーカスがあるときは何もしない(台本やシートの入力を壊さない)。
 enum KeyCommand: Hashable {
     case playPause, stepBack, stepForward, toStart
-    /// M4 で使う(いまは割り当てだけ。ハンドラが無ければキーはそのまま素通りする)。
-    case split, delete
+    /// S = 分割、Delete / Backspace = 削除、Escape = 選択を外す(ハンドラが無ければキーはそのまま素通りする)。
+    case split, delete, deselect
 }
 
 @MainActor
@@ -18,6 +18,7 @@ final class KeyRouter {
         1: .split,             // S
         51: .delete,           // Delete(Backspace)
         117: .delete,          // Forward Delete
+        53: .deselect,         // Escape
     ]
 
     /// テキスト入力中か(NSText / NSTextView / NSTextField のフィールドエディタ、NSTextInputClient)。

@@ -117,6 +117,30 @@ final class TimelineCanvas: NSView {
     private var charNames: [String: String] = [:]
     private var projectEnd = 0.0
 
+    // ドラッグ編集(M4a)
+    enum DragMode { case move, trimLeft, trimRight }
+    struct ClipDrag {
+        var clipId: String
+        var mode: DragMode
+        var downPoint: NSPoint
+        var downTime: Double
+        var active = false
+        var base = Project()
+        var lastTarget: Int
+        var lastPoint: NSPoint
+    }
+    /// 押している最中のクリップ操作(3pt 動くまでは「クリック」で、active は false)。
+    private(set) var drag: ClipDrag?
+    /// 吸着の案内線の時刻(ドラッグ中だけ)。
+    private(set) var snapGuides: [Double] = []
+    /// ポインタが左右の端 30pt 以内にあるときの自動スクロールの向き(-1 左 / 0 なし / 1 右)。
+    private(set) var autoScrollDirection = 0
+    private var autoScrollTimer: Timer?
+    private var mouseIsDown = false
+    static let edgeZone: CGFloat = 8
+    static let dragThreshold: CGFloat = 3
+    static let autoScrollZone: CGFloat = 30
+
     // 検証用
     private(set) var lastDrawMs = 0.0
     private(set) var lastDrawClipCount = 0
@@ -136,6 +160,7 @@ final class TimelineCanvas: NSView {
         super.init(frame: frame)
         wantsLayer = true
         layerContentsRedrawPolicy = .onSetNeedsDisplay
+        registerForDraggedTypes([.fileURL])
     }
     required init?(coder: NSCoder) { fatalError() }
 
@@ -147,7 +172,24 @@ final class TimelineCanvas: NSView {
     override func keyDown(with event: NSEvent) {}   // 受けないキーでビープ音を鳴らさない(操作は KeyRouter が受ける)
 
     override func resetCursorRects() {
-        addCursorRect(NSRect(x: TimelineLayout.headerWidth, y: 0, width: max(0, bounds.width - TimelineLayout.headerWidth), height: TimelineLayout.rulerHeight), cursor: .pointingHand)
+        let hw = TimelineLayout.headerWidth
+        addCursorRect(NSRect(x: hw, y: 0, width: max(0, bounds.width - hw), height: TimelineLayout.rulerHeight), cursor: .pointingHand)
+        let content = NSRect(x: hw, y: TimelineLayout.rulerHeight, width: max(0, bounds.width - hw), height: max(0, bounds.height - TimelineLayout.rulerHeight))
+        if let d = drag, d.active {
+            // ドラッグ中は、どこにいても同じカーソル
+            addCursorRect(content, cursor: d.mode == .move ? .closedHand : .resizeLeftRight)
+            return
+        }
+        for (i, tr) in project.tracks.enumerated() {
+            for c in tr.clips {
+                let r = geometry.clipRect(start: c.start, duration: c.duration, track: i).intersection(content)
+                if r.isNull || r.isEmpty { continue }
+                let z = min(Self.edgeZone, r.width / 3)
+                addCursorRect(NSRect(x: r.minX, y: r.minY, width: z, height: r.height), cursor: .resizeLeftRight)
+                addCursorRect(NSRect(x: r.maxX - z, y: r.minY, width: z, height: r.height), cursor: .resizeLeftRight)
+                addCursorRect(NSRect(x: r.minX + z, y: r.minY, width: max(0, r.width - 2 * z), height: r.height), cursor: .openHand)
+            }
+        }
     }
 
     // MARK: モデルからの反映
@@ -164,7 +206,11 @@ final class TimelineCanvas: NSView {
             if grew { geometry.scrollY = maxScrollY }   // ＋レイヤーで足した行が見えるように
             full = true
         }
-        if s.selectedId != selectedId { selectedId = s.selectedId; full = true }
+        if s.selectedId != selectedId {
+            selectedId = s.selectedId; full = true
+            // メニューやボタンで追加・選択されたクリップの行が画面外なら、見える所までスクロールする(マウスで押したときは動かさない)
+            if !mouseIsDown, let id = selectedId, let loc = ClipEditing.locate(id, in: project) { revealRow(loc.track) }
+        }
         if abs(s.pps - geometry.pps) > 1e-9 {
             // 外から(スライダー)変えたときは、再生ヘッドが見えていればその時刻、見えなければ真ん中の時刻を動かさない
             let centerX = TimelineLayout.headerWidth + (bounds.width - TimelineLayout.headerWidth) / 2
@@ -250,6 +296,14 @@ final class TimelineCanvas: NSView {
         needsDisplay = true
     }
 
+    /// その行が縦に全部見えるようにスクロールする。
+    private func revealRow(_ i: Int) {
+        let top = geometry.rowTop(i), bottom = top + TimelineLayout.rowHeight
+        if top < TimelineLayout.rulerHeight { geometry.scrollY -= TimelineLayout.rulerHeight - top }
+        else if bottom > bounds.height { geometry.scrollY += bottom - bounds.height }
+        clampScroll()
+    }
+
     /// 検証用: スクロール位置を直接指定。
     func debugSetScroll(x: CGFloat, y: CGFloat) { geometry.scrollX = x; geometry.scrollY = y; clampScroll(); needsDisplay = true }
 
@@ -325,6 +379,19 @@ final class TimelineCanvas: NSView {
 
         // ルーラー
         if dirtyRect.minY < rh { drawRuler(dirty: dirtyRect, ctx: ctx) }
+
+        // 吸着の案内線(ドラッグ中)
+        if !snapGuides.isEmpty {
+            let bottom = min(H, max(rh, g.rowTop(rows)))
+            ctx.saveGState()
+            ctx.clip(to: NSRect(x: hw, y: rh, width: max(0, W - hw), height: max(0, bottom - rh)))
+            TimelinePalette.accent.setFill()
+            for t in snapGuides {
+                let gx = g.x(forTime: t)
+                NSRect(x: gx - 0.5, y: rh, width: 1.5, height: max(0, bottom - rh)).fill()
+            }
+            ctx.restoreGState()
+        }
 
         // 再生ヘッド(ルーラーからレイヤーの下端まで)
         let px = g.x(forTime: time)
@@ -402,6 +469,13 @@ final class TimelineCanvas: NSView {
             let o = NSBezierPath(roundedRect: r.insetBy(dx: -1, dy: -1), xRadius: 5, yRadius: 5)
             o.lineWidth = 2
             TimelinePalette.selection.setStroke(); o.stroke()
+            // 左右のトリム用のつまみ(幅 3pt)
+            if r.width >= 14 {
+                NSColor(white: 1, alpha: 0.9).setFill()
+                for hx in [r.minX + 2.5, r.maxX - 5.5] {
+                    NSBezierPath(roundedRect: NSRect(x: hx, y: r.midY - 7, width: 3, height: 14), xRadius: 1.5, yRadius: 1.5).fill()
+                }
+            }
         }
         // ラベル
         let labelRect = NSRect(x: textLeft, y: r.minY + 4, width: r.maxX - textLeft - 4, height: 15)
@@ -500,7 +574,12 @@ final class TimelineCanvas: NSView {
 
     override func mouseDown(with e: NSEvent) {
         window?.makeFirstResponder(self)
-        let p = point(e)
+        mouseDown(at: point(e))
+    }
+
+    /// テストからも呼べるよう、イベントから切り離した入口。
+    func mouseDown(at p: NSPoint) {
+        mouseIsDown = true
         let hw = TimelineLayout.headerWidth
         if p.y < TimelineLayout.rulerHeight {
             if p.x >= hw { beginScrub(at: p) }
@@ -516,20 +595,181 @@ final class TimelineCanvas: NSView {
         }
         if let id = clipId(at: p) {
             model?.selectedClipId = id
+            guard let m = model, !m.isLocked, let loc = ClipEditing.locate(id, in: project) else { return }
+            let c = project.tracks[loc.track].clips[loc.index]
+            let r = geometry.clipRect(start: c.start, duration: c.duration, track: loc.track)
+            let z = min(Self.edgeZone, r.width / 3)
+            let mode: DragMode = p.x - r.minX < z ? .trimLeft : (r.maxX - p.x < z ? .trimRight : .move)
+            drag = ClipDrag(clipId: id, mode: mode, downPoint: p, downTime: geometry.time(forX: p.x), lastTarget: loc.track, lastPoint: p)
         } else {
             model?.selectedClipId = nil     // 何もない所: 選択を外して、その時刻へ(シーク)
             beginScrub(at: p)
         }
     }
 
-    override func mouseDragged(with e: NSEvent) {
-        if isScrubbing { scrub(to: point(e)) }
+    override func mouseDragged(with e: NSEvent) { mouseDragged(to: point(e)) }
+
+    func mouseDragged(to p: NSPoint) {
+        if isScrubbing { scrub(to: p); return }
+        guard var d = drag else { return }
+        if !d.active {
+            // 3pt 動くまではクリック扱い
+            guard hypot(p.x - d.downPoint.x, p.y - d.downPoint.y) >= Self.dragThreshold, let m = model else { return }
+            m.beginGesture()                       // 再生を止め、元の状態を覚える
+            d.active = true
+            d.base = m.project
+            d.lastTarget = ClipEditing.locate(d.clipId, in: d.base)?.track ?? d.lastTarget
+            drag = d
+            window?.invalidateCursorRects(for: self)
+        }
+        d.lastPoint = p
+        drag = d
+        updateAutoScrollDirection(p)
+        applyDrag(at: p)
     }
 
-    override func mouseUp(with e: NSEvent) {
-        guard isScrubbing else { return }
-        isScrubbing = false
-        model?.playback.endScrub()
+    override func mouseUp(with e: NSEvent) { mouseUp() }
+
+    func mouseUp() {
+        mouseIsDown = false
+        if isScrubbing {
+            isScrubbing = false
+            model?.playback.endScrub()
+            return
+        }
+        guard let d = drag else { return }
+        drag = nil
+        stopAutoScroll()
+        if d.active {
+            snapGuides = []
+            let name: String
+            switch d.mode {
+            case .move: name = "クリップの移動"
+            case .trimLeft: name = "クリップの左端トリム"
+            case .trimRight: name = "クリップの右端トリム"
+            }
+            model?.commitGesture(name)             // 変わっていれば 1 回の Undo
+            syncFromModel()
+            window?.invalidateCursorRects(for: self)
+            needsDisplay = true
+        }
+    }
+
+    /// ポインタの位置から、いまのドラッグ(モード・行)を計算してモデルへ反映する。
+    private func applyDrag(at p: NSPoint) {
+        guard var d = drag, d.active, let m = model else { return }
+        let dt = debugFixedDelta ?? (geometry.time(forX: p.x) - d.downTime)
+        let result: ClipEditing.Result
+        switch d.mode {
+        case .move:
+            if let row = geometry.rowIndex(forY: p.y, rowCount: d.base.tracks.count) { d.lastTarget = row; drag = d }
+            result = ClipEditing.move(in: d.base, clipId: d.clipId, deltaT: dt, targetTrackIndex: d.lastTarget, playhead: m.currentTime, pps: geometry.pps, snapEnabled: m.snapEnabled)
+        case .trimLeft:
+            result = ClipEditing.trimLeft(in: d.base, clipId: d.clipId, deltaT: dt, playhead: m.currentTime, pps: geometry.pps, snapEnabled: m.snapEnabled)
+        case .trimRight:
+            result = ClipEditing.trimRight(in: d.base, clipId: d.clipId, deltaT: dt, playhead: m.currentTime, pps: geometry.pps, snapEnabled: m.snapEnabled)
+        }
+        snapGuides = result.guides
+        m.updateGesture(result.project)
+        syncFromModel()
+        needsDisplay = true
+    }
+
+    // MARK: 自動スクロール(ドラッグ中にポインタが左右の端 30pt 以内)
+
+    private func updateAutoScrollDirection(_ p: NSPoint) {
+        let hw = TimelineLayout.headerWidth
+        let dir: Int
+        if p.x < hw + Self.autoScrollZone { dir = -1 }
+        else if p.x > bounds.width - Self.autoScrollZone { dir = 1 }
+        else { dir = 0 }
+        autoScrollDirection = dir
+        if dir != 0 {
+            if autoScrollTimer == nil {
+                let t = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.autoScrollStep() }
+                }
+                RunLoop.main.add(t, forMode: .common)
+                autoScrollTimer = t
+            }
+        } else {
+            stopAutoScroll()
+        }
+    }
+
+    private func stopAutoScroll() {
+        autoScrollTimer?.invalidate(); autoScrollTimer = nil
+        autoScrollDirection = 0
+    }
+
+    /// 端に近いほど速く(4〜18pt/コマ)。スクロールしたら、ポインタの下の時刻に合わせてドラッグを計算し直す。
+    func autoScrollStep() {
+        guard let d = drag, d.active, autoScrollDirection != 0 else { return }
+        let hw = TimelineLayout.headerWidth
+        let depth: CGFloat = autoScrollDirection < 0
+            ? max(0, min(1, (hw + Self.autoScrollZone - d.lastPoint.x) / Self.autoScrollZone))
+            : max(0, min(1, (d.lastPoint.x - (bounds.width - Self.autoScrollZone)) / Self.autoScrollZone))
+        let speed = 4 + 14 * depth
+        let old = geometry.scrollX
+        geometry.scrollX += CGFloat(autoScrollDirection) * speed
+        clampScroll()
+        if geometry.scrollX != old { applyDrag(at: d.lastPoint) }
+    }
+
+    /// 検証用 / テスト用: タイムラインの外から同じ手順でドラッグを組み立てる。
+    /// `hold` なら離さずに止める(途中の絵を撮る用)。dt は秒、`targetTrack` は移動先のレイヤー。
+    func debugDrag(clipId: String, mode: DragMode, deltaT: Double, targetTrack: Int? = nil, hold: Bool = false) {
+        guard let m = model, let loc = ClipEditing.locate(clipId, in: m.project) else { return }
+        m.selectedClipId = clipId
+        m.beginGesture()
+        var d = ClipDrag(clipId: clipId, mode: mode, downPoint: .zero, downTime: 0, lastTarget: targetTrack ?? loc.track, lastPoint: .zero)
+        d.active = true
+        d.base = m.project
+        drag = d
+        // dt をそのまま使うため、downTime をポインタ位置と無関係にする
+        debugFixedDelta = deltaT
+        applyDrag(at: .zero)
+        if !hold { mouseUp() }
+        debugFixedDelta = nil
+    }
+
+    private var debugFixedDelta: Double?
+
+    /// モデルの現在の値をそのままキャンバスへ反映する(SwiftUI を待たずに描き直したいとき)。
+    func syncFromModel() {
+        guard let m = model else { return }
+        apply(TimelineState(project: m.project, revision: m.projectRevision, selectedId: m.selectedClipId,
+                            time: m.currentTime, pps: m.pps, playing: m.isPlaying))
+    }
+
+    // MARK: ドラッグ&ドロップ(Finder から素材)
+
+    private func droppedMediaURLs(_ info: NSDraggingInfo) -> [URL] {
+        let urls = info.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+        return urls.filter { ClipEditing.isSupportedMedia(path: $0.path) }
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        droppedMediaURLs(sender).isEmpty ? [] : .copy
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        droppedMediaURLs(sender).isEmpty ? [] : .copy
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        let urls = droppedMediaURLs(sender)
+        guard !urls.isEmpty, let m = model else { return false }
+        let p = convert(sender.draggingLocation, from: nil)
+        let t = dropTime(at: p)
+        Task { @MainActor in await m.addMedia(urls: urls, at: t) }
+        return true
+    }
+
+    /// 行の上に落としたなら、その位置の時刻。それ以外(ヘッダー・ルーラー・行の外)は nil = 再生ヘッダー位置。
+    func dropTime(at p: NSPoint) -> Double? {
+        guard p.x >= TimelineLayout.headerWidth, geometry.rowIndex(forY: p.y, rowCount: project.tracks.count) != nil else { return nil }
+        return max(0, geometry.time(forX: p.x))
     }
 
     private func beginScrub(at p: NSPoint) {
