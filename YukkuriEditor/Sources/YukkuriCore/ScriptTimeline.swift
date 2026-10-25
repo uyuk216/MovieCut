@@ -7,6 +7,20 @@ public enum ScriptTimeline {
         (Double(p.width) * Double(p.height) / (1920.0 * 1080.0)).squareRoot()
     }
 
+    /// 1 行を (話すキャラ, セリフ) に分ける。最初の ":" か "：" で区切り、名前が既知のキャラならその声、
+    /// 不明なら selectedCharId のキャラ(無ければ先頭)で行全体がセリフ(renderer.js scriptToTimeline と同じ)。
+    public static func parse(line rawLine: String, characters: [Character], selectedCharId: String?) -> (Character, String)? {
+        let line = rawLine.trimmingCharacters(in: .whitespaces)
+        guard !line.isEmpty else { return nil }
+        if let sep = line.firstIndex(where: { $0 == ":" || $0 == "：" }), sep != line.startIndex {
+            let name = line[line.startIndex..<sep].trimmingCharacters(in: .whitespaces)
+            let rest = line[line.index(after: sep)...].trimmingCharacters(in: .whitespaces)
+            if !rest.isEmpty, let found = characters.first(where: { $0.name == name }) { return (found, rest) }
+        }
+        guard let who = characters.first(where: { $0.id == selectedCharId }) ?? characters.first else { return nil }
+        return (who, line)
+    }
+
     /// 「名前: セリフ」「名前：セリフ」の行をボイスクリップにして、最初の「全部ボイス」のレイヤー(無ければ新設)の末尾へ並べる。
     /// 名前が分からない行は selectedCharId のキャラ(無ければ先頭)。
     /// - Returns: 追加したクリップ
@@ -23,14 +37,7 @@ public enum ScriptTimeline {
         var cursor = max(0, project.tracks[trackIndex].clips.map { $0.start + $0.duration }.max() ?? 0)
         var added: [Clip] = []
         for line in lines {
-            var ch: Character?
-            var text = line
-            if let sep = line.firstIndex(where: { $0 == ":" || $0 == "：" }), sep != line.startIndex {
-                let name = line[line.startIndex..<sep].trimmingCharacters(in: .whitespaces)
-                let rest = line[line.index(after: sep)...].trimmingCharacters(in: .whitespaces)
-                if !rest.isEmpty, let found = project.characters.first(where: { $0.name == name }) { ch = found; text = rest }
-            }
-            guard let who = ch ?? project.characters.first(where: { $0.id == selectedCharId }) ?? project.characters.first else { continue }
+            guard let (who, text) = parse(line: line, characters: project.characters, selectedCharId: selectedCharId) else { continue }
             let r = try await voice.synthesize(character: who, text: text, in: directory)
             var clip = Clip()
             clip.type = .voice

@@ -50,6 +50,16 @@ case "info" where args.count == 2:
         }
         let other = clips.filter { !$0.type.isKnown }.count
         if other > 0 { print("  (unknown): \(other)") }
+        // 配置(ボイスクリップ): レイヤー / 開始 / 長さ / 終了 / 直前との間隔 / キャラ / セリフ
+        for (ti, t) in p.tracks.enumerated() {
+            var prevEnd: Double?
+            for c in t.clips.sorted(by: { $0.start < $1.start }) where c.type == .voice {
+                let who = p.characters.first { $0.id == c.charId }?.name ?? "?"
+                let gap = prevEnd.map { String(format: "%.3f", c.start - $0) } ?? "-"
+                print(String(format: "  [layer %d] start=%.3f dur=%.3f end=%.3f gap=%@ %@: %@", ti + 1, c.start, c.duration, c.start + c.duration, gap, who, c.text ?? ""))
+                prevEnd = c.start + c.duration
+            }
+        }
     } catch { fail("読めませんでした: \(error)") }
 case "new" where args.count == 2:
     do { try Project.new().save(to: URL(fileURLWithPath: args[1])); print("wrote \(args[1])") }
@@ -88,6 +98,60 @@ case "export" where args.count >= 3:
         if let c = optValue("--codec") { guard ["h264", "hevc"].contains(c) else { fail("--codec は h264 か hevc") }; p.codec = c }
         try await runExport(p, to: URL(fileURLWithPath: args[2]))
     } catch { fail("書き出せませんでした: \(error.localizedDescription)") }
+case "speak":
+    // speak (--voicevox <id> [--speed 1 --pitch 0 --intonation 1] | --voice <preset> [--speed 100]) --text "…" --out x.wav
+    guard let text = optValue("--text"), let outPath = optValue("--out") else { fail("--text と --out が必要です") }
+    var proj = Project.new()
+    if let u = optValue("--url") { proj.voicevoxUrl = u }   // 別ポートで冷間起動を試すとき用
+    let t0 = Date()
+    do {
+        let url: URL
+        var used = ""
+        if let sp = optValue("--voicevox") {
+            guard let id = Int(sp) else { fail("--voicevox は話者IDの数字") }
+            let engine = VoicevoxEngine()
+            defer { engine.shutdown() }
+            guard await engine.ensureRunning(baseURL: proj.voicevoxUrl) else { fail("VOICEVOX に接続できません(\(DependencyStatus.voicevoxURL))") }
+            let t1 = Date()
+            url = try await VoicevoxClient(baseURL: proj.voicevoxUrl).synthesize(text: text, speaker: id, speed: optValue("--speed").flatMap(Double.init), pitch: optValue("--pitch").flatMap(Double.init), intonation: optValue("--intonation").flatMap(Double.init))
+            used = String(format: "voicevox (engine ready %.2fs, synth %.2fs)", t1.timeIntervalSince(t0), Date().timeIntervalSince(t1))
+        } else if let voice = optValue("--voice") {
+            let aq = AquesTalkSynthesizer()
+            url = try await aq.synthesize(text: text, voice: voice, speed: optValue("--speed").flatMap(Double.init) ?? 100, commandTemplate: proj.aquestalkCommand)
+            used = aq.effectiveCommand(proj.aquestalkCommand).usingFallback ? "say (fallback)" : "aquestalk"
+        } else { fail("--voicevox <話者ID> か --voice <プリセット> が必要です") }
+        try? FileManager.default.removeItem(atPath: outPath)
+        try FileManager.default.copyItem(at: url, to: URL(fileURLWithPath: outPath))
+        let dur = try RealVoiceProvider.duration(of: url)
+        print(String(format: "wrote %@ engine=%@ duration=%.3fs total=%.2fs", outPath, used, dur, Date().timeIntervalSince(t0)))
+    } catch { fail("合成できませんでした: \(error.localizedDescription)") }
+case "speakers":
+    let proj = Project.new()
+    let engine = VoicevoxEngine()
+    defer { engine.shutdown() }
+    guard await engine.ensureRunning(baseURL: proj.voicevoxUrl) else { fail("VOICEVOX に接続できません(\(DependencyStatus.voicevoxURL))") }
+    do {
+        for sp in try await VoicevoxClient(baseURL: proj.voicevoxUrl).speakers() {
+            print(sp.name + ": " + sp.styles.map { "\($0.name)=\($0.id)" }.joined(separator: ", "))
+        }
+    } catch { fail("話者を取得できませんでした: \(error.localizedDescription)") }
+case "deps":
+    let st = await DependencyStatus.check(project: Project.new())
+    print("voicevoxInstalled: \(st.voicevoxInstalled)\nvoicevoxRunning: \(st.voicevoxRunning)\naquestalkPlayerInstalled: \(st.aquestalkPlayerInstalled)")
+    for n in st.notice { print("notice: " + n) }
+case "script" where args.count >= 2:
+    // script <script.txt> --out <out.ymproj>: 台本ファイルから実際の声でプロジェクトを作る(既定キャラ=霊夢)
+    guard let outPath = optValue("--out") else { fail("--out が必要です") }
+    do {
+        var p = Project.new()
+        let lines = try String(contentsOfFile: args[1], encoding: .utf8).components(separatedBy: "\n")
+        let provider = RealVoiceProvider(project: p)
+        defer { provider.engine.shutdown() }
+        try await ScriptTimeline.add(lines: lines, to: &p, voice: provider, directory: FileManager.default.temporaryDirectory, selectedCharId: p.characters[0].id)
+        try p.save(to: URL(fileURLWithPath: outPath))
+        print("engines used: \(provider.enginesUsed.sorted().joined(separator: ", ")); fallback: \(provider.usingFallback)")
+        print("wrote \(outPath)")
+    } catch { fail("作れませんでした: \(error.localizedDescription)") }
 case "smoke":
     // smoke --out <mp4> [--size WxH] [--codec h264|hevc] [--blur]
     guard let outPath = optValue("--out") else { fail("--out が必要です") }
@@ -97,7 +161,12 @@ case "smoke":
         let size = optValue("--size").map(parseSize)
         let codec = optValue("--codec")
         if let c = codec, !["h264", "hevc"].contains(c) { fail("--codec は h264 か hevc") }
-        var p = try await ScriptTimeline.smokeProject(size: size.map { (width: $0.0, height: $0.1) }, codec: codec, blur: args.contains("--blur"), voice: ToneVoiceProvider(), directory: dir)
+        let real = RealVoiceProvider(project: Project.new())
+        defer { real.engine.shutdown() }
+        let useTone = args.contains("--tone")
+        let voice: VoiceProvider = useTone ? ToneVoiceProvider() : real
+        var p = try await ScriptTimeline.smokeProject(size: size.map { (width: $0.0, height: $0.1) }, codec: codec, blur: args.contains("--blur"), voice: voice, directory: dir)
+        print(useTone ? "voices: tone (--tone)" : "voices: engines used = \(real.enginesUsed.sorted().joined(separator: ", ")); fallback = \(real.usingFallback)")
         // 計測用: 文字とぼかしの長さを伸ばす(--text-duration 10)
         if let d = optValue("--text-duration").flatMap(Double.init) {
             for ti in p.tracks.indices { for ci in p.tracks[ti].clips.indices where p.tracks[ti].clips[ci].type == .text || p.tracks[ti].clips[ci].type == .blur { p.tracks[ti].clips[ci].duration = d } }
@@ -108,5 +177,5 @@ case "smoke":
         try await runExport(p, to: URL(fileURLWithPath: outPath))
     } catch { fail("書き出せませんでした: \(error.localizedDescription)") }
 default:
-    fail("usage:\n  yukkuri-cli info <file.ymproj>\n  yukkuri-cli new <out.ymproj>\n  yukkuri-cli export <in.ymproj> <out.mp4> [--size WxH] [--codec h264|hevc]\n  yukkuri-cli smoke --out <mp4> [--size WxH] [--codec h264|hevc] [--blur] [--save-project p.ymproj]\n  yukkuri-cli frame <in.ymproj> --t <sec> --out <png> [--size WxH] [--bench N]")
+    fail("usage:\n  yukkuri-cli info <file.ymproj>\n  yukkuri-cli new <out.ymproj>\n  yukkuri-cli export <in.ymproj> <out.mp4> [--size WxH] [--codec h264|hevc]\n  yukkuri-cli smoke --out <mp4> [--size WxH] [--codec h264|hevc] [--blur] [--tone] [--save-project p.ymproj]\n  yukkuri-cli speak (--voicevox <id> [--speed --pitch --intonation] | --voice <preset> [--speed]) --text <t> --out <wav>\n  yukkuri-cli speakers | deps | script <script.txt> --out <p.ymproj>\n  yukkuri-cli frame <in.ymproj> --t <sec> --out <png> [--size WxH] [--bench N]")
 }
