@@ -14,6 +14,10 @@ let package = Package(
         .executableTarget(name: "YukkuriEditor", dependencies: ["YukkuriCore"]),
         .executableTarget(name: "yukkuri-cli", dependencies: ["YukkuriCore"]),
         .testTarget(
+            name: "YukkuriEditorTests",
+            dependencies: ["YukkuriEditor", "YukkuriCore"]
+        ),
+        .testTarget(
             name: "YukkuriCoreTests",
             dependencies: ["YukkuriCore"],
             resources: [.copy("Fixtures")]
