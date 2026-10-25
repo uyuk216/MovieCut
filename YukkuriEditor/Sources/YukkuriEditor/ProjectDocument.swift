@@ -30,7 +30,8 @@ final class ProjectDocument: ReferenceFileDocument {
     }
 
     func snapshot(contentType: UTType) throws -> Data {
-        try onMain { try model.project.encoded() }
+        // 主スレッド以外から呼ばれる(保存中は主スレッドが待っている)ので、写しから作る
+        try model.mirror.get().encoded()
     }
 
     func fileWrapper(snapshot: Data, configuration: WriteConfiguration) throws -> FileWrapper {

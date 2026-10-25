@@ -5,6 +5,8 @@ enum KeyCommand: Hashable {
     case playPause, stepBack, stepForward, toStart
     /// S = 分割、Delete / Backspace = 削除、Escape = 選択を外す(ハンドラが無ければキーはそのまま素通りする)。
     case split, delete, deselect
+    /// ⌘= (US 配列の「⌘+」の押し方)。メニューの ⌘+ とは別に、キーボードの = でも拡大できるようにする。
+    case zoomIn
 }
 
 @MainActor
@@ -38,6 +40,12 @@ final class KeyRouter {
         return keyMap[keyCode]
     }
 
+    /// ⌘= か ⌘+(Shift は許す)か。配列によって「+」の押し方が違うので、文字で見る。
+    static func isCommandEquals(modifiers: NSEvent.ModifierFlags, charactersIgnoringModifiers: String?, characters: String? = nil) -> Bool {
+        guard modifiers.intersection([.command, .option, .control]) == .command else { return false }
+        return charactersIgnoringModifiers == "=" || charactersIgnoringModifiers == "+" || characters == "+"
+    }
+
     /// コマンドごとの処理。true を返すとキーを消費する。
     var handlers: [KeyCommand: () -> Bool] = [:]
     /// このルーターが受け持つウィンドウ(第二画面も含められる)。
@@ -62,6 +70,7 @@ final class KeyRouter {
     /// 受け持つウィンドウのキー入力だけ処理する(他のドキュメントやシートのものは触らない)。
     func handle(_ event: NSEvent) -> Bool {
         guard let w = event.window, windows().contains(where: { $0 === w }) else { return false }
+        if Self.isCommandEquals(modifiers: event.modifierFlags, charactersIgnoringModifiers: event.charactersIgnoringModifiers, characters: event.characters), let h = handlers[.zoomIn] { return h() }
         return dispatch(keyCode: event.keyCode, modifiers: event.modifierFlags, firstResponder: w.firstResponder, isRepeat: event.isARepeat)
     }
 

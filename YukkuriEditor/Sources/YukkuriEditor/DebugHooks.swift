@@ -41,6 +41,15 @@ import YukkuriCore
 ///   (`setVoiceText`)で書き換え、前後の `src` / 長さ / WAV の実長 / offset を出し、Undo して元に戻ったことも出す。
 ///   最後に Redo までして Undo の状態を出す。`YE_DEBUG_SCRIPT` のあとに実行される。
 /// - `YE_DEBUG_SECOND=1`      別画面ウィンドウを開き、`YE_SNAPSHOT_DIR` があれば `<dir>/second.png` にも書く(`window.png` と同時)。
+/// - `YE_DEBUG_MENU=1`        メニューバー(`NSApp.mainMenu`)の全項目(題・キー・有効・チェック・サブメニュー)を標準出力へ。
+///   `YE_DEBUG_MENU=export` なら書き出し中(`YE_DEBUG_EXPORT` と一緒に使う)の状態を出す。
+/// - `YE_DEBUG_MENU_CLICK="解像度/縦 1080×1920;背景色/白;…"` メニュー項目を `NSMenu.performActionForItem(at:)` で本当に押し、そのたびに状態を出す。
+///   `YE_DEBUG_MENU_SCRIPT` で台本欄の文字を先に入れられる。
+/// - `YE_DEBUG_DEPS=missing`   依存チェックの結果を「VOICEVOX も AquesTalkPlayer も無い」に固定する(バナーの確認用)。
+/// - `YE_DEBUG_EDITED=1`      編集 → 保存で、ウィンドウの「未保存の点」(isDocumentEdited)が変わるかを出す(YE_OPEN の一時コピーで使う)。
+/// - `YE_DEBUG_QUIT=1|engine|dirty` ⌘Q の経路。`engine` は VOICEVOX エンジンを自分で起動してから終了、`dirty` は未保存で終了を試みて確認シートが出るかを出す。
+/// - `YE_DEBUG_FRAME=set:x,y,w,h|print|min` ウィンドウの位置の記憶と最小サイズの確認。
+/// - `YE_DEBUG_DOCS=1`        起動の数秒後に、開いているドキュメントの一覧を出して終了する(`open -a app file.ymproj` の確認用)。
 @MainActor
 final class DebugHooks {
     static let shared = DebugHooks()
@@ -49,11 +58,27 @@ final class DebugHooks {
 
     private var active: Bool {
         ["YE_SNAPSHOT_DIR", "YE_DEBUG_SIZE", "YE_DEBUG_SCRIPT", "YE_DEBUG_EXPORT", "YE_DEBUG_SHEET", "YE_DEBUG_ZOOM", "YE_DEBUG_WINDOW", "YE_DEBUG_SELECT_CLIP",
-         "YE_DEBUG_TIME", "YE_DEBUG_PLAY", "YE_DEBUG_SEEK_TEST", "YE_DEBUG_DRAWTIME", "YE_DEBUG_SECOND", "YE_DEBUG_EDIT", "YE_DEBUG_HOLD_DRAG", "YE_DEBUG_SELECT_CHAR", "YE_DEBUG_DELETE_CHAR", "YE_DEBUG_VOICE_EDIT", "YE_DEBUG_INSPECTOR_SCROLL"].contains { env[$0] != nil }
+         "YE_DEBUG_TIME", "YE_DEBUG_PLAY", "YE_DEBUG_SEEK_TEST", "YE_DEBUG_DRAWTIME", "YE_DEBUG_SECOND", "YE_DEBUG_EDIT", "YE_DEBUG_HOLD_DRAG", "YE_DEBUG_SELECT_CHAR", "YE_DEBUG_DELETE_CHAR", "YE_DEBUG_VOICE_EDIT", "YE_DEBUG_INSPECTOR_SCROLL",
+         "YE_DEBUG_MENU", "YE_DEBUG_MENU_CLICK", "YE_DEBUG_MENU_KEYS", "YE_DEBUG_EDITED", "YE_DEBUG_QUIT", "YE_DEBUG_FRAME"].contains { env[$0] != nil }
     }
 
     func appDidLaunch() {
+        if env["YE_DEBUG_DOCS"] != nil {
+            let wait = env["YE_DEBUG_DOCS_WAIT"].flatMap(Double.init) ?? 4
+            DispatchQueue.main.asyncAfter(deadline: .now() + wait) {
+                let docs = NSDocumentController.shared.documents
+                Self.out("docs: count=\(docs.count)")
+                for d in docs {
+                    let p = (d as? NSDocument)?.fileURL?.path ?? "-"
+                    let proj = (d as? NSDocument).map { String(describing: type(of: $0)) } ?? "-"
+                    Self.out("docs: \(p) windows=\(d.windowControllers.compactMap { $0.window?.title }) class=\(proj)")
+                }
+                Self.finish(0)
+            }
+            return
+        }
         guard env["YE_OPEN"] != nil || active else { return }
+        NSWindow.allowsAutomaticWindowTabbing = false   // 検証中は、開いた書類が裏のタブに隠れないようにする
         NSApp.activate(ignoringOtherApps: true)
         if let path = env["YE_OPEN"] {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
@@ -116,6 +141,23 @@ final class DebugHooks {
         if let s = env["YE_DEBUG_DELETE_CHAR"] { await debugDeleteChar(s, model) }
         if let t = env["YE_DEBUG_VOICE_EDIT"] { await debugVoiceEdit(t, model) }
         if let t = env["YE_DEBUG_TIME"].flatMap(Double.init) { model.currentTime = t }
+        if let m = env["YE_DEBUG_MENU"], m != "export" {
+            await settle(model)
+            await bringToFront(model)
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
+            dumpMainMenu(label: m)
+            if env["YE_DEBUG_MENU_TWICE"] != nil {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                model.window?.makeKeyAndOrderFront(nil)
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                dumpMainMenu(label: m + " +4s")
+            }
+        }
+        if let spec = env["YE_DEBUG_MENU_CLICK"] { await menuClicks(spec, model) }
+        if let spec = env["YE_DEBUG_MENU_KEYS"] { await menuKeys(spec, model) }
+        if let f = env["YE_DEBUG_FRAME"] { await debugFrame(f, model) }
+        if env["YE_DEBUG_EDITED"] != nil { await debugEdited(model) }
+        if let q = env["YE_DEBUG_QUIT"] { await debugQuit(q, model) }
         if let spec = env["YE_DEBUG_HOLD_DRAG"] {
             await settle(model)
             try? await Task.sleep(nanoseconds: 300_000_000)
@@ -141,6 +183,14 @@ final class DebugHooks {
             }
             let url = URL(fileURLWithPath: out)
             let t0 = Date()
+            if env["YE_DEBUG_MENU"] == "export" {
+                Task { @MainActor in
+                    while !model.isExporting { try? await Task.sleep(nanoseconds: 20_000_000) }
+                    try? await Task.sleep(nanoseconds: 1_500_000_000)
+                    Self.out(String(format: "menu: (書き出し中 progress=%.2f isExporting=%@)", model.exportProgress, model.isExporting ? "true" : "false"))
+                    self.dumpMainMenu(label: "export")
+                }
+            }
             switch await model.runExport(to: url) {
             case .success(let u):
                 let size = (try? FileManager.default.attributesOfItem(atPath: u.path)[.size] as? Int) ?? 0
@@ -172,6 +222,9 @@ final class DebugHooks {
 
         if env["YE_SNAPSHOT_DIR"] != nil {
             await settle(model)
+            // 依存チェックの結果(バナー)が出るまで待つ
+            var bw = 0.0
+            while AppServices.deps.checkCount == 0 && !AppServices.deps.dismissedThisSession && bw < 8 { try? await Task.sleep(nanoseconds: 50_000_000); bw += 0.05 }
             if env["YE_DEBUG_SECOND"] != nil { try? await Task.sleep(nanoseconds: 800_000_000) }
             try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             snapshot(model)
@@ -308,6 +361,245 @@ final class DebugHooks {
         Self.out("edit: canUndo=\(um.canUndo) canRedo=\(um.canRedo) selected=\(model.selectedClipId ?? "-")")
     }
 
+    // MARK: メニュー・ネイティブ動作の検証
+
+    private static func shortcutText(_ item: NSMenuItem) -> String {
+        guard !item.keyEquivalent.isEmpty else { return "" }
+        let m = item.keyEquivalentModifierMask
+        var s = ""
+        if m.contains(.control) { s += "⌃" }
+        if m.contains(.option) { s += "⌥" }
+        if m.contains(.shift) { s += "⇧" }
+        if m.contains(.command) { s += "⌘" }
+        let k = item.keyEquivalent
+        let names = ["\r": "⏎", "\u{3}": "⌅", "\u{8}": "⌫", "\u{7f}": "⌫", " ": "Space", "\u{1b}": "⎋"]
+        if let n = names[k] { return s + n }
+        return s + k.uppercased() + (k.unicodeScalars.first.map { $0.value > 126 || $0.value < 32 ? "(U+\(String($0.value, radix: 16)))" : "" } ?? "")
+    }
+
+    private static func menuLines(_ menu: NSMenu, depth: Int) -> [String] {
+        var out: [String] = []
+        let pad = String(repeating: "  ", count: depth)
+        for item in menu.items {
+            if item.isSeparatorItem { out.append(pad + "----"); continue }
+            var line = pad + item.title
+            let sc = shortcutText(item)
+            if !sc.isEmpty { line += "  [\(sc)]" }
+            line += item.isEnabled ? "" : "  (無効)"
+            switch item.state { case .on: line += "  ✓"; case .mixed: line += "  −"; default: break }
+            if item.isHidden { line += "  (隠し)" }
+            if item.isAlternate { line += "  (代替)" }
+            if let a = item.action, item.submenu == nil { line += "  → \(NSStringFromSelector(a))" }
+            out.append(line)
+            if let sub = item.submenu { out += menuLines(sub, depth: depth + 1) }
+        }
+        return out
+    }
+
+    /// メニューの有効・チェックは、メニューが開かれる(update される)ときに決まる。読む前に全階層を更新する。
+    private static func updateAll(_ menu: NSMenu) {
+        // 本物のメニューを開いたときと同じ更新(SwiftUI のメニューは menuNeedsUpdate の中で中身を差し替える)
+        menu.delegate?.menuNeedsUpdate?(menu)
+        menu.update()
+        for i in menu.items { if let s = i.submenu { updateAll(s) } }
+    }
+
+    private func dumpMainMenu(label: String) {
+        guard let menu = NSApp.mainMenu else { Self.out("menu: mainMenu がありません"); return }
+        Self.updateAll(menu)
+        if let w = NSApp.keyWindow { Self.out("menu: keyWindow collectionBehavior.fullScreenPrimary=\(w.collectionBehavior.contains(.fullScreenPrimary)) styleMask.fullScreen=\(w.styleMask.contains(.fullScreen)) isMainWindow=\(w.isMainWindow) tabbing=\(w.tabbingMode.rawValue) windows=\(NSApp.windows.map { $0.title })") }
+        Self.out("menu: active.model=\(ActiveDocument.shared.model != nil) state=\(ActiveDocument.shared.state)")
+        Self.out("menu: ===== NSApp.mainMenu (\(label)) ===== appActive=\(NSApp.isActive) keyWindow=\(NSApp.keyWindow?.title ?? "-") mainWindow=\(NSApp.mainWindow?.title ?? "-")")
+        for l in Self.menuLines(menu, depth: 0) { Self.out("menu: " + l) }
+        Self.out("menu: ===== end =====")
+    }
+
+    /// 「解像度/縦 1080×1920」のような道筋で項目を探す(最初の名前は、メニューバーのどの階層にあってもよい)。
+    private static func findMenuItem(_ path: [String], in menu: NSMenu) -> (NSMenu, Int)? {
+        func descend(_ menu: NSMenu, _ rest: ArraySlice<String>) -> (NSMenu, Int)? {
+            guard let first = rest.first, let i = menu.items.firstIndex(where: { $0.title == first }) else { return nil }
+            if rest.count == 1 { return (menu, i) }
+            guard let sub = menu.items[i].submenu else { return nil }
+            return descend(sub, rest.dropFirst())
+        }
+        func search(_ menu: NSMenu) -> (NSMenu, Int)? {
+            if let r = descend(menu, path[...]) { return r }
+            for item in menu.items { if let sub = item.submenu, let r = search(sub) { return r } }
+            return nil
+        }
+        return search(menu)
+    }
+
+    private func stateLine(_ model: ProjectModel) -> String {
+        let um = model.effectiveUndoManager
+        let sel = model.selectedClip.map { $0.type.rawValue } ?? "-"
+        return "state: active=\(ActiveDocument.shared.model === model) locked=\(model.isLocked) size=\(model.project.width)x\(model.project.height) codec=\(model.project.codec) bg=\(model.project.bg) clips=\(model.project.allClips.count) chars=\(model.project.characters.count) selected=\(sel) canUndo=\(um.canUndo) undo=\"\(um.undoActionName)\" status=\"\(model.statusText)\" error=\(model.errorMessage ?? "-")"
+    }
+
+    /// このドキュメントを前面にして、メニューの操作先(ActiveDocument)になるまで待つ。
+    private func bringToFront(_ model: ProjectModel) async {
+        NSApp.activate(ignoringOtherApps: true)
+        model.window?.makeKeyAndOrderFront(nil)
+        var w = 0.0
+        while ActiveDocument.shared.model !== model && w < 5 {
+            model.window?.makeKeyAndOrderFront(nil)
+            ActiveDocument.shared.activate(model)
+            try? await Task.sleep(nanoseconds: 100_000_000); w += 0.1
+        }
+    }
+
+    private func menuClicks(_ spec: String, _ model0: ProjectModel) async {
+        await settle(model0)
+        // 空の書類が複数あるとき、メニューが操作するのは前面(メイン)の書類。そちらを相手にする
+        try? await Task.sleep(nanoseconds: 1_000_000_000)
+        let model = ActiveDocument.shared.model ?? model0
+        if let t = env["YE_DEBUG_MENU_SCRIPT"] { model.scriptText = t.replacingOccurrences(of: "\\n", with: "\n") }
+        try? await Task.sleep(nanoseconds: 1_200_000_000)
+        Self.out("menu-click: initial " + stateLine(model))
+        for raw in spec.split(separator: ";").map({ $0.trimmingCharacters(in: .whitespaces) }) where !raw.isEmpty {
+            let path = raw.split(separator: "/").map(String.init)
+            guard let main = NSApp.mainMenu, let (menu, idx) = Self.findMenuItem(path, in: main) else {
+                Self.out("menu-click: \(raw) → 見つかりません"); continue
+            }
+            let item = menu.items[idx]
+            let before = item.state
+            Self.updateAll(main)
+            guard item.isEnabled else { Self.out("menu-click: \(raw) → 無効のため押せません"); continue }
+            menu.performActionForItem(at: idx)
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            var waited = 0.0
+            while model.busyMessage != nil && waited < 120 { try? await Task.sleep(nanoseconds: 100_000_000); waited += 0.1 }
+            try? await Task.sleep(nanoseconds: 800_000_000)   // メニューの✓が更新されるのを待つ
+            Self.updateAll(main)   // 本物のメニューを開いたときと同じ更新をして、✓ を読み直す
+            Self.out("menu-click: \(raw) → 押しました (✓ \(before == .on ? "on" : "off") → \(menu.items[idx].state == .on ? "on" : "off"))")
+            Self.out("menu-click:   " + stateLine(model))
+        }
+    }
+
+    /// キー(⌘+ など)を本物のキーイベントにしてメニューバーへ渡し、項目が反応するか見る。
+    private func menuKeys(_ spec: String, _ model0: ProjectModel) async {
+        await settle(model0)
+        try? await Task.sleep(nanoseconds: 1_000_000_000)
+        let model = ActiveDocument.shared.model ?? model0
+        try? await Task.sleep(nanoseconds: 1_000_000_000)
+        let codes: [String: UInt16] = ["=": 24, "-": 27, "0": 29, "t": 17, "b": 11, "c": 8, "i": 34, "e": 14, "p": 35, ",": 43, "return": 36, "a": 0, "s": 1, "z": 6, "x": 7, "v": 9]
+        for raw in spec.split(separator: ";").map({ $0.trimmingCharacters(in: .whitespaces) }) where !raw.isEmpty {
+            let parts = raw.split(separator: "+").map(String.init)
+            guard let key = parts.last, let code = codes[key] else { Self.out("menu-key: \(raw) → 読めません"); continue }
+            var flags: NSEvent.ModifierFlags = []
+            if parts.contains("cmd") { flags.insert(.command) }
+            if parts.contains("shift") { flags.insert(.shift) }
+            if parts.contains("opt") { flags.insert(.option) }
+            let chars = key == "return" ? "\r" : (flags.contains(.shift) ? (key == "=" ? "+" : key.uppercased()) : key)
+            let ign = key == "return" ? "\r" : key
+            guard let win = model.window,
+                  let ev = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: win.windowNumber, context: nil, characters: chars, charactersIgnoringModifiers: ign, isARepeat: false, keyCode: code) else { continue }
+            let pps0 = model.pps, clips0 = model.project.allClips.count, sets0 = model.showSettings
+            Self.updateAll(NSApp.mainMenu!)
+            let fileURL = model.fileURL
+            func mt() -> String { fileURL.flatMap { (try? FileManager.default.attributesOfItem(atPath: $0.path)[.modificationDate] as? Date)?.map { String($0.timeIntervalSince1970) } } ?? "-" }
+            let m0 = mt()
+            DispatchQueue.global().asyncAfter(deadline: .now() + 6) { Self.out("menu-key: (6 秒たちました) \(raw)") }
+            let handled = NSApp.mainMenu?.performKeyEquivalent(with: ev) ?? false
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            if key == "s" { Self.out("menu-key: save → file mtime changed=\(mt() != m0) docEdited=\(model.window.flatMap { NSDocumentController.shared.document(for: $0) }?.isDocumentEdited ?? false)") }
+            Self.out(String(format: "menu-key: %@ → handled=%@ pps %.1f→%.1f clips %d→%d settingsSheet %@→%@", raw, handled ? "true" : "false", pps0, model.pps, clips0, model.project.allClips.count, sets0 ? "on" : "off", model.showSettings ? "on" : "off"))
+        }
+    }
+
+    private func debugEdited(_ model: ProjectModel) async {
+        guard let win = model.window else { return }
+        await settle(model)
+        try? await Task.sleep(nanoseconds: 800_000_000)
+        let doc = NSDocumentController.shared.document(for: win)
+        let path = doc?.fileURL?.path
+        func mtime() -> String { path.flatMap { (try? FileManager.default.attributesOfItem(atPath: $0)[.modificationDate] as? Date)?.map { String($0.timeIntervalSince1970) } } ?? "-" }
+        Self.out("edited: start isDocumentEdited=\(win.isDocumentEdited) docEdited=\(doc?.isDocumentEdited ?? false) title=\"\(win.title)\" file=\(path ?? "-") mtime=\(mtime())")
+        Self.out("edited: model.undoManager=\(model.undoManager != nil) same-as-doc=\(doc?.undoManager === model.undoManager) same-as-window=\(win.undoManager === model.undoManager) docUM=\(doc?.undoManager != nil) groupsByEvent=\(model.undoManager?.groupsByEvent ?? false) levels=\(model.undoManager?.levelsOfUndo ?? -1)")
+        model.addTextClip()
+        try? await Task.sleep(nanoseconds: 800_000_000)
+        Self.out("edited: um.canUndo=\(model.effectiveUndoManager.canUndo) docUM.canUndo=\(doc?.undoManager?.canUndo ?? false) updateChangeCount-edited=\(doc?.isDocumentEdited ?? false)")
+        func edited(_ label: String) {
+            Self.out("edited: \(label) window.isDocumentEdited=\(win.isDocumentEdited) doc.isDocumentEdited=\(doc?.isDocumentEdited ?? false) title=\"\(win.title)\" controllers=\(doc?.windowControllers.map { String(describing: type(of: $0)) } ?? [])")
+        }
+        edited("after edit")
+        let um = model.effectiveUndoManager
+        um.undo()
+        try? await Task.sleep(nanoseconds: 800_000_000)
+        edited("after undo")
+        um.redo()
+        try? await Task.sleep(nanoseconds: 800_000_000)
+        edited("after redo")
+        if let doc, path != nil {
+            let t0 = mtime()
+            if let url = doc.fileURL {
+                doc.save(to: url, ofType: doc.fileType ?? "jp.local.yukkuri-editor.project", for: .saveOperation) { err in
+                    Self.out("edited: save completion error=\(err?.localizedDescription ?? "nil")")
+                }
+            }
+            var w = 0.0
+            while doc.isDocumentEdited && w < 10 { try? await Task.sleep(nanoseconds: 100_000_000); w += 0.1 }
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            edited("after save (waited \(String(format: "%.1f", w))s, mtime changed=\(mtime() != t0))")
+            let reread = path.flatMap { try? Data(contentsOf: URL(fileURLWithPath: $0)) }.flatMap { try? Project.decode(from: $0) }
+            Self.out("edited: file on disk now has \(reread?.tracks.flatMap { $0.clips }.count ?? -1) clips (model has \(model.project.allClips.count))")
+        } else { Self.out("edited: 保存先が無いので保存は試しません") }
+    }
+
+    private func debugQuit(_ mode: String, _ model: ProjectModel) async {
+        await settle(model)
+        if mode == "engine" {
+            let ok = await AppServices.engine.ensureRunning(baseURL: model.project.voicevoxUrl)
+            Self.out("quit: engine ensureRunning=\(ok) startedByUs=\(AppServices.engine.startedByUs)")
+        }
+        if mode == "dirty" {
+            model.addTextClip()
+            try? await Task.sleep(nanoseconds: 800_000_000)
+            Self.out("quit: dirty isDocumentEdited=\(model.window?.isDocumentEdited ?? false)")
+            NSApp.terminate(nil)
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            let sheet = model.window?.attachedSheet
+            Self.out("quit: 未保存の確認シート=\(sheet != nil) running=\(NSApp.isRunning)")
+            if let sheet, let png = Self.png(of: sheet, over: NSColor(calibratedWhite: 0.2, alpha: 1)), let dir = env["YE_SNAPSHOT_DIR"] {
+                try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+                try? png.write(to: URL(fileURLWithPath: dir).appendingPathComponent("quit-sheet.png"))
+                Self.out("quit: シートを \(dir)/quit-sheet.png に書きました")
+            }
+            Self.finish(0)
+        }
+        Self.out("quit: NSApp.terminate を呼びます")
+        NSApp.terminate(nil)
+        try? await Task.sleep(nanoseconds: 3_000_000_000)
+        Self.out("quit: まだ動いています(終了が止められました)")
+        Self.finish(1)
+    }
+
+    private func debugFrame(_ spec: String, _ model: ProjectModel) async {
+        guard let win = model.window else { return }
+        await settle(model)
+        try? await Task.sleep(nanoseconds: 800_000_000)
+        if spec.hasPrefix("set:") {
+            let p = spec.dropFirst(4).split(separator: ",").compactMap { Double($0) }
+            guard p.count == 4 else { Self.out("frame: 指定が読めません"); return }
+            Self.out("frame: before \(NSStringFromRect(win.frame)) autosave=\"\(win.frameAutosaveName)\"")
+            win.setFrame(NSRect(x: p[0], y: p[1], width: p[2], height: p[3]), display: true)
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            Self.out("frame: set → \(NSStringFromRect(win.frame))")
+            win.close()
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            Self.finish(0)
+        } else if spec == "min" {
+            Self.out("frame: before content=\(NSStringFromSize(win.contentView?.frame.size ?? .zero)) minSize=\(NSStringFromSize(win.minSize)) contentMinSize=\(NSStringFromSize(win.contentMinSize))")
+            win.setContentSize(NSSize(width: 300, height: 300))
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            Self.out("frame: setContentSize(300,300) → content=\(NSStringFromSize(win.contentView?.frame.size ?? .zero)) frame=\(NSStringFromRect(win.frame))")
+            Self.finish(0)
+        } else {
+            Self.out("frame: print \(NSStringFromRect(win.frame)) autosave=\"\(win.frameAutosaveName)\" screen=\(NSStringFromRect(win.screen?.visibleFrame ?? .zero))")
+            Self.finish(0)
+        }
+    }
+
     // MARK: 再生の検証
 
     private func runPlaybackDebug(_ model: ProjectModel) async {
@@ -426,8 +718,18 @@ final class DebugHooks {
         return r2.representation(using: .png, properties: [:])
     }
 
-    private static func out(_ s: String) {
+    static func trace(_ s: String) {
+        if ProcessInfo.processInfo.environment["YE_DEBUG_TRACE"] != nil { out("trace: " + s) }
+    }
+
+    static func out(_ s: String) {
         FileHandle.standardOutput.write(Data((s + "\n").utf8))
+    }
+
+    /// 終了の経路の確認用(`YE_DEBUG_QUIT` があるときだけ出す)。
+    static func logQuit(engineStartedByUs: Bool, after: Bool = false) {
+        guard ProcessInfo.processInfo.environment["YE_DEBUG_QUIT"] != nil else { return }
+        out("quit: applicationWillTerminate \(after ? "after shutdown" : "before shutdown") engineStartedByUs=\(engineStartedByUs)")
     }
 
     /// 書き出しの未保存確認などで止まらないよう、エンジンだけ止めて直接終わる。

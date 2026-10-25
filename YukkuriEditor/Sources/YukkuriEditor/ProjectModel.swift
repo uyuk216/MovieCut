@@ -9,6 +9,12 @@ enum AppServices {
     static let engine = VoicevoxEngine()
     /// VOICEVOX の話者一覧(キャラの一覧とプロパティ欄で共有)。
     @MainActor static let speakers = SpeakerCatalog()
+    /// 一度だけ出すお知らせ(Kyoko の代用など)。アプリを起動している間に 1 回。
+    @MainActor static let notices = OneTimeNotices()
+    /// Dock アイコンの進行バー(書き出し中)。
+    @MainActor static let dock = DockProgressController(tile: NSApp?.dockTile)
+    /// 起動時の依存チェックとバナー(アプリ全体で 1 つ。閉じたらこの起動中は出さない)。
+    @MainActor static let deps = DependencyNoticeCenter(checker: DependencyNoticeCenter.debugChecker() ?? { p in await DependencyStatus.check(project: p) })
 }
 
 /// 解像度のプリセット(renderer.js の #res-select と同じ並び)。
@@ -68,13 +74,24 @@ final class ProgressVoiceProvider: VoiceProvider {
     }
 }
 
+/// プロジェクトの写し(どのスレッドからでも読める)。保存は SwiftUI が主スレッド以外から snapshot を呼び、
+/// そのあいだ主スレッドは保存の完了を待つので、snapshot が主スレッドを待つとデッドロックする。そのための写し。
+final class ProjectMirror: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: Project
+    init(_ p: Project) { value = p }
+    func set(_ p: Project) { lock.withLock { value = p } }
+    func get() -> Project { lock.withLock { value } }
+}
+
 /// 1 つのドキュメントの状態。すべての編集は `edit(_:_:)` を通し、UndoManager に登録する(Project 全体のスナップショット式)。
 @MainActor
 final class ProjectModel: ObservableObject {
     @Published var project: Project {
         // タイムラインが「変わったか」を安く調べるための通し番号
-        didSet { projectRevision &+= 1 }
+        didSet { projectRevision &+= 1; mirror.set(project) }
     }
+    nonisolated let mirror: ProjectMirror
     private(set) var projectRevision = 0
     /// ドラッグ中の編集の出発点(M4a。ドラッグの間は Undo に積まず、離したときに 1 回だけ登録する)。
     var gestureBase: Project?
@@ -96,6 +113,8 @@ final class ProjectModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var errorTitle = "エラー"
     @Published var showSettings = false
+    /// 左の台本欄の文字(ツールバー・メニューの「台本から音声を作る」が読む)。
+    @Published var scriptText = ""
     /// タイムラインの拡大率(pt/秒)と吸着(M4 のドラッグで使う)。
     @Published var pps: Double = TimelineLayout.defaultPps
     @Published var snapEnabled = true
@@ -127,6 +146,13 @@ final class ProjectModel: ObservableObject {
     /// 再生・別画面・キー操作(ドキュメントを閉じるときに手放す)。
     var playback: PlaybackController!
     let secondScreen = SecondScreenController()
+    /// 編集済みの通知の差し替え(テスト用)。nil なら NSDocument に伝える。
+    var editedTimer: Timer?
+    var documentChangeHook: ((NSDocument.ChangeType) -> Void)?
+    /// 一度だけ出すお知らせの入れ物(テストでは差し替える。nil ならアプリ全体のもの)。
+    var notices: OneTimeNotices?
+    /// Dock の進行バー(テストでは差し替える。nil ならアプリ全体のもの)。
+    var dockOverride: DockProgressController?
     let keyRouter = KeyRouter()
 
     private var exportTask: Task<Void, Error>?
@@ -139,6 +165,7 @@ final class ProjectModel: ObservableObject {
     var playTestAudio: ((URL) throws -> Void)?
 
     init(project: Project = .new()) {
+        self.mirror = ProjectMirror(project)
         self.project = project
         self.selectedCharId = project.characters.first?.id
         self.playback = PlaybackController(model: self)
@@ -181,6 +208,25 @@ final class ProjectModel: ObservableObject {
         }
         um.setActionName(name)
         um.endUndoGrouping()
+        noteDocumentChanged(undoing: um.isUndoing, redoing: um.isRedoing)
+    }
+
+    /// 書類を「編集済み」にする(ウィンドウのタイトルの点・閉じる/終了時の保存確認)。
+    /// SwiftUI の ReferenceFileDocument は Undo の登録だけでは編集済みにならなかったので、NSDocument に直接伝える。
+    /// Undo / Redo のときは NSDocument の数え方(changeUndone / changeRedone)に合わせ、元に戻れば編集済みが消える。
+    func noteDocumentChanged(undoing: Bool, redoing: Bool) {
+        let kind: NSDocument.ChangeType = undoing ? .changeUndone : (redoing ? .changeRedone : .changeDone)
+        if let hook = documentChangeHook { hook(kind); return }
+        guard let w = window, let d = NSDocumentController.shared.document(for: w) else { return }
+        d.updateChangeCount(kind)
+        // タイトルバーの点(SwiftUI のウィンドウは自動では変わらない)。書類の編集済み(保存で消えるのも)を 0.25 秒ごとに写す
+        if editedTimer == nil {
+            editedTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak w, weak d] t in
+                guard let w, let d else { t.invalidate(); return }
+                if w.isDocumentEdited != d.isDocumentEdited { w.isDocumentEdited = d.isDocumentEdited }
+            }
+        }
+        w.isDocumentEdited = d.isDocumentEdited
     }
 
     // MARK: レイヤー
@@ -216,6 +262,7 @@ final class ProjectModel: ObservableObject {
             // 分割 / 削除 / 選択解除は、ドキュメントのウィンドウが前面のときだけ(別画面の Esc は別画面が閉じる)
             .split: { [weak self] in guard let m = self, !m.isLocked, m.window?.isKeyWindow == true, m.canSplit else { return false }; return m.splitSelected() },
             .delete: { [weak self] in guard let m = self, !m.isLocked, m.window?.isKeyWindow == true, m.selectedClip != nil else { return false }; return m.deleteSelected() },
+            .zoomIn: { [weak self] in guard let m = self, !m.isLocked, m.window?.isKeyWindow == true else { return false }; m.zoomTimeline(by: AppMenu.zoomStep); return true },
             .deselect: { [weak self] in guard let m = self, m.window?.isKeyWindow == true, m.selectedClipId != nil else { return false }; m.selectedClipId = nil; return true },
         ]
         keyRouter.install()
@@ -226,6 +273,7 @@ final class ProjectModel: ObservableObject {
 
     /// ドキュメントを閉じるとき: 再生・エンジン・別画面・キー監視を手放す。
     func shutdown() {
+        editedTimer?.invalidate(); editedTimer = nil
         keyRouter.uninstall()
         secondScreen.close()
         playback.shutdown()
@@ -303,6 +351,7 @@ final class ProjectModel: ObservableObject {
             edit("台本から音声を作る") { $0.tracks = work.tracks }
             statusText = "\(added.count) 個のセリフを並べました"
             onFitTimeline()
+            noteFallbackIfUsed(provider.inner)
         } catch {
             errorTitle = "音声を作れませんでした"
             errorMessage = error.localizedDescription
@@ -317,11 +366,18 @@ final class ProjectModel: ObservableObject {
         isExporting = true
         exportProgress = 0
         statusText = "書き出し中…"
+        let dock = dockOverride ?? AppServices.dock
+        dock.update(0)
         defer { isExporting = false; exportTask = nil }
         let exporter = Exporter(project: project, assets: RenderAssets())
         let task = Task { [weak self] in
             try await exporter.export(to: url) { v in
-                Task { @MainActor in self?.exportProgress = v }
+                Task { @MainActor in
+                    // 終わったあとに遅れて届いた進み具合では Dock を出し直さない
+                    guard let self, self.isExporting else { return }
+                    self.exportProgress = v
+                    dock.update(v)
+                }
             }
         }
         exportTask = task
@@ -329,14 +385,17 @@ final class ProjectModel: ObservableObject {
             try await task.value
             exportProgress = 1
             statusText = "\(url.lastPathComponent) に書き出しました"
+            dock.finish(notify: true)
             return .success(url)
         } catch is CancellationError {
             statusText = "書き出しをキャンセルしました"
+            dock.finish(notify: false)
             return .cancelled
         } catch {
             statusText = "書き出しに失敗しました"
             errorTitle = "書き出せませんでした"
             errorMessage = error.localizedDescription
+            dock.finish(notify: true)
             return .failure(error)
         }
     }

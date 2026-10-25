@@ -301,7 +301,9 @@ extension ProjectModel {
         busyMessage = "試し読み上げ用の音声を作っています…"
         defer { busyMessage = nil }
         do {
-            let r = try await voiceProviderFactory(project).synthesize(character: ch, text: "\(ch.name)です。よろしくお願いします。", in: FileManager.default.temporaryDirectory)
+            let provider = voiceProviderFactory(project)
+            let r = try await provider.synthesize(character: ch, text: "\(ch.name)です。よろしくお願いします。", in: FileManager.default.temporaryDirectory)
+            noteFallbackIfUsed(provider)
             if let hook = playTestAudio {
                 try hook(r.url)
             } else {

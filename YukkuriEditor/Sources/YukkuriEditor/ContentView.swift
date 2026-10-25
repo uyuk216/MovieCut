@@ -47,16 +47,16 @@ struct ContentView: View {
 
     @AppStorage("timelineHeight") private var timelineHeight: Double = 230
     @State private var dragStartHeight: Double?
-    @State private var scriptText = ""
 
     var body: some View {
         GeometryReader { geo in
             let h = min(max(timelineHeight, 160), max(160, geo.size.height * 0.55))
             VStack(spacing: 0) {
+                DependencyBannerBar(center: AppServices.deps)
                 ToolbarBar(model: model)
                 Divider()
                 HStack(spacing: 0) {
-                    LeftPanel(model: model, speakers: AppServices.speakers, scriptText: $scriptText)
+                    LeftPanel(model: model, speakers: AppServices.speakers, scriptText: $model.scriptText)
                         .frame(width: 300)
                     Divider()
                     CenterPanel(model: model)
@@ -83,7 +83,7 @@ struct ContentView: View {
             Button("消す", role: .destructive) { if let id = model.pendingDeleteCharId { model.deleteCharacter(id) } }
             Button("キャンセル", role: .cancel) { model.pendingDeleteCharId = nil }
         } message: { Text(model.pendingDeleteCharId.flatMap { model.deleteConfirmation(for: $0)?.message } ?? "") }
-        .background(WindowAccessor { w in model.window = w })
+        .background(WindowAccessor { w in model.window = w; if w.isMainWindow { ActiveDocument.shared.activate(model) } })
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
             // タイムライン以外にドロップされたとき: 再生ヘッドの位置に置く(タイムライン上は TimelineCanvas が受ける)
             DropLoader.loadFileURLs(providers) { urls in
@@ -94,11 +94,16 @@ struct ContentView: View {
             model.undoManager = undoManager
             model.fileURL = fileURL
             model.installKeyboard()
+            if model.window?.isMainWindow == true { ActiveDocument.shared.activate(model) }
             DebugHooks.shared.attach(model)
         }
+        .task { await AppServices.deps.refresh(project: model.project) }
         .task(id: model.project.voicevoxUrl) { await AppServices.speakers.load(baseURL: model.project.voicevoxUrl) }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { note in
-            if let w = note.object as? NSWindow, w === model.window { model.shutdown() }
+            if let w = note.object as? NSWindow, w === model.window { model.shutdown(); ActiveDocument.shared.deactivate(model) }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeMainNotification)) { note in
+            if let w = note.object as? NSWindow, w === model.window { ActiveDocument.shared.activate(model) }
         }
         .onChange(of: undoManager) { _, new in model.undoManager = new }
         .onChange(of: fileURL) { _, new in model.fileURL = new }
@@ -157,9 +162,9 @@ struct ToolbarBar: View {
                 .lineLimit(1)
             Button("設定") { model.showSettings = true }
                 .disabled(model.isLocked)
-            Button("MP4 書き出し") { exportTapped() }
+            Button("MP4 書き出し") { model.chooseAndExport() }
                 .buttonStyle(.borderedProminent)
-                .disabled(model.isLocked || model.project.endTime <= 0)
+                .disabled(!model.canExport)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
@@ -170,23 +175,6 @@ struct ToolbarBar: View {
         if !model.statusText.isEmpty { return model.statusText }
         let n = model.project.allClips.count
         return n > 0 ? "クリップ \(n) 個" : ""
-    }
-
-    private func exportTapped() {
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.mpeg4Movie]
-        panel.nameFieldStringValue = model.documentName + ".mp4"
-        panel.canCreateDirectories = true
-        panel.title = "MP4 書き出し"
-        let run: (NSApplication.ModalResponse) -> Void = { resp in
-            guard resp == .OK, let url = panel.url else { return }
-            Task { @MainActor in
-                if case .success(let u) = await model.runExport(to: url) {
-                    NSWorkspace.shared.activateFileViewerSelecting([u])
-                }
-            }
-        }
-        if let w = model.window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
     }
 }
 
@@ -242,7 +230,7 @@ struct LeftPanel: View {
             }
             .frame(maxHeight: .infinity)
             Button {
-                Task { await model.generateVoices(from: scriptText) }
+                Task { await model.generateVoicesFromScript() }
             } label: {
                 Text("台本から音声を作ってタイムラインに並べる")
                     .multilineTextAlignment(.center)
