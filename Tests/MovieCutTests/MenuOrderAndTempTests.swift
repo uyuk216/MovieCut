@@ -17,7 +17,10 @@ final class MenuOrderAndTempTests: XCTestCase {
         let right = MenuOrder.ordered(swiftUIOrder)
         XCTAssertEqual(MenuOrder.ordered(right), right)
         // 英語表記でも並べられる。知らない題は知っているものの後ろに元の順
-        XCTAssertEqual(MenuOrder.ordered(["App", "View", "File", "Edit", "Zzz", "Window", "Help"]), ["App", "File", "Edit", "View", "Window", "Help", "Zzz"])
+        // ヘルプは必ず最後。知らない題はヘルプの前
+        XCTAssertEqual(MenuOrder.ordered(["App", "View", "File", "Edit", "Zzz", "Window", "Help"]), ["App", "File", "Edit", "View", "Window", "Zzz", "Help"])
+        // 実機の表記(ウインドウ=イ入り)でも、ヘルプより前に来る
+        XCTAssertEqual(MenuOrder.ordered(["Movie Cut", "ファイル", "編集", "表示", "ヘルプ", "ウインドウ"]), ["Movie Cut", "ファイル", "編集", "表示", "ウインドウ", "ヘルプ"])
         XCTAssertEqual(MenuOrder.ordered(["App"]), ["App"])
         XCTAssertEqual(MenuOrder.ordered([]), [])
     }
@@ -44,6 +47,20 @@ final class MenuOrderAndTempTests: XCTestCase {
         XCTAssertEqual(m.items.count, 9)
     }
 
+    func testFixFindsWindowAndHelpMenusByIdentityEvenWithLocalizedTitles() {
+        // 実機の順(ヘルプが先、ウインドウが後)。ウインドウ / ヘルプはシステムの題ではなく windowsMenu / helpMenu で判定する
+        let m = menu(["Movie Cut", "ファイル", "編集", "クリップ", "再生", "移動", "表示", "Aide", "Fenster"])
+        let help = m.items[7].submenu!, windows = m.items[8].submenu!
+        XCTAssertTrue(MenuOrder.fix(m, windowsMenu: windows, helpMenu: help))
+        XCTAssertEqual(m.items.map(MenuOrder.title(of:)), ["Movie Cut", "ファイル", "編集", "クリップ", "再生", "移動", "表示", "Fenster", "Aide"])
+        XCTAssertFalse(MenuOrder.fix(m, windowsMenu: windows, helpMenu: help), "2 回目は何も変えない")
+        // 実機の表記のまま: 題で判定(ヘルプを必ず最後に)
+        let m2 = menu(["Movie Cut", "ファイル", "編集", "表示", "ヘルプ", "ウインドウ"])
+        XCTAssertTrue(MenuOrder.fix(m2))
+        XCTAssertEqual(m2.items.map(MenuOrder.title(of:)), ["Movie Cut", "ファイル", "編集", "表示", "ウインドウ", "ヘルプ"])
+        XCTAssertFalse(MenuOrder.fix(m2))
+    }
+
     func testFixUsesItemTitleWhenThereIsNoSubmenuTitle() {
         let m = NSMenu(title: "main")
         for t in ["A", "表示", "編集"] { m.addItem(NSMenuItem(title: t, action: nil, keyEquivalent: "")) }
@@ -64,11 +81,14 @@ final class MenuOrderAndTempTests: XCTestCase {
         XCTAssertEqual(m.items.map(MenuOrder.title(of:))[3], "表示", "通知の中ではまだ直さない")
         RunLoop.main.run(until: Date().addingTimeInterval(0.2))
         XCTAssertEqual(m.items.map(MenuOrder.title(of:)), ["Movie Cut", "ファイル", "編集", "クリップ", "再生", "移動", "表示", "ウィンドウ", "ヘルプ"], "次の run loop で直る(アプリの更新を待たない)")
-        // 項目の追加(新しい CommandMenu)でも
+        // 項目の追加(新しい CommandMenu)でも。題の無い項目(知らない題)はヘルプの前へ直す(1 回だけ)
         let n = MenuOrder.fixCount
-        m.addItem(NSMenuItem(title: "", action: nil, keyEquivalent: ""))     // 題の無い項目(知らない題)は末尾のまま
+        m.addItem(NSMenuItem(title: "", action: nil, keyEquivalent: ""))
         RunLoop.main.run(until: Date().addingTimeInterval(0.1))
-        XCTAssertEqual(MenuOrder.fixCount, n, "順番が正しいなら何もしない(ループしない)")
+        XCTAssertEqual(MenuOrder.fixCount, n + 1, "知らない題を入れて直すのは 1 回だけ")
+        XCTAssertEqual(m.items.map(MenuOrder.title(of:)).last, "ヘルプ", "ヘルプは必ず最後")
+        RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+        XCTAssertEqual(MenuOrder.fixCount, n + 1, "直ったあとは何もしない(ループしない)")
     }
 
     // MARK: 一時ファイル
