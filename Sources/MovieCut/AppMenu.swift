@@ -4,12 +4,17 @@ import MovieCutCore
 /// メニューバーの項目が呼ぶ操作(ツールバーと同じモデルの関数に行き着く)。
 enum MenuCommand: Hashable {
     case about, settings
-    case addMedia, export
+    case addMedia, export, exportPreset(ExportPreset)
     case split, delete, addText, addBlur, addCharacter, makeVoices
+    // クリップ(M7)
+    case duplicate, rippleDelete, trimBefore, trimAfter, prevClip, nextClip, moveLayerUp, moveLayerDown, addLayer, regenerateVoice
     case playPause, toStart, stepBack, stepForward
+    // 移動(M7)
+    case goStart, goEnd, prevEdit, nextEdit, prevLine, nextLine, jumpToTime
+    case addMarker, renameMarker, prevMarker, nextMarker, deleteMarker, clearMarkers, jumpToMarker(String)
     case zoomIn, zoomOut, zoomFit
     case resolution(String), codec(String), background(String)
-    case toggleSecondScreen, fullScreen
+    case toggleSecondScreen, fullScreen, toggleStatusItem
     case helpVoicevox, helpAquestalk, helpLicense, helpThirdParty
 }
 
@@ -31,7 +36,21 @@ struct MenuShortcut: Hashable {
         if modifiers.contains(.option) { s += "⌥" }
         if modifiers.contains(.shift) { s += "⇧" }
         if modifiers.contains(.command) { s += "⌘" }
-        return s + (key == KeyEquivalent.return.character ? "⏎" : String(key).uppercased())
+        return s + Self.keyName(key)
+    }
+
+    /// キー 1 つの表示名(矢印・⏎・⌫ などは記号に)。
+    static func keyName(_ key: Swift.Character) -> String {
+        switch key {
+        case KeyEquivalent.return.character: return "⏎"
+        case KeyEquivalent.leftArrow.character: return "←"
+        case KeyEquivalent.rightArrow.character: return "→"
+        case KeyEquivalent.upArrow.character: return "↑"
+        case KeyEquivalent.downArrow.character: return "↓"
+        case KeyEquivalent.delete.character: return "⌫"
+        case KeyEquivalent.space.character: return "Space"
+        default: return String(key).uppercased()
+        }
     }
 }
 
@@ -43,9 +62,14 @@ struct MenuItemSpec: Equatable {
     var enabled: Bool
     /// nil = チェックなしの普通の項目、true/false = ラジオ(✓)。
     var checked: Bool?
+    /// 通常キーのヒント(S・Home など)。メニューの文字の後ろに添えるだけで、ショートカットは登録しない(KeyRouter が受ける)。
+    var hint: String? = nil
+
+    /// メニューに出す題(ヒントつき)。
+    var displayTitle: String { hint.map { "\(title)  (\($0))" } ?? title }
 
     static func == (a: MenuItemSpec, b: MenuItemSpec) -> Bool {
-        a.command == b.command && a.title == b.title && a.shortcut == b.shortcut && a.enabled == b.enabled && a.checked == b.checked
+        a.command == b.command && a.title == b.title && a.shortcut == b.shortcut && a.enabled == b.enabled && a.checked == b.checked && a.hint == b.hint
     }
 }
 
@@ -60,11 +84,36 @@ struct MenuState: Equatable {
     var codec = ""
     var bg = ""
     var isSecondScreenOpen = false
+    // クリップ(M7)
+    var canTrim = false              // 再生位置が選択クリップの中
+    var isVoiceSelected = false
+    var canMoveUp = false
+    var canMoveDown = false
+    var hasPrevClip = false
+    var hasNextClip = false
+    // 移動(M7)
+    var hasPrevEdit = false
+    var hasNextEdit = false
+    var hasPrevLine = false
+    var hasNextLine = false
+    var markers: [MarkerItem] = []
+    var markerAtPlayhead = false
+    var hasPrevMarker = false
+    var hasNextMarker = false
+    /// メニューバーのアイコンを出す設定(「表示」メニューの切り替え)。
+    var statusItemShown = true
+
+    struct MarkerItem: Equatable {
+        var id: String
+        var time: Double
+        var name: String
+    }
 
     init() {}
 
     @MainActor
     init(model: ProjectModel?) {
+        statusItemShown = AppServices.statusBar.isEnabled
         guard let m = model else { return }
         hasDocument = true
         isLocked = m.isLocked
@@ -75,6 +124,27 @@ struct MenuState: Equatable {
         codec = m.project.codec
         bg = m.project.bg
         isSecondScreenOpen = m.isSecondScreenOpen
+        let p = m.project, t = m.currentTime
+        if let c = m.selectedClip {
+            canTrim = ClipEditing.canTrim(c, at: t)
+            isVoiceSelected = c.type == .voice
+            if let loc = ClipEditing.locate(c.id, in: p) {
+                canMoveUp = loc.track > 0
+                canMoveDown = loc.track < p.tracks.count - 1
+            }
+        }
+        hasPrevClip = ClipEditing.hasAdjacentClip(in: p, from: m.selectedClipId, forward: false, playhead: t)
+        hasNextClip = ClipEditing.hasAdjacentClip(in: p, from: m.selectedClipId, forward: true, playhead: t)
+        hasPrevEdit = ClipEditing.hasEditPoint(p, before: t)
+        hasNextEdit = ClipEditing.hasEditPoint(p, after: t)
+        var firstVoice = Double.infinity, lastVoice = -Double.infinity
+        for c in p.allClips where c.type == .voice { firstVoice = min(firstVoice, c.start); lastVoice = max(lastVoice, c.start) }
+        hasPrevLine = firstVoice < t - ClipEditing.timeEpsilon
+        hasNextLine = lastVoice > t + ClipEditing.timeEpsilon
+        markers = p.markers.map { MarkerItem(id: $0.id, time: $0.time, name: $0.name) }
+        markerAtPlayhead = m.markerNearPlayhead != nil
+        hasPrevMarker = p.markers.contains { $0.time < t - MarkerEditing.epsilon }
+        hasNextMarker = p.markers.contains { $0.time > t + MarkerEditing.epsilon }
     }
 
     /// 編集してよい状態(ドキュメントがあり、書き出し・音声生成の最中でない)。
@@ -97,20 +167,61 @@ enum AppMenuSpec {
     }
 
     static func file(_ s: MenuState) -> [MenuItemSpec] {
-        [MenuItemSpec(command: .addMedia, title: "素材を追加…", shortcut: cmd("i"), enabled: s.canEdit, checked: nil),
-         MenuItemSpec(command: .export, title: "MP4 を書き出す…", shortcut: cmd("e"), enabled: s.canEdit && s.canExport, checked: nil)]
+        [MenuItemSpec(command: .addMedia, title: "素材を追加…", shortcut: cmd("i"), enabled: s.canEdit, checked: nil)]
     }
 
-    /// 分割・削除(S / Delete は KeyRouter が受けるので、メニューにはキーを付けない)。
-    static func editSelection(_ s: MenuState) -> [MenuItemSpec] {
-        [MenuItemSpec(command: .split, title: "クリップを分割", shortcut: nil, enabled: s.canEdit && s.canSplit, checked: nil),
-         MenuItemSpec(command: .delete, title: "クリップを削除", shortcut: nil, enabled: s.canEdit && s.hasSelection, checked: nil)]
+    /// ファイル ▸ 書き出し: 現在の設定(⌘E)と、書き出しプリセット。
+    static func exportCurrent(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .export, title: "現在の設定で書き出す…", shortcut: cmd("e"), enabled: s.canEdit && s.canExport, checked: nil)
     }
 
-    static func editAdd(_ s: MenuState) -> [MenuItemSpec] {
+    static func exportPresets(_ s: MenuState) -> [MenuItemSpec] {
+        ExportPreset.allCases.map {
+            MenuItemSpec(command: .exportPreset($0), title: $0.title, shortcut: nil, enabled: s.canEdit && s.canExport, checked: nil, hint: $0.summary)
+        }
+    }
+
+    // MARK: クリップメニュー
+
+    /// 追加(テキスト・ぼかし範囲)。
+    static func clipAdd(_ s: MenuState) -> [MenuItemSpec] {
         [MenuItemSpec(command: .addText, title: "テキストを追加", shortcut: cmd("t", shift: true), enabled: s.canEdit, checked: nil),
-         MenuItemSpec(command: .addBlur, title: "ぼかし範囲を追加", shortcut: cmd("b", shift: true), enabled: s.canEdit, checked: nil),
-         MenuItemSpec(command: .addCharacter, title: "キャラクターを追加", shortcut: cmd("c", shift: true), enabled: s.canEdit, checked: nil),
+         MenuItemSpec(command: .addBlur, title: "ぼかし範囲を追加", shortcut: cmd("b", shift: true), enabled: s.canEdit, checked: nil)]
+    }
+
+    /// 分割・複製・削除(S / Delete は KeyRouter が受けるので、メニューにはキーを付けずヒントだけ添える)。
+    static func clipEdit(_ s: MenuState) -> [MenuItemSpec] {
+        [MenuItemSpec(command: .split, title: "クリップを分割", shortcut: nil, enabled: s.canEdit && s.canSplit, checked: nil, hint: "S"),
+         MenuItemSpec(command: .duplicate, title: "クリップを複製", shortcut: cmd("d"), enabled: s.canEdit && s.hasSelection, checked: nil),
+         MenuItemSpec(command: .delete, title: "クリップを削除", shortcut: nil, enabled: s.canEdit && s.hasSelection, checked: nil, hint: "⌫"),
+         MenuItemSpec(command: .rippleDelete, title: "すき間を詰めて削除", shortcut: MenuShortcut(key: .delete, modifiers: .shift), enabled: s.canEdit && s.hasSelection, checked: nil)]
+    }
+
+    static func clipTrim(_ s: MenuState) -> [MenuItemSpec] {
+        [MenuItemSpec(command: .trimBefore, title: "再生位置より前を切り落とす", shortcut: MenuShortcut(key: "[", modifiers: .option), enabled: s.canEdit && s.canTrim, checked: nil),
+         MenuItemSpec(command: .trimAfter, title: "再生位置より後ろを切り落とす", shortcut: MenuShortcut(key: "]", modifiers: .option), enabled: s.canEdit && s.canTrim, checked: nil)]
+    }
+
+    static func clipNavigate(_ s: MenuState) -> [MenuItemSpec] {
+        [MenuItemSpec(command: .prevClip, title: "前のクリップを選択", shortcut: MenuShortcut(key: .leftArrow, modifiers: .option), enabled: s.canEdit && s.hasPrevClip, checked: nil),
+         MenuItemSpec(command: .nextClip, title: "次のクリップを選択", shortcut: MenuShortcut(key: .rightArrow, modifiers: .option), enabled: s.canEdit && s.hasNextClip, checked: nil),
+         MenuItemSpec(command: .moveLayerUp, title: "選択クリップを上のレイヤーへ", shortcut: MenuShortcut(key: .upArrow, modifiers: .option), enabled: s.canEdit && s.canMoveUp, checked: nil),
+         MenuItemSpec(command: .moveLayerDown, title: "選択クリップを下のレイヤーへ", shortcut: MenuShortcut(key: .downArrow, modifiers: .option), enabled: s.canEdit && s.canMoveDown, checked: nil)]
+    }
+
+    static func clipLayerAndVoice(_ s: MenuState) -> [MenuItemSpec] {
+        [MenuItemSpec(command: .addLayer, title: "レイヤーを追加", shortcut: cmd("l", shift: true), enabled: s.canEdit, checked: nil),
+         MenuItemSpec(command: .regenerateVoice, title: "選択クリップの音声を作り直す", shortcut: MenuShortcut(key: "r", modifiers: [.command, .option]), enabled: s.canEdit && s.isVoiceSelected, checked: nil)]
+    }
+
+    /// クリップメニューの全項目(区切りごとのグループ)。
+    static func clipMenu(_ s: MenuState) -> [[MenuItemSpec]] {
+        [clipAdd(s), clipEdit(s), clipTrim(s), clipNavigate(s), clipLayerAndVoice(s)]
+    }
+
+    /// 編集メニューに残すもの(キャラクターと台本)。
+    static func editAdd(_ s: MenuState) -> [MenuItemSpec] {
+        [MenuItemSpec(command: .addCharacter, title: "キャラクターを追加", shortcut: cmd("c", shift: true), enabled: s.canEdit, checked: nil),
          MenuItemSpec(command: .makeVoices, title: "台本から音声を作る", shortcut: cmd(.return), enabled: s.canEdit, checked: nil)]
     }
 
@@ -120,6 +231,45 @@ enum AppMenuSpec {
          MenuItemSpec(command: .toStart, title: "先頭へ戻る", shortcut: nil, enabled: s.canEdit, checked: nil),
          MenuItemSpec(command: .stepBack, title: "1コマ戻る", shortcut: nil, enabled: s.canEdit, checked: nil),
          MenuItemSpec(command: .stepForward, title: "1コマ進む", shortcut: nil, enabled: s.canEdit, checked: nil)]
+    }
+
+    // MARK: 移動メニュー
+
+    private static func opt(_ k: KeyEquivalent, command: Bool = false) -> MenuShortcut {
+        MenuShortcut(key: k, modifiers: command ? [.option, .command] : .option)
+    }
+
+    /// 先頭・末尾(Home / End は KeyRouter が受けるのでヒントだけ)。
+    static func gotoEnds(_ s: MenuState) -> [MenuItemSpec] {
+        [MenuItemSpec(command: .goStart, title: "先頭へ", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "Home"),
+         MenuItemSpec(command: .goEnd, title: "末尾へ", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "End")]
+    }
+
+    static func gotoNeighbours(_ s: MenuState) -> [MenuItemSpec] {
+        [MenuItemSpec(command: .prevEdit, title: "前のクリップの境目へ", shortcut: opt(.leftArrow, command: true), enabled: s.canEdit && s.hasPrevEdit, checked: nil),
+         MenuItemSpec(command: .nextEdit, title: "次のクリップの境目へ", shortcut: opt(.rightArrow, command: true), enabled: s.canEdit && s.hasNextEdit, checked: nil),
+         MenuItemSpec(command: .prevLine, title: "前のセリフへ", shortcut: MenuShortcut(key: .leftArrow, modifiers: .control), enabled: s.canEdit && s.hasPrevLine, checked: nil),
+         MenuItemSpec(command: .nextLine, title: "次のセリフへ", shortcut: MenuShortcut(key: .rightArrow, modifiers: .control), enabled: s.canEdit && s.hasNextLine, checked: nil)]
+    }
+
+    static func gotoTime(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .jumpToTime, title: "時間を指定して移動…", shortcut: cmd("j"), enabled: s.canEdit, checked: nil)
+    }
+
+    static func markerItems(_ s: MenuState) -> [MenuItemSpec] {
+        [MenuItemSpec(command: .addMarker, title: "マーカーを追加", shortcut: opt("m", command: true), enabled: s.canEdit && !s.markerAtPlayhead, checked: nil),
+         MenuItemSpec(command: .renameMarker, title: "マーカーを名前変更…", shortcut: nil, enabled: s.canEdit && s.markerAtPlayhead, checked: nil),
+         MenuItemSpec(command: .prevMarker, title: "前のマーカーへ", shortcut: opt(.upArrow, command: true), enabled: s.canEdit && s.hasPrevMarker, checked: nil),
+         MenuItemSpec(command: .nextMarker, title: "次のマーカーへ", shortcut: opt(.downArrow, command: true), enabled: s.canEdit && s.hasNextMarker, checked: nil),
+         MenuItemSpec(command: .deleteMarker, title: "マーカーを削除", shortcut: nil, enabled: s.canEdit && s.markerAtPlayhead, checked: nil),
+         MenuItemSpec(command: .clearMarkers, title: "すべてのマーカーを消去", shortcut: nil, enabled: s.canEdit && !s.markers.isEmpty, checked: nil)]
+    }
+
+    /// マーカー一覧の 1 項目の題(時刻と名前)。
+    static func markerTitle(_ m: MenuState.MarkerItem) -> String { "\(timecode(m.time))  \(m.name)" }
+
+    static func markerList(_ s: MenuState) -> [MenuItemSpec] {
+        s.markers.map { MenuItemSpec(command: .jumpToMarker($0.id), title: markerTitle($0), shortcut: nil, enabled: s.canEdit, checked: nil) }
     }
 
     static func zoom(_ s: MenuState) -> [MenuItemSpec] {
@@ -156,6 +306,10 @@ enum AppMenuSpec {
         MenuItemSpec(command: .toggleSecondScreen, title: s.isSecondScreenOpen ? "別画面を閉じる" : "プレビューを別画面に表示", shortcut: cmd("p"), enabled: s.canEdit, checked: nil)
     }
 
+    static func statusItemToggle(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .toggleStatusItem, title: "メニューバーアイコンを表示", shortcut: nil, enabled: true, checked: s.statusItemShown)
+    }
+
     /// 標準の「全画面表示」(⌃⌘F)。ウィンドウがあれば使える(書き出し中でも構わない)。
     static func fullScreen(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .fullScreen, title: "全画面表示", shortcut: MenuShortcut(key: "f", modifiers: [.command, .control]), enabled: s.hasDocument, checked: nil)
@@ -170,8 +324,10 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, settings(s)] + file(s) + editSelection(s) + editAdd(s) + playback(s) + zoom(s)
-            + resolutions(s) + [customResolution(s)] + codecItems(s) + backgroundItems(s) + [secondScreen(s), fullScreen(s)] + help.flatMap { $0 }
+        [about, settings(s)] + file(s) + [exportCurrent(s)] + exportPresets(s) + clipMenu(s).flatMap { $0 } + editAdd(s) + playback(s)
+            + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerList(s)
+            + zoom(s) + resolutions(s) + [customResolution(s)] + codecItems(s) + backgroundItems(s)
+            + [secondScreen(s), statusItemToggle(s), fullScreen(s)] + help.flatMap { $0 }
     }
 }
 
@@ -187,13 +343,41 @@ enum AppMenu {
         case .helpAquestalk: openURL(DependencyStatus.aquestalkURL)
         case .helpLicense: HelpDocs.open(.license)
         case .helpThirdParty: HelpDocs.open(.thirdParty)
+        case .toggleStatusItem:
+            AppServices.statusBar.setEnabled(!AppServices.statusBar.isEnabled)
+            ActiveDocument.shared.refresh()
         default:
             guard let m = model else { return }
             switch c {
             case .settings: m.openSettings()
             case .addMedia: m.chooseAndAddMedia()
             case .export: m.chooseAndExport()
+            case .exportPreset(let p): m.chooseAndExport(preset: p)
             case .split: m.splitSelected()
+            case .duplicate: m.duplicateSelected()
+            case .rippleDelete: m.rippleDeleteSelected()
+            case .trimBefore: m.trimSelectedBeforePlayhead()
+            case .trimAfter: m.trimSelectedAfterPlayhead()
+            case .prevClip: m.selectAdjacentClip(forward: false)
+            case .nextClip: m.selectAdjacentClip(forward: true)
+            case .moveLayerUp: m.moveSelectedToAdjacentLayer(up: true)
+            case .moveLayerDown: m.moveSelectedToAdjacentLayer(up: false)
+            case .addLayer: m.addTrack()
+            case .regenerateVoice: Task { await m.regenerateSelectedVoice() }
+            case .goStart: m.playback.goToStart()
+            case .goEnd: m.goToEnd()
+            case .prevEdit: m.seekEditPoint(forward: false)
+            case .nextEdit: m.seekEditPoint(forward: true)
+            case .prevLine: m.seekVoiceLine(forward: false)
+            case .nextLine: m.seekVoiceLine(forward: true)
+            case .jumpToTime: m.openJumpSheet()
+            case .addMarker: m.addMarkerAtPlayhead()
+            case .renameMarker: m.openRenameMarker()
+            case .prevMarker: m.seekMarker(forward: false)
+            case .nextMarker: m.seekMarker(forward: true)
+            case .deleteMarker: m.deleteMarkerAtPlayhead()
+            case .clearMarkers: m.clearMarkers()
+            case .jumpToMarker(let id): m.jumpToMarker(id: id)
             case .delete: m.deleteSelected()
             case .addText: m.addTextClip()
             case .addBlur: m.addBlurClip()

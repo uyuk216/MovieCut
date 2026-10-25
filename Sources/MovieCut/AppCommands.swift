@@ -7,11 +7,11 @@ struct MenuItemView: View {
 
     var body: some View {
         if let checked = spec.checked {
-            Toggle(spec.title, isOn: Binding(get: { checked }, set: { _ in perform(spec.command) }))
+            Toggle(spec.displayTitle, isOn: Binding(get: { checked }, set: { _ in perform(spec.command) }))
                 .keyboardShortcut(spec.shortcut?.keyboardShortcut)
                 .disabled(!spec.enabled)
         } else {
-            Button(spec.title) { perform(spec.command) }
+            Button(spec.displayTitle) { perform(spec.command) }
                 .keyboardShortcut(spec.shortcut?.keyboardShortcut)
                 .disabled(!spec.enabled)
         }
@@ -47,22 +47,56 @@ struct AppCommands: Commands {
 
         // ファイル(⌘P のプリントは menu.js に無く、別画面表示と衝突するので、その場所に素材追加と書き出しを置く)
         CommandGroup(replacing: .printItem) {
-            MenuSection { s, run in items(AppMenuSpec.file(s), run) }
+            MenuSection { s, run in
+                items(AppMenuSpec.file(s), run)
+                Menu("書き出し") {
+                    MenuItemView(spec: AppMenuSpec.exportCurrent(s), perform: run)
+                    Divider()
+                    items(AppMenuSpec.exportPresets(s), run)
+                }
+            }
         }
 
-        // 編集
+        // 編集(分割・削除などクリップの操作はクリップメニューへ移した)
         CommandGroup(after: .pasteboard) {
             MenuSection { s, run in
-                Divider()
-                items(AppMenuSpec.editSelection(s), run)
                 Divider()
                 items(AppMenuSpec.editAdd(s), run)
             }
         }
 
-        // 再生
+        // クリップ / 再生 / 移動。SwiftUI は CommandMenu を「表示」の後ろへ置くので、順番は MenuOrder が起動後に直す。
+        CommandMenu("クリップ") {
+            MenuSection { s, run in
+                let groups = AppMenuSpec.clipMenu(s)
+                ForEach(Array(groups.enumerated()), id: \.offset) { i, g in
+                    if i > 0 { Divider() }
+                    items(g, run)
+                }
+            }
+        }
+
         CommandMenu("再生") {
             MenuSection { s, run in items(AppMenuSpec.playback(s), run) }
+        }
+
+        CommandMenu("移動") {
+            MenuSection { s, run in
+                items(AppMenuSpec.gotoEnds(s), run)
+                Divider()
+                items(AppMenuSpec.gotoNeighbours(s), run)
+                Divider()
+                MenuItemView(spec: AppMenuSpec.gotoTime(s), perform: run)
+                Divider()
+                items(AppMenuSpec.markerItems(s), run)
+                Menu("マーカー一覧") {
+                    if s.markers.isEmpty {
+                        Text("マーカーはありません")
+                    } else {
+                        items(AppMenuSpec.markerList(s), run)
+                    }
+                }
+            }
         }
 
         // 表示
@@ -79,6 +113,7 @@ struct AppCommands: Commands {
                 Menu("背景色") { items(AppMenuSpec.backgroundItems(s), run) }
                 Divider()
                 MenuItemView(spec: AppMenuSpec.secondScreen(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.statusItemToggle(s), perform: run)
                 Divider()
             }
         }

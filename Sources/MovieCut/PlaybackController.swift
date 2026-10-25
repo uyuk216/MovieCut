@@ -155,7 +155,6 @@ final class PlaybackController {
     private lazy var linkTarget = DisplayLinkTarget { [weak self] in
         MainActor.assumeIsolated { self?.tick() }
     }
-    private let tempPrefix = "moviecut-playback-\(ProcessInfo.processInfo.processIdentifier)-"
 
     init(model: ProjectModel?, backend: AudioBackend = EngineAudioBackend(), clock: PlaybackClock = HostClock(),
          debounce: TimeInterval = 0.25,
@@ -371,7 +370,7 @@ final class PlaybackController {
         generation += 1
         let gen = generation
         buildingKey = key
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent(tempPrefix + UUID().uuidString + ".caf")
+        let url = PlaybackTempFiles.newFileURL()
         let mixer = self.mixer
         let assets = model?.assets
         let result: Result<Double, Error> = await Task.detached(priority: .userInitiated) {

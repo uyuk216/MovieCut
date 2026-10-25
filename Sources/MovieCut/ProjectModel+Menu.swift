@@ -28,23 +28,29 @@ extension ProjectModel {
     /// 設定シート(動画設定)を開く。
     func openSettings() { if !isLocked { showSettings = true } }
 
-    /// 「MP4 を書き出す…」: 保存パネルで場所を選び、書き出し、終わったら Finder で見せる。
-    func chooseAndExport() {
+    /// 「現在の設定で書き出す…」/ 書き出しプリセット: 保存パネルで場所を選び、書き出し、終わったら Finder で見せる。
+    /// プリセットはプロジェクトの写しに当てるので、ドキュメントは変わらない。保存パネルの提案名は `<書類名>-<プリセット>.mp4|.m4a`。
+    func chooseAndExport(preset: ExportPreset? = nil) {
         guard canExport else { return }
         let panel = NSSavePanel()
-        panel.allowedContentTypes = [.mpeg4Movie]
-        panel.nameFieldStringValue = documentName + ".mp4"
+        panel.allowedContentTypes = [preset?.isAudioOnly == true ? .mpeg4Audio : .mpeg4Movie]
+        panel.nameFieldStringValue = exportSuggestedName(preset: preset)
         panel.canCreateDirectories = true
-        panel.title = "MP4 書き出し"
+        panel.title = preset.map { "書き出し — \($0.title)" } ?? "MP4 書き出し"
         let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
             guard resp == .OK, let url = panel.url, let self else { return }
             Task { @MainActor in
-                if case .success(let u) = await self.runExport(to: url) {
+                if case .success(let u) = await self.runExport(to: url, preset: preset) {
                     NSWorkspace.shared.activateFileViewerSelecting([u])
                 }
             }
         }
         if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
+    }
+
+    /// 保存パネルが最初に出す名前。
+    func exportSuggestedName(preset: ExportPreset?) -> String {
+        preset?.suggestedFileName(documentName: documentName) ?? documentName + ".mp4"
     }
 
     /// 書き出し形式(メニューの H.264 / HEVC)。Undo できる。

@@ -10,6 +10,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // 前の起動が残した再生用の一時ファイル(1 日より古いもの)を消す
+        DispatchQueue.global(qos: .utility).async { PlaybackTempFiles.removeStale() }
+        // メニューの並び(クリップ / 再生 / 移動 を表示の前へ)とメニューバーのアイコン
+        MainActor.assumeIsolated {
+            MenuOrder.install()
+            AppServices.statusBar.start()
+        }
         DebugHooks.trace("applicationDidFinishLaunching docs=\(NSDocumentController.shared.documents.count) windows=\(NSApp.windows.count)")
         // 書類を渡して起動された(ダブルクリック・open -a file)ときは、SwiftUI が作った空の名称未設定をすぐ閉じる
         let launchedWithDocuments = NSAppleEventManager.shared().currentAppleEvent?.eventID == AEEventID(kAEOpenDocuments)
@@ -45,6 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         MainActor.assumeIsolated { WindowFrameKeeper.saveAll() }
+        PlaybackTempFiles.removeCurrent()
         if HangWatch.enabled { HangWatch.shared.printSummary() }
         DebugHooks.logQuit(engineStartedByUs: AppServices.engine.startedByUs)
         AppServices.engine.shutdown()

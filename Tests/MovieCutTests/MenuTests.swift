@@ -33,12 +33,18 @@ final class MenuTests: XCTestCase {
         XCTAssertEqual(AppMenuSpec.settings(s).title, "設定…")
         XCTAssertEqual(AppMenuSpec.settings(s).shortcut, sc(",", .command))
         let file = AppMenuSpec.file(s)
-        XCTAssertEqual(file.map(\.title), ["素材を追加…", "MP4 を書き出す…"])
-        XCTAssertEqual(file.map(\.shortcut), [sc("i", .command), sc("e", .command)])
-        XCTAssertEqual(AppMenuSpec.editSelection(s).map(\.title), ["クリップを分割", "クリップを削除"])
+        XCTAssertEqual(file.map(\.title), ["素材を追加…"])
+        XCTAssertEqual(file.map(\.shortcut), [sc("i", .command)])
+        XCTAssertEqual(AppMenuSpec.exportCurrent(s).title, "現在の設定で書き出す…")
+        XCTAssertEqual(AppMenuSpec.exportCurrent(s).shortcut, sc("e", .command))
+        XCTAssertEqual(AppMenuSpec.clipEdit(s).map(\.title), ["クリップを分割", "クリップを複製", "クリップを削除", "すき間を詰めて削除"])
+        // 編集メニューに残るのはキャラクターと台本だけ。テキスト・ぼかし範囲はクリップメニューへ移った
         let add = AppMenuSpec.editAdd(s)
-        XCTAssertEqual(add.map(\.title), ["テキストを追加", "ぼかし範囲を追加", "キャラクターを追加", "台本から音声を作る"])
-        XCTAssertEqual(add.map(\.shortcut), [sc("t", [.command, .shift]), sc("b", [.command, .shift]), sc("c", [.command, .shift]), sc(.return, .command)])
+        XCTAssertEqual(add.map(\.title), ["キャラクターを追加", "台本から音声を作る"])
+        XCTAssertEqual(add.map(\.shortcut), [sc("c", [.command, .shift]), sc(.return, .command)])
+        let clipAdd = AppMenuSpec.clipAdd(s)
+        XCTAssertEqual(clipAdd.map(\.title), ["テキストを追加", "ぼかし範囲を追加"])
+        XCTAssertEqual(clipAdd.map(\.shortcut), [sc("t", [.command, .shift]), sc("b", [.command, .shift])])
         XCTAssertEqual(AppMenuSpec.playback(s).map(\.title), ["再生 / 停止", "先頭へ戻る", "1コマ戻る", "1コマ進む"])
         let zoom = AppMenuSpec.zoom(s)
         XCTAssertEqual(zoom.map(\.title), ["タイムラインを拡大", "タイムラインを縮小", "全体表示"])
@@ -77,7 +83,7 @@ final class MenuTests: XCTestCase {
         // S / Delete / Space / Home / ← / → は KeyRouter が受ける(登録すると入力欄で打てなくなる)
         let s = state()
         for c in [MenuCommand.split, .delete, .playPause, .toStart, .stepBack, .stepForward] {
-            let spec = (AppMenuSpec.editSelection(s) + AppMenuSpec.playback(s)).first { $0.command == c }
+            let spec = (AppMenuSpec.clipEdit(s) + AppMenuSpec.playback(s)).first { $0.command == c }
             XCTAssertNotNil(spec)
             XCTAssertNil(spec?.shortcut, "\(c) にショートカットがあります")
         }
@@ -98,7 +104,7 @@ final class MenuTests: XCTestCase {
         XCTAssertFalse(s.hasDocument)
         for spec in AppMenuSpec.all(s) {
             switch spec.command {
-            case .about, .helpVoicevox, .helpAquestalk, .helpLicense, .helpThirdParty: XCTAssertTrue(spec.enabled, "\(spec.title)")
+            case .about, .helpVoicevox, .helpAquestalk, .helpLicense, .helpThirdParty, .toggleStatusItem: XCTAssertTrue(spec.enabled, "\(spec.title)")
             default: XCTAssertFalse(spec.enabled, "\(spec.title) が有効です")
             }
         }
@@ -108,26 +114,28 @@ final class MenuTests: XCTestCase {
         let s = state { $0.canExport = false }
         XCTAssertTrue(AppMenuSpec.settings(s).enabled)
         XCTAssertTrue(item(AppMenuSpec.file(s), .addMedia)!.enabled)
-        XCTAssertFalse(item(AppMenuSpec.file(s), .export)!.enabled, "中身が無いと書き出せない")
-        XCTAssertFalse(item(AppMenuSpec.editSelection(s), .split)!.enabled)
-        XCTAssertFalse(item(AppMenuSpec.editSelection(s), .delete)!.enabled)
+        XCTAssertFalse(AppMenuSpec.exportCurrent(s).enabled, "中身が無いと書き出せない")
+        XCTAssertTrue(AppMenuSpec.exportPresets(s).allSatisfy { !$0.enabled }, "プリセットも同じ")
+        XCTAssertFalse(item(AppMenuSpec.clipEdit(s), .split)!.enabled)
+        XCTAssertFalse(item(AppMenuSpec.clipEdit(s), .delete)!.enabled)
         XCTAssertTrue(AppMenuSpec.editAdd(s).allSatisfy(\.enabled))
+        XCTAssertTrue(AppMenuSpec.clipAdd(s).allSatisfy(\.enabled))
         XCTAssertTrue(AppMenuSpec.playback(s).allSatisfy(\.enabled))
     }
 
     func testSelectionEnablesDeleteAndSplitNeedsPlayheadInside() {
         var s = state { $0.hasSelection = true }
-        XCTAssertTrue(item(AppMenuSpec.editSelection(s), .delete)!.enabled)
-        XCTAssertFalse(item(AppMenuSpec.editSelection(s), .split)!.enabled, "再生ヘッドがクリップの外")
+        XCTAssertTrue(item(AppMenuSpec.clipEdit(s), .delete)!.enabled)
+        XCTAssertFalse(item(AppMenuSpec.clipEdit(s), .split)!.enabled, "再生ヘッドがクリップの外")
         s.canSplit = true
-        XCTAssertTrue(item(AppMenuSpec.editSelection(s), .split)!.enabled)
+        XCTAssertTrue(item(AppMenuSpec.clipEdit(s), .split)!.enabled)
     }
 
     func testEverythingWithADocumentIsDisabledWhileLocked() {
         let s = state { $0.isLocked = true; $0.hasSelection = true; $0.canSplit = true }
         for spec in AppMenuSpec.all(s) {
             switch spec.command {
-            case .about, .helpVoicevox, .helpAquestalk, .helpLicense, .helpThirdParty, .fullScreen: XCTAssertTrue(spec.enabled, "\(spec.title)")
+            case .about, .helpVoicevox, .helpAquestalk, .helpLicense, .helpThirdParty, .fullScreen, .toggleStatusItem: XCTAssertTrue(spec.enabled, "\(spec.title)")
             default: XCTAssertFalse(spec.enabled, "\(spec.title) が書き出し中も有効です")
             }
         }

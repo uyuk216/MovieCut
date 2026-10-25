@@ -2,7 +2,7 @@ import AppKit
 
 /// ウィンドウ全体のキー操作。入力欄にフォーカスがあるときは何もしない(台本やシートの入力を壊さない)。
 enum KeyCommand: Hashable {
-    case playPause, stepBack, stepForward, toStart
+    case playPause, stepBack, stepForward, toStart, toEnd
     /// S = 分割、Delete / Backspace = 削除、Escape = 選択を外す(ハンドラが無ければキーはそのまま素通りする)。
     case split, delete, deselect
     /// ⌘= (US 配列の「⌘+」の押し方)。メニューの ⌘+ とは別に、キーボードの = でも拡大できるようにする。
@@ -17,6 +17,7 @@ final class KeyRouter {
         123: .stepBack,        // ←
         124: .stepForward,     // →
         115: .toStart,         // Home
+        119: .toEnd,           // End
         1: .split,             // S
         51: .delete,           // Delete(Backspace)
         117: .delete,          // Forward Delete
@@ -80,7 +81,7 @@ final class KeyRouter {
         guard let cmd = Self.command(keyCode: keyCode, modifiers: modifiers, firstResponder: firstResponder),
               let h = handlers[cmd] else { return false }
         // Space の長押しで再生/停止が連打されないようにする(矢印のコマ送りは長押しで続ける)
-        if isRepeat && (cmd == .playPause || cmd == .toStart) { return true }
+        if isRepeat && (cmd == .playPause || cmd == .toStart || cmd == .toEnd) { return true }
         return h()
     }
 }

@@ -23,12 +23,11 @@ func parseSize(_ s: String) -> (Int, Int) {
 }
 
 /// 書き出して、進み具合(約10%ごと)を stderr、最後に コマ数・秒・実時間比 を stdout に出す。
-func runExport(_ p: Project, to url: URL) async throws {
-    let exporter = Exporter(project: p, assets: RenderAssets())
-    let frames = exporter.totalFrames
+func runExport(_ p: Project, to url: URL, preset: ExportPreset? = nil) async throws {
+    let frames = preset?.isAudioOnly == true ? 0 : Exporter(project: ExportJob.resolvedProject(p, preset: preset), assets: RenderAssets()).totalFrames
     var nextMark = 0.1
     let t0 = Date()
-    try await exporter.export(to: url) { v in
+    try await ExportJob.run(project: p, preset: preset, to: url) { v in
         if v >= nextMark - 1e-9 {
             FileHandle.standardError.write(Data(String(format: "  %3.0f%%\n", v * 100).utf8))
             nextMark = (v * 10 + 1e-9).rounded(.down) / 10 + 0.1
@@ -92,12 +91,19 @@ case "frame" where args.count >= 2:
         print("wrote \(outPath) (\(p.width)x\(p.height))")
     } catch { fail("読めませんでした: \(error)") }
 case "export" where args.count >= 3:
-    // export <in.ymproj> <out.mp4> [--size WxH] [--codec h264|hevc]
+    // export <in.mcpjc> <out.mp4|out.m4a> [--preset youtube1080|youtube4k|short|light|audio] [--size WxH] [--codec h264|hevc]
+    // --preset はプロジェクトの写しに当てるだけ(入力ファイルは変えない)。--size / --codec は、プリセットの前に当てる。
     do {
         var p = try Project.load(from: URL(fileURLWithPath: args[1]))
         if let s = optValue("--size") { let sz = parseSize(s); p = p.scaledForResolution(newWidth: sz.0, newHeight: sz.1) }
         if let c = optValue("--codec") { guard ["h264", "hevc"].contains(c) else { fail("--codec は h264 か hevc") }; p.codec = c }
-        try await runExport(p, to: URL(fileURLWithPath: args[2]))
+        var preset: ExportPreset?
+        if let name = optValue("--preset") {
+            guard let pr = ExportPreset(cliName: name) else { fail("--preset は " + ExportPreset.allCases.map(\.rawValue).joined(separator: " / ") + " のどれか") }
+            preset = pr
+            if pr.isAudioOnly, !args[2].lowercased().hasSuffix(".m4a") { FileHandle.standardError.write(Data("注意: 音声のみの出力先は .m4a にしてください\n".utf8)) }
+        }
+        try await runExport(p, to: URL(fileURLWithPath: args[2]), preset: preset)
     } catch { fail("書き出せませんでした: \(error.localizedDescription)") }
 case "speak":
     // speak (--voicevox <id> [--speed 1 --pitch 0 --intonation 1] | --voice <preset> [--speed 100]) --text "…" --out x.wav
@@ -218,5 +224,5 @@ case "smoke":
         try await runExport(p, to: URL(fileURLWithPath: outPath))
     } catch { fail("書き出せませんでした: \(error.localizedDescription)") }
 default:
-    fail("usage:\n  moviecut-cli info <file.ymproj>\n  moviecut-cli new <out.ymproj>\n  moviecut-cli export <in.ymproj> <out.mp4> [--size WxH] [--codec h264|hevc]\n  moviecut-cli smoke --out <mp4> [--size WxH] [--codec h264|hevc] [--blur] [--tone] [--save-project p.ymproj]\n  moviecut-cli speak (--voicevox <id> [--speed --pitch --intonation] | --voice <preset> [--speed]) --text <t> --out <wav>\n  moviecut-cli speakers | deps | script <script.txt> --out <p.ymproj>\n  moviecut-cli frame <in.ymproj> --t <sec> --out <png> [--size WxH] [--bench N]\n  moviecut-cli addvideo <in.ymproj> <clip.mp4> <out.ymproj>\n  moviecut-cli genclips <N> <out.ymproj>")
+    fail("usage:\n  moviecut-cli info <file.ymproj>\n  moviecut-cli new <out.ymproj>\n  moviecut-cli export <in.mcpjc> <out.mp4|out.m4a> [--preset youtube1080|youtube4k|short|light|audio] [--size WxH] [--codec h264|hevc]\n  moviecut-cli smoke --out <mp4> [--size WxH] [--codec h264|hevc] [--blur] [--tone] [--save-project p.ymproj]\n  moviecut-cli speak (--voicevox <id> [--speed --pitch --intonation] | --voice <preset> [--speed]) --text <t> --out <wav>\n  moviecut-cli speakers | deps | script <script.txt> --out <p.ymproj>\n  moviecut-cli frame <in.ymproj> --t <sec> --out <png> [--size WxH] [--bench N]\n  moviecut-cli addvideo <in.ymproj> <clip.mp4> <out.ymproj>\n  moviecut-cli genclips <N> <out.ymproj>")
 }

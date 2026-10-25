@@ -75,6 +75,8 @@ struct ContentView: View {
         .preferredColorScheme(.dark)
         .overlay { BusyOverlay(message: model.busyMessage) }
         .sheet(isPresented: $model.showSettings) { SettingsSheet(model: model) }
+        .sheet(isPresented: $model.showJumpSheet) { JumpToTimeSheet(model: model) }
+        .sheet(isPresented: Binding(get: { model.renamingMarkerId != nil }, set: { if !$0 { model.renamingMarkerId = nil } })) { RenameMarkerSheet(model: model) }
         .sheet(isPresented: Binding(get: { model.isExporting }, set: { _ in })) { ExportSheet(model: model) }
         .alert(model.errorTitle, isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {
             Button("OK") { model.errorMessage = nil }
@@ -361,7 +363,7 @@ struct ExportSheet: View {
     @ObservedObject var model: ProjectModel
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("MP4 を書き出しています").font(.headline)
+            Text(model.exportTitle).font(.headline)
             ProgressView(value: model.exportProgress).frame(width: 320)
             HStack {
                 Text("\(Int((model.exportProgress * 100).rounded()))%").monospacedDigit().foregroundStyle(.secondary)
@@ -372,6 +374,79 @@ struct ExportSheet: View {
         }
         .padding(20)
         .interactiveDismissDisabled()
+    }
+}
+
+// MARK: - 時間を指定して移動 / マーカーの名前変更(M7)
+
+/// 「時間を指定して移動…」(⌘J)。`12.5` `1:23` `1:23.5` `00:01:23.50` を受ける。Return で決定、Esc で取り消し。
+struct JumpToTimeSheet: View {
+    @ObservedObject var model: ProjectModel
+    @State private var text = ""
+    @State private var failed = false
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("時間を指定して移動").font(.headline)
+            TextField("例: 12.5 / 1:23 / 1:23.5 / 00:01:23.50", text: $text)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 340)
+                .focused($focused)
+                .onSubmit { commit() }
+                .onChange(of: text) { _, _ in failed = false }
+            if failed {
+                Text("時間を読み取れませんでした。例: 12.5(秒)・1:23(分:秒)・00:01:23.50(時:分:秒)").font(.caption).foregroundStyle(.red)
+            } else {
+                Text("全体の長さ \(timecode(model.project.endTime))。範囲を超えた値は先頭か末尾に収めます。").font(.caption).foregroundStyle(.secondary)
+            }
+            HStack {
+                Spacer()
+                Button("キャンセル") { model.showJumpSheet = false }
+                    .keyboardShortcut(.cancelAction)
+                Button("移動") { commit() }
+                    .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding(20)
+        .onAppear { text = timecode(model.currentTime); focused = true }
+    }
+
+    private func commit() { failed = !model.commitJump(text) }
+}
+
+/// 「マーカーを名前変更…」。
+struct RenameMarkerSheet: View {
+    @ObservedObject var model: ProjectModel
+    @State private var name = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("マーカーの名前").font(.headline)
+            TextField("名前", text: $name)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 300)
+                .focused($focused)
+                .onSubmit { commit() }
+            HStack {
+                Spacer()
+                Button("キャンセル") { model.renamingMarkerId = nil }
+                    .keyboardShortcut(.cancelAction)
+                Button("変更") { commit() }
+                    .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding(20)
+        .onAppear {
+            name = model.project.markers.first { $0.id == model.renamingMarkerId }?.name ?? ""
+            focused = true
+        }
+    }
+
+    private func commit() {
+        if let id = model.renamingMarkerId { model.renameMarker(id: id, to: name) }
+        model.renamingMarkerId = nil
     }
 }
 

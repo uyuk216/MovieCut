@@ -15,10 +15,12 @@ public struct Project: Codable, Equatable {
     public var aquestalkCommand: String = defaultAquesTalkCommand
     public var characters: [Character] = Character.defaults()
     public var tracks: [Track] = Track.defaultLayers()
+    /// タイムライン上のマーカー(M7)。空のときはファイルに書かない。
+    public var markers: [Marker] = []
     /// 知らないキー(保持して書き戻す)
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["width", "height", "fps", "bg", "codec", "voicevoxUrl", "aquestalkCommand", "characters", "tracks"]
+    static let knownKeys: Set<String> = ["width", "height", "fps", "bg", "codec", "voicevoxUrl", "aquestalkCommand", "characters", "tracks", "markers"]
 
     public init() {}
 
@@ -37,6 +39,7 @@ public struct Project: Codable, Equatable {
         // Electron 版: 空配列・欠落のときは既定に戻す
         if let v: [Character] = l.value("characters"), !v.isEmpty { characters = v }
         if let v: [Track] = l.value("tracks"), !v.isEmpty { tracks = v }
+        markers = l.value("markers") ?? []
         extra = l.extra()
     }
 
@@ -52,6 +55,7 @@ public struct Project: Codable, Equatable {
         try c.encode(aquestalkCommand, forKey: AnyKey("aquestalkCommand"))
         try c.encode(characters, forKey: AnyKey("characters"))
         try c.encode(tracks, forKey: AnyKey("tracks"))
+        if !markers.isEmpty { try c.encode(markers, forKey: AnyKey("markers")) }
     }
 
     public var allClips: [Clip] { tracks.flatMap { $0.clips } }

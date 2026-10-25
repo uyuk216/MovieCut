@@ -43,7 +43,7 @@ import MovieCutCore
 ///   最後に Redo までして Undo の状態を出す。`MC_DEBUG_SCRIPT` のあとに実行される。
 /// - `MC_DEBUG_SECOND=1`      別画面ウィンドウを開き、`MC_SNAPSHOT_DIR` があれば `<dir>/second.png` にも書く(`window.png` と同時)。
 /// - `MC_DEBUG_MENU=1`        メニューバー(`NSApp.mainMenu`)の全項目(題・キー・有効・チェック・サブメニュー)を標準出力へ。
-///   `MC_DEBUG_MENU=export` なら書き出し中(`MC_DEBUG_EXPORT` と一緒に使う)の状態を出す。
+///   `MC_DEBUG_MENU=export` なら書き出し中(`MC_DEBUG_EXPORT` と一緒に使う)の状態を出す。`MC_DEBUG_MENU=1,export` なら両方(カンマ区切り)。
 /// - `MC_DEBUG_MENU_CLICK="解像度/縦 1080×1920;背景色/白;…"` メニュー項目を `NSMenu.performActionForItem(at:)` で本当に押し、そのたびに状態を出す。
 ///   `MC_DEBUG_MENU_SCRIPT` で台本欄の文字を先に入れられる。
 /// - `MC_DEBUG_DEPS=missing`   依存チェックの結果を「VOICEVOX も AquesTalkPlayer も無い」に固定する(バナーの確認用)。
@@ -53,6 +53,39 @@ import MovieCutCore
 /// - `MC_DEBUG_ABOUT=1`       About パネルを開き、ウィンドウの題と中の文字をすべて標準出力へ出して終了する。
 /// - `MC_DEBUG_SAVEAS=1`     (`MC_DEBUG_DOCS` と一緒に)最初の書類に「保存」を送り、保存パネルの提案名と許可する型を出して取り消す。
 /// - `MC_DEBUG_DOCS=1`        起動の数秒後に、開いているドキュメントの一覧を出して終了する(`open -a app file.ymproj` の確認用)。
+///
+/// ## 静かな起動(`MC_DEBUG_*` / `MC_SNAPSHOT_DIR` / `MC_OPEN` のどれかがあるとき)
+/// アクティベーションポリシーは `.accessory`(Dock にもメニューバーにも出ない)、前面にしない、ウィンドウは画面の遠く(x=-30000)、
+/// メニューバーの状態アイコン(NSStatusItem)は作らない(`NullStatusItemPresenter`。表示の設定も保存しない)、
+/// `MC_DEBUG_MAXSEC`(既定 20)秒で自分で終了する。終了時には再生用の一時ファイルも消す。
+///
+/// ## 上の一覧に無かった環境変数(M7 でまとめて記載)
+/// - `MC_SNAPSHOT_DELAY=<sec>`   スナップショットを撮るまでの待ち(既定 0.5)。
+/// - `MC_DEBUG_PLAY_FROM=<sec>`  `MC_DEBUG_PLAY` の再生開始時刻(既定 0)。
+/// - `MC_DEBUG_MENU_TWICE=1`     `MC_DEBUG_MENU` を 4 秒後にもう一度出す(メニューが組み直されても崩れないかの確認)。
+/// - `MC_DEBUG_MENU_KEYS="cmd+shift+t;…"` キーを本物のキーイベントにしてメニューバーへ渡し、反応するか見る。
+/// - `MC_DEBUG_WINDOWS=1`        開いているウィンドウとドキュメントを一覧にして終了する(`MC_DEBUG_DOCS` の仲間。待ちは `MC_DEBUG_DOCS_WAIT`、既定 2 秒)。
+///   `MC_DEBUG_CLOSEALL=1` を付けると全部閉じてから終了(復元状態の掃除用)、`MC_DEBUG_REOPEN=1` は全部閉じて Dock のクリック(reopen)を送り、
+///   `MC_DEBUG_TERMINATE=1` は普通の終了(⌘Q 相当)で終わる(復元状態もふつうに書かれる)。
+/// - `MC_DEBUG_DOCS_WAIT=<sec>`  `MC_DEBUG_DOCS` / `MC_DEBUG_WINDOWS` で一覧を出すまでの待ち。
+/// - `MC_DEBUG_KEEP_STATE=1`     検証の起動でもウィンドウの復元状態を読み書きする(通常は無効にしている)。
+/// - `MC_DEBUG_HANGWATCH=1`      主スレッドの固まりを記録する(100ms 超の返事の遅れ)。`MC_DEBUG_HANGWATCH_SAMPLE=<dir>` で、300ms 固まったときに `sample` を取る。
+/// - `MC_DEBUG_SWEEP=1`          (`MC_DEBUG_HANGWATCH=1` と一緒に)主スレッドの重い作業を一通り行って、局面ごとの固まりを数える。
+///   `MC_DEBUG_SWEEP_EXPORT=<out.mp4>` を付けると最後に書き出しも行う。
+/// - `MC_DEBUG_ENGINE_URL=<url>` `MC_DEBUG_QUIT=engine` が自分のエンジンを起動するときの URL(本物の VOICEVOX と別ポートで試すため)。
+/// - `MC_DEBUG_TRACE=1`          起動と終了の経路のトレースを出す。
+/// - `MC_DEBUG_VISIBLE=1`        静かな起動をやめて普通に表示する(画面を撮るとき用)。
+/// - `MC_DEBUG_MAXSEC=<sec>`     静かな起動で自分で終了するまでの秒数(既定 20)。
+/// - `MC_NOCANVAS=1`             タイムラインのキャンバスを隠す(固まりの切り分け用)。
+/// - `MC_DEBUG_DEPS=missing|missing-voicevox|missing-aquestalk` 依存チェックの結果を固定する。
+///
+/// ## M7 で足したもの
+/// - `MC_DEBUG_STATUS=1`         メニューバーの状態アイコンのメニューの中身(`StatusMenuBuilder`)を標準出力へ。書き出し中(`MC_DEBUG_EXPORT` と一緒)は、その最中の分も出す。
+/// - `MC_DEBUG_SHEET=jump|rename-marker` 「時間を指定して移動」/「マーカーの名前変更」のシートを開いた状態にする(`settings` は既存)。
+/// - `MC_DEBUG_JUMP_VALUE=<text>` `MC_DEBUG_MENU_CLICK` で「時間を指定して移動…」を押したあと、シートの決定と同じ関数(`commitJump`)にこの文字を渡す。
+/// - `MC_DEBUG_MENU_CLICK` の特別な項目(`@` で始まる): `@time=<sec>` 再生ヘッドを動かす / `@select=<index>` 全クリップの index 番目を選ぶ /
+///   `@clips` クリップとマーカーを全部出す / `@export=<preset>:<out>` 書き出しメニューの項目が押せることを確かめたうえで、保存パネルを出さずに
+///   同じ関数(`runExport(to:preset:)`)で書き出す(preset は `current` か `youtube1080` など)。
 @MainActor
 final class DebugHooks {
     static let shared = DebugHooks()
@@ -62,7 +95,7 @@ final class DebugHooks {
     private var active: Bool {
         ["MC_SNAPSHOT_DIR", "MC_DEBUG_SIZE", "MC_DEBUG_SCRIPT", "MC_DEBUG_EXPORT", "MC_DEBUG_SHEET", "MC_DEBUG_ZOOM", "MC_DEBUG_WINDOW", "MC_DEBUG_SELECT_CLIP",
          "MC_DEBUG_TIME", "MC_DEBUG_PLAY", "MC_DEBUG_SEEK_TEST", "MC_DEBUG_DRAWTIME", "MC_DEBUG_SECOND", "MC_DEBUG_EDIT", "MC_DEBUG_HOLD_DRAG", "MC_DEBUG_SELECT_CHAR", "MC_DEBUG_DELETE_CHAR", "MC_DEBUG_VOICE_EDIT", "MC_DEBUG_INSPECTOR_SCROLL",
-         "MC_DEBUG_MENU", "MC_DEBUG_MENU_CLICK", "MC_DEBUG_MENU_KEYS", "MC_DEBUG_EDITED", "MC_DEBUG_QUIT", "MC_DEBUG_FRAME", "MC_DEBUG_HANGWATCH", "MC_DEBUG_SWEEP"].contains { env[$0] != nil }
+         "MC_DEBUG_MENU", "MC_DEBUG_MENU_CLICK", "MC_DEBUG_MENU_KEYS", "MC_DEBUG_EDITED", "MC_DEBUG_QUIT", "MC_DEBUG_FRAME", "MC_DEBUG_HANGWATCH", "MC_DEBUG_SWEEP", "MC_DEBUG_STATUS"].contains { env[$0] != nil }
     }
 
     func appDidLaunch() {
@@ -208,6 +241,7 @@ final class DebugHooks {
             Self.out("script: \(model.statusText)\(model.errorMessage.map { " ERROR: \($0)" } ?? "")")
         }
         if env["MC_DEBUG_SHEET"] == "settings" { model.showSettings = true }
+        if env["MC_DEBUG_SHEET"] == "jump" { model.showJumpSheet = true }
         if let z = env["MC_DEBUG_ZOOM"].flatMap(Double.init) { model.pps = TimelineLayout.clampPps(z) }
         if let spec = env["MC_DEBUG_EDIT"] {
             await settle(model)
@@ -229,7 +263,8 @@ final class DebugHooks {
         if let s = env["MC_DEBUG_DELETE_CHAR"] { await debugDeleteChar(s, model) }
         if let t = env["MC_DEBUG_VOICE_EDIT"] { await debugVoiceEdit(t, model) }
         if let t = env["MC_DEBUG_TIME"].flatMap(Double.init) { model.currentTime = t }
-        if let m = env["MC_DEBUG_MENU"], m != "export" {
+        let menuModes = (env["MC_DEBUG_MENU"] ?? "").split(separator: ",").map(String.init)
+        if let m = menuModes.first(where: { $0 != "export" }) {
             await settle(model)
             await bringToFront(model)
             try? await Task.sleep(nanoseconds: 1_200_000_000)
@@ -241,6 +276,7 @@ final class DebugHooks {
                 dumpMainMenu(label: m + " +4s")
             }
         }
+        if env["MC_DEBUG_STATUS"] != nil { dumpStatus("idle") }
         if let spec = env["MC_DEBUG_MENU_CLICK"] { await menuClicks(spec, model) }
         if let spec = env["MC_DEBUG_MENU_KEYS"] { await menuKeys(spec, model) }
         if let f = env["MC_DEBUG_FRAME"] { await debugFrame(f, model) }
@@ -272,12 +308,13 @@ final class DebugHooks {
             }
             let url = URL(fileURLWithPath: out)
             let t0 = Date()
-            if env["MC_DEBUG_MENU"] == "export" {
+            if menuModes.contains("export") {
                 Task { @MainActor in
                     while !model.isExporting { try? await Task.sleep(nanoseconds: 20_000_000) }
                     try? await Task.sleep(nanoseconds: 1_500_000_000)
                     Self.out(String(format: "menu: (書き出し中 progress=%.2f isExporting=%@)", model.exportProgress, model.isExporting ? "true" : "false"))
                     self.dumpMainMenu(label: "export")
+                    if self.env["MC_DEBUG_STATUS"] != nil { self.dumpStatus("exporting") }
                 }
             }
             switch await model.runExport(to: url) {
@@ -461,7 +498,8 @@ final class DebugHooks {
         if m.contains(.shift) { s += "⇧" }
         if m.contains(.command) { s += "⌘" }
         let k = item.keyEquivalent
-        let names = ["\r": "⏎", "\u{3}": "⌅", "\u{8}": "⌫", "\u{7f}": "⌫", " ": "Space", "\u{1b}": "⎋"]
+        let names = ["\r": "⏎", "\u{3}": "⌅", "\u{8}": "⌫", "\u{7f}": "⌫", " ": "Space", "\u{1b}": "⎋",
+                     "\u{f700}": "↑", "\u{f701}": "↓", "\u{f702}": "←", "\u{f703}": "→"]
         if let n = names[k] { return s + n }
         return s + k.uppercased() + (k.unicodeScalars.first.map { $0.value > 126 || $0.value < 32 ? "(U+\(String($0.value, radix: 16)))" : "" } ?? "")
     }
@@ -501,12 +539,26 @@ final class DebugHooks {
         Self.out("menu: ===== NSApp.mainMenu (\(label)) ===== appActive=\(NSApp.isActive) keyWindow=\(NSApp.keyWindow?.title ?? "-") mainWindow=\(NSApp.mainWindow?.title ?? "-")")
         for l in Self.menuLines(menu, depth: 0) { Self.out("menu: " + l) }
         Self.out("menu: ===== end =====")
+        Self.out("menu: top-level order = \(menu.items.map { MenuOrder.title(of: $0) }) (MenuOrder.fixCount=\(MenuOrder.fixCount))")
+    }
+
+    /// メニューバーの状態アイコンのメニューの中身(本物の NSStatusItem は作らず、中身のモデルだけ出す)。
+    private func dumpStatus(_ label: String) {
+        let c = AppServices.statusBar
+        Self.out("status: ===== status item menu (\(label)) ===== presenter=\(type(of: c.presenter)) visible=\(c.presenter.isVisible) enabled(pref)=\(c.isEnabled) buttonTitle=\"\(c.presenter.buttonTitle)\" engine=\(c.state.engine)")
+        for l in StatusMenuBuilder.lines(c.entries) { Self.out("status: " + l) }
+        Self.out("status: ===== end =====")
+    }
+
+    /// 題の一致。キーのヒントを添えた題(「クリップを分割  (S)」)は、ヒントを除いた名前でも一致させる。
+    static func titleMatches(_ title: String, _ name: String) -> Bool {
+        title == name || title.hasPrefix(name + "  (")
     }
 
     /// 「解像度/縦 1080×1920」のような道筋で項目を探す(最初の名前は、メニューバーのどの階層にあってもよい)。
     private static func findMenuItem(_ path: [String], in menu: NSMenu) -> (NSMenu, Int)? {
         func descend(_ menu: NSMenu, _ rest: ArraySlice<String>) -> (NSMenu, Int)? {
-            guard let first = rest.first, let i = menu.items.firstIndex(where: { $0.title == first }) else { return nil }
+            guard let first = rest.first, let i = menu.items.firstIndex(where: { Self.titleMatches($0.title, first) }) else { return nil }
             if rest.count == 1 { return (menu, i) }
             guard let sub = menu.items[i].submenu else { return nil }
             return descend(sub, rest.dropFirst())
@@ -522,7 +574,7 @@ final class DebugHooks {
     private func stateLine(_ model: ProjectModel) -> String {
         let um = model.effectiveUndoManager
         let sel = model.selectedClip.map { $0.type.rawValue } ?? "-"
-        return "state: active=\(ActiveDocument.shared.model === model) locked=\(model.isLocked) size=\(model.project.width)x\(model.project.height) codec=\(model.project.codec) bg=\(model.project.bg) clips=\(model.project.allClips.count) chars=\(model.project.characters.count) selected=\(sel) canUndo=\(um.canUndo) undo=\"\(um.undoActionName)\" status=\"\(model.statusText)\" error=\(model.errorMessage ?? "-")"
+        return "state: active=\(ActiveDocument.shared.model === model) locked=\(model.isLocked) size=\(model.project.width)x\(model.project.height) codec=\(model.project.codec) bg=\(model.project.bg) clips=\(model.project.allClips.count) chars=\(model.project.characters.count) selected=\(sel) canUndo=\(um.canUndo) undo=\"\(um.undoActionName)\" t=\(String(format: "%.3f", model.currentTime)) markers=\(model.project.markers.count) status=\"\(model.statusText)\" error=\(model.errorMessage ?? "-")"
     }
 
     /// このドキュメントを前面にして、メニューの操作先(ActiveDocument)になるまで待つ。
@@ -539,6 +591,7 @@ final class DebugHooks {
 
     private func menuClicks(_ spec: String, _ model0: ProjectModel) async {
         await settle(model0)
+        await bringToFront(model0)    // メニューの操作先(ActiveDocument)にする(静かな起動では前面にならないため)
         // 空の書類が複数あるとき、メニューが操作するのは前面(メイン)の書類。そちらを相手にする
         try? await Task.sleep(nanoseconds: 1_000_000_000)
         let model = ActiveDocument.shared.model ?? model0
@@ -546,6 +599,7 @@ final class DebugHooks {
         try? await Task.sleep(nanoseconds: 1_200_000_000)
         Self.out("menu-click: initial " + stateLine(model))
         for raw in spec.split(separator: ";").map({ $0.trimmingCharacters(in: .whitespaces) }) where !raw.isEmpty {
+            if raw.hasPrefix("@") { await menuClickToken(raw, model); continue }
             let path = raw.split(separator: "/").map(String.init)
             guard let main = NSApp.mainMenu, let (menu, idx) = Self.findMenuItem(path, in: main) else {
                 Self.out("menu-click: \(raw) → 見つかりません"); continue
@@ -556,12 +610,59 @@ final class DebugHooks {
             guard item.isEnabled else { Self.out("menu-click: \(raw) → 無効のため押せません"); continue }
             menu.performActionForItem(at: idx)
             try? await Task.sleep(nanoseconds: 500_000_000)
+            if model.showJumpSheet, let v = env["MC_DEBUG_JUMP_VALUE"] {
+                // シートの Return と同じ関数
+                let t0 = model.currentTime
+                let ok = model.commitJump(v)
+                Self.out("menu-click:   (時間を指定して移動シート: 入力 \"\(v)\" → \(ok ? "決定" : "読めない") 再生位置 \(String(format: "%.3f", t0)) → \(String(format: "%.3f", model.currentTime)), 終わり \(String(format: "%.3f", model.project.endTime)))")
+            }
             var waited = 0.0
             while model.busyMessage != nil && waited < 120 { try? await Task.sleep(nanoseconds: 100_000_000); waited += 0.1 }
             try? await Task.sleep(nanoseconds: 800_000_000)   // メニューの✓が更新されるのを待つ
             Self.updateAll(main)   // 本物のメニューを開いたときと同じ更新をして、✓ を読み直す
             Self.out("menu-click: \(raw) → 押しました (✓ \(before == .on ? "on" : "off") → \(menu.items[idx].state == .on ? "on" : "off"))")
             Self.out("menu-click:   " + stateLine(model))
+        }
+    }
+
+    /// `MC_DEBUG_MENU_CLICK` の `@` で始まる特別な項目。
+    private func menuClickToken(_ raw: String, _ model: ProjectModel) async {
+        let body = String(raw.dropFirst())
+        let kv = body.split(separator: "=", maxSplits: 1).map(String.init)
+        switch kv[0] {
+        case "time":
+            if kv.count == 2, let t = Double(kv[1]) { model.currentTime = t; try? await Task.sleep(nanoseconds: 300_000_000) }
+            Self.out("menu-click: @time → \(String(format: "%.3f", model.currentTime))")
+        case "select":
+            if kv.count == 2, let i = Int(kv[1]), model.project.allClips.indices.contains(i) { model.selectedClipId = model.project.allClips[i].id; try? await Task.sleep(nanoseconds: 300_000_000) }
+            Self.out("menu-click: @select → selected=\(model.selectedClip.map { "\($0.type.rawValue) \($0.id)" } ?? "-")")
+        case "clips":
+            dumpClips(model, label: "clips")
+            for m in model.project.markers { Self.out(String(format: "clips: marker %@ time=%.3f name=%@", m.id, m.time, m.name)) }
+            Self.out("clips: selected=\(model.selectedClipId ?? "-") layers=\(model.project.tracks.count) endTime=\(String(format: "%.3f", model.project.endTime))")
+        case "export":
+            // @export=<preset|current>:<out>
+            let parts = (kv.count == 2 ? kv[1] : "").split(separator: ":", maxSplits: 1).map(String.init)
+            guard parts.count == 2 else { Self.out("menu-click: @export の指定が読めません: \(raw)"); return }
+            // 前の書き出しが終わったあと、メニューの有効・無効が組み直されるのを待つ
+            while model.isExporting { try? await Task.sleep(nanoseconds: 50_000_000) }
+            try? await Task.sleep(nanoseconds: 800_000_000)
+            let preset = ExportPreset(cliName: parts[0])
+            let itemName = preset?.title ?? "現在の設定で書き出す…"
+            Self.updateAll(NSApp.mainMenu!)
+            let found = NSApp.mainMenu.flatMap { Self.findMenuItem(["書き出し", itemName], in: $0) }
+            let enabled = found.map { $0.0.items[$0.1].isEnabled } ?? false
+            Self.out("menu-click: @export → メニュー項目「ファイル ▸ 書き出し ▸ \(itemName)」found=\(found != nil) enabled=\(enabled)")
+            guard enabled else { return }
+            let before = model.project
+            let url = URL(fileURLWithPath: parts[1])
+            let suggested = model.exportSuggestedName(preset: preset)
+            let t0 = Date()
+            let r = await model.runExport(to: url, preset: preset)
+            let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int) ?? 0
+            Self.out(String(format: "menu-click: @export → %@ suggestedName=%@ result=%@ bytes=%d (%.1fs) documentUnchanged=%@ status=%@", url.lastPathComponent, suggested, "\(r)", size, Date().timeIntervalSince(t0), model.project == before ? "true" : "false", model.statusText))
+        default:
+            Self.out("menu-click: \(raw) → 読めません")
         }
     }
 
@@ -972,6 +1073,7 @@ final class DebugHooks {
         DispatchQueue.main.asyncAfter(deadline: .now() + limit) {
             out("debug: \(limit) 秒たったので自分で終了します")
             if HangWatch.enabled { HangWatch.shared.printSummary() }
+            PlaybackTempFiles.removeCurrent()
             exit(0)
         }
     }
@@ -1014,6 +1116,7 @@ final class DebugHooks {
     static func finish(_ code: Int32) -> Never {
         if HangWatch.enabled { HangWatch.shared.printSummary() }
         AppServices.engine.shutdown()
+        PlaybackTempFiles.removeCurrent()
         exit(code)
     }
 }

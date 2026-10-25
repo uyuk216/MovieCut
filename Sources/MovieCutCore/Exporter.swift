@@ -16,6 +16,7 @@ public enum ExportError: LocalizedError {
     case audioMixFailed(Error)
     case audioReadFailed(Error?)
     case writerFailed(Error?)
+    case noAudio
 
     public var errorDescription: String? {
         func tail(_ e: Error?) -> String { e.map { "(\($0.localizedDescription))" } ?? "" }
@@ -30,6 +31,7 @@ public enum ExportError: LocalizedError {
         case .audioMixFailed(let e): return "音声のミックスに失敗しました: \(e.localizedDescription)"
         case .audioReadFailed(let e): return "ミックスした音声を読み込めませんでした" + tail(e)
         case .writerFailed(let e): return "書き出しに失敗しました" + tail(e)
+        case .noAudio: return "音声がありません(音声・ボイス・動画の音が 1 つも無いので、音声だけの書き出しはできません)"
         }
     }
 }

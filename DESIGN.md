@@ -23,7 +23,8 @@ Electron 版のコードは git タグ `electron-final` に残してある(`git 
 - キャッシュの置き場所は `~/Library/Application Support/MovieCut/voices`。旧名 `yukkuri-editor/voices` があれば、初回に移す。
 JSON。主なキー: width, height, fps, bg("#rrggbb"), codec("h264"|"hevc"), voicevoxUrl, aquestalkCommand,
 characters[{id,name,engine("voicevox"|"aquestalk"),speaker,voice,speed,pitch,intonation,color,imgClosed,imgOpen,x,y,scale,flip,alwaysShow}],
-tracks[{id,name,hidden?,muted?,clips[...]}]。
+tracks[{id,name,hidden?,muted?,clips[...]}],
+**markers[{id,time,name}]**(M7。タイムラインの目印。時刻は秒。空のときはキーごと書かない。古いファイルには無くてよい。マーカー自身の知らないキーも保持する。書き出しには影響しない)。
 clip 共通: id,type("image"|"video"|"audio"|"text"|"voice"|"blur"),start,duration,offset,
 src,srcDuration,x,y,scale,opacity,volume,blur(px);
 text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,font; blur-region: w,h,strength,shape("rect"|"ellipse")。
@@ -41,13 +42,22 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
 再生: 再生/停止(Space)、先頭(Home)、1コマ送り/戻し(←/→)、動画クリップ同期、途中からの音声再生、消音レイヤー、終端で停止、二重再生防止。
 プレビュー: 本当の縦横比の枠(灰色の下地)、左上に「W×H · Nfps」、別画面(内蔵以外で最大の画面)に全画面表示。
 書き出し: H.264/HEVC (VideoToolbox) + AAC 256k、再生を待たず高速に、進捗表示、Dock の進行バーと完了時バウンス、Finder で表示、失敗時のエラー表示、2回連続OK。
-メニュー: 旧 menu.js と同じ構成(ファイル/編集/再生/表示/ウィンドウ/ヘルプ、設定… Cmd+,、解像度・書き出し形式・背景色のラジオ)。Space/S/Delete/矢印は入力欄で打てるよう通常キーのまま。
+メニュー: ファイル/編集/クリップ/再生/移動/表示/ウィンドウ/ヘルプ(設定… Cmd+,、解像度・書き出し形式・背景色のラジオ)。Space/S/Delete/Home/End/矢印は入力欄で打てるよう通常キーのまま(KeyRouter)。メニューの項目は `AppMenuSpec`(項目表)→ `AppCommands`(SwiftUI)→ `AppMenu.perform`(モデルの関数)の 1 本道で、項目表を単体テストが見る。
 設定シート: VOICEVOX の URL、ゆっくり用の実行コマンド(任意)、動画設定。
 依存チェック: VOICEVOX / AquesTalkPlayer が無いときの案内(ffmpeg は不要)。
 ウィンドウ: 最小 1100×700、位置を記憶。パッケージ: arm64 の dmg、ad-hoc 署名、`.mcpjc` の関連付け、About、ヘルプのライセンス/第三者の規約。
 ドラッグ&ドロップで素材追加、「素材を追加」ダイアログ(画像/動画/音声)。
 
+## メニューバー・書き出しプリセット・状態アイコン (M7)
+- **並び**: SwiftUI は `CommandMenu` を「表示」の後ろに置くので、`MenuOrder` が `NSApplication.didUpdateNotification` のたびにトップレベルの項目を ファイル/編集/クリップ/再生/移動/表示/ウィンドウ/ヘルプ の順に並べ直す(項目そのものを移すだけ)。
+- **クリップ**: テキスト・ぼかし範囲を追加 / 分割・複製(⌘D)・削除・すき間を詰めて削除(⇧⌫) / 再生位置より前・後ろを切り落とす(⌥[ ⌥]) / 前後のクリップを選択(⌥←→、開始時刻順・全レイヤー) / 上下のレイヤーへ(⌥↑↓。時刻は変えない・レイヤーは増やさない。「上」は画面の上の行 = 配列の前) / レイヤーを追加 / 音声を作り直す。計算は `ClipEditing`(`ClipEditing+Menu.swift`)の純粋関数。どれも 1 回の Undo。
+- **移動**: 先頭・末尾(Home / End は KeyRouter)、前後のクリップの境目(0・終わり・全クリップの頭と終わり)、前後のセリフ(ボイスの頭)、時間を指定(`12.5` `1:23` `1:23.5` `00:01:23.50`)、マーカー(追加・名前変更・前後・削除・消去・一覧)。ルーラーに旗、行の上に点線、旗のクリックで移動・ドラッグで移動(1 回の Undo)。
+- **書き出しプリセット**(`ExportPreset`): YouTube 1080p(1920×1080 H.264)/ YouTube 4K(3840×2160 HEVC)/ ショート縦(1080×1920 H.264)/ 軽量 720p(1280×720 H.264・fps は min(元, 30))/ 音声のみ(AAC 256 kbps 48 kHz の .m4a)。プロジェクトの**写し**に `scaledForResolution` + コーデック + fps を当てて書き出すので、ドキュメントは変わらない。保存パネルの提案名は `<書類名>-<プリセット>.mp4|.m4a`。
+- **状態アイコン**(メニューバー右側、`StatusBar.swift`): SF Symbol「film」(テンプレート画像)。書き出しの進み具合(`ExportStatusCenter`)・VOICEVOX(`GET /version` を、メニューを開いている間だけ 3 秒に 1 回、非同期で)・最近のプロジェクト。ロジックは `StatusItemPresenting` プロトコルの向こうにあり、静かな検証(`MC_DEBUG_*`)では本物の NSStatusItem を作らない。表示の設定は UserDefaults `showMenuBarIcon`(既定 ON、「表示」メニューで切り替え)。LSUIElement にはしないので Dock のふるまいは変わらない。
+- **再生用の一時ファイル**: `$TMPDIR/MovieCut-playback/` にまとめ、起動時に 1 日より古いものを消し、書類を閉じるとき・終了するときに自分の分を消す(`PlaybackTempFiles`)。
+
 ## 確認の取り方 (エージェント共通)
 - `swift build` と `swift test` が通ること。ヘッドレスは moviecut-cli で ffprobe / 画像を使って確かめる。
+- アプリの起動(特に画面に出るもの)は利用者の作業の邪魔になるので、日常の確認は XCTest(オフスクリーンの NSWindow / NSHostingView と偽物)で行う。実際に起動するときは静かな起動(`MC_DEBUG_*`)にして 1 回にまとめる。
 - UI の見た目は、アプリ内で `NSView.cacheDisplay` を使って PNG に書き出す(`MC_SNAPSHOT_DIR` 環境変数)。画面収録の許可に頼らない。PNG は Read ツールで実際に見る。
 - コミットはしない(司令塔がする)。

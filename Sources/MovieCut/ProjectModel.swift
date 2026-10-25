@@ -13,6 +13,25 @@ enum AppServices {
     @MainActor static let notices = OneTimeNotices()
     /// Dock アイコンの進行バー(書き出し中)。
     @MainActor static let dock = DockProgressController(tile: NSApp?.dockTile)
+    /// 書き出しの進み具合の共有(メニューバーのアイコンが見る)。
+    @MainActor static let exportStatus = ExportStatusCenter()
+    /// メニューバー右側のアイコン。静かな検証(MC_DEBUG_*)では本物の NSStatusItem を作らず、設定も保存しない。
+    @MainActor static let statusBar: MenuBarStatusController = makeStatusBar(quiet: DebugHooks.isQuiet)
+
+    /// 静か(`quiet`)なら、本物の NSStatusItem を作らず、表示の設定も UserDefaults に書かない。
+    @MainActor static func makeStatusBar(quiet: Bool, export: ExportStatusCenter? = nil) -> MenuBarStatusController {
+        let baseURL = { ActiveDocument.shared.model?.project.voicevoxUrl ?? Project().voicevoxUrl }
+        let actions = AppStatusActions(engine: engine, baseURL: baseURL)
+        let c = MenuBarStatusController(
+            presenter: quiet ? NullStatusItemPresenter() : NSStatusItemPresenter(),
+            export: export ?? exportStatus,
+            probe: VoicevoxProbe(engine: engine, baseURL: baseURL),
+            recentURLs: { NSDocumentController.shared.recentDocumentURLs },
+            preferences: quiet ? MemoryStatusPreference() : UserDefaultsStatusPreference(),
+            handler: actions)
+        actions.afterEngineCommand = { [weak c] in await c?.engineCommandFinished() }
+        return c
+    }
     /// 起動時の依存チェックとバナー(アプリ全体で 1 つ。閉じたらこの起動中は出さない)。
     @MainActor static let deps = DependencyNoticeCenter(checker: DependencyNoticeCenter.debugChecker() ?? { p in await DependencyStatus.check(project: p) })
 }
@@ -113,6 +132,10 @@ final class ProjectModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var errorTitle = "エラー"
     @Published var showSettings = false
+    /// 「時間を指定して移動…」のシート。
+    @Published var showJumpSheet = false
+    /// 名前を変えているマーカー(シートを出す)。
+    @Published var renamingMarkerId: String?
     /// 左の台本欄の文字(ツールバー・メニューの「台本から音声を作る」が読む)。
     @Published var scriptText = ""
     /// タイムラインの拡大率(pt/秒)と吸着(M4 のドラッグで使う)。
@@ -156,6 +179,12 @@ final class ProjectModel: ObservableObject {
     let keyRouter = KeyRouter()
 
     private var exportTask: Task<Void, Error>?
+    /// 書き出し中のファイル名(メニューバーのアイコンに出す)。
+    private(set) var exportFileName = ""
+    /// 書き出しシートの見出し(プリセットや音声のみのとき変わる)。
+    private(set) var exportTitle = "MP4 を書き出しています"
+    /// 書き出しの進み具合の共有(テストでは差し替える。nil ならアプリ全体のもの)。
+    var exportStatusOverride: ExportStatusCenter?
     /// スライダー以外の連続した編集(ステッパー・色・文字入力)を 1 回の Undo にまとめるための待ち。
     var coalesceTask: Task<Void, Never>?
     var coalesceName: String?
@@ -259,6 +288,7 @@ final class ProjectModel: ObservableObject {
             .stepBack: { [weak self] in guard let m = self, !m.isLocked else { return false }; m.playback.step(frames: -1); return true },
             .stepForward: { [weak self] in guard let m = self, !m.isLocked else { return false }; m.playback.step(frames: 1); return true },
             .toStart: { [weak self] in guard let m = self, !m.isLocked else { return false }; m.playback.goToStart(); return true },
+            .toEnd: { [weak self] in guard let m = self, !m.isLocked else { return false }; m.goToEnd(); return true },
             // 分割 / 削除 / 選択解除は、ドキュメントのウィンドウが前面のときだけ(別画面の Esc は別画面が閉じる)
             .split: { [weak self] in guard let m = self, !m.isLocked, m.window?.isKeyWindow == true, m.canSplit else { return false }; return m.splitSelected() },
             .delete: { [weak self] in guard let m = self, !m.isLocked, m.window?.isKeyWindow == true, m.selectedClip != nil else { return false }; return m.deleteSelected() },
@@ -361,22 +391,28 @@ final class ProjectModel: ObservableObject {
     // MARK: 書き出し
 
     /// 書き出し(ツールバーのボタンも MC_DEBUG_EXPORT もこれを呼ぶ)。
-    func runExport(to url: URL) async -> ExportOutcome {
+    /// `preset` があれば、プロジェクトの「写し」にプリセットを当てて書き出す(ドキュメント自体は変えない)。
+    func runExport(to url: URL, preset: ExportPreset? = nil) async -> ExportOutcome {
         guard !isExporting else { return .failure(ExportError.writerFailed(nil)) }
         isExporting = true
         exportProgress = 0
+        exportFileName = url.lastPathComponent
+        exportTitle = preset.map { $0.isAudioOnly ? "音声を書き出しています" : "\($0.title) で書き出しています" } ?? "MP4 を書き出しています"
         statusText = "書き出し中…"
         let dock = dockOverride ?? AppServices.dock
+        let status = exportStatusOverride ?? AppServices.exportStatus
         dock.update(0)
-        defer { isExporting = false; exportTask = nil }
-        let exporter = Exporter(project: project, assets: RenderAssets())
+        status.begin(owner: self, fileName: url.lastPathComponent, cancel: { [weak self] in self?.cancelExport() })
+        defer { isExporting = false; exportTask = nil; status.end(owner: self) }
+        let snapshot = project
         let task = Task { [weak self] in
-            try await exporter.export(to: url) { v in
+            try await ExportJob.run(project: snapshot, preset: preset, to: url) { v in
                 Task { @MainActor in
                     // 終わったあとに遅れて届いた進み具合では Dock を出し直さない
                     guard let self, self.isExporting else { return }
                     self.exportProgress = v
                     dock.update(v)
+                    status.update(owner: self, fraction: v)
                 }
             }
         }
