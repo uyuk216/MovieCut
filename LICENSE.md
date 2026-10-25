@@ -1,4 +1,4 @@
-# ゆっくりエディタ (Yukkuri Editor) License
+# Movie Cut License
 
 Copyright (c) 【作者名】
 
@@ -127,11 +127,11 @@ You may publish a modified version only if all of the following are true: (1) yo
 
 ## A4. Name and icon
 
-Unless the permit expressly allows it, a modified version or fork must not use the name "ゆっくりエディタ" / "Yukkuri Editor", the app icon, or any name, logo, or icon that is confusingly similar. A modified version must not suggest that it is made or endorsed by 【作者名】.
+Unless the permit expressly allows it, a modified version or fork must not use the name "Movie Cut", the app icon, or any name, logo, or icon that is confusingly similar. A modified version must not suggest that it is made or endorsed by 【作者名】.
 
 ## A5. Third-party engines
 
-The software does not include any third-party engines. It only calls software that you install separately, including VOICEVOX, AquesTalkPlayer (A-quest) and ffmpeg. These are not covered by this license. You must follow their own terms yourself. In particular:
+The software does not include any third-party engines. It only calls software that you install separately, including VOICEVOX and AquesTalkPlayer (A-quest). These are not covered by this license. You must follow their own terms yourself. In particular:
 - Commercial or monetized use of AquesTalk voices requires a commercial license that you buy from A-quest.
 - VOICEVOX characters require credit such as "VOICEVOX:ずんだもん", and each character has its own terms.
 - Check the official terms of every engine and voice you use. See docs/第三者の規約.md.
