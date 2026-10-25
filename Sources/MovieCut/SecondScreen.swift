@@ -69,7 +69,7 @@ final class SecondScreenController {
         }
         window = w
         model.isSecondScreenOpen = true
-        w.makeKeyAndOrderFront(nil)
+        w.debugOrderFront()
     }
 
     func close() { window?.close() }

@@ -156,6 +156,10 @@ public final class VoicevoxEngine {
         let p: Process? = lock.withLock { let x = process; process = nil; return x }
         guard let p, p.isRunning else { return }
         p.terminate()
+        // SIGTERM を無視されても終了処理が止まらないよう、2 秒だけ待って、まだ動いていれば SIGKILL
+        let deadline = Date().addingTimeInterval(2)
+        while p.isRunning && Date() < deadline { Thread.sleep(forTimeInterval: 0.02) }
+        if p.isRunning { kill(p.processIdentifier, SIGKILL) }
         p.waitUntilExit()
     }
 }

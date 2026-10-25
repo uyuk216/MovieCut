@@ -6,13 +6,46 @@ import MovieCutCore
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillFinishLaunching(_ notification: Notification) {
         AppWindowPolicy.disableTabbing()
+        DebugHooks.enterQuietModeIfNeeded()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        DebugHooks.trace("applicationDidFinishLaunching docs=\(NSDocumentController.shared.documents.count) windows=\(NSApp.windows.count)")
+        // 書類を渡して起動された(ダブルクリック・open -a file)ときは、SwiftUI が作った空の名称未設定をすぐ閉じる
+        let launchedWithDocuments = NSAppleEventManager.shared().currentAppleEvent?.eventID == AEEventID(kAEOpenDocuments)
+        Self.settleLaunchWindows(closeAllBlank: launchedWithDocuments)
+        // 状態の復元や、渡された書類は少し遅れて届くので、起動直後の数秒だけ数え直す
+        for delay in [0.3, 0.8, 1.6, 3.0] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { Self.settleLaunchWindows(closeAllBlank: false) }
+        }
         DebugHooks.shared.appDidLaunch()
     }
 
+    /// 起動時のウィンドウ数を整える(方針は `LaunchWindowPolicy`)。
+    static func settleLaunchWindows(closeAllBlank: Bool) {
+        let docs = NSDocumentController.shared.documents
+        let infos = docs.map { LaunchDocInfo(isUntitled: $0.fileURL == nil, isPristine: !$0.isDocumentEdited) }
+        var close = LaunchWindowPolicy.indicesToClose(infos)
+        if closeAllBlank { close = infos.indices.filter { infos[$0].isBlankUntitled } }
+        guard !close.isEmpty else { return }
+        DebugHooks.trace("settleLaunchWindows closing \(close) of \(infos.count)")
+        for i in close.reversed() { docs[i].close() }
+    }
+
+    /// 名称未設定の書類を作るのは SwiftUI だが、Dock のクリックでウィンドウが 0 のときは「開く」パネルしか出さないので、
+    /// Mac 標準どおり新しい書類を 1 つ開く。
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        DebugHooks.trace("applicationShouldHandleReopen visible=\(flag) docs=\(NSDocumentController.shared.documents.count)")
+        if ReopenPolicy.shouldOpenNewDocument(hasVisibleWindows: flag, documentCount: NSDocumentController.shared.documents.count) {
+            NSDocumentController.shared.newDocument(nil)
+            return false
+        }
+        return true
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
+        MainActor.assumeIsolated { WindowFrameKeeper.saveAll() }
+        if HangWatch.enabled { HangWatch.shared.printSummary() }
         DebugHooks.logQuit(engineStartedByUs: AppServices.engine.startedByUs)
         AppServices.engine.shutdown()
         DebugHooks.logQuit(engineStartedByUs: AppServices.engine.startedByUs, after: true)
@@ -46,6 +79,7 @@ enum AppWindowPolicy {
     /// 書類ウィンドウごとに、タブにまとめられないようにする。
     static func apply(to window: NSWindow) {
         window.tabbingMode = .disallowed
+        MainActor.assumeIsolated { WindowFrameKeeper.attach(to: window) }
     }
 }
 
@@ -55,6 +89,7 @@ struct MovieCutApp: App {
 
     init() {
         AppWindowPolicy.disableTabbing()
+        DebugHooks.suppressStateRestorationIfDebugging()
     }
 
     var body: some Scene {

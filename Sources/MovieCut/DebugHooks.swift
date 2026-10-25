@@ -62,7 +62,7 @@ final class DebugHooks {
     private var active: Bool {
         ["MC_SNAPSHOT_DIR", "MC_DEBUG_SIZE", "MC_DEBUG_SCRIPT", "MC_DEBUG_EXPORT", "MC_DEBUG_SHEET", "MC_DEBUG_ZOOM", "MC_DEBUG_WINDOW", "MC_DEBUG_SELECT_CLIP",
          "MC_DEBUG_TIME", "MC_DEBUG_PLAY", "MC_DEBUG_SEEK_TEST", "MC_DEBUG_DRAWTIME", "MC_DEBUG_SECOND", "MC_DEBUG_EDIT", "MC_DEBUG_HOLD_DRAG", "MC_DEBUG_SELECT_CHAR", "MC_DEBUG_DELETE_CHAR", "MC_DEBUG_VOICE_EDIT", "MC_DEBUG_INSPECTOR_SCROLL",
-         "MC_DEBUG_MENU", "MC_DEBUG_MENU_CLICK", "MC_DEBUG_MENU_KEYS", "MC_DEBUG_EDITED", "MC_DEBUG_QUIT", "MC_DEBUG_FRAME"].contains { env[$0] != nil }
+         "MC_DEBUG_MENU", "MC_DEBUG_MENU_CLICK", "MC_DEBUG_MENU_KEYS", "MC_DEBUG_EDITED", "MC_DEBUG_QUIT", "MC_DEBUG_FRAME", "MC_DEBUG_HANGWATCH", "MC_DEBUG_SWEEP"].contains { env[$0] != nil }
     }
 
     func appDidLaunch() {
@@ -86,14 +86,45 @@ final class DebugHooks {
             }
             return
         }
-        if env["MC_DEBUG_DOCS"] != nil {
-            let wait = env["MC_DEBUG_DOCS_WAIT"].flatMap(Double.init) ?? 4
+        if env["MC_DEBUG_DOCS"] != nil || env["MC_DEBUG_WINDOWS"] != nil {
+            let wait = env["MC_DEBUG_DOCS_WAIT"].flatMap(Double.init) ?? (env["MC_DEBUG_WINDOWS"] != nil ? 2 : 4)
             DispatchQueue.main.asyncAfter(deadline: .now() + wait) {
                 let docs = NSDocumentController.shared.documents
+                Self.dumpWindows()
+                if self.env["MC_DEBUG_CLOSEALL"] != nil {
+                    // 復元状態の掃除用: 全部閉じて、状態が書き込まれるのを待ってから終わる
+                    for d in docs { d.updateChangeCount(.changeCleared); d.close() }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                        Self.out("closeall: windows now \(Self.docWindowCount())")
+                        NSApp.terminate(nil)
+                    }
+                    return
+                }
+                if self.env["MC_DEBUG_REOPEN"] != nil {
+                    // Dock のアイコンのクリックと同じ: すべてのウィンドウを閉じて reopen を送る
+                    for d in docs { d.updateChangeCount(.changeCleared); d.close() }
+                    NSApp.windows.filter { $0.isVisible && !($0 is NSPanel) }.forEach { $0.close() }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                        Self.out("reopen: after closing all: visibleDocWindows=\(Self.docWindowCount()) documents=\(NSDocumentController.shared.documents.count)")
+                        // 本物の kAEReopenApplication を自分に送る(Dock のクリックと同じ経路)
+                        Self.sendReopenAppleEvent()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                            Self.out("reopen: after reopen event:")
+                            Self.dumpWindows()
+                            Self.finish(0)
+                        }
+                    }
+                    return
+                }
+                if self.env["MC_DEBUG_WINDOWS"] != nil {
+                    // MC_DEBUG_TERMINATE=1: 普通の終了(⌘Q 相当)で終わる。復元状態もふつうに書かれる。
+                    if self.env["MC_DEBUG_TERMINATE"] != nil { NSApp.terminate(nil); return }
+                    Self.finish(0)
+                }
                 Self.out("docs: count=\(docs.count)")
                 for d in docs {
-                    let p = (d as? NSDocument)?.fileURL?.path ?? "-"
-                    let proj = (d as? NSDocument).map { String(describing: type(of: $0)) } ?? "-"
+                    let p = d.fileURL?.path ?? "-"
+                    let proj = String(describing: type(of: d))
                     Self.out("docs: \(p) windows=\(d.windowControllers.compactMap { $0.window?.title }) class=\(proj)")
                     Self.out("docs: fileType=\(d.fileType ?? "nil") isDraft=\(d.isDraft) writableTypes(save)=\(d.writableTypes(for: .saveOperation)) tabbingModes=\(d.windowControllers.compactMap { $0.window?.tabbingMode.rawValue })")
                 }
@@ -107,9 +138,9 @@ final class DebugHooks {
                     }
                     func mtime() -> Date? { d.fileURL.flatMap { try? FileManager.default.attributesOfItem(atPath: $0.path)[.modificationDate] as? Date } }
                     let m0 = mtime()
-                    d.windowControllers.first?.window?.makeKeyAndOrderFront(nil)
+                    d.windowControllers.first?.window?.debugOrderFront()
                     d.updateChangeCount(.changeDone)
-                    NSApp.activate(ignoringOtherApps: true); d.save(nil)
+                    DebugHooks.quietActivate(); d.save(nil)
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                         if let sp = panel() {
                             Self.out("saveas: Save -> panel shown name=\(sp.nameFieldStringValue) types=\(sp.allowedContentTypes.map(\.identifier)) exts=\(sp.allowedContentTypes.compactMap(\.preferredFilenameExtension))")
@@ -136,7 +167,7 @@ final class DebugHooks {
         }
         guard env["MC_OPEN"] != nil || active else { return }
         NSWindow.allowsAutomaticWindowTabbing = false   // 検証中は、開いた書類が裏のタブに隠れないようにする
-        NSApp.activate(ignoringOtherApps: true)
+        DebugHooks.quietActivate()
         if let path = env["MC_OPEN"] {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                 NSDocumentController.shared.openDocument(withContentsOf: URL(fileURLWithPath: path), display: true) { _, _, error in
@@ -163,13 +194,13 @@ final class DebugHooks {
 
     private func run(_ model: ProjectModel) async {
         while model.window == nil { try? await Task.sleep(nanoseconds: 50_000_000) }
-        NSApp.activate(ignoringOtherApps: true)
-        model.window?.makeKeyAndOrderFront(nil)
+        DebugHooks.quietActivate()
+        model.window?.debugOrderFront()
         let delay = env["MC_SNAPSHOT_DELAY"].flatMap(Double.init) ?? 0.5
 
         if let s = env["MC_DEBUG_WINDOW"] {
             let p = s.lowercased().split(separator: "x").compactMap { Double($0) }
-            if p.count == 2 { model.window?.setContentSize(NSSize(width: p[0], height: p[1])); model.window?.center(); try? await Task.sleep(nanoseconds: 400_000_000) }
+            if p.count == 2 { model.window?.setContentSize(NSSize(width: p[0], height: p[1])); if !DebugHooks.isQuiet { model.window?.center() }; try? await Task.sleep(nanoseconds: 400_000_000) }
         }
         if let s = env["MC_DEBUG_SIZE"] { model.selectResolution(s) }
         if let s = env["MC_DEBUG_SCRIPT"] {
@@ -205,7 +236,7 @@ final class DebugHooks {
             dumpMainMenu(label: m)
             if env["MC_DEBUG_MENU_TWICE"] != nil {
                 try? await Task.sleep(nanoseconds: 3_000_000_000)
-                model.window?.makeKeyAndOrderFront(nil)
+                model.window?.debugOrderFront()
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
                 dumpMainMenu(label: m + " +4s")
             }
@@ -214,6 +245,7 @@ final class DebugHooks {
         if let spec = env["MC_DEBUG_MENU_KEYS"] { await menuKeys(spec, model) }
         if let f = env["MC_DEBUG_FRAME"] { await debugFrame(f, model) }
         if env["MC_DEBUG_EDITED"] != nil { await debugEdited(model) }
+        if env["MC_DEBUG_SWEEP"] != nil { await debugSweep(model) }
         if let q = env["MC_DEBUG_QUIT"] { await debugQuit(q, model) }
         if let spec = env["MC_DEBUG_HOLD_DRAG"] {
             await settle(model)
@@ -495,11 +527,11 @@ final class DebugHooks {
 
     /// このドキュメントを前面にして、メニューの操作先(ActiveDocument)になるまで待つ。
     private func bringToFront(_ model: ProjectModel) async {
-        NSApp.activate(ignoringOtherApps: true)
-        model.window?.makeKeyAndOrderFront(nil)
+        DebugHooks.quietActivate()
+        model.window?.debugOrderFront()
         var w = 0.0
         while ActiveDocument.shared.model !== model && w < 5 {
-            model.window?.makeKeyAndOrderFront(nil)
+            model.window?.debugOrderFront()
             ActiveDocument.shared.activate(model)
             try? await Task.sleep(nanoseconds: 100_000_000); w += 0.1
         }
@@ -603,25 +635,38 @@ final class DebugHooks {
         } else { Self.out("edited: 保存先が無いので保存は試しません") }
     }
 
-    private func debugQuit(_ mode: String, _ model: ProjectModel) async {
+    /// 終了の経路の確認。`MC_DEBUG_QUIT=<mode>[+engine]`
+    /// - `1`: 未保存なしで ⌘Q(`NSApp.terminate`)。そのまま終わるはず。
+    /// - `engine`(または `+engine`): 先に VOICEVOX エンジンを自分で起動する(`MC_DEBUG_ENGINE_URL` でポートを変えられる)。
+    /// - `dirty`: 編集して未保存にしてから終了を試み、確認シートの題・ボタンを出す。`dirty:cancel` / `dirty:discard` / `dirty:save` は
+    ///   そのボタン(キャンセル / 保存しない / 保存)を実際に押して、アプリが生きているか・終わったか・ファイルが書けたかを出す。
+    ///   (`dirty:save` は `MC_OPEN` で開いた一時コピーに保存する。保存先が無い書類は保存パネルになるため。)
+    private func debugQuit(_ mode0: String, _ model: ProjectModel) async {
         await settle(model)
-        if mode == "engine" {
-            let ok = await AppServices.engine.ensureRunning(baseURL: model.project.voicevoxUrl)
+        let parts = mode0.split(separator: "+").map(String.init)
+        let mode = parts.first ?? "1"
+        if parts.contains("engine") || mode == "engine" {
+            // MC_DEBUG_ENGINE_URL: 本物の VOICEVOX が動いていても自分のエンジンを別ポートで起動して確かめるため
+            let url = env["MC_DEBUG_ENGINE_URL"] ?? model.project.voicevoxUrl
+            let ok = await AppServices.engine.ensureRunning(baseURL: url)
             Self.out("quit: engine ensureRunning=\(ok) startedByUs=\(AppServices.engine.startedByUs)")
         }
-        if mode == "dirty" {
+        if mode.hasPrefix("dirty") {
+            let action = mode.split(separator: ":").dropFirst().first.map(String.init)
+            let clipsBefore = model.project.allClips.count
             model.addTextClip()
             try? await Task.sleep(nanoseconds: 800_000_000)
-            Self.out("quit: dirty isDocumentEdited=\(model.window?.isDocumentEdited ?? false)")
+            Self.out("quit: dirty window.isDocumentEdited=\(model.window?.isDocumentEdited ?? false) NSDocument.isDocumentEdited=\(model.window.flatMap { NSDocumentController.shared.document(for: $0)?.isDocumentEdited } ?? false) clips \(clipsBefore)→\(model.project.allClips.count)")
+            let t0 = CACurrentMediaTime()
+            // NSApp.terminate は、未保存の書類があると確認シートの答えが出るまで戻ってこない(AppKit が入れ子のイベントループで待つ。
+            // 主スレッドは止まっておらずループは回っている)。なので、シートを調べてボタンを押す側は terminate の前に走らせておく。
+            // (確認待ちの入れ子ループでは async の続き = メインキュー が動かないので、common モードの Timer で見張る)
+            self.watchQuitSheet(model, action: action, t0: t0)
+            Self.out("quit: terminate を呼びます")
             NSApp.terminate(nil)
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
-            let sheet = model.window?.attachedSheet
-            Self.out("quit: 未保存の確認シート=\(sheet != nil) running=\(NSApp.isRunning)")
-            if let sheet, let png = Self.png(of: sheet, over: NSColor(calibratedWhite: 0.2, alpha: 1)), let dir = env["MC_SNAPSHOT_DIR"] {
-                try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-                try? png.write(to: URL(fileURLWithPath: dir).appendingPathComponent("quit-sheet.png"))
-                Self.out("quit: シートを \(dir)/quit-sheet.png に書きました")
-            }
+            // ここへ戻ってくるのは、キャンセルされたとき(終了しないとき)だけ
+            Self.out(String(format: "quit: terminate が戻りました(%.2fs 後)= 終了は取り消されました。running=%@", CACurrentMediaTime() - t0, NSApp.isRunning ? "yes" : "no"))
+            try? await Task.sleep(nanoseconds: 3_500_000_000)   // ボタンを押した側の「N 秒後」の報告が出るのを待つ
             Self.finish(0)
         }
         Self.out("quit: NSApp.terminate を呼びます")
@@ -629,6 +674,117 @@ final class DebugHooks {
         try? await Task.sleep(nanoseconds: 3_000_000_000)
         Self.out("quit: まだ動いています(終了が止められました)")
         Self.finish(1)
+    }
+
+    private var quitWatchTimer: Timer?
+
+    private func watchQuitSheet(_ model: ProjectModel, action: String?, t0: CFTimeInterval) {
+        var pressed = false
+        let t = Timer(timeInterval: 0.1, repeats: true) { [weak self] timer in
+            MainActor.assumeIsolated {
+                guard let self, !pressed else { return }
+                let elapsed = CACurrentMediaTime() - t0
+                guard let sheet = model.window?.attachedSheet else {
+                    if elapsed > 10 { Self.out("quit: 10 秒待っても確認シートが出ません"); Self.finish(1) }
+                    return
+                }
+                pressed = true; timer.invalidate()
+                Self.out(String(format: "quit: terminate の %.2fs 後 確認シートあり(主スレッドは動いている)", elapsed))
+                func collect(_ v: NSView, _ buttons: inout [NSButton], _ texts: inout [String]) {
+                    if let b = v as? NSButton, !b.title.isEmpty { buttons.append(b) }
+                    if let t = v as? NSTextField, !t.stringValue.isEmpty { texts.append(t.stringValue) }
+                    v.subviews.forEach { collect($0, &buttons, &texts) }
+                }
+                var buttons: [NSButton] = [], texts: [String] = []
+                if let c = sheet.contentView { collect(c, &buttons, &texts) }
+                Self.out("quit: シート class=\(type(of: sheet)) texts=\(texts) buttons=\(buttons.map(\.title))")
+                if let dir = self.env["MC_SNAPSHOT_DIR"], let png = Self.png(of: sheet, over: NSColor(calibratedWhite: 0.2, alpha: 1)) {
+                    try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+                    try? png.write(to: URL(fileURLWithPath: dir).appendingPathComponent("quit-sheet.png"))
+                }
+                guard let action else { Self.finish(0) }
+                // 保存済みの書類だと「保存しない」は「変更を元に戻す」という名前で出る(自動保存つきの書類のシート)
+                let wants: [String] = ["cancel": ["キャンセル"], "discard": ["保存しない", "変更を元に戻す"], "save": ["保存"]][action] ?? [action]
+                guard let button = buttons.first(where: { wants.contains($0.title) }) else { let want = wants[0]
+                    Self.out("quit: ボタン「\(want)」が見つかりません"); Self.finish(1) }
+                let want = button.title
+                let path = model.fileURL?.path
+                let mtime0 = path.flatMap { try? FileManager.default.attributesOfItem(atPath: $0)[.modificationDate] as? Date }
+                Self.out("quit: ボタン「\(want)」を押します")
+                button.performClick(nil)
+                // 押したあと: 「保存しない」「保存」ならアプリはここで終わる。生きていたら(= 終わらない)様子を出す
+                for delay in [1.0, 3.0] {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                        self.reportAfterQuitButton(model, want: want, path: path, mtime0: mtime0, label: "「\(want)」の \(delay)s 後(= まだ終わっていない)")
+                    }
+                }
+            }
+        }
+        RunLoop.main.add(t, forMode: .common)
+        quitWatchTimer = t
+    }
+
+    private func reportAfterQuitButton(_ model: ProjectModel, want: String, path: String?, mtime0: Date?, label: String) {
+        let mtime1 = path.flatMap { try? FileManager.default.attributesOfItem(atPath: $0)[.modificationDate] as? Date }
+        let onDisk = path.flatMap { try? Data(contentsOf: URL(fileURLWithPath: $0)) }.flatMap { try? Project.decode(from: $0) }
+        Self.out("quit: \(label): アプリは生きている edited=\((model.window?.isDocumentEdited ?? false) ? "yes" : "no") sheet=\(model.window?.attachedSheet != nil ? "あり" : "なし") ファイル更新=\(mtime0 != mtime1 ? "yes" : "no") ディスク上のクリップ数=\(onDisk.map { String($0.allClips.count) } ?? "-") モデルのクリップ数=\(model.project.allClips.count)")
+    }
+
+    /// `MC_DEBUG_SWEEP=1`(`MC_DEBUG_HANGWATCH=1` と一緒に): 主スレッドで本物の仕事をする一連の局面を順に行い、局面ごとの固まりを数える。
+    /// MC_OPEN の書類(一時コピー)に対して行う。マウスは使えないので、ドラッグはジェスチャー API(begin/update/commit)で再現する。
+    /// `MC_DEBUG_SWEEP_EXPORT=<out.mp4>` があれば最後に書き出し(UI と同じ runExport)も行う。
+    private func debugSweep(_ model: ProjectModel) async {
+        await settle(model)
+        let hw = HangWatch.shared
+        func sleep(_ s: Double) async { try? await Task.sleep(nanoseconds: UInt64(s * 1_000_000_000)) }
+        func phase(_ n: String) { hw.phase(n); Self.out("sweep: phase \(n)") }
+        phase("idle 1.5s"); await sleep(1.5)
+        phase("select clips")
+        for c in model.project.allClips.prefix(60) { model.selectedClipId = c.id; await sleep(0.01) }
+        phase("edit text/slider (gesture)")
+        model.addTextClip(); await sleep(0.2)
+        if let id = model.selectedClipId ?? model.project.allClips.last?.id {
+            model.beginGesture()
+            for i in 0..<120 {
+                var p = model.project
+                if let ti = p.tracks.firstIndex(where: { $0.clips.contains { $0.id == id } }), let ci = p.tracks[ti].clips.firstIndex(where: { $0.id == id }) {
+                    p.tracks[ti].clips[ci].start += 0.001 * Double(i % 5)
+                }
+                model.updateGesture(p); await sleep(0.008)
+            }
+            model.commitGesture("ドラッグ")
+            for i in 0..<30 { model.setClipField(.opacity, Double(i % 10) / 10 + 0.05, clipId: id); await sleep(0.01) }
+        }
+        phase("undo/redo")
+        for _ in 0..<10 { model.effectiveUndoManager.undo(); await sleep(0.02) }
+        for _ in 0..<10 { model.effectiveUndoManager.redo(); await sleep(0.02) }
+        phase("save (real, ⌘S path)")
+        if let d = model.window.flatMap({ NSDocumentController.shared.document(for: $0) }) {
+            d.save(nil); await sleep(1.5)
+            Self.out("sweep: saved isDocumentEdited=\(d.isDocumentEdited)")
+        }
+        phase("resolution switch")
+        model.selectResolution("1280x720"); await sleep(0.5); model.selectResolution("1920x1080"); await sleep(0.5)
+        phase("playback 2s")
+        model.playback.play(); await sleep(2); model.playback.pause()
+        phase("window resize 60Hz x1.5s")
+        if let w = model.window {
+            let f0 = w.frame
+            for i in 0..<90 {
+                var f = f0; f.size.width += CGFloat(i % 40) * 4; f.size.height += CGFloat(i % 30) * 4
+                w.setFrame(f, display: true); await sleep(1.0 / 60)
+            }
+            w.setFrame(f0, display: true)
+        }
+        phase("second screen open/close")
+        model.toggleSecondScreen(); await sleep(0.7); model.toggleSecondScreen(); await sleep(0.5)
+        if let out = env["MC_DEBUG_SWEEP_EXPORT"] {
+            phase("export")
+            let r = await model.runExport(to: URL(fileURLWithPath: out))
+            Self.out("sweep: export \(r)")
+        }
+        phase("end")
+        Self.finish(0)
     }
 
     private func debugFrame(_ spec: String, _ model: ProjectModel) async {
@@ -775,11 +931,76 @@ final class DebugHooks {
         return r2.representation(using: .png, properties: [:])
     }
 
-    static func trace(_ s: String) {
+    nonisolated static func trace(_ s: String) {
         if ProcessInfo.processInfo.environment["MC_DEBUG_TRACE"] != nil { out("trace: " + s) }
     }
 
-    static func out(_ s: String) {
+    /// 検証用の環境変数(`MC_DEBUG_*` / `MC_SNAPSHOT_DIR` / `MC_OPEN`)が 1 つでもあれば、ウィンドウの復元状態を読まず・書かない。
+    /// (検証の起動は exit() で終わるため、復元状態が残ると、次にユーザーが普通に起動したとき余計なウィンドウが復元される。)
+    /// 復元の可否は AppKit が起動の早い段階で UserDefaults の引数ドメインから読むので、App.init で入れる。
+    nonisolated static func suppressStateRestorationIfDebugging() {
+        let env = ProcessInfo.processInfo.environment
+        guard env.keys.contains(where: { $0.hasPrefix("MC_DEBUG_") || $0 == "MC_SNAPSHOT_DIR" || $0 == "MC_OPEN" }),
+              env["MC_DEBUG_KEEP_STATE"] == nil else { return }
+        var domain = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)
+        domain["ApplePersistenceIgnoreState"] = true
+        domain["NSQuitAlwaysKeepsWindows"] = false
+        UserDefaults.standard.setVolatileDomain(domain, forName: UserDefaults.argumentDomain)
+    }
+
+    /// 検証用の環境変数があるか(静かな起動にする)。
+    nonisolated static var isDebugRun: Bool {
+        let env = ProcessInfo.processInfo.environment
+        return env.keys.contains { $0.hasPrefix("MC_DEBUG_") || $0 == "MC_SNAPSHOT_DIR" || $0 == "MC_OPEN" }
+    }
+
+    /// 静かな起動: Dock にもメニューバーにも出ない(.accessory)・前面にしない・ウィンドウは画面の遠くの外・20 秒で自分で終わる。
+    /// ユーザーが同じ Mac で作業していても邪魔をしないため。`MC_DEBUG_VISIBLE=1` で通常の表示に戻せる(画面を撮るとき用)。
+    nonisolated static var isQuiet: Bool { isDebugRun && ProcessInfo.processInfo.environment["MC_DEBUG_VISIBLE"] == nil }
+
+    static func quietActivate() {
+        if isQuiet { return }
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    /// 起動の最初(applicationWillFinishLaunching)に呼ぶ。
+    static func enterQuietModeIfNeeded() {
+        if HangWatch.enabled { HangWatch.shared.start() }
+        guard isQuiet else { return }
+        NSApp.setActivationPolicy(.accessory)
+        let limit = ProcessInfo.processInfo.environment["MC_DEBUG_MAXSEC"].flatMap(Double.init) ?? 20
+        DispatchQueue.main.asyncAfter(deadline: .now() + limit) {
+            out("debug: \(limit) 秒たったので自分で終了します")
+            if HangWatch.enabled { HangWatch.shared.printSummary() }
+            exit(0)
+        }
+    }
+
+    /// 書類ウィンドウ(NSPanel でない・見えている)の数。
+    static func docWindowCount() -> Int {
+        NSApp.windows.filter { $0.isVisible && !($0 is NSPanel) }.count
+    }
+
+    /// `NSApp.windows` と `NSDocumentController.shared.documents` を出す(MC_DEBUG_WINDOWS / MC_DEBUG_DOCS)。
+    static func dumpWindows() {
+        let docs = NSDocumentController.shared.documents
+        out("windows: count=\(NSApp.windows.count) visibleDocWindows=\(docWindowCount()) documents=\(docs.count)")
+        for (i, w) in NSApp.windows.enumerated() {
+            out("windows: [\(i)] class=\(type(of: w)) title=\"\(w.title)\" visible=\(w.isVisible) frame=\(NSStringFromRect(w.frame)) delegate=\(w.delegate.map { String(describing: type(of: $0)) } ?? "nil")")
+        }
+        for d in docs {
+            out("windows: doc \(type(of: d)) url=\(d.fileURL?.lastPathComponent ?? "untitled") windowControllers=\(d.windowControllers.count) edited=\(d.isDocumentEdited)")
+        }
+    }
+
+    /// 自分自身に kAEReopenApplication を送る(Dock のアイコンのクリックと同じ)。
+    static func sendReopenAppleEvent() {
+        let target = NSAppleEventDescriptor(processIdentifier: ProcessInfo.processInfo.processIdentifier)
+        let ev = NSAppleEventDescriptor(eventClass: AEEventClass(kCoreEventClass), eventID: AEEventID(kAEReopenApplication), targetDescriptor: target, returnID: AEReturnID(kAutoGenerateReturnID), transactionID: AETransactionID(kAnyTransactionID))
+        AESendMessage(ev.aeDesc!, nil, AESendMode(kAENoReply), 1)
+    }
+
+    nonisolated static func out(_ s: String) {
         FileHandle.standardOutput.write(Data((s + "\n").utf8))
     }
 
@@ -790,8 +1011,21 @@ final class DebugHooks {
     }
 
     /// 書き出しの未保存確認などで止まらないよう、エンジンだけ止めて直接終わる。
-    private static func finish(_ code: Int32) -> Never {
+    static func finish(_ code: Int32) -> Never {
+        if HangWatch.enabled { HangWatch.shared.printSummary() }
         AppServices.engine.shutdown()
         exit(code)
+    }
+}
+
+extension NSWindow {
+    /// 検証用: 静かな起動では前面にせず、画面の外(x=-30000)に置く。
+    @MainActor func debugOrderFront() {
+        if DebugHooks.isQuiet {
+            if frame.origin.x > -20000 { setFrameOrigin(NSPoint(x: -30000, y: -30000)) }
+            orderBack(nil)
+        } else {
+            makeKeyAndOrderFront(nil)
+        }
     }
 }
