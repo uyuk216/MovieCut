@@ -1,11 +1,14 @@
 import Foundation
 import Combine
 import AppKit
+import AVFoundation
 import YukkuriCore
 
 /// アプリ全体で 1 つだけ持つもの(VOICEVOX エンジンは終了時に止める)。
 enum AppServices {
     static let engine = VoicevoxEngine()
+    /// VOICEVOX の話者一覧(キャラの一覧とプロパティ欄で共有)。
+    @MainActor static let speakers = SpeakerCatalog()
 }
 
 /// 解像度のプリセット(renderer.js の #res-select と同じ並び)。
@@ -75,8 +78,15 @@ final class ProjectModel: ObservableObject {
     private(set) var projectRevision = 0
     /// ドラッグ中の編集の出発点(M4a。ドラッグの間は Undo に積まず、離したときに 1 回だけ登録する)。
     var gestureBase: Project?
-    @Published var selectedClipId: String?
+    @Published var selectedClipId: String? {
+        // クリップを選んだら、プロパティ欄はキャラの表示をやめてクリップの表示にする
+        didSet { if selectedClipId != nil { characterPanelActive = false } }
+    }
     @Published var selectedCharId: String?
+    /// 左の一覧でキャラを選んだ状態(クリップが選ばれていなければ、プロパティ欄にキャラの設定が出る)。
+    @Published var characterPanelActive = false
+    /// 「このキャラを消す」の確認待ち(確認の警告を出す)。
+    @Published var pendingDeleteCharId: String?
     @Published var currentTime: Double = 0
     @Published var isExporting = false
     @Published var statusText = ""
@@ -120,6 +130,13 @@ final class ProjectModel: ObservableObject {
     let keyRouter = KeyRouter()
 
     private var exportTask: Task<Void, Error>?
+    /// スライダー以外の連続した編集(ステッパー・色・文字入力)を 1 回の Undo にまとめるための待ち。
+    var coalesceTask: Task<Void, Never>?
+    var coalesceName: String?
+    /// 「試しに読み上げる」の再生中のもの。
+    var testPlayer: AVAudioPlayer?
+    /// 試し読み上げの再生を差し替える(テスト用。nil なら AVAudioPlayer で鳴らす)。
+    var playTestAudio: ((URL) throws -> Void)?
 
     init(project: Project = .new()) {
         self.project = project
@@ -263,7 +280,7 @@ final class ProjectModel: ObservableObject {
         c.color = "#4f8cff"
         c.x = 0.5; c.flip = false   // charDefaults(9)
         edit("キャラクターの追加") { $0.characters.append(c) }
-        selectedCharId = c.id
+        selectCharacter(c.id)
     }
 
     // MARK: 台本 → タイムライン

@@ -56,12 +56,12 @@ struct ContentView: View {
                 ToolbarBar(model: model)
                 Divider()
                 HStack(spacing: 0) {
-                    LeftPanel(model: model, scriptText: $scriptText)
+                    LeftPanel(model: model, speakers: AppServices.speakers, scriptText: $scriptText)
                         .frame(width: 300)
                     Divider()
                     CenterPanel(model: model)
                     Divider()
-                    RightPanel()
+                    InspectorView(model: model, speakers: AppServices.speakers)
                         .frame(width: 280)
                 }
                 .disabled(model.isLocked)
@@ -79,6 +79,10 @@ struct ContentView: View {
         .alert(model.errorTitle, isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {
             Button("OK") { model.errorMessage = nil }
         } message: { Text(model.errorMessage ?? "") }
+        .alert(model.pendingDeleteCharId.flatMap { model.deleteConfirmation(for: $0)?.title } ?? "", isPresented: Binding(get: { model.pendingDeleteCharId != nil }, set: { if !$0 { model.pendingDeleteCharId = nil } })) {
+            Button("消す", role: .destructive) { if let id = model.pendingDeleteCharId { model.deleteCharacter(id) } }
+            Button("キャンセル", role: .cancel) { model.pendingDeleteCharId = nil }
+        } message: { Text(model.pendingDeleteCharId.flatMap { model.deleteConfirmation(for: $0)?.message } ?? "") }
         .background(WindowAccessor { w in model.window = w })
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
             // タイムライン以外にドロップされたとき: 再生ヘッドの位置に置く(タイムライン上は TimelineCanvas が受ける)
@@ -92,6 +96,7 @@ struct ContentView: View {
             model.installKeyboard()
             DebugHooks.shared.attach(model)
         }
+        .task(id: model.project.voicevoxUrl) { await AppServices.speakers.load(baseURL: model.project.voicevoxUrl) }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { note in
             if let w = note.object as? NSWindow, w === model.window { model.shutdown() }
         }
@@ -189,6 +194,7 @@ struct ToolbarBar: View {
 
 struct LeftPanel: View {
     @ObservedObject var model: ProjectModel
+    @ObservedObject var speakers: SpeakerCatalog
     @Binding var scriptText: String
 
     var body: some View {
@@ -203,7 +209,11 @@ struct LeftPanel: View {
             ScrollView {
                 VStack(spacing: 6) {
                     ForEach(model.project.characters) { ch in
-                        CharacterRow(ch: ch, selected: ch.id == model.effectiveSelectedCharId) { model.selectedCharId = ch.id }
+                        CharacterRow(ch: ch, speakerName: ch.speaker.flatMap { speakers.label(for: $0) }, selected: ch.id == model.effectiveSelectedCharId) { model.selectCharacter(ch.id) }
+                            .contextMenu {
+                                Button("このキャラを消す", role: .destructive) { model.requestDeleteCharacter(ch.id) }
+                                    .disabled(model.project.characters.count <= 1)
+                            }
                     }
                 }
             }
@@ -248,11 +258,13 @@ struct LeftPanel: View {
 
 struct CharacterRow: View {
     let ch: Character
+    /// VOICEVOX の話者一覧が読めていれば「ずんだもん（ノーマル）」
+    var speakerName: String?
     let selected: Bool
     let action: () -> Void
 
     private var engineLabel: String {
-        if ch.engine == "voicevox" { return "VOICEVOX 話者 \(ch.speaker ?? 3)" }
+        if ch.engine == "voicevox" { return speakerName ?? "VOICEVOX 話者 \(ch.speaker ?? 3)" }
         return "ゆっくり " + (ch.voice ?? "")
     }
 
@@ -333,22 +345,6 @@ struct TransportBar: View {
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
         }
-    }
-}
-
-// MARK: - 右パネル
-
-struct RightPanel: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("プロパティ").font(.headline)
-            Divider()
-            Text("クリップを選ぶと設定が出ます。")
-                .font(.callout).foregroundStyle(.secondary)
-            Spacer()
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 }
 

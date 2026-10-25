@@ -32,6 +32,14 @@ import YukkuriCore
 ///   `YE_SNAPSHOT_DIR` も付けると、その結果の画面を撮る(`YE_DEBUG_SELECT_CLIP` / `YE_DEBUG_TIME` は編集のあとに効く)。
 /// - `YE_DEBUG_HOLD_DRAG=<move|trimL|trimR>:<idx>:<dt>[:<行>]` ドラッグを途中(マウスを離す前)の状態で止める。吸着の案内線が写る。
 ///   `YE_DEBUG_EDIT` と `YE_DEBUG_SELECT_CLIP` / `YE_DEBUG_TIME` のあとに実行され、再生ヘッドの時刻が吸着の候補になる。
+/// - `YE_DEBUG_SELECT_CHAR=<index>` キャラ一覧の index 番目を左の一覧で選んだのと同じ(`selectCharacter`)にして、プロパティ欄をキャラの設定にする。
+///   VOICEVOX のキャラのときは話者一覧が読めるまで(最大 40 秒)待ち、`speakers: state=… count=…` を出す。
+/// - `YE_DEBUG_INSPECTOR_SCROLL=bottom` 右のプロパティ欄を一番下までスクロールしてから撮る(下の方の項目を見るため)。
+/// - `YE_DEBUG_DELETE_CHAR=<index>[:ask|:do]` index 番目のキャラを消す確認を出す(`:ask` 省略時。画面に確認の警告が出る)か、
+///   `:do` で確認を通して実際に消す(`deleteCharacter`)。結果(キャラ数・クリップ数・Undo の状態)を標準出力に出す。
+/// - `YE_DEBUG_VOICE_EDIT=<新しいセリフ>` 選択中(`YE_DEBUG_SELECT_CLIP`)のボイスクリップのセリフを、プロパティ欄のセリフ欄と同じ関数
+///   (`setVoiceText`)で書き換え、前後の `src` / 長さ / WAV の実長 / offset を出し、Undo して元に戻ったことも出す。
+///   最後に Redo までして Undo の状態を出す。`YE_DEBUG_SCRIPT` のあとに実行される。
 /// - `YE_DEBUG_SECOND=1`      別画面ウィンドウを開き、`YE_SNAPSHOT_DIR` があれば `<dir>/second.png` にも書く(`window.png` と同時)。
 @MainActor
 final class DebugHooks {
@@ -41,7 +49,7 @@ final class DebugHooks {
 
     private var active: Bool {
         ["YE_SNAPSHOT_DIR", "YE_DEBUG_SIZE", "YE_DEBUG_SCRIPT", "YE_DEBUG_EXPORT", "YE_DEBUG_SHEET", "YE_DEBUG_ZOOM", "YE_DEBUG_WINDOW", "YE_DEBUG_SELECT_CLIP",
-         "YE_DEBUG_TIME", "YE_DEBUG_PLAY", "YE_DEBUG_SEEK_TEST", "YE_DEBUG_DRAWTIME", "YE_DEBUG_SECOND", "YE_DEBUG_EDIT", "YE_DEBUG_HOLD_DRAG"].contains { env[$0] != nil }
+         "YE_DEBUG_TIME", "YE_DEBUG_PLAY", "YE_DEBUG_SEEK_TEST", "YE_DEBUG_DRAWTIME", "YE_DEBUG_SECOND", "YE_DEBUG_EDIT", "YE_DEBUG_HOLD_DRAG", "YE_DEBUG_SELECT_CHAR", "YE_DEBUG_DELETE_CHAR", "YE_DEBUG_VOICE_EDIT", "YE_DEBUG_INSPECTOR_SCROLL"].contains { env[$0] != nil }
     }
 
     func appDidLaunch() {
@@ -97,6 +105,16 @@ final class DebugHooks {
             let clips = model.project.allClips
             if clips.indices.contains(i) { model.selectedClipId = clips[i].id }
         }
+        if let i = env["YE_DEBUG_SELECT_CHAR"].flatMap(Int.init) {
+            let chars = model.project.characters
+            if chars.indices.contains(i) {
+                model.selectCharacter(chars[i].id)
+                if chars[i].engine == "voicevox" { await waitSpeakers(model) }
+                Self.out("select-char: \(chars[i].name) engine=\(chars[i].engine) mode=\(model.inspectorMode)")
+            } else { Self.out("select-char: index \(i) がありません") }
+        }
+        if let s = env["YE_DEBUG_DELETE_CHAR"] { await debugDeleteChar(s, model) }
+        if let t = env["YE_DEBUG_VOICE_EDIT"] { await debugVoiceEdit(t, model) }
         if let t = env["YE_DEBUG_TIME"].flatMap(Double.init) { model.currentTime = t }
         if let spec = env["YE_DEBUG_HOLD_DRAG"] {
             await settle(model)
@@ -135,6 +153,18 @@ final class DebugHooks {
             }
         }
 
+        if env["YE_DEBUG_INSPECTOR_SCROLL"] == "bottom", let win = model.window, let root = win.contentView {
+            await settle(model)
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            // 右端にある縦スクロール(プロパティ欄)を探して、一番下へ
+            func all(_ v: NSView) -> [NSScrollView] { (v is NSScrollView ? [v as! NSScrollView] : []) + v.subviews.flatMap(all) }
+            if let sv = all(root).filter({ $0.convert($0.bounds, to: nil).minX > win.frame.width - 320 && $0.hasVerticalScroller }).first, let doc = sv.documentView {
+                let maxY = max(0, doc.frame.height - sv.contentView.bounds.height)
+                sv.contentView.scroll(to: NSPoint(x: 0, y: doc.isFlipped ? maxY : 0))
+                sv.reflectScrolledClipView(sv.contentView)
+                Self.out("inspector-scroll: bottom doc=\(Int(doc.frame.height)) view=\(Int(sv.contentView.bounds.height))")
+            } else { Self.out("inspector-scroll: scroll view not found") }
+        }
         if env["YE_DEBUG_SECOND"] != nil {
             model.toggleSecondScreen()
             Self.out("second: open=\(model.isSecondScreenOpen) frame=\(model.secondScreen.window.map { NSStringFromRect($0.frame) } ?? "-")")
@@ -155,6 +185,59 @@ final class DebugHooks {
         while !(model.previewFrameCount > 0 && model.previewIdle) && waited < 30 {
             try? await Task.sleep(nanoseconds: 50_000_000); waited += 0.05
         }
+    }
+
+    // MARK: プロパティ欄・キャラクターの検証
+
+    /// 話者一覧が読み込まれる(または失敗する)まで待つ(最大 40 秒)。
+    private func waitSpeakers(_ model: ProjectModel) async {
+        var waited = 0.0
+        let cat = AppServices.speakers
+        while (cat.state == .idle || cat.state == .loading) && waited < 40 {
+            try? await Task.sleep(nanoseconds: 100_000_000); waited += 0.1
+        }
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        Self.out("speakers: state=\(cat.state) count=\(cat.choices.count) first=\(cat.choices.first?.label ?? "-")")
+    }
+
+    private func debugDeleteChar(_ spec: String, _ model: ProjectModel) async {
+        let f = spec.split(separator: ":").map(String.init)
+        guard let i = f.first.flatMap(Int.init), model.project.characters.indices.contains(i) else { Self.out("delete-char: 指定が読めません: \(spec)"); return }
+        let ch = model.project.characters[i]
+        let before = (model.project.characters.count, model.project.allClips.count)
+        if f.count > 1, f[1] == "do" {
+            let ok = model.deleteCharacter(ch.id)
+            let um = model.effectiveUndoManager
+            Self.out("delete-char: \(ch.name) ok=\(ok) characters \(before.0)→\(model.project.characters.count) clips \(before.1)→\(model.project.allClips.count) selectedChar=\(model.effectiveSelectedCharId == model.project.characters.first?.id ? "first" : "other") canUndo=\(um.canUndo)")
+            um.undo()
+            Self.out("delete-char: undo → characters \(model.project.characters.count) clips \(model.project.allClips.count)")
+        } else {
+            model.selectCharacter(ch.id)
+            model.requestDeleteCharacter(ch.id)
+            Self.out("delete-char: 確認を出しました pending=\(model.pendingDeleteCharId != nil) \(model.deleteConfirmation(for: ch.id).map { "\($0.title) / \($0.message)" } ?? "-")")
+        }
+    }
+
+    private func debugVoiceEdit(_ text: String, _ model: ProjectModel) async {
+        guard let id = model.selectedClipId ?? model.project.allClips.first(where: { $0.type == .voice })?.id, let before = model.clip(id), before.type == .voice else {
+            Self.out("voice-edit: ボイスクリップを選べません"); return
+        }
+        func wavLen(_ c: Clip) -> String { c.src.flatMap { try? RealVoiceProvider.duration(of: URL(fileURLWithPath: $0)) }.map { String(format: "%.3f", $0) } ?? "-" }
+        func line(_ label: String, _ c: Clip) {
+            Self.out("voice-edit: \(label) text=\"\(c.text ?? "")\" src=\(c.src.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "-") wav=\(wavLen(c))s duration=\(String(format: "%.3f", c.duration)) offset=\(String(format: "%.3f", c.offset))")
+        }
+        model.selectedClipId = id
+        line("before", before)
+        let ok = await model.setVoiceText(text, clipId: id)
+        let um = model.effectiveUndoManager
+        if let a = model.clip(id) { line("after (ok=\(ok), duration≈wav+0.15: \(abs(a.duration - (Double(wavLen(a)) ?? 0) - 0.15) < 0.002))", a) }
+        Self.out("voice-edit: canUndo=\(um.canUndo) undoName=\(um.undoActionName) error=\(model.errorMessage ?? "-")")
+        um.undo()
+        if let u = model.clip(id) { line("undone (== before: \(u == before))", u) }
+        um.redo()
+        if let r = model.clip(id) { line("redone", r) }
+        um.undo()
+        Self.out("voice-edit: final canUndo=\(um.canUndo) canRedo=\(um.canRedo)")
     }
 
     // MARK: タイムライン編集の検証
@@ -319,20 +402,28 @@ final class DebugHooks {
         }
         if let png = Self.png(of: win) { try? png.write(to: url.appendingPathComponent("window.png")) }
         if let second = model.secondScreen.window, let png = Self.png(of: second) { try? png.write(to: url.appendingPathComponent("second.png")) }
-        if let sheet = win.attachedSheet, let png = Self.png(of: sheet) {
+        if let sheet = win.attachedSheet, let png = Self.png(of: sheet, over: NSColor(calibratedWhite: 0.2, alpha: 1)) {
             try? png.write(to: url.appendingPathComponent("sheet.png"))
         }
         Self.out("snapshot: wrote \(url.path)")
     }
 
     /// ウィンドウの中身を PNG にする(画面収録の許可に頼らず、レイヤーを直接描く)。
-    static func png(of win: NSWindow) -> Data? {
+    /// `over` を指定すると、その色を下地にして重ねる(警告シートは背景が半透明で、そのままだと文字だけが写るため)。
+    static func png(of win: NSWindow, over background: NSColor? = nil) -> Data? {
         guard let view = win.contentView else { return nil }
         win.displayIfNeeded()
         view.layoutSubtreeIfNeeded()
         guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return nil }
         view.cacheDisplay(in: view.bounds, to: rep)
-        return rep.representation(using: .png, properties: [:])
+        guard let bg = background else { return rep.representation(using: .png, properties: [:]) }
+        let out = NSImage(size: view.bounds.size)
+        out.lockFocus()
+        bg.setFill(); NSRect(origin: .zero, size: view.bounds.size).fill()
+        rep.draw(in: NSRect(origin: .zero, size: view.bounds.size))
+        out.unlockFocus()
+        guard let tiff = out.tiffRepresentation, let r2 = NSBitmapImageRep(data: tiff) else { return nil }
+        return r2.representation(using: .png, properties: [:])
     }
 
     private static func out(_ s: String) {
