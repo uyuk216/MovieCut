@@ -38,11 +38,20 @@
     </aside>
 
     <section id="center">
-      <div id="preview-wrap"><canvas id="preview"></canvas></div>
+      <div id="preview-wrap"><canvas id="preview"></canvas><div id="preview-chip"></div></div>
       <div id="transport">
         <button id="btn-home">⏮</button>
         <button id="btn-play">▶</button>
         <button id="btn-popout" title="外付け画面にプレビューを出す">別画面に表示</button>
+        <label id="res-label">解像度 <select id="res-select" title="動画のサイズ">
+          <option value="1920x1080">1920×1080</option>
+          <option value="2560x1440">2560×1440</option>
+          <option value="3840x2160">3840×2160</option>
+          <option value="1080x1920">縦 1080×1920</option>
+          <option value="720x1280">縦 720×1280</option>
+          <option value="1080x1080">正方形 1080×1080</option>
+          <option value="custom">自由…</option>
+        </select></label>
         <span id="timecode">00:00.00 / 00:00.00</span>
       </div>
     </section>
@@ -79,8 +88,8 @@
         </select></label>
         <label>幅 <input id="set-w" type="number" /></label>
         <label>高さ <input id="set-h" type="number" /></label>
-        <label>FPS <input id="set-fps" type="number" /></label>
-        <label>背景色 <input id="set-bg" type="color" /> <select id="set-bg-preset"><option value="#000000">黒</option><option value="#ffffff">白</option><option value="#00b140">緑（クロマキー）</option><option value="custom">自由</option></select></label>
+        <label>FPS <select id="set-fps"><option value="24">24</option><option value="30">30</option><option value="60">60</option></select></label>
+        <label>背景色 <span class="pair"><input id="set-bg" type="color" /> <select id="set-bg-preset"><option value="#000000">黒</option><option value="#ffffff">白</option><option value="#00b140">緑（クロマキー）</option><option value="custom">自由</option></select></span></label>
         <label>書き出し形式 <select id="set-codec">
           <option value="h264">H.264（どこでも再生できる）</option>
           <option value="hevc">HEVC（同じ画質で小さい・4K向け）</option>
@@ -88,12 +97,12 @@
       </fieldset>
       <fieldset>
         <legend>VOICEVOX（互換エンジンも可）</legend>
-        <label>エンジンのURL <input id="set-vv" type="text" size="32" /></label>
+        <label>エンジンのURL <input id="set-vv" type="text" /></label>
         <p class="hint">VOICEVOX は 50021、COEIROINK は 50031、SHAREVOX は 50025 が初期値です。</p>
       </fieldset>
       <fieldset>
         <legend>ゆっくり（AquesTalk 系）</legend>
-        <label>実行コマンド<br /><textarea id="set-aq" rows="3" cols="60"></textarea></label>
+        <label class="stack">実行コマンド<textarea id="set-aq" rows="3"></textarea></label>
         <p class="hint">{text} {voice} {speed} {out} が置き換わります。{out} に WAV を書き出すコマンドにしてください。<br />
         標準（AquesTalkPlayer Mac版）:<br /><code>/Applications/AquesTalkPlayer.app/Contents/MacOS/AquesTalkPlayer -P {voice} -T {text} -W {out}</code><br />
         {voice} にはキャラの「声」に選んだプリセット名（れいむ、まりさ など）が入ります。<br />

@@ -145,7 +145,7 @@ async function synth(ch, text) {
 async function makeVoiceClip(ch, text, start, track) {
   const src = await synth(ch, text);
   const buf = await getBuffer(src);
-  const clip = { id: uid(), type: 'voice', start, duration: buf.duration + 0.15, offset: 0, src, text, charId: ch.id, volume: 1, subtitle: true, fontSize: 64, font: FONTS[0] };
+  const clip = { id: uid(), type: 'voice', start, duration: buf.duration + 0.15, offset: 0, src, text, charId: ch.id, volume: 1, subtitle: true, fontSize: Math.max(8, Math.round(64 * resK())), font: FONTS[0] };
   track.clips.push(clip);
   return clip;
 }
@@ -184,16 +184,63 @@ async function scriptToTimeline() {
   } catch (e) {
     console.log('SMOKE synth error', e.message);
     alert('音声を作れませんでした:\n' + e.message);
-  } finally { overlay(null); renderAll(); }
+  } finally { overlay(null); renderAll(); $('#btn-fit').click(); } // 並べた結果が読めるように全体表示にする
 }
 
 // ---------- 描画 ----------
 const canvas = $('#preview');
 const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
 
+// 1080p を基準にした「見た目の大きさの倍率」。新しく作る文字・字幕・ぼかしの初期値に掛ける
+const resK = () => Math.sqrt((project.width * project.height) / (1920 * 1080));
+
 function resizeCanvas() {
   canvas.width = project.width;
   canvas.height = project.height;
+  // 表示は本当の縦横比で枠の中央に置く(CSS の max-width/max-height で収める)
+  canvas.style.aspectRatio = `${project.width} / ${project.height}`;
+  $('#preview-chip').textContent = `${project.width}×${project.height} · ${project.fps}fps`;
+  syncResUi();
+}
+
+// 解像度を変えたとき、文字やぼかしの大きさが見た目で変わらないように比例させる。
+// 絵の面積比の平方根(1080p→4K なら 2 倍、1080p→縦1080×1920 なら約 1.0)で、
+// テキストの fontSize・音声の字幕 fontSize・クリップの blur(px)・ぼかし範囲の strength(px) を掛け直す。
+// 位置や幅・高さは 0〜1 の割合なので変えない。
+function scaleForResolution(oldW, oldH, newW, newH) {
+  const k = Math.sqrt((newW * newH) / (oldW * oldH));
+  if (!isFinite(k) || k <= 0 || Math.abs(k - 1) < 1e-6) return;
+  for (const c of allClips()) {
+    if ((c.type === 'text' || c.type === 'voice') && c.fontSize) c.fontSize = Math.max(8, Math.round(c.fontSize * k));
+    if (c.blur > 0) c.blur = Math.round(c.blur * k);
+    if (c.type === 'blur' && c.strength > 0) c.strength = Math.round(c.strength * k);
+  }
+}
+
+// 解像度・FPS・コーデックを変える共通の入口(トランスポートの選択もダイアログも同じ道を通る)
+function applyVideoSize(w, h) {
+  w = Math.max(16, Math.round(+w) || 1920); h = Math.max(16, Math.round(+h) || 1080);
+  if (w === project.width && h === project.height) return;
+  scaleForResolution(project.width, project.height, w, h);
+  project.width = w; project.height = h;
+  if (w * h >= 3840 * 2160) project.codec = 'hevc'; // 4K は HEVC の方が小さくきれい
+  resizeCanvas(); draw(); renderProps();
+}
+
+// #res-select をプロジェクトの値に合わせる(開く・新規・設定ダイアログの後)
+function syncResUi() {
+  const sel = $('#res-select');
+  if (!sel) return;
+  const key = `${project.width}x${project.height}`;
+  const known = [...sel.options].some((o) => o.value === key && o.value !== 'custom');
+  const cur = sel.querySelector('option[data-cur]');
+  if (cur) cur.remove();
+  if (!known) { // 一覧にない値は、その場限りの項目として「自由…」の前に足す
+    const o = new Option(`${project.width}×${project.height}`, key);
+    o.dataset.cur = '1';
+    sel.add(o, sel.querySelector('option[value=custom]'));
+  }
+  sel.value = key;
 }
 
 function drawText(text, x, y, size, color, font, align = 'center', outline = '#000') {
@@ -233,7 +280,7 @@ function draw() {
       ctx.save();
       ctx.globalAlpha = c.opacity ?? 1;
       // ぼかし(クリップごと)。save/restore の内側なので他のクリップには漏れない
-      if (c.blur > 0 && ['image', 'video', 'text'].includes(c.type)) ctx.filter = `blur(${Math.min(100, c.blur)}px)`;
+      if (c.blur > 0 && ['image', 'video', 'text'].includes(c.type)) ctx.filter = `blur(${Math.min(300, c.blur)}px)`;
       if (c.type === 'blur') {
         // ぼかし範囲: ここまでに描いたキャンバス(下のレイヤー)を、図形の内側だけぼかして描き直す。
         // 制限: 立ち絵・字幕はトラックの後に描くので、ぼかし範囲では隠せない(トラック上のクリップだけが対象)
@@ -424,7 +471,12 @@ function clipEl(c) {
   el.className = `clip ${c.type}` + (c.id === selectedClipId ? ' selected' : '');
   el.style.left = c.start * pps + 'px';
   el.style.width = Math.max(4, c.duration * pps) + 'px';
-  if (c.type === 'voice') el.style.borderLeft = `4px solid ${charById(c.charId)?.color ?? '#999'}`;
+  if (c.type === 'voice') {
+    // キャラの色を暗く混ぜた背景(白文字が読める)+左の太い線
+    const col = charById(c.charId)?.color ?? '#999999';
+    el.style.background = `color-mix(in srgb, ${col} 42%, #16171c)`;
+    el.style.borderLeft = `4px solid ${col}`;
+  }
   el.textContent = clipLabel(c);
   el.title = clipLabel(c);
   const hl = document.createElement('div'); hl.className = 'handle l';
@@ -503,7 +555,7 @@ function select(id) {
 
 function field(label, value, onChange, opts = {}) {
   const l = document.createElement('label');
-  l.textContent = label;
+  l.append(label);
   let input;
   if (opts.options) {
     input = document.createElement('select');
@@ -516,17 +568,37 @@ function field(label, value, onChange, opts = {}) {
     input = document.createElement('input');
     input.type = opts.type ?? 'text';
     if (opts.step) input.step = opts.step;
+    if (opts.max != null) input.max = opts.max; // 値より先に上限を決める(後だと値が100に丸められる)
     if (input.type === 'checkbox') input.checked = !!value; else input.value = value ?? '';
+  }
+  // スライダーは現在の値をラベルの横に出し、動かすと同時に更新する。色は16進の値を横に出す
+  let lv = null;
+  if (input.type === 'range') {
+    lv = document.createElement('span'); lv.className = 'lv';
+    const show = () => (lv.textContent = opts.fmt ? opts.fmt(+input.value) : String(+input.value));
+    show(); input.addEventListener('input', show);
+    l.append(lv);
+  }
+  let hex = null;
+  if (input.type === 'color') {
+    hex = document.createElement('span'); hex.className = 'hex';
+    const show = () => (hex.textContent = input.value.toUpperCase());
+    show(); input.addEventListener('input', show); input.addEventListener('change', show);
   }
   input.onchange = () => {
     const v = input.type === 'checkbox' ? input.checked : input.type === 'number' || input.type === 'range' ? +input.value : input.value;
     onChange(v);
     renderTimeline();
   };
-  if (opts.live) input.oninput = input.onchange;
+  if (opts.live) input.oninput = () => { input.onchange(); lv && (lv.textContent = opts.fmt ? opts.fmt(+input.value) : String(+input.value)); hex && (hex.textContent = input.value.toUpperCase()); };
   l.appendChild(input);
+  if (hex) l.appendChild(hex);
   return l;
 }
+
+const sec = (t) => Object.assign(document.createElement('div'), { className: 'sec', textContent: t });
+const MAXPX = 300; // ぼかし(px)のスライダー上限。4K でも足りるように広めにしてある
+const pct = (v) => Math.round(v * 100) + '%';
 
 function renderProps() {
   const box = $('#props');
@@ -534,25 +606,29 @@ function renderProps() {
   const c = findClip(selectedClipId);
   if (!c) { box.innerHTML = '<p class="hint">クリップを選ぶと設定が出ます。</p>'; return; }
   const set = (k) => (v) => (c[k] = v);
-  box.append(
-    field('開始(秒)', +c.start.toFixed(3), (v) => (c.start = Math.max(0, v)), { type: 'number', step: 0.01 }),
-    field('長さ(秒)', +c.duration.toFixed(3), (v) => (c.duration = Math.max(0.05, v)), { type: 'number', step: 0.01 }),
+    box.append(
+    sec('タイミング'),
+    field('開始（秒）', +c.start.toFixed(3), (v) => (c.start = Math.max(0, v)), { type: 'number', step: 0.01 }),
+    field('長さ（秒）', +c.duration.toFixed(3), (v) => (c.duration = Math.max(0.05, v)), { type: 'number', step: 0.01 }),
   );
   if (c.type === 'voice') {
     box.append(
+      sec('セリフ'),
       field('キャラクター', c.charId, (v) => { c.charId = v; regenerateVoice(c); }, { options: project.characters.map((ch) => [ch.id, ch.name]) }),
       field('セリフ', c.text, (v) => { c.text = v; regenerateVoice(c); }, { multiline: true }),
+      sec('字幕'),
       field('字幕を出す', c.subtitle, set('subtitle'), { type: 'checkbox' }),
-      field('字幕の大きさ', c.fontSize, set('fontSize'), { type: 'number' }),
+      field('字幕の大きさ（px）', c.fontSize, set('fontSize'), { type: 'number' }),
       field('フォント', c.font, set('font'), { options: FONTS.map((f) => [f, f]) }),
-      field('音量', c.volume, set('volume'), { type: 'range', step: 0.05, live: true }),
+      sec('音声'),
+      field('音量', c.volume, set('volume'), { type: 'range', step: 0.05, live: true, fmt: pct, max: 2 }),
     );
-    box.lastChild.querySelector('input').max = 2;
   }
   if (c.type === 'text') {
     box.append(
+      sec('文字'),
       field('文字', c.text, set('text'), { multiline: true, live: true }),
-      field('大きさ', c.fontSize, set('fontSize'), { type: 'number', live: true }),
+      field('大きさ（px）', c.fontSize, set('fontSize'), { type: 'number', live: true }),
       field('色', c.color, set('color'), { type: 'color', live: true }),
       field('縁の色', c.outline, set('outline'), { type: 'color', live: true }),
       field('フォント', c.font, set('font'), { options: FONTS.map((f) => [f, f]) }),
@@ -561,25 +637,21 @@ function renderProps() {
   if (['image', 'video', 'text'].includes(c.type)) {
     const r = document.createElement('div'); r.className = 'row';
     r.append(field('横位置', c.x ?? 0.5, set('x'), { type: 'number', step: 0.01, live: true }), field('縦位置', c.y ?? 0.5, set('y'), { type: 'number', step: 0.01, live: true }));
-    box.append(r, field('不透明度', c.opacity ?? 1, set('opacity'), { type: 'range', step: 0.01, live: true }));
-    box.lastChild.querySelector('input').max = 1;
-    box.append(field('ぼかし', c.blur ?? 0, set('blur'), { type: 'range', step: 1, live: true }));
-    box.lastChild.querySelector('input').max = 100;
+    box.append(sec('位置'), r);
+    if (c.type === 'image' || c.type === 'video') box.append(field('拡大', c.scale ?? 1, set('scale'), { type: 'number', step: 0.05, live: true }));
+    box.append(sec('見た目'), field('不透明度', c.opacity ?? 1, set('opacity'), { type: 'range', step: 0.01, live: true, fmt: pct, max: 1 }));
+    box.append(field('ぼかし（px）', c.blur ?? 0, set('blur'), { type: 'range', step: 1, live: true, fmt: (v) => v + 'px', max: MAXPX }));
   }
   if (c.type === 'blur') {
     const r1 = document.createElement('div'); r1.className = 'row';
     r1.append(field('中心 横', c.x ?? 0.5, set('x'), { type: 'number', step: 0.01, live: true }), field('中心 縦', c.y ?? 0.5, set('y'), { type: 'number', step: 0.01, live: true }));
     const r2 = document.createElement('div'); r2.className = 'row';
     r2.append(field('幅', c.w ?? 0.3, set('w'), { type: 'number', step: 0.01, live: true }), field('高さ', c.h ?? 0.3, set('h'), { type: 'number', step: 0.01, live: true }));
-    box.append(r1, r2,
-      field('強さ(px)', c.strength ?? 24, set('strength'), { type: 'number', step: 1, live: true }),
-      field('形', c.shape ?? 'rect', set('shape'), { options: [['rect', '四角'], ['ellipse', '楕円']] }),
-    );
+    box.append(sec('範囲'), r1, r2, field('形', c.shape ?? 'rect', set('shape'), { options: [['rect', '四角'], ['ellipse', '楕円']] }),
+      sec('見た目'), field('強さ（px）', c.strength ?? 24, set('strength'), { type: 'range', step: 1, live: true, fmt: (v) => v + 'px', max: MAXPX }));
   }
-  if (c.type === 'image' || c.type === 'video') box.append(field('拡大', c.scale ?? 1, set('scale'), { type: 'number', step: 0.05, live: true }));
   if (c.type === 'video' || c.type === 'audio') {
-    box.append(field('音量', c.volume ?? 1, set('volume'), { type: 'range', step: 0.05, live: true }));
-    box.lastChild.querySelector('input').max = 2;
+    box.append(sec('音声'), field('音量', c.volume ?? 1, set('volume'), { type: 'range', step: 0.05, live: true, fmt: pct, max: 2 }));
   }
 }
 
@@ -616,11 +688,13 @@ function renderChars() {
 function renderCharProps(ch) {
   renderTimeline();
   const box = $('#props');
-  box.innerHTML = '<h3>キャラクター</h3>';
+  box.innerHTML = '';
   const set = (k) => (v) => { ch[k] = v; renderChars(); draw(); };
   box.append(
+    sec('基本'),
     field('名前', ch.name, set('name')),
     field('字幕の縁の色', ch.color, set('color'), { type: 'color' }),
+    sec('声'),
     field('音声エンジン', ch.engine, (v) => {
       ch.engine = v;
       // エンジンごとに「速さ」の単位が違う(VOICEVOX は 1 が標準、ゆっくりは 100)ので、切り替え時に合わせる
@@ -676,11 +750,11 @@ function renderCharProps(ch) {
     renderAll();
   };
   box.append(
-    imgBtn('立ち絵(口閉じ)', 'imgClosed'), imgBtn('立ち絵(口開き)', 'imgOpen'), r,
+    sec('立ち絵'), imgBtn('立ち絵(口閉じ)', 'imgClosed'), imgBtn('立ち絵(口開き)', 'imgOpen'), r,
     field('大きさ', ch.scale, set('scale'), { type: 'number', step: 0.05, live: true }),
     field('左右反転', ch.flip, set('flip'), { type: 'checkbox' }),
     field('いつも表示', ch.alwaysShow, set('alwaysShow'), { type: 'checkbox' }),
-    test, del,
+    sec('操作'), test, del,
   );
 }
 
@@ -723,14 +797,14 @@ document.addEventListener('drop', (e) => {
 
 $('#btn-text').onclick = () => {
   const tr = project.tracks[project.tracks.length - 1];
-  const c = { id: uid(), type: 'text', text: 'テキスト', start: t, duration: 3, x: 0.5, y: 0.15, fontSize: 96, color: '#ffffff', outline: '#000000', font: FONTS[0], opacity: 1 };
+  const c = { id: uid(), type: 'text', text: 'テキスト', start: t, duration: 3, x: 0.5, y: 0.15, fontSize: Math.max(8, Math.round(96 * resK())), color: '#ffffff', outline: '#000000', font: FONTS[0], opacity: 1 };
   tr.clips.push(c);
   select(c.id);
 };
 
 $('#btn-blur').onclick = () => {
   const tr = project.tracks[project.tracks.length - 1];
-  const c = { id: uid(), type: 'blur', start: t, duration: 3, x: 0.5, y: 0.5, w: 0.3, h: 0.3, strength: 24, shape: 'rect' };
+  const c = { id: uid(), type: 'blur', start: t, duration: 3, x: 0.5, y: 0.5, w: 0.3, h: 0.3, strength: Math.round(24 * resK()), shape: 'rect' };
   tr.clips.push(c);
   select(c.id);
 };
@@ -849,7 +923,12 @@ $('#btn-new').onclick = () => {
 
 // ---------- 設定 ----------
 $('#btn-settings').onclick = () => {
-  $('#set-w').value = project.width; $('#set-h').value = project.height; $('#set-fps').value = project.fps;
+  $('#set-w').value = project.width; $('#set-h').value = project.height;
+  // FPS は 24/30/60 から選ぶ。保存データに別の値があればその値も選べるように足す
+  const fs = $('#set-fps');
+  fs.querySelector('option[data-cur]')?.remove();
+  if (![...fs.options].some((o) => +o.value === project.fps)) { const o = new Option(`${project.fps}（保存された値）`, project.fps); o.dataset.cur = '1'; fs.add(o); }
+  fs.value = String(project.fps);
   $('#set-bg').value = project.bg; bgPresetFromColor(); $('#set-vv').value = project.voicevoxUrl; $('#set-aq').value = project.aquestalkCommand;
   $('#set-codec').value = project.codec;
   const key = `${project.width}x${project.height}`;
@@ -870,12 +949,18 @@ $('#set-size').onchange = (e) => {
   // 4K は HEVC の方が小さくきれいに収まる
   if (+w * +h >= 3840 * 2160) $('#set-codec').value = 'hevc';
 };
+// 画面の解像度セレクト: 選ぶとすぐ反映。「自由…」は設定ダイアログを開く
+$('#res-select').onchange = (e) => {
+  if (e.target.value === 'custom') { syncResUi(); $('#btn-settings').click(); return; }
+  const [w, h] = e.target.value.split('x');
+  applyVideoSize(w, h);
+};
 $('#dlg-settings').addEventListener('close', () => {
   const oldVv = project.voicevoxUrl;
-  project.width = +$('#set-w').value || 1920; project.height = +$('#set-h').value || 1080;
   project.fps = +$('#set-fps').value || 60; project.bg = $('#set-bg').value;
   project.voicevoxUrl = $('#set-vv').value.replace(/\/$/, ''); project.aquestalkCommand = $('#set-aq').value;
   project.codec = $('#set-codec').value;
+  applyVideoSize($('#set-w').value, $('#set-h').value); // 文字サイズの比例もここで行う
   resizeCanvas(); draw();
   if (oldVv !== project.voicevoxUrl) loadSpeakers();
 });
@@ -896,7 +981,14 @@ async function exportVideo() {
   const end = projectEnd();
   if (end <= 0) return alert('タイムラインが空です');
   exporting = true;
-  try { await exportVideoInner(end); } finally { exporting = false; overlay(null); }
+  const eb = $('#btn-export');
+  eb.classList.add('busy'); eb.textContent = '書き出し中…';
+  document.querySelectorAll('#toolbar button:not(#btn-export), #transport button, #res-select').forEach((b) => (b.disabled = true));
+  try { await exportVideoInner(end); } finally {
+    exporting = false; overlay(null);
+    eb.classList.remove('busy'); eb.textContent = 'MP4 書き出し';
+    document.querySelectorAll('#toolbar button, #transport button, #res-select').forEach((b) => (b.disabled = false));
+  }
 }
 async function exportVideoInner(end) {
   const out = window.api.smokeOut ?? (await window.api.chooseExportPath());
@@ -974,10 +1066,13 @@ loadSpeakers().then(async () => {
   await detectAquesTalk();
   // 動作確認用: YE_SMOKE_OUT を付けて起動すると、台本→音声→書き出しを自動で行って終わる
   if (!window.api.smokeOut) return;
+  // YE_SMOKE_SIZE=WxH / YE_SMOKE_CODEC=h264|hevc で、台本の前にサイズとコーデックを決める
+  if (window.api.smokeSize) { const [w, h] = window.api.smokeSize.split('x'); applyVideoSize(w, h); }
+  if (window.api.smokeCodec) project.codec = window.api.smokeCodec;
   $('#script').value = '霊夢: ゆっくりしていってね\nずんだもん: ずんだもんなのだ';
   await scriptToTimeline();
-  project.tracks[4].clips.push({ id: uid(), type: 'text', text: 'テスト', start: 0, duration: 2, x: 0.5, y: 0.2, fontSize: 120, color: '#ffffff', outline: '#000000', font: FONTS[0], opacity: 1 });
-  if (window.api.smokeBlur) project.tracks[project.tracks.length - 1].clips.push({ id: uid(), type: 'blur', start: 0, duration: 2, x: 0.5, y: 0.15, w: 0.5, h: 0.25, strength: 30, shape: 'rect' });
+  project.tracks[4].clips.push({ id: uid(), type: 'text', text: 'テスト', start: 0, duration: 2, x: 0.5, y: 0.2, fontSize: Math.round(120 * resK()), color: '#ffffff', outline: '#000000', font: FONTS[0], opacity: 1 });
+  if (window.api.smokeBlur) project.tracks[project.tracks.length - 1].clips.push({ id: uid(), type: 'blur', start: 0, duration: 2, x: 0.5, y: 0.15, w: 0.5, h: 0.25, strength: Math.round(30 * resK()), shape: 'rect' });
   console.log('SMOKE clips', JSON.stringify(allClips().map((c) => [c.type, c.text, +c.duration.toFixed(2)])));
   await exportVideo();
   window.api.quit();

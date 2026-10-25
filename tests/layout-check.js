@@ -131,6 +131,65 @@ async function run() {
     check(`${W}x${H} plain wheel scrolls horizontally (no vertical overflow)`, wh.vov || wh.sl > 0, JSON.stringify(wh));
   }
 
+  // ---- 解像度: #res-select / 表示の縦横比 / 文字サイズの比例 / コントラスト ----
+  for (const [W, H] of SIZES) {
+    win.setSize(W, H);
+    await win.loadFile(path.join(ROOT, 'index.html'));
+    await sleep(1500);
+    const rs = await win.webContents.executeJavaScript(`(() => { const e = document.querySelector('#res-select'); if (!e) return null; const r = e.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom, iw: innerWidth, ih: innerHeight, n: e.options.length }; })()`);
+    check(`${W}x${H} #res-select present and inside viewport`, !!rs && rs.l >= 0 && rs.t >= 0 && rs.r <= rs.iw && rs.b <= rs.ih, rs && `[${rs.l.toFixed(0)},${rs.r.toFixed(0)}] options=${rs.n}`);
+  }
+  win.setSize(1400, 900);
+  await win.loadFile(path.join(ROOT, 'index.html'));
+  await sleep(1500);
+  for (const res of ['1920x1080', '2560x1440', '3840x2160', '1080x1920', '720x1280', '1080x1080', '1920x1080']) {
+    const r = await win.webContents.executeJavaScript(`(async () => {
+      const sel = document.querySelector('#res-select'); sel.value = '${res}'; sel.dispatchEvent(new Event('change', { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 150));
+      const c = document.querySelector('#preview').getBoundingClientRect(), w = document.querySelector('#preview-wrap').getBoundingClientRect();
+      return { pw: project.width, ph: project.height, cw: c.width, ch: c.height, inside: c.left >= w.left - 1 && c.right <= w.right + 1 && c.top >= w.top - 1 && c.bottom <= w.bottom + 1,
+        chip: document.querySelector('#preview-chip').textContent, sel: sel.value, codec: project.codec };
+    })()`);
+    const ratio = r.cw / r.ch, want = r.pw / r.ph;
+    check(`res ${res}: project size matches`, `${r.pw}x${r.ph}` === res, `${r.pw}x${r.ph}`);
+    check(`res ${res}: displayed aspect == w/h (1%)`, Math.abs(ratio / want - 1) < 0.01, `shown=${ratio.toFixed(4)} want=${want.toFixed(4)} (${r.cw.toFixed(0)}x${r.ch.toFixed(0)})`);
+    check(`res ${res}: canvas inside #preview-wrap`, r.inside);
+    check(`res ${res}: chip + select in sync`, r.chip.startsWith(res.replace('x', '×')) && r.sel === res, `${r.chip} / select=${r.sel}`);
+    if (res === '3840x2160') check('4K switches codec to hevc', r.codec === 'hevc', r.codec);
+  }
+  // 文字サイズ: 1080p で 96 → 4K で約 192 → 1080p に戻すと 96
+  const fs = await win.webContents.executeJavaScript(`(async () => {
+    const sel = document.querySelector('#res-select'); const go = async (v) => { sel.value = v; sel.dispatchEvent(new Event('change', { bubbles: true })); await new Promise((r) => setTimeout(r, 100)); };
+    await go('1920x1080');
+    const mk = (o) => { const c = { id: 'x' + Math.random(), start: 0, duration: 2, ...o }; project.tracks[4].clips.push(c); return c; };
+    const txt = mk({ type: 'text', text: 'T', fontSize: 96, blur: 10 }), vo = mk({ type: 'voice', text: 'v', fontSize: 64, charId: project.characters[0].id, src: '/x' }), bl = mk({ type: 'blur', strength: 24, x: .5, y: .5, w: .3, h: .3 });
+    const out = { a: [txt.fontSize, vo.fontSize, bl.strength, txt.blur] };
+    await go('3840x2160'); out.b = [txt.fontSize, vo.fontSize, bl.strength, txt.blur];
+    await go('1080x1920'); out.c = [txt.fontSize, vo.fontSize, bl.strength, txt.blur];
+    await go('1920x1080'); out.d = [txt.fontSize, vo.fontSize, bl.strength, txt.blur];
+    project.tracks[4].clips = project.tracks[4].clips.filter((c) => ![txt, vo, bl].includes(c));
+    return out;
+  })()`);
+  check('fontSize 96 @1080p -> ~192 @4K', Math.abs(fs.b[0] - 192) <= 2 && Math.abs(fs.b[1] - 128) <= 2 && Math.abs(fs.b[2] - 48) <= 2 && Math.abs(fs.b[3] - 20) <= 1, JSON.stringify(fs));
+  check('portrait 1080x1920 keeps text ~same size (area ratio 1.0)', Math.abs(fs.c[0] - 96) <= 2, `fontSize=${fs.c[0]}`);
+  check('back to 1080p restores text size', Math.abs(fs.d[0] - 96) <= 3, `fontSize=${fs.d[0]}`);
+
+  // コントラスト(WCAG): 文字色を、最も近い不透明な背景に重ねて計算する
+  await win.webContents.executeJavaScript(`(() => { const c = { id: 'ct', type: 'text', text: 'ct', start: 0, duration: 2, x: .5, y: .5, fontSize: 96, color: '#fff', outline: '#000', font: 'Hiragino Sans', opacity: 1 }; project.tracks[4].clips.push(c); select(c.id); status('状態の表示サンプル'); })()`);
+  await sleep(300);
+  const ratios = await win.webContents.executeJavaScript(`(() => {
+    const parse = (c) => { const m = c.match(/[\\d.]+/g).map(Number); return { r: m[0], g: m[1], b: m[2], a: m.length > 3 ? m[3] : 1 }; };
+    const over = (top, bot) => ({ r: top.r * top.a + bot.r * (1 - top.a), g: top.g * top.a + bot.g * (1 - top.a), b: top.b * top.a + bot.b * (1 - top.a), a: 1 });
+    const bgOf = (el) => { const layers = []; for (let e = el; e; e = e.parentElement) { const c = parse(getComputedStyle(e).backgroundColor); if (c.a > 0) { layers.push(c); if (c.a >= 0.99) break; } } let acc = { r: 21, g: 22, b: 26, a: 1 }; if (!layers.length || layers[layers.length - 1].a < 0.99) acc = parse(getComputedStyle(document.body).backgroundColor); for (let i = layers.length - 1; i >= 0; i--) acc = over(layers[i], acc); return acc; };
+    const lum = (c) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b); };
+    const sels = ['.hint', '#props label', '#props .sec', '#props .lv', '.track-head', '.track-head label', '.tick', '#status', '.char .meta', '#timecode', '#tl-tools label', '#btn-new', '#btn-export', '#btn-script', '#btn-fit', '#res-label'];
+    return sels.map((s) => { const el = document.querySelector(s); if (!el) return { s, missing: true };
+      const fg = parse(getComputedStyle(el).color), bg = bgOf(el); const fgc = fg.a < 1 ? over(fg, bg) : fg;
+      const a = lum(fgc), b = lum(bg); return { s, ratio: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) }; });
+  })()`);
+  for (const r of ratios) check(`contrast ${r.s} >= 4.5`, !r.missing && r.ratio >= 4.5, r.missing ? 'element missing' : r.ratio.toFixed(2));
+  await win.webContents.executeJavaScript(`(() => { project.tracks[4].clips = project.tracks[4].clips.filter((c) => c.id !== 'ct'); select(null); })()`);
+
   // 白背景・台本つきのスクリーンショット(1400x900)
   win.setSize(1400, 900);
   await win.loadFile(path.join(ROOT, 'index.html'));

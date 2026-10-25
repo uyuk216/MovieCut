@@ -18,6 +18,8 @@ contextBridge.exposeInMainWorld('api', {
   displays: invoke('displays'),
   smokeOut: process.env.YE_SMOKE_OUT || null,
   smokeBlur: process.env.YE_SMOKE_BLUR === '1',
+  smokeSize: process.env.YE_SMOKE_SIZE || null, // 例 1080x1920
+  smokeCodec: process.env.YE_SMOKE_CODEC || null, // h264 | hevc
   quit: () => ipcRenderer.invoke('quit'),
   pathOf: (file) => webUtils.getPathForFile(file),
 });
