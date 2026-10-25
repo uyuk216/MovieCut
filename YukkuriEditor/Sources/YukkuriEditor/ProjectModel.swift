@@ -68,7 +68,11 @@ final class ProgressVoiceProvider: VoiceProvider {
 /// 1 つのドキュメントの状態。すべての編集は `edit(_:_:)` を通し、UndoManager に登録する(Project 全体のスナップショット式)。
 @MainActor
 final class ProjectModel: ObservableObject {
-    @Published var project: Project
+    @Published var project: Project {
+        // タイムラインが「変わったか」を安く調べるための通し番号
+        didSet { projectRevision &+= 1 }
+    }
+    private(set) var projectRevision = 0
     @Published var selectedClipId: String?
     @Published var selectedCharId: String?
     @Published var currentTime: Double = 0
@@ -80,6 +84,13 @@ final class ProjectModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var errorTitle = "エラー"
     @Published var showSettings = false
+    /// タイムラインの拡大率(pt/秒)と吸着(M4 のドラッグで使う)。
+    @Published var pps: Double = TimelineLayout.defaultPps
+    @Published var snapEnabled = true
+    @Published var isPlaying = false
+    @Published var isSecondScreenOpen = false
+    /// 増やすと、同じ時刻でもプレビューを描き直す(再生を止めたとき)。
+    @Published var previewEpoch = 0
 
     /// 保存先(ドキュメントから渡される。無題なら nil)。
     var fileURL: URL?
@@ -94,17 +105,24 @@ final class ProjectModel: ObservableObject {
     /// プレビューと共有する素材キャッシュ(書き出しは別に作る: 書き出し専用モードがあるため)。
     let assets = RenderAssets()
     var voiceProviderFactory: (Project) -> VoiceProvider = { RealVoiceProvider(project: $0, engine: AppServices.engine) }
-    /// タイムラインの「全体表示」(M3b で実体を入れる)。
+    /// タイムラインの「全体表示」(タイムラインのビューが差し込む)。
     var onFitTimeline: () -> Void = {}
     /// プレビューの状態(検証用)。
     var previewFrameCount = 0
     var previewIdle = false
+    /// 描画が間に合わず、描かれずに捨てられたフレームの数(再生中の検証用)。
+    var previewDropped = 0
+    /// 再生・別画面・キー操作(ドキュメントを閉じるときに手放す)。
+    var playback: PlaybackController!
+    let secondScreen = SecondScreenController()
+    let keyRouter = KeyRouter()
 
     private var exportTask: Task<Void, Error>?
 
     init(project: Project = .new()) {
         self.project = project
         self.selectedCharId = project.characters.first?.id
+        self.playback = PlaybackController(model: self)
     }
 
     var documentName: String {
@@ -134,6 +152,7 @@ final class ProjectModel: ObservableObject {
     private func replace(with new: Project, name: String) {
         let old = project
         project = new
+        playback?.projectDidChange()   // 編集したら再生は止める
         let um = effectiveUndoManager
         um.beginUndoGrouping()
         um.registerUndo(withTarget: self) { m in
@@ -141,6 +160,50 @@ final class ProjectModel: ObservableObject {
         }
         um.setActionName(name)
         um.endUndoGrouping()
+    }
+
+    // MARK: レイヤー
+
+    /// ＋レイヤー: 末尾に「レイヤー{n+1}」を足す。
+    func addTrack() {
+        edit("レイヤーの追加") { $0.tracks.append(Track(name: "レイヤー\($0.tracks.count + 1)")) }
+    }
+
+    enum TrackFlag { case hidden, muted }
+
+    /// 行ヘッダーの「隠す」「消音」。
+    func toggleTrack(_ index: Int, _ flag: TrackFlag) {
+        guard project.tracks.indices.contains(index) else { return }
+        edit(flag == .hidden ? "レイヤーを隠す/表示" : "レイヤーの消音") { p in
+            switch flag {
+            case .hidden: p.tracks[index].hidden = p.tracks[index].isHidden ? nil : true
+            case .muted: p.tracks[index].muted = p.tracks[index].isMuted ? nil : true
+            }
+        }
+    }
+
+    // MARK: ウィンドウの付き合い(キー操作・別画面・終了)
+
+    /// ドキュメントの画面が出たときに 1 回。Space / ←→ / Home を受ける。
+    func installKeyboard() {
+        keyRouter.windows = { [weak self] in [self?.window, self?.secondScreen.window] }
+        keyRouter.handlers = [
+            .playPause: { [weak self] in guard let m = self, !m.isLocked else { return false }; m.playback.togglePlay(); return true },
+            .stepBack: { [weak self] in guard let m = self, !m.isLocked else { return false }; m.playback.step(frames: -1); return true },
+            .stepForward: { [weak self] in guard let m = self, !m.isLocked else { return false }; m.playback.step(frames: 1); return true },
+            .toStart: { [weak self] in guard let m = self, !m.isLocked else { return false }; m.playback.goToStart(); return true },
+        ]
+        keyRouter.install()
+        playback.warmUp()
+    }
+
+    func toggleSecondScreen() { secondScreen.toggle(model: self) }
+
+    /// ドキュメントを閉じるとき: 再生・エンジン・別画面・キー監視を手放す。
+    func shutdown() {
+        keyRouter.uninstall()
+        secondScreen.close()
+        playback.shutdown()
     }
 
     // MARK: 解像度

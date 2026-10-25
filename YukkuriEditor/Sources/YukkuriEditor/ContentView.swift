@@ -66,7 +66,7 @@ struct ContentView: View {
                 }
                 .disabled(model.isLocked)
                 splitter(totalHeight: geo.size.height)
-                TimelinePlaceholder()
+                TimelineSection(model: model)
                     .frame(height: h)
             }
         }
@@ -83,7 +83,11 @@ struct ContentView: View {
         .onAppear {
             model.undoManager = undoManager
             model.fileURL = fileURL
+            model.installKeyboard()
             DebugHooks.shared.attach(model)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { note in
+            if let w = note.object as? NSWindow, w === model.window { model.shutdown() }
         }
         .onChange(of: undoManager) { _, new in model.undoManager = new }
         .onChange(of: fileURL) { _, new in model.fileURL = new }
@@ -271,7 +275,7 @@ struct CenterPanel: View {
     var body: some View {
         VStack(spacing: 0) {
             ZStack(alignment: .topLeading) {
-                PreviewView(project: model.project, time: model.currentTime, assets: model.assets, model: model)
+                PreviewView(project: model.project, time: model.currentTime, assets: model.assets, model: model, epoch: model.previewEpoch)
                 Text(String(format: "%d×%d · %dfps", model.project.width, model.project.height, model.project.fps))
                     .font(.system(size: 12))
                     .padding(.horizontal, 9).padding(.vertical, 3)
@@ -295,14 +299,13 @@ struct TransportBar: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Button("⏮") { model.currentTime = 0 }
-                .help("先頭へ")
-            Button("▶") {}
-                .disabled(true)
-                .help("再生は M3b で実装します")
-            Button("別画面に表示") {}
-                .disabled(true)
-                .help("外付け画面にプレビューを出す(M3b で実装します)")
+            Button("⏮") { model.playback.goToStart() }
+                .help("先頭へ(Home)")
+            Button(model.isPlaying ? "⏸" : "▶") { model.playback.togglePlay() }
+                .help("再生 / 一時停止(Space)")
+                .disabled(model.isLocked)
+            Button(model.isSecondScreenOpen ? "別画面を閉じる" : "別画面に表示") { model.toggleSecondScreen() }
+                .help("外付け画面にプレビューを全画面で出す(Esc で閉じる)")
             HStack(spacing: 6) {
                 Text("解像度")
                 Picker("解像度", selection: resolutionBinding) {
@@ -323,7 +326,7 @@ struct TransportBar: View {
     }
 }
 
-// MARK: - 右パネル / タイムライン(仮)
+// MARK: - 右パネル
 
 struct RightPanel: View {
     var body: some View {
@@ -336,30 +339,6 @@ struct RightPanel: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .topLeading)
-    }
-}
-
-struct TimelinePlaceholder: View {
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 10) {
-                Button("＋レイヤー") {}
-                Text("拡大")
-                Slider(value: .constant(40), in: 5...400).frame(width: 140)
-                Button("全体表示") {}
-                Toggle("吸着", isOn: .constant(true))
-                Spacer()
-            }
-            .disabled(true)
-            .padding(.horizontal, 10).padding(.vertical, 6)
-            Divider()
-            ZStack {
-                Color(nsColor: .underPageBackgroundColor).opacity(0.5)
-                Text("タイムラインは次のマイルストーン(M3b)で入ります")
-                    .font(.callout).foregroundStyle(.tertiary)
-            }
-        }
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))
     }
 }
 

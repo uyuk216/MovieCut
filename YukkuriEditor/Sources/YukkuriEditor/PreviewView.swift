@@ -8,19 +8,23 @@ struct PreviewView: NSViewRepresentable {
     let time: Double
     let assets: RenderAssets
     let model: ProjectModel
+    /// 別画面(全画面・黒背景・余白なし)用。
+    var fullscreen = false
+    /// 同じ時刻・同じ内容でも描き直したいときに増やす(再生を止めたとき、正確なフレームに戻す)。
+    var epoch = 0
 
-    func makeCoordinator() -> PreviewCoordinator { PreviewCoordinator(model: model) }
+    func makeCoordinator() -> PreviewCoordinator { PreviewCoordinator(model: model, isPrimary: !fullscreen) }
 
     func makeNSView(context: Context) -> PreviewCanvasView {
-        let v = PreviewCanvasView()
+        let v = PreviewCanvasView(fullscreen: fullscreen)
         context.coordinator.view = v
         v.setPlaceholder(project: project)
-        context.coordinator.request(project: project, time: time, assets: assets)
+        context.coordinator.request(project: project, time: time, assets: assets, epoch: epoch)
         return v
     }
 
     func updateNSView(_ nsView: PreviewCanvasView, context: Context) {
-        context.coordinator.request(project: project, time: time, assets: assets)
+        context.coordinator.request(project: project, time: time, assets: assets, epoch: epoch)
     }
 }
 
@@ -28,6 +32,8 @@ struct PreviewView: NSViewRepresentable {
 final class PreviewCoordinator {
     weak var view: PreviewCanvasView?
     let model: ProjectModel
+    /// 検証用の数え上げ(落としたフレームなど)は主画面のぶんだけ。
+    let isPrimary: Bool
     private let queue = DispatchQueue(label: "yukkuri.preview.render", qos: .userInitiated)
     private let lock = NSLock()
     private var pending: (project: Project, time: Double, assets: RenderAssets, seq: Int)?
@@ -35,18 +41,21 @@ final class PreviewCoordinator {
     // 主スレッドだけで触る
     private var lastProject: Project?
     private var lastTime: Double?
+    private var lastEpoch = -1
     private var seq = 0
 
-    init(model: ProjectModel) { self.model = model }
+    init(model: ProjectModel, isPrimary: Bool = true) { self.model = model; self.isPrimary = isPrimary }
 
-    func request(project: Project, time: Double, assets: RenderAssets) {
-        if lastProject == project && lastTime == time { return }
-        lastProject = project; lastTime = time
+    func request(project: Project, time: Double, assets: RenderAssets, epoch: Int = 0) {
+        if lastEpoch == epoch && lastTime == time && lastProject == project { return }
+        lastProject = project; lastTime = time; lastEpoch = epoch
         seq += 1
         let mySeq = seq
         MainActor.assumeIsolated { model.previewRequested() }
         view?.setPlaceholder(project: project)
         lock.lock()
+        // まだ描かれていない古い要求を上書きした = そのフレームは描かれずに落ちた
+        if pending != nil, isPrimary { MainActor.assumeIsolated { model.previewDropped += 1 } }
         pending = (project, time, assets, mySeq)
         let start = !running
         running = true
@@ -76,21 +85,24 @@ final class PreviewCanvasView: NSView {
     private var aspect = CGSize(width: 16, height: 9)
     private var hasImage = false
 
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
+    private let fullscreen: Bool
+
+    init(fullscreen: Bool = false) {
+        self.fullscreen = fullscreen
+        super.init(frame: .zero)
         wantsLayer = true
         let root = CALayer()
-        root.cornerRadius = 8
+        root.cornerRadius = fullscreen ? 0 : 8
         root.masksToBounds = true
-        root.backgroundColor = Self.checkerColor()
+        root.backgroundColor = fullscreen ? NSColor.black.cgColor : Self.checkerColor()
         layer = root
         frameLayer.contentsGravity = .resize
         frameLayer.magnificationFilter = .linear
         frameLayer.minificationFilter = .trilinear
-        frameLayer.borderWidth = 1
+        frameLayer.borderWidth = fullscreen ? 0 : 1
         frameLayer.borderColor = NSColor(white: 1, alpha: 0.35).cgColor
         frameLayer.shadowColor = NSColor.black.cgColor
-        frameLayer.shadowOpacity = 0.45
+        frameLayer.shadowOpacity = fullscreen ? 0 : 0.45
         frameLayer.shadowRadius = 8
         frameLayer.shadowOffset = CGSize(width: 0, height: -2)
         frameLayer.masksToBounds = false
@@ -143,7 +155,7 @@ final class PreviewCanvasView: NSView {
     }
 
     private func relayout() {
-        let avail = bounds.insetBy(dx: 12, dy: 12)
+        let avail = fullscreen ? bounds : bounds.insetBy(dx: 12, dy: 12)
         guard avail.width > 4, avail.height > 4, aspect.width > 0, aspect.height > 0 else { return }
         let k = min(avail.width / aspect.width, avail.height / aspect.height)
         let w = (aspect.width * k).rounded(), h = (aspect.height * k).rounded()

@@ -1,6 +1,7 @@
 import Foundation
 import YukkuriCore
 import ImageIO
+import AVFoundation
 import UniformTypeIdentifiers
 
 func fail(_ msg: String) -> Never {
@@ -152,6 +153,46 @@ case "script" where args.count >= 2:
         print("engines used: \(provider.enginesUsed.sorted().joined(separator: ", ")); fallback: \(provider.usingFallback)")
         print("wrote \(outPath)")
     } catch { fail("作れませんでした: \(error.localizedDescription)") }
+case "addvideo" where args.count == 4:
+    // addvideo <in.ymproj> <clip.mp4> <out.ymproj>: 動画を、空いているレイヤー(無ければ新設)の先頭に動画クリップとして置く(再生の検証用)
+    do {
+        var p = try Project.load(from: URL(fileURLWithPath: args[1]))
+        let url = URL(fileURLWithPath: args[2])
+        let asset = AVURLAsset(url: url)
+        let dur = try await asset.load(.duration).seconds
+        guard dur.isFinite, dur > 0 else { fail("動画の長さを読めません: \(args[2])") }
+        var c = Clip()
+        c.type = .video
+        c.start = 0; c.duration = dur; c.offset = 0
+        c.src = url.path; c.srcDuration = dur
+        c.x = 0.5; c.y = 0.5; c.scale = 1; c.opacity = 1; c.volume = 1
+        var ti = p.tracks.firstIndex { $0.clips.isEmpty }
+        if ti == nil { p.tracks.append(Track(name: "レイヤー\(p.tracks.count + 1)")); ti = p.tracks.count - 1 }
+        p.tracks[ti!].clips.append(c)
+        try p.save(to: URL(fileURLWithPath: args[3]))
+        print(String(format: "added video %@ (%.2fs) to layer %d; project end=%.2fs; wrote %@", url.lastPathComponent, dur, ti! + 1, p.endTime, args[3]))
+    } catch { fail("動画を足せませんでした: \(error.localizedDescription)") }
+case "genclips" where args.count == 3:
+    // genclips <N> <out.ymproj>: 音声なしのクリップ(文字・画像・ぼかし・ボイス風)を N 個並べた重いプロジェクト(タイムラインの描画の検証用)
+    guard let n = Int(args[1]), n > 0 else { fail("N は正の整数") }
+    var p = Project.new()
+    for _ in 0..<5 { p.tracks.append(Track(name: "レイヤー\(p.tracks.count + 1)")) }
+    let names = ["霊夢", "魔理沙", "ずんだもん"]
+    for i in 0..<n {
+        var c = Clip()
+        let lane = i % p.tracks.count
+        c.start = Double(i / p.tracks.count) * 1.7 + Double(lane) * 0.13
+        c.duration = 0.4 + Double((i * 7) % 11) * 0.25
+        switch i % 4 {
+        case 0: c.type = .voice; c.charId = p.characters[i % 3].id; c.text = "\(names[i % 3]) のセリフ \(i)"; c.subtitle = true
+        case 1: c.type = .text; c.text = "文字 \(i)"; c.fontSize = 80
+        case 2: c.type = .image; c.src = "/tmp/yukkuri-genclips-\(i).png"
+        default: c.type = .blur; c.w = 0.3; c.h = 0.3
+        }
+        p.tracks[lane].clips.append(c)
+    }
+    do { try p.save(to: URL(fileURLWithPath: args[2])); print("wrote \(args[2]) clips=\(p.allClips.count) end=\(String(format: "%.1f", p.endTime))s") }
+    catch { fail("書けませんでした: \(error)") }
 case "smoke":
     // smoke --out <mp4> [--size WxH] [--codec h264|hevc] [--blur]
     guard let outPath = optValue("--out") else { fail("--out が必要です") }
@@ -177,5 +218,5 @@ case "smoke":
         try await runExport(p, to: URL(fileURLWithPath: outPath))
     } catch { fail("書き出せませんでした: \(error.localizedDescription)") }
 default:
-    fail("usage:\n  yukkuri-cli info <file.ymproj>\n  yukkuri-cli new <out.ymproj>\n  yukkuri-cli export <in.ymproj> <out.mp4> [--size WxH] [--codec h264|hevc]\n  yukkuri-cli smoke --out <mp4> [--size WxH] [--codec h264|hevc] [--blur] [--tone] [--save-project p.ymproj]\n  yukkuri-cli speak (--voicevox <id> [--speed --pitch --intonation] | --voice <preset> [--speed]) --text <t> --out <wav>\n  yukkuri-cli speakers | deps | script <script.txt> --out <p.ymproj>\n  yukkuri-cli frame <in.ymproj> --t <sec> --out <png> [--size WxH] [--bench N]")
+    fail("usage:\n  yukkuri-cli info <file.ymproj>\n  yukkuri-cli new <out.ymproj>\n  yukkuri-cli export <in.ymproj> <out.mp4> [--size WxH] [--codec h264|hevc]\n  yukkuri-cli smoke --out <mp4> [--size WxH] [--codec h264|hevc] [--blur] [--tone] [--save-project p.ymproj]\n  yukkuri-cli speak (--voicevox <id> [--speed --pitch --intonation] | --voice <preset> [--speed]) --text <t> --out <wav>\n  yukkuri-cli speakers | deps | script <script.txt> --out <p.ymproj>\n  yukkuri-cli frame <in.ymproj> --t <sec> --out <png> [--size WxH] [--bench N]\n  yukkuri-cli addvideo <in.ymproj> <clip.mp4> <out.ymproj>\n  yukkuri-cli genclips <N> <out.ymproj>")
 }
