@@ -75,6 +75,8 @@ struct ContentView: View {
         .preferredColorScheme(.dark)
         .overlay { BusyOverlay(message: model.busyMessage) }
         .sheet(isPresented: $model.showSettings) { SettingsSheet(model: model) }
+        .sheet(isPresented: $model.showResolutionSheet) { ResolutionSheet(model: model) }
+        .sheet(isPresented: $model.showFpsSheet) { FrameRateSheet(model: model) }
         .sheet(isPresented: $model.showJumpSheet) { JumpToTimeSheet(model: model) }
         .sheet(isPresented: Binding(get: { model.renamingMarkerId != nil }, set: { if !$0 { model.renamingMarkerId = nil } })) { RenameMarkerSheet(model: model) }
         .sheet(isPresented: Binding(get: { model.isExporting }, set: { _ in })) { ExportSheet(model: model) }
@@ -289,7 +291,7 @@ struct CenterPanel: View {
         VStack(spacing: 0) {
             ZStack(alignment: .topLeading) {
                 PreviewView(project: model.project, time: model.currentTime, assets: model.assets, model: model, epoch: model.previewEpoch)
-                Text(String(format: "%d×%d · %dfps", model.project.width, model.project.height, model.project.fps))
+                Text(VideoText.chip(width: model.project.width, height: model.project.height, fps: model.project.fps))
                     .font(.system(size: 12))
                     .padding(.horizontal, 9).padding(.vertical, 3)
                     .background(Capsule().fill(Color.black.opacity(0.6)))
@@ -354,6 +356,9 @@ struct ExportSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(model.exportTitle).font(.headline)
+            if !model.exportNotice.isEmpty {
+                Text(model.exportNotice).font(.caption).foregroundStyle(.orange).frame(width: 320, alignment: .leading)
+            }
             ProgressView(value: model.exportProgress).frame(width: 320)
             HStack {
                 Text("\(Int((model.exportProgress * 100).rounded()))%").monospacedDigit().foregroundStyle(.secondary)
@@ -446,19 +451,28 @@ struct SettingsSheet: View {
     @ObservedObject var model: ProjectModel
     @Environment(\.dismiss) private var dismiss
     @State private var draft: VideoSettingsDraft
+    @State private var res: ResolutionInput
+    @State private var fpsChoice: String
+    @State private var fpsText: String
     private let original: VideoSettingsDraft
+    private static let customFpsTag = "custom"
 
     init(model: ProjectModel) {
         self.model = model
         let d = VideoSettingsDraft(model.project)
         _draft = State(initialValue: d)
+        _res = State(initialValue: ResolutionInput(width: d.width, height: d.height, codec: d.codec, fps: d.fps))
+        let isPreset = FrameRate.presets.contains { FrameRate.same($0, d.fps) }
+        _fpsChoice = State(initialValue: isPreset ? FrameRate.label(d.fps) : Self.customFpsTag)
+        _fpsText = State(initialValue: FrameRate.label(d.fps))
         original = d
     }
 
     private var sizeKey: String {
-        let k = "\(draft.width)x\(draft.height)"
+        let k = "\(res.width ?? 0)x\(res.height ?? 0)"
         return ResolutionPresets.isPreset(k) ? k : ResolutionPresets.customKey
     }
+    private var fpsValid: Bool { if case .success = FrameRateInput.parse(fpsText) { return true } else { return false } }
     private var bgPreset: String {
         let b = draft.bg.lowercased()
         return ["#000000", "#ffffff", "#00b140"].contains(b) ? b : "custom"
@@ -469,29 +483,32 @@ struct SettingsSheet: View {
             Text("設定").font(.title3.bold())
             GroupBox("動画") {
                 Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 10) {
-                    GridRow {
+                    GridRow(alignment: .top) {
                         Text("サイズ")
-                        Picker("", selection: Binding(get: { sizeKey }, set: { k in
-                            let parts = k.split(separator: "x").compactMap { Int($0) }
-                            if parts.count == 2 { draft.width = parts[0]; draft.height = parts[1] }
-                        })) {
-                            ForEach(ResolutionPresets.items, id: \.key) { Text($0.label).tag($0.key) }
-                            Text("自由").tag(ResolutionPresets.customKey)
-                        }.labelsHidden().frame(width: 200)
-                    }
-                    GridRow {
-                        Text("幅 × 高さ")
-                        HStack {
-                            TextField("", value: $draft.width, format: .number.grouping(.never)).frame(width: 80)
-                            Text("×")
-                            TextField("", value: $draft.height, format: .number.grouping(.never)).frame(width: 80)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Picker("", selection: Binding(get: { sizeKey }, set: { k in
+                                if let sz = ResolutionInput.parseSize(k) { res.set(width: sz.width, height: sz.height) }
+                            })) {
+                                ForEach(ResolutionPresets.items, id: \.key) { Text($0.label).tag($0.key) }
+                                Text("カスタム").tag(ResolutionPresets.customKey)
+                            }.labelsHidden().frame(width: 200)
+                            ResolutionFields(input: $res)
                         }
                     }
-                    GridRow {
+                    GridRow(alignment: .top) {
                         Text("FPS")
-                        Picker("", selection: $draft.fps) {
-                            Text("24").tag(24); Text("30").tag(30); Text("60").tag(60)
-                        }.pickerStyle(.segmented).labelsHidden().frame(width: 160)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Picker("", selection: Binding(get: { fpsChoice }, set: { k in
+                                fpsChoice = k
+                                if k != Self.customFpsTag { fpsText = k }
+                            })) {
+                                ForEach(FrameRate.presets, id: \.self) { Text("\(FrameRate.label($0)) fps").tag(FrameRate.label($0)) }
+                                Text("カスタム").tag(Self.customFpsTag)
+                            }.labelsHidden().frame(width: 200)
+                            if fpsChoice == Self.customFpsTag {
+                                FrameRateFields(text: $fpsText)
+                            }
+                        }
                     }
                     GridRow {
                         Text("背景色")
@@ -508,10 +525,15 @@ struct SettingsSheet: View {
                     }
                     GridRow {
                         Text("書き出し形式")
-                        Picker("", selection: $draft.codec) {
-                            Text("H.264（どこでも再生できる）").tag("h264")
-                            Text("HEVC（同じ画質で小さい・4K向け）").tag("hevc")
-                        }.labelsHidden().frame(width: 260)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Picker("", selection: $draft.codec) {
+                                Text("H.264（どこでも再生できる）").tag("h264")
+                                Text("HEVC（同じ画質で小さい・4K向け）").tag("hevc")
+                            }.labelsHidden().frame(width: 260)
+                            if draft.codec == "h264", let w = res.width, let h = res.height, !OutputPlan.h264Supports(width: w, height: h) {
+                                Text("注意: このサイズは H.264 で書き出せないので、書き出しは HEVC になります").font(.caption).foregroundStyle(.orange)
+                            }
+                        }
                     }
                 }
                 .padding(8)
@@ -537,13 +559,18 @@ struct SettingsSheet: View {
                 Spacer()
                 Button("キャンセル") { dismiss() }.keyboardShortcut(.cancelAction)
                 Button("適用") {
+                    guard res.isValid, let w = res.width, let h = res.height, case .success(let f) = FrameRateInput.parse(fpsText) else { return }
+                    draft.width = w; draft.height = h; draft.fps = f
                     model.applySettings(draft, original: original)
                     dismiss()
                 }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
+                    .disabled(!res.isValid || !fpsValid)
             }
         }
         .padding(20)
-        .frame(width: 520)
+        .frame(width: 560)
+        .onChange(of: draft.codec) { _, c in res.codec = c }
+        .onChange(of: fpsText) { _, t in if case .success(let v) = FrameRateInput.parse(t) { res.fps = v } }
     }
 }
 

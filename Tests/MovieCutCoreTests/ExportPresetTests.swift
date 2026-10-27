@@ -8,7 +8,7 @@ final class ExportPresetTests: XCTestCase {
     override func setUpWithError() throws { try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true) }
     override func tearDownWithError() throws { try? FileManager.default.removeItem(at: tmp) }
 
-    private func sample(w: Int = 1280, h: Int = 720, fps: Int = 60, codec: String = "h264") -> Project {
+    private func sample(w: Int = 1280, h: Int = 720, fps: Double = 60, codec: String = "h264") -> Project {
         var p = Project.new()
         p.width = w; p.height = h; p.fps = fps; p.codec = codec
         var t = Clip(); t.type = .text; t.text = "字幕"; t.start = 0; t.duration = 2; t.fontSize = 60
@@ -21,9 +21,9 @@ final class ExportPresetTests: XCTestCase {
 
     func testPresetParameters() {
         let p = sample()
-        func check(_ preset: ExportPreset, _ w: Int, _ h: Int, _ codec: String, _ fps: Int, line: UInt = #line) {
+        func check(_ preset: ExportPreset, _ w: Int, _ h: Int, _ codec: String, _ fps: Double, line: UInt = #line) {
             let q = preset.apply(to: p)
-            XCTAssertEqual([q.width, q.height, q.fps], [w, h, fps], "\(preset)", line: line)
+            XCTAssertEqual([q.width, q.height], [w, h], "\(preset)", line: line); XCTAssertEqual(q.fps, fps, "\(preset)", line: line)
             XCTAssertEqual(q.codec, codec, "\(preset)", line: line)
         }
         check(.youtube1080, 1920, 1080, "h264", 60)

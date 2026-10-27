@@ -11,7 +11,7 @@ final class ExporterTests: XCTestCase {
     override func tearDownWithError() throws { try? FileManager.default.removeItem(at: tmp) }
 
     /// 2 秒のプロジェクト: 文字 + トーンのボイス(1.85 秒 + 0.15)。
-    func twoSecondProject(w: Int = 640, h: Int = 360, fps: Int = 30, codec: String = "h264", withAudio: Bool = true) throws -> Project {
+    func twoSecondProject(w: Int = 640, h: Int = 360, fps: Double = 30, codec: String = "h264", withAudio: Bool = true) throws -> Project {
         var p = Project.new()
         p.width = w; p.height = h; p.fps = fps; p.codec = codec
         var text = Clip(); text.type = .text; text.text = "テスト"; text.start = 0; text.duration = 2

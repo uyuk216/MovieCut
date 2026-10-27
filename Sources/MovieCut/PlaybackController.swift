@@ -214,9 +214,8 @@ final class PlaybackController {
     /// ←/→: 1 コマ(1/fps)ずつ。
     func step(frames: Int) {
         guard let model else { return }
-        let fps = Double(max(1, model.project.fps))
         let end = model.project.endTime
-        var t = model.currentTime + Double(frames) / fps
+        var t = model.project.frameRate.stepped(from: model.currentTime, frames: frames)
         t = max(0, end > 0 ? min(t, max(end, model.currentTime)) : t)
         seek(to: t)
     }

@@ -53,11 +53,31 @@ extension ProjectModel {
         preset?.suggestedFileName(documentName: documentName) ?? documentName + ".mp4"
     }
 
-    /// フレームレート(メニューの 24 / 30 / 60)。Undo できる。
-    func setFps(_ fps: Int) {
-        guard fps >= 1, fps <= 240, fps != project.fps, !isLocked else { return }
-        edit("FPS の変更") { $0.fps = fps }
+    /// フレームレート(メニューの定番・最近使ったカスタム・シート)。1〜240 の範囲外は断る。Undo は 1 回。
+    func setFps(_ fps: Double) {
+        guard !isLocked else { return }
+        switch FrameRateInput.validated(fps) {
+        case .failure(let e):
+            errorTitle = "フレームレートを変えられません"; errorMessage = e.message
+        case .success(let v):
+            guard !FrameRate.same(v, project.fps) else { return }
+            edit("FPS の変更") { $0.fps = v }
+        }
     }
+
+    /// 「フレームレートを入力」シートの適用。定番でないレートは「最近使ったカスタム」に残す。
+    func applyCustomFps(_ fps: Double) {
+        guard !isLocked else { return }
+        setFps(fps)
+        rememberCustomFps(fps)
+    }
+
+    func rememberCustomFps(_ fps: Double) {
+        if !FrameRate.presets.contains(where: { FrameRate.same($0, fps) }) { RecentCustoms.frameRates().addRate(fps) }
+        ActiveDocument.shared.refresh()
+    }
+
+    func openFpsSheet() { if !isLocked { showFpsSheet = true } }
 
     /// 書き出し形式(メニューの H.264 / HEVC)。Undo できる。
     func setCodec(_ codec: String) {

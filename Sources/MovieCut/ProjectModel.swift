@@ -39,12 +39,13 @@ enum AppServices {
 /// 解像度のプリセット(renderer.js の #res-select と同じ並び)。
 enum ResolutionPresets {
     static let items: [(key: String, label: String)] = [
-        ("1920x1080", "1920×1080"),
-        ("2560x1440", "2560×1440"),
-        ("3840x2160", "3840×2160"),
-        ("1080x1920", "縦 1080×1920"),
-        ("720x1280", "縦 720×1280"),
-        ("1080x1080", "正方形 1080×1080"),
+        ("1366x768", "1366×768"),
+        ("1280x720", "HD 1280×720"),
+        ("1920x1080", "FHD 1920×1080"),
+        ("2560x1440", "WQHD 2560×1440"),
+        ("3840x2160", "4K 3840×2160"),
+        ("5120x2880", "5K 5120×2880"),
+        ("7680x4320", "8K 7680×4320"),
     ]
     static let customKey = "custom"
     static func isPreset(_ key: String) -> Bool { items.contains { $0.key == key } }
@@ -61,7 +62,7 @@ enum ExportOutcome {
 struct VideoSettingsDraft: Equatable {
     var width: Int
     var height: Int
-    var fps: Int
+    var fps: Double
     var bg: String
     var codec: String
     var voicevoxUrl: String
@@ -132,6 +133,9 @@ final class ProjectModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var errorTitle = "エラー"
     @Published var showSettings = false
+    /// 「解像度を入力」「フレームレートを入力」のシート。
+    @Published var showResolutionSheet = false
+    @Published var showFpsSheet = false
     /// 「時間を指定して移動…」のシート。
     @Published var showJumpSheet = false
     /// 名前を変えているマーカー(シートを出す)。
@@ -183,6 +187,8 @@ final class ProjectModel: ObservableObject {
     private(set) var exportFileName = ""
     /// 書き出しシートの見出し(プリセットや音声のみのとき変わる)。
     private(set) var exportTitle = "MP4 を書き出しています"
+    /// 書き出しシートの補足(H.264 で書けない大きさのとき「HEVC で書き出します」など)。なければ空。
+    private(set) var exportNotice = ""
     /// 書き出しの進み具合の共有(テストでは差し替える。nil ならアプリ全体のもの)。
     var exportStatusOverride: ExportStatusCenter?
     /// スライダー以外の連続した編集(ステッパー・色・文字入力)を 1 回の Undo にまとめるための待ち。
@@ -313,38 +319,68 @@ final class ProjectModel: ObservableObject {
 
     var resolutionKey: String { "\(project.width)x\(project.height)" }
 
-    /// renderer.js applyVideoSize: 文字・字幕・ぼかしを面積比の平方根で直し、4K 以上は HEVC にする。
+    /// renderer.js applyVideoSize: 文字・字幕・ぼかしを面積比の平方根で直し、4K 以上(または H.264 の上限を超えるサイズ)は HEVC にする。
+    /// 書き出せない大きさ(8192×4320 相当の面積を超える)は断って理由を出す。Undo は 1 回。
     func applyVideoSize(_ w: Int, _ h: Int) {
         let w = max(16, w), h = max(16, h)
         guard w != project.width || h != project.height else { return }
+        guard OutputPlan.hevcSupports(width: w, height: h) else {
+            errorTitle = "解像度を変えられません"
+            errorMessage = "このサイズ(\(w)×\(h))は大きすぎて書き出せません。8192×4320 相当の面積までです。"
+            return
+        }
         edit("解像度の変更") { p in
             p = p.scaledForResolution(newWidth: w, newHeight: h)
-            if w * h >= 3840 * 2160 { p.codec = "hevc" }
+            if w * h >= 3840 * 2160 || !OutputPlan.h264Supports(width: w, height: h) { p.codec = "hevc" }
         }
     }
 
-    /// Picker(と MC_DEBUG_SIZE)の入口。"WxH" か "custom"(= 設定シートを開く)。
-    func selectResolution(_ key: String) {
-        if key == ResolutionPresets.customKey { showSettings = true; return }
-        let parts = key.lowercased().split(separator: "x").compactMap { Int($0) }
-        guard parts.count == 2 else { return }
-        applyVideoSize(parts[0], parts[1])
+    /// 「解像度を入力」シートの適用。定番でないサイズは「最近使ったカスタム」に残す。
+    func applyCustomResolution(width: Int, height: Int) {
+        guard !isLocked else { return }
+        if let msg = ResolutionInput.validate(width: width, height: height) {
+            errorTitle = "解像度を変えられません"; errorMessage = msg; return
+        }
+        applyVideoSize(width, height)
+        rememberCustomResolution(width: width, height: height)
     }
+
+    func rememberCustomResolution(width: Int, height: Int) {
+        if !ResolutionPresets.isPreset("\(width)x\(height)") { RecentCustoms.resolutions().addSize(width: width, height: height) }
+        ActiveDocument.shared.refresh()
+    }
+
+    /// Picker(と MC_DEBUG_SIZE)の入口。"WxH" か "custom"(= 「解像度を入力」シートを開く)。
+    func selectResolution(_ key: String) {
+        if key == ResolutionPresets.customKey { openResolutionSheet(); return }
+        guard let sz = ResolutionInput.parseSize(key) else { return }
+        applyVideoSize(sz.width, sz.height)
+    }
+
+    /// 出力 ▸ 解像度 ▸ 縦横を入れ替える。いまの幅と高さを入れ替える(文字の大きさ直しも同じ道。Undo は 1 回)。
+    func swapResolution() {
+        guard !isLocked, project.width != project.height else { return }
+        applyVideoSize(project.height, project.width)
+    }
+
+    func openResolutionSheet() { if !isLocked { showResolutionSheet = true } }
 
     /// 設定シートの「適用」。1 回の Undo にまとめる。
     func applySettings(_ d: VideoSettingsDraft, original: VideoSettingsDraft) {
         edit("動画設定") { p in
             let w = max(16, d.width), h = max(16, d.height)
-            if w != p.width || h != p.height {
+            if w != p.width || h != p.height, OutputPlan.hevcSupports(width: w, height: h) {
                 p = p.scaledForResolution(newWidth: w, newHeight: h)
-                if w * h >= 3840 * 2160 { p.codec = "hevc" }
+                if w * h >= 3840 * 2160 || !OutputPlan.h264Supports(width: w, height: h) { p.codec = "hevc" }
             }
             if d.codec != original.codec { p.codec = d.codec }
-            p.fps = d.fps
+            p.fps = FrameRate.canonical(d.fps)
             p.bg = d.bg
             p.voicevoxUrl = d.voicevoxUrl
             p.aquestalkCommand = d.aquestalkCommand
         }
+        if d.width != original.width || d.height != original.height { rememberCustomResolution(width: d.width, height: d.height) }
+        if !FrameRate.same(d.fps, original.fps) { rememberCustomFps(d.fps) }
     }
 
     // MARK: キャラクター
@@ -399,6 +435,15 @@ final class ProjectModel: ObservableObject {
         exportFileName = url.lastPathComponent
         exportTitle = preset.map { $0.isAudioOnly ? "音声を書き出しています" : "\($0.title) で書き出しています" } ?? "MP4 を書き出しています"
         statusText = "書き出し中…"
+        let exporting = ExportJob.resolvedProject(project, preset: preset)
+        let plan = OutputPlan.make(width: exporting.width, height: exporting.height, codec: exporting.codec)
+        let isVideo = preset?.isAudioOnly != true
+        var notices: [String] = []
+        if isVideo, plan.error == nil {
+            if plan.usesFallbackCodec { notices.append(OutputPlan.fallbackNotice) }
+            if let h = OutputPlan.heavyWarning(width: plan.width, height: plan.height, fps: exporting.fps) { notices.append(h) }
+        }
+        exportNotice = notices.joined(separator: "\n")
         let dock = dockOverride ?? AppServices.dock
         let status = exportStatusOverride ?? AppServices.exportStatus
         dock.update(0)
@@ -420,7 +465,7 @@ final class ProjectModel: ObservableObject {
         do {
             try await task.value
             exportProgress = 1
-            statusText = "\(url.lastPathComponent) に書き出しました"
+            statusText = "\(url.lastPathComponent) に書き出しました" + (plan.usesFallbackCodec && isVideo ? "(HEVC)" : "")
             dock.finish(notify: true)
             return .success(url)
         } catch is CancellationError {

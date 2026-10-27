@@ -49,8 +49,11 @@ final class MenuTests: XCTestCase {
         let zoom = AppMenuSpec.zoom(s)
         XCTAssertEqual(zoom.map(\.title), ["タイムラインを拡大", "タイムラインを縮小", "全体表示"])
         XCTAssertEqual(zoom.map(\.shortcut), [sc("+", .command), sc("-", .command), sc("0", .command)])
-        XCTAssertEqual(AppMenuSpec.resolutions(s).map(\.title), ["1920×1080", "2560×1440", "3840×2160", "縦 1080×1920", "縦 720×1280", "正方形 1080×1080"])
-        XCTAssertEqual(AppMenuSpec.customResolution(s).title, "自由…")
+        XCTAssertEqual(AppMenuSpec.resolutions(s).map(\.title), ["1366×768", "HD 1280×720", "FHD 1920×1080", "WQHD 2560×1440", "4K 3840×2160", "5K 5120×2880", "8K 7680×4320"])
+        XCTAssertEqual(AppMenuSpec.customResolution(s).title, "カスタム…")
+        XCTAssertEqual(AppMenuSpec.swapResolution(s).title, "縦横を入れ替える")
+        XCTAssertEqual(AppMenuSpec.fpsItems(s).map(\.title), ["24 fps", "30 fps", "48 fps", "60 fps", "120 fps", "240 fps"])
+        XCTAssertEqual(AppMenuSpec.customFps(s).title, "カスタム…")
         XCTAssertEqual(AppMenuSpec.codecItems(s).map(\.title), ["H.264", "HEVC"])
         XCTAssertEqual(AppMenuSpec.backgroundItems(s).map(\.title), ["黒", "白", "緑（クロマキー）"])
         XCTAssertEqual(AppMenuSpec.secondScreen(s).title, "プレビューを別画面に表示")
@@ -167,26 +170,76 @@ final class MenuTests: XCTestCase {
         }
     }
 
-    func testCustomResolutionGetsAnExtraCheckedEntry() {
+    func testCustomResolutionGetsCheckedRecentEntry() {
         let list = AppMenuSpec.resolutions(state { $0.resolutionKey = "1234x567" })
-        XCTAssertEqual(list.count, ResolutionPresets.items.count + 1)
-        XCTAssertEqual(list.last?.title, "1234×567")
-        XCTAssertEqual(list.last?.command, .resolution("1234x567"))
-        XCTAssertEqual(list.filter { $0.checked == true }.count, 1)
-        XCTAssertEqual(list.last?.checked, true)
+        XCTAssertEqual(list.count, ResolutionPresets.items.count)
+        XCTAssertTrue(list.allSatisfy { $0.checked == false })
+        let recent = AppMenuSpec.recentResolutions(state { $0.resolutionKey = "1234x567" })
+        XCTAssertEqual(recent.map(\.title), ["1234×567"])
+        XCTAssertEqual(recent.first?.command, .resolution("1234x567"))
+        XCTAssertEqual(recent.first?.checked, true)
+        // 履歴: 現在のものに ✓、定番は重ねない、最大 3 件
+        let r2 = AppMenuSpec.recentResolutions(state { $0.resolutionKey = "1000x500"; $0.recentResolutions = ["1000x500", "1920x1080", "900x400", "800x300"] })
+        XCTAssertEqual(r2.map(\.title), ["1000×500", "900×400", "800×300"])
+        XCTAssertEqual(r2.map(\.checked), [true, false, false])
     }
 
-    func testFpsRadioChecksCurrentValueAndAddsExtraEntry() {
+    func testSwapResolutionIsOneUndoStepAndScalesText() {
+        let m = makeModel()
+        m.applyVideoSize(1280, 720)
+        let before = m.project
+        AppMenu.perform(.swapResolution, model: m)
+        XCTAssertEqual(m.resolutionKey, "720x1280")
+        XCTAssertEqual(m.project.tracks[0].clips.count, before.tracks[0].clips.count)
+        m.effectiveUndoManager.undo()
+        XCTAssertEqual(m.project, before)
+        XCTAssertFalse(AppMenuSpec.swapResolution(MenuState()).enabled)
+        XCTAssertFalse(AppMenuSpec.swapResolution(state { $0.isLocked = true }).enabled)
+    }
+
+    func testResolutionPresetsRadioIncludesNewSizes() {
+        for key in ["1366x768", "1280x720", "5120x2880", "7680x4320"] {
+            let list = AppMenuSpec.resolutions(state { $0.resolutionKey = key })
+            XCTAssertEqual(list.filter { $0.checked == true }.map(\.command), [.resolution(key)])
+        }
+    }
+
+    func testFpsRadioChecksCurrentValueAndRecentCustoms() {
         for f in AppMenuSpec.fpsPresets {
             let list = AppMenuSpec.fpsItems(state { $0.fps = f })
-            XCTAssertEqual(list.map(\.title), ["24 fps", "30 fps", "60 fps"])
             XCTAssertEqual(list.filter { $0.checked == true }.map(\.command), [.fps(f)])
+            XCTAssertTrue(AppMenuSpec.recentFpsItems(state { $0.fps = f }).isEmpty)
         }
-        let odd = AppMenuSpec.fpsItems(state { $0.fps = 25 })
-        XCTAssertEqual(odd.map(\.title), ["24 fps", "30 fps", "60 fps", "25 fps"])
-        XCTAssertEqual(odd.filter { $0.checked == true }.map(\.command), [.fps(25)])
+        let odd = state { $0.fps = 29.97; $0.recentFps = [12.5, 24, 29.97] }
+        XCTAssertTrue(AppMenuSpec.fpsItems(odd).allSatisfy { $0.checked == false })
+        let recent = AppMenuSpec.recentFpsItems(odd)
+        XCTAssertEqual(recent.map(\.title), ["12.5 fps", "29.97 fps"])
+        XCTAssertEqual(recent.map(\.checked), [false, true])
+        XCTAssertEqual(AppMenuSpec.recentFpsItems(state { $0.fps = 25 }).map(\.title), ["25 fps"], "履歴になくても現在のレートは ✓ 付きで出る")
         XCTAssertTrue(AppMenuSpec.fpsItems(MenuState()).allSatisfy { !$0.enabled && $0.checked != true }, "書類なしは無効")
         XCTAssertTrue(AppMenuSpec.fpsItems(state { $0.isLocked = true }).allSatisfy { !$0.enabled }, "書き出し中は無効")
+        XCTAssertFalse(AppMenuSpec.customFps(MenuState()).enabled)
+        XCTAssertFalse(AppMenuSpec.customFps(state { $0.isLocked = true }).enabled)
+    }
+
+    func testCustomFpsOpensSheetAndAppliesInOneUndoStep() {
+        let m = makeModel()
+        AppMenu.perform(.fpsCustom, model: m)
+        XCTAssertTrue(m.showFpsSheet)
+        m.applyCustomFps(29.97)
+        XCTAssertEqual(m.project.fps, 29.97)
+        XCTAssertEqual(m.project.frameRate, FrameRate(num: 30000, den: 1001))
+        m.effectiveUndoManager.undo()
+        XCTAssertEqual(m.project.fps, 60)
+        m.setFps(500)
+        XCTAssertEqual(m.project.fps, 60); XCTAssertNotNil(m.errorMessage)
+        RecentCustoms.frameRates().clear()
+    }
+
+    func testCodecItemShowsCautionForHugeSizes() {
+        XCTAssertNil(AppMenuSpec.codecItems(state()).first?.hint)
+        XCTAssertNotNil(AppMenuSpec.codecItems(state { $0.h264Unsupported = true }).first?.hint)
+        XCTAssertNil(AppMenuSpec.codecItems(state { $0.h264Unsupported = true })[1].hint)
     }
 
     func testFpsMenuIsUndoableThroughModel() {
@@ -241,8 +294,8 @@ final class MenuTests: XCTestCase {
         AppMenu.perform(.addCharacter, model: m)
         XCTAssertEqual(m.project.characters.count, chars + 1)
         AppMenu.perform(.resolution(ResolutionPresets.customKey), model: m)
-        XCTAssertTrue(m.showSettings)
-        m.showSettings = false
+        XCTAssertTrue(m.showResolutionSheet)
+        m.showResolutionSheet = false
         AppMenu.perform(.settings, model: m)
         XCTAssertTrue(m.showSettings)
         AppMenu.perform(.toggleSecondScreen, model: nil)   // ドキュメントが無くても落ちない

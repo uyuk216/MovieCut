@@ -13,7 +13,7 @@ enum MenuCommand: Hashable {
     case goStart, goEnd, prevEdit, nextEdit, prevLine, nextLine, jumpToTime
     case addMarker, renameMarker, prevMarker, nextMarker, deleteMarker, clearMarkers, jumpToMarker(String)
     case zoomIn, zoomOut, zoomFit
-    case resolution(String), fps(Int), codec(String), background(String)
+    case resolution(String), swapResolution, fps(Double), fpsCustom, codec(String), background(String)
     case toggleSecondScreen, fullScreen, toggleStatusItem
     case helpVoicevox, helpAquestalk, helpLicense, helpThirdParty
 }
@@ -81,7 +81,12 @@ struct MenuState: Equatable {
     var hasSelection = false
     var canSplit = false
     var resolutionKey = ""
-    var fps = 0
+    var fps = 0.0
+    /// 「最近使ったカスタム」(新しい順・最大 3 件)。
+    var recentResolutions: [String] = []
+    var recentFps: [Double] = []
+    /// 今のサイズが H.264 の上限を超える(書き出しは HEVC になる)。
+    var h264Unsupported = false
     var codec = ""
     var bg = ""
     var isSecondScreenOpen = false
@@ -123,6 +128,9 @@ struct MenuState: Equatable {
         canSplit = m.canSplit
         resolutionKey = m.resolutionKey
         fps = m.project.fps
+        recentResolutions = RecentCustoms.resolutions().items
+        recentFps = RecentCustoms.frameRates().rates
+        h264Unsupported = !OutputPlan.h264Supports(width: m.project.width, height: m.project.height)
         codec = m.project.codec
         bg = m.project.bg
         isSecondScreenOpen = m.isSecondScreenOpen
@@ -173,17 +181,30 @@ enum AppMenuSpec {
         MenuItemSpec(command: .videoSettings, title: "動画の設定…", shortcut: nil, enabled: s.canEdit, checked: nil)
     }
 
-    static let fpsPresets = [24, 30, 60]
+    static let fpsPresets = FrameRate.presets
 
-    /// FPS のラジオ。24 / 30 / 60 以外のときは、チェック付きの項目がもう 1 つ増える。
+    static func fpsTitle(_ v: Double) -> String { "\(FrameRate.label(v)) fps" }
+
+    /// FPS のラジオ(定番のレート)。今のレートに ✓。
     static func fpsItems(_ s: MenuState) -> [MenuItemSpec] {
-        var items = fpsPresets.map {
-            MenuItemSpec(command: .fps($0), title: "\($0) fps", shortcut: nil, enabled: s.canEdit, checked: $0 == s.fps)
+        fpsPresets.map {
+            MenuItemSpec(command: .fps($0), title: fpsTitle($0), shortcut: nil, enabled: s.canEdit, checked: s.hasDocument && FrameRate.same($0, s.fps))
         }
-        if s.hasDocument, s.fps > 0, !fpsPresets.contains(s.fps) {
-            items.append(MenuItemSpec(command: .fps(s.fps), title: "\(s.fps) fps", shortcut: nil, enabled: s.canEdit, checked: true))
+    }
+
+    /// 「最近使ったカスタム」のレート。今のレートが定番でも履歴にもなければ、✓ 付きでここに足す。
+    static func recentFpsItems(_ s: MenuState) -> [MenuItemSpec] {
+        var list = s.recentFps.filter { v in !fpsPresets.contains { FrameRate.same($0, v) } }
+        if s.hasDocument, s.fps > 0, !fpsPresets.contains(where: { FrameRate.same($0, s.fps) }), !list.contains(where: { FrameRate.same($0, s.fps) }) {
+            list.insert(s.fps, at: 0)
         }
-        return items
+        return list.map {
+            MenuItemSpec(command: .fps($0), title: fpsTitle($0), shortcut: nil, enabled: s.canEdit, checked: s.hasDocument && FrameRate.same($0, s.fps))
+        }
+    }
+
+    static func customFps(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .fpsCustom, title: "カスタム…", shortcut: nil, enabled: s.canEdit, checked: nil)
     }
 
     static func file(_ s: MenuState) -> [MenuItemSpec] {
@@ -298,24 +319,38 @@ enum AppMenuSpec {
          MenuItemSpec(command: .zoomFit, title: "全体表示", shortcut: cmd("0"), enabled: s.canEdit, checked: nil)]
     }
 
-    /// 解像度のラジオ。プリセット以外のサイズのときは、チェック付きの項目がもう 1 つ増える。
+    /// 解像度のラジオ(定番のサイズ)。今のサイズに ✓。
     static func resolutions(_ s: MenuState) -> [MenuItemSpec] {
-        var items = ResolutionPresets.items.map {
-            MenuItemSpec(command: .resolution($0.key), title: $0.label, shortcut: nil, enabled: s.canEdit, checked: $0.key == s.resolutionKey)
+        ResolutionPresets.items.map {
+            MenuItemSpec(command: .resolution($0.key), title: $0.label, shortcut: nil, enabled: s.canEdit, checked: s.hasDocument && $0.key == s.resolutionKey)
         }
-        if s.hasDocument, !ResolutionPresets.isPreset(s.resolutionKey), !s.resolutionKey.isEmpty {
-            let label = s.resolutionKey.replacingOccurrences(of: "x", with: "×")
-            items.append(MenuItemSpec(command: .resolution(s.resolutionKey), title: label, shortcut: nil, enabled: s.canEdit, checked: true))
+    }
+
+    /// 「最近使ったカスタム」のサイズ。今のサイズが定番でも履歴にもなければ、✓ 付きでここに足す。
+    static func recentResolutions(_ s: MenuState) -> [MenuItemSpec] {
+        var list = s.recentResolutions.filter { !ResolutionPresets.isPreset($0) }
+        if s.hasDocument, !s.resolutionKey.isEmpty, !ResolutionPresets.isPreset(s.resolutionKey), !list.contains(s.resolutionKey) {
+            list.insert(s.resolutionKey, at: 0)
         }
-        return items
+        return list.map {
+            MenuItemSpec(command: .resolution($0), title: $0.replacingOccurrences(of: "x", with: "×"), shortcut: nil, enabled: s.canEdit, checked: s.hasDocument && $0 == s.resolutionKey)
+        }
     }
 
     static func customResolution(_ s: MenuState) -> MenuItemSpec {
-        MenuItemSpec(command: .resolution(ResolutionPresets.customKey), title: "自由…", shortcut: nil, enabled: s.canEdit, checked: nil)
+        MenuItemSpec(command: .resolution(ResolutionPresets.customKey), title: "カスタム…", shortcut: nil, enabled: s.canEdit, checked: nil)
+    }
+
+    static func swapResolution(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .swapResolution, title: "縦横を入れ替える", shortcut: nil, enabled: s.canEdit, checked: nil)
     }
 
     static func codecItems(_ s: MenuState) -> [MenuItemSpec] {
-        codecs.map { MenuItemSpec(command: .codec($0.key), title: $0.label, shortcut: nil, enabled: s.canEdit, checked: s.codec == $0.key) }
+        codecs.map {
+            // 今のサイズが H.264 の上限を超えるときは、H.264 の横に注意を添える(書き出しは自動で HEVC になる)
+            let hint = ($0.key == "h264" && s.hasDocument && s.h264Unsupported) ? "このサイズは HEVC で書き出し" : nil
+            return MenuItemSpec(command: .codec($0.key), title: $0.label, shortcut: nil, enabled: s.canEdit, checked: s.codec == $0.key, hint: hint)
+        }
     }
 
     static func backgroundItems(_ s: MenuState) -> [MenuItemSpec] {
@@ -346,7 +381,7 @@ enum AppMenuSpec {
     static func all(_ s: MenuState) -> [MenuItemSpec] {
         [about, settings(s), videoSettings(s)] + file(s) + [exportCurrent(s)] + exportPresets(s) + clipMenu(s).flatMap { $0 } + editAdd(s) + playback(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerList(s)
-            + zoom(s) + resolutions(s) + [customResolution(s)] + fpsItems(s) + codecItems(s) + backgroundItems(s)
+            + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + [secondScreen(s), statusItemToggle(s), fullScreen(s)] + help.flatMap { $0 }
     }
 }
@@ -411,7 +446,9 @@ enum AppMenu {
             case .zoomOut: m.zoomTimeline(by: 1 / zoomStep)
             case .zoomFit: m.onFitTimeline()
             case .resolution(let key): m.selectResolution(key)
+            case .swapResolution: m.swapResolution()
             case .fps(let f): m.setFps(f)
+            case .fpsCustom: m.openFpsSheet()
             case .codec(let k): m.setCodec(k)
             case .background(let k): m.setBackground(k)
             case .toggleSecondScreen: m.toggleSecondScreen()

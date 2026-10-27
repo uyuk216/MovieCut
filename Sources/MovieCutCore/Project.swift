@@ -8,7 +8,10 @@ public let defaultFonts = ["Hiragino Maru Gothic ProN", "Hiragino Sans", "Hiragi
 public struct Project: Codable, Equatable {
     public var width: Int = 1920
     public var height: Int = 1080
-    public var fps: Int = 60
+    /// 1 秒あたりのコマ数(1〜240。29.97 のような小数も可)。ファイルでは整数なら整数、そうでなければ小数で書く。
+    public var fps: Double = 60
+    /// 正確な分数のレート(時刻とコマの変換はこれを使う)。
+    public var frameRate: FrameRate { FrameRate.from(fps) }
     public var bg: String = "#000000"
     public var codec: String = "h264"
     public var voicevoxUrl: String = "http://127.0.0.1:50021"
@@ -31,7 +34,7 @@ public struct Project: Codable, Equatable {
         let l = Lenient(c: try decoder.container(keyedBy: AnyKey.self), known: Self.knownKeys)
         width = l.int("width") ?? width
         height = l.int("height") ?? height
-        fps = l.int("fps") ?? fps
+        fps = Self.decodeFps(l)
         bg = l.string("bg") ?? bg
         codec = l.string("codec") ?? codec
         voicevoxUrl = l.string("voicevoxUrl") ?? voicevoxUrl
@@ -48,7 +51,9 @@ public struct Project: Codable, Equatable {
         for (k, v) in extra { try c.encode(v, forKey: AnyKey(k)) }
         try c.encode(width, forKey: AnyKey("width"))
         try c.encode(height, forKey: AnyKey("height"))
-        try c.encode(fps, forKey: AnyKey("fps"))
+        // 整数のレートは整数で書く(ファイルを読みやすく保つ)
+        let f = FrameRate.canonical(fps)
+        if f == f.rounded() { try c.encode(Int(f), forKey: AnyKey("fps")) } else { try c.encode(f, forKey: AnyKey("fps")) }
         try c.encode(bg, forKey: AnyKey("bg"))
         try c.encode(codec, forKey: AnyKey("codec"))
         try c.encode(voicevoxUrl, forKey: AnyKey("voicevoxUrl"))
@@ -56,6 +61,13 @@ public struct Project: Codable, Equatable {
         try c.encode(characters, forKey: AnyKey("characters"))
         try c.encode(tracks, forKey: AnyKey("tracks"))
         if !markers.isEmpty { try c.encode(markers, forKey: AnyKey("markers")) }
+    }
+
+    /// fps を Int / Double / "29.97" / "30000/1001" のどれからでも読む。読めない・欠けているときは 60、範囲外は 1〜240 に収める。
+    static func decodeFps(_ l: Lenient) -> Double {
+        if let d: Double = l.value("fps") { return FrameRate.clamp(d) }
+        if let s: String = l.value("fps"), let v = FrameRateInput.rawValue(s) { return FrameRate.clamp(v) }
+        return FrameRate.defaultValue
     }
 
     public var allClips: [Clip] { tracks.flatMap { $0.clips } }

@@ -58,12 +58,12 @@ final class ProjectModelTests: XCTestCase {
 
     func testSelectResolutionKeyAndCustom() {
         let m = makeModel()
-        m.selectResolution("720x1280")
-        XCTAssertEqual(m.resolutionKey, "720x1280")
+        m.selectResolution("1366x768")
+        XCTAssertEqual(m.resolutionKey, "1366x768")
         XCTAssertTrue(ResolutionPresets.isPreset(m.resolutionKey))
         m.selectResolution("custom")
-        XCTAssertTrue(m.showSettings)
-        XCTAssertEqual(m.resolutionKey, "720x1280")
+        XCTAssertTrue(m.showResolutionSheet)
+        XCTAssertEqual(m.resolutionKey, "1366x768")
         m.applyVideoSize(1234, 777)
         XCTAssertEqual(m.resolutionKey, "1234x777")
         XCTAssertFalse(ResolutionPresets.isPreset(m.resolutionKey))

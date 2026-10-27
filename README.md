@@ -27,6 +27,8 @@ VOICEVOX / AquesTalkPlayer が入っていれば、実エンジンのテスト�
 ## 書き出し(コマンドライン)
 ```
 moviecut-cli export in.mcpjc out.mp4                       # プロジェクトの設定のまま
+moviecut-cli export in.mcpjc out.mp4 --size 2048x1080 --fps 29.97 [--codec hevc]  # 任意の幅x高さ(64〜8192)・fps(1〜240、23.976 や 30000/1001 も可)
+moviecut-cli smoke --out out.mp4 --size 1280x720 --fps 23.976
 moviecut-cli export in.mcpjc out.mp4 --preset youtube1080  # 1920×1080 H.264
 moviecut-cli export in.mcpjc out.mp4 --preset youtube4k    # 3840×2160 HEVC
 moviecut-cli export in.mcpjc out.mp4 --preset short        # 1080×1920 H.264

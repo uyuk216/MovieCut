@@ -100,9 +100,24 @@ struct AppCommands: Commands {
                 Menu("解像度") {
                     items(AppMenuSpec.resolutions(s), run)
                     Divider()
+                    if !AppMenuSpec.recentResolutions(s).isEmpty {
+                        Text("最近使ったカスタム")
+                        items(AppMenuSpec.recentResolutions(s), run)
+                        Divider()
+                    }
                     MenuItemView(spec: AppMenuSpec.customResolution(s), perform: run)
+                    MenuItemView(spec: AppMenuSpec.swapResolution(s), perform: run)
                 }
-                Menu("FPS") { items(AppMenuSpec.fpsItems(s), run) }
+                Menu("FPS") {
+                    items(AppMenuSpec.fpsItems(s), run)
+                    Divider()
+                    if !AppMenuSpec.recentFpsItems(s).isEmpty {
+                        Text("最近使ったカスタム")
+                        items(AppMenuSpec.recentFpsItems(s), run)
+                        Divider()
+                    }
+                    MenuItemView(spec: AppMenuSpec.customFps(s), perform: run)
+                }
                 Menu("書き出し形式") { items(AppMenuSpec.codecItems(s), run) }
                 Menu("背景色") { items(AppMenuSpec.backgroundItems(s), run) }
                 Divider()

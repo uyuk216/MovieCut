@@ -34,7 +34,7 @@ final class ProjectTests: XCTestCase {
     func testEmptyObjectEqualsNewDefaults() throws {
         let p = try Project.decode(from: Data("{}".utf8))
         let n = Project.new()
-        XCTAssertEqual([p.width, p.height, p.fps], [1920, 1080, 60])
+        XCTAssertEqual([p.width, p.height], [1920, 1080]); XCTAssertEqual(p.fps, 60)
         XCTAssertEqual(p.bg, "#000000"); XCTAssertEqual(p.codec, "h264")
         XCTAssertEqual(p.voicevoxUrl, "http://127.0.0.1:50021")
         XCTAssertEqual(p.aquestalkCommand, n.aquestalkCommand)

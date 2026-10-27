@@ -100,7 +100,7 @@ extension ProjectModel {
     // MARK: マーカー
 
     /// マーカーとみなす近さ(1 コマ)。
-    var markerTolerance: Double { 1.0 / Double(max(1, project.fps)) }
+    var markerTolerance: Double { project.frameRate.frameDuration }
 
     /// 再生位置の(1 コマ以内の)マーカー。
     var markerNearPlayhead: Marker? {

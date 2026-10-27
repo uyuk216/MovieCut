@@ -17,6 +17,7 @@ public enum ExportError: LocalizedError {
     case audioReadFailed(Error?)
     case writerFailed(Error?)
     case noAudio
+    case invalidSize(String)
 
     public var errorDescription: String? {
         func tail(_ e: Error?) -> String { e.map { "(\($0.localizedDescription))" } ?? "" }
@@ -31,6 +32,7 @@ public enum ExportError: LocalizedError {
         case .audioMixFailed(let e): return "音声のミックスに失敗しました: \(e.localizedDescription)"
         case .audioReadFailed(let e): return "ミックスした音声を読み込めませんでした" + tail(e)
         case .writerFailed(let e): return "書き出しに失敗しました" + tail(e)
+        case .invalidSize(let m): return m
         case .noAudio: return "音声がありません(音声・ボイス・動画の音が 1 つも無いので、音声だけの書き出しはできません)"
         }
     }
@@ -65,15 +67,19 @@ public final class Exporter {
         self.assets = assets
     }
 
+    /// 正確な分数のフレームレート(29.97 → 30000/1001 など)。
+    public var frameRate: FrameRate { project.frameRate }
+
     /// 書き出すコマ数 = ceil(長さ × fps)。浮動小数の誤差(3.7×60=222.00000000000003)で 1 コマ増えないよう少し引く。
-    public var totalFrames: Int {
-        Int(ceil(project.endTime * Double(max(1, project.fps)) - 1e-6))
-    }
+    public var totalFrames: Int { frameRate.frameCount(duration: project.endTime) }
 
     /// 偶数に切り下げた出力サイズ(H.264 / HEVC は偶数が必要)。
     public var outputSize: (width: Int, height: Int) {
         (project.width & ~1, project.height & ~1)
     }
+
+    /// 実際に書き出すサイズとコーデック(H.264 で書けない大きさなら HEVC に切り替える)。
+    public var plan: OutputPlan { OutputPlan.make(width: project.width, height: project.height, codec: project.codec) }
 
     public func export(to url: URL, progress: ((Double) -> Void)? = nil) async throws {
         let control = ExportControl()
@@ -85,13 +91,21 @@ public final class Exporter {
     }
 
     private func run(to url: URL, progress: ((Double) -> Void)?, control: ExportControl) async throws {
-        let fps = max(1, project.fps)
+        let rate = frameRate
+        let fpsValue = rate.value
         let N = totalFrames
         guard N > 0 else { throw ExportError.emptyProject }
-        let (ew, eh) = outputSize
-        guard ew >= 2, eh >= 2 else { throw ExportError.noOutputSize(width: project.width, height: project.height) }
+        let plan = self.plan
+        if let msg = plan.error { throw ExportError.invalidSize(msg) }
+        let (ew, eh) = (plan.width, plan.height)
         if ew != project.width || eh != project.height {
             FileHandle.standardError.write(Data("書き出しサイズを偶数に切り下げました: \(project.width)x\(project.height) -> \(ew)x\(eh)\n".utf8))
+        }
+        if let w = OutputPlan.heavyWarning(width: ew, height: eh, fps: fpsValue) {
+            FileHandle.standardError.write(Data((w + "\n").utf8))
+        }
+        if plan.usesFallbackCodec {
+            FileHandle.standardError.write(Data((OutputPlan.fallbackNotice + "\n").utf8))
         }
         var rp = project
         rp.width = ew; rp.height = eh
@@ -118,13 +132,13 @@ public final class Exporter {
         writer.shouldOptimizeForNetworkUse = true
 
         // 映像入力
-        let isHEVC = project.codec.lowercased() == "hevc"
-        let base = Double(ew) * Double(eh) * Double(fps) * 0.1
+        let isHEVC = plan.codec == "hevc"
+        let base = Double(ew) * Double(eh) * fpsValue * 0.1
         let h264Rate = min(60_000_000, max(8_000_000, base))
         var props: [String: Any] = [
             AVVideoAverageBitRateKey: Int(isHEVC ? h264Rate * 0.75 : h264Rate),
-            AVVideoExpectedSourceFrameRateKey: fps,
-            AVVideoMaxKeyFrameIntervalKey: 2 * fps,
+            AVVideoExpectedSourceFrameRateKey: fpsValue,
+            AVVideoMaxKeyFrameIntervalKey: max(1, Int((2 * fpsValue).rounded())),
         ]
         if !isHEVC { props[AVVideoProfileLevelKey] = AVVideoProfileLevelH264HighAutoLevel }
         let vSettings: [String: Any] = [
@@ -141,6 +155,8 @@ public final class Exporter {
         ]
         let vInput = AVAssetWriterInput(mediaType: .video, outputSettings: vSettings)
         vInput.expectsMediaDataInRealTime = false
+        // トラックの時間の目盛りをコマの長さの整数倍にする(既定の 1/600 だと 29.97 などの時刻が丸められて、コマの間隔がそろわない)
+        vInput.mediaTimeScale = CMTimeScale(rate.num * max(1, (600 + rate.num - 1) / rate.num))
         let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: vInput, sourcePixelBufferAttributes: [
             kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
             kCVPixelBufferWidthKey as String: ew,
@@ -214,10 +230,10 @@ public final class Exporter {
                     CVPixelBufferLockBaseAddress(pb, [])
                     if let ctx = CGContext(data: CVPixelBufferGetBaseAddress(pb), width: ew, height: eh, bitsPerComponent: 8,
                                            bytesPerRow: CVPixelBufferGetBytesPerRow(pb), space: exportSRGB, bitmapInfo: exportBitmapInfo) {
-                        renderer.render(t: Double(i) / Double(fps), into: ctx)
+                        renderer.render(t: rate.time(ofFrame: i), into: ctx)
                     }
                     CVPixelBufferUnlockBaseAddress(pb, [])
-                    if !adaptor.append(pb, withPresentationTime: CMTime(value: CMTimeValue(i), timescale: CMTimeScale(fps))) {
+                    if !adaptor.append(pb, withPresentationTime: rate.cmTime(frame: i)) {
                         control.fail(ExportError.appendFailed(frame: i, underlying: writer.error)); ok = false
                     }
                 }

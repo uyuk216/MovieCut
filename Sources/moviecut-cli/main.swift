@@ -16,15 +16,31 @@ func optValue(_ name: String) -> String? {
     return args[i + 1]
 }
 
+/// --size WxH(アプリのシートと同じ検証と日本語のメッセージ)。
 func parseSize(_ s: String) -> (Int, Int) {
-    let parts = s.lowercased().split(separator: "x").compactMap { Int($0) }
-    guard parts.count == 2, parts[0] > 0, parts[1] > 0 else { fail("--size は WxH で指定してください") }
-    return (parts[0], parts[1])
+    switch ResolutionInput.parseAndValidate(s) {
+    case .success(let sz): return (sz.width, sz.height)
+    case .failure(let e): fail(e.message)
+    }
+}
+
+/// --fps 29.97 / 12.5 / 30000/1001(アプリのシートと同じ検証と日本語のメッセージ)。
+func parseFps(_ s: String) -> Double {
+    switch FrameRateInput.parse(s) {
+    case .success(let v): return v
+    case .failure(let e): fail("--fps: " + e.message)
+    }
 }
 
 /// 書き出して、進み具合(約10%ごと)を stderr、最後に コマ数・秒・実時間比 を stdout に出す。
 func runExport(_ p: Project, to url: URL, preset: ExportPreset? = nil) async throws {
-    let frames = preset?.isAudioOnly == true ? 0 : Exporter(project: ExportJob.resolvedProject(p, preset: preset), assets: RenderAssets()).totalFrames
+    let resolved = ExportJob.resolvedProject(p, preset: preset)
+    let frames = preset?.isAudioOnly == true ? 0 : Exporter(project: resolved, assets: RenderAssets()).totalFrames
+    if preset?.isAudioOnly != true {
+        let plan = Exporter(project: resolved, assets: RenderAssets()).plan
+        print("plan: \(plan.width)x\(plan.height) \(plan.codec)\(plan.usesFallbackCodec ? " (H.264 では書けないので HEVC に切り替え)" : "") fps=\(FrameRate.label(resolved.fps)) (\(resolved.frameRate.num)/\(resolved.frameRate.den))")
+        if let w = OutputPlan.heavyWarning(width: plan.width, height: plan.height, fps: resolved.fps) { print("caution: " + w) }
+    }
     var nextMark = 0.1
     let t0 = Date()
     try await ExportJob.run(project: p, preset: preset, to: url) { v in
@@ -41,7 +57,7 @@ switch args.first {
 case "info" where args.count == 2:
     do {
         let p = try Project.load(from: URL(fileURLWithPath: args[1]))
-        print("size: \(p.width)x\(p.height)  fps: \(p.fps)  codec: \(p.codec)  bg: \(p.bg)")
+        print("size: \(p.width)x\(p.height)  fps: \(FrameRate.label(p.fps))  codec: \(p.codec)  bg: \(p.bg)")
         print("characters: \(p.characters.count)  tracks: \(p.tracks.count)")
         let clips = p.allClips
         print("clips: \(clips.count)")
@@ -72,9 +88,8 @@ case "frame" where args.count >= 2:
     do {
         var p = try Project.load(from: URL(fileURLWithPath: args[1]))
         if let s = opt("--size") {
-            let parts = s.lowercased().split(separator: "x").compactMap { Int($0) }
-            guard parts.count == 2, parts[0] > 0, parts[1] > 0 else { fail("--size は WxH で指定してください") }
-            p = p.scaledForResolution(newWidth: parts[0], newHeight: parts[1])
+            let sz = parseSize(s)
+            p = p.scaledForResolution(newWidth: sz.0, newHeight: sz.1)
         }
         let renderer = Renderer(project: p, assets: RenderAssets())
         if let n = opt("--bench").flatMap(Int.init), n > 0 {
@@ -91,11 +106,12 @@ case "frame" where args.count >= 2:
         print("wrote \(outPath) (\(p.width)x\(p.height))")
     } catch { fail("読めませんでした: \(error)") }
 case "export" where args.count >= 3:
-    // export <in.mcpjc> <out.mp4|out.m4a> [--preset youtube1080|youtube4k|short|light|audio] [--size WxH] [--codec h264|hevc]
+    // export <in.mcpjc> <out.mp4|out.m4a> [--preset youtube1080|youtube4k|short|light|audio] [--size WxH] [--fps 29.97] [--codec h264|hevc]
     // --preset はプロジェクトの写しに当てるだけ(入力ファイルは変えない)。--size / --codec は、プリセットの前に当てる。
     do {
         var p = try Project.load(from: URL(fileURLWithPath: args[1]))
         if let s = optValue("--size") { let sz = parseSize(s); p = p.scaledForResolution(newWidth: sz.0, newHeight: sz.1) }
+        if let f = optValue("--fps") { p.fps = parseFps(f) }
         if let c = optValue("--codec") { guard ["h264", "hevc"].contains(c) else { fail("--codec は h264 か hevc") }; p.codec = c }
         var preset: ExportPreset?
         if let name = optValue("--preset") {
@@ -218,11 +234,11 @@ case "smoke":
         if let d = optValue("--text-duration").flatMap(Double.init) {
             for ti in p.tracks.indices { for ci in p.tracks[ti].clips.indices where p.tracks[ti].clips[ci].type == .text || p.tracks[ti].clips[ci].type == .blur { p.tracks[ti].clips[ci].duration = d } }
         }
-        if let f = optValue("--fps").flatMap(Int.init) { p.fps = f }
+        if let f = optValue("--fps") { p.fps = parseFps(f) }
         if let sp = optValue("--save-project") { try p.save(to: URL(fileURLWithPath: sp)) }  // frame コマンドとの比較用
         print("clips: " + p.allClips.map { "\($0.type.rawValue)(\(String(format: "%.2f", $0.duration)))" }.joined(separator: " "))
         try await runExport(p, to: URL(fileURLWithPath: outPath))
     } catch { fail("書き出せませんでした: \(error.localizedDescription)") }
 default:
-    fail("usage:\n  moviecut-cli info <file.ymproj>\n  moviecut-cli new <out.ymproj>\n  moviecut-cli export <in.mcpjc> <out.mp4|out.m4a> [--preset youtube1080|youtube4k|short|light|audio] [--size WxH] [--codec h264|hevc]\n  moviecut-cli smoke --out <mp4> [--size WxH] [--codec h264|hevc] [--blur] [--tone] [--save-project p.ymproj]\n  moviecut-cli speak (--voicevox <id> [--speed --pitch --intonation] | --voice <preset> [--speed]) --text <t> --out <wav>\n  moviecut-cli speakers | deps | script <script.txt> --out <p.ymproj>\n  moviecut-cli frame <in.ymproj> --t <sec> --out <png> [--size WxH] [--bench N]\n  moviecut-cli addvideo <in.ymproj> <clip.mp4> <out.ymproj>\n  moviecut-cli genclips <N> <out.ymproj>")
+    fail("usage:\n  moviecut-cli info <file.ymproj>\n  moviecut-cli new <out.ymproj>\n  moviecut-cli export <in.mcpjc> <out.mp4|out.m4a> [--preset youtube1080|youtube4k|short|light|audio] [--size WxH] [--fps 29.97] [--codec h264|hevc]\n  moviecut-cli smoke --out <mp4> [--size WxH] [--fps 23.976] [--codec h264|hevc] [--blur] [--tone] [--save-project p.ymproj]\n  moviecut-cli speak (--voicevox <id> [--speed --pitch --intonation] | --voice <preset> [--speed]) --text <t> --out <wav>\n  moviecut-cli speakers | deps | script <script.txt> --out <p.ymproj>\n  moviecut-cli frame <in.ymproj> --t <sec> --out <png> [--size WxH] [--bench N]\n  moviecut-cli addvideo <in.ymproj> <clip.mp4> <out.ymproj>\n  moviecut-cli genclips <N> <out.ymproj>")
 }

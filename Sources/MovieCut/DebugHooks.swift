@@ -242,6 +242,8 @@ final class DebugHooks {
         }
         if env["MC_DEBUG_SHEET"] == "settings" { model.showSettings = true }
         if env["MC_DEBUG_SHEET"] == "jump" { model.showJumpSheet = true }
+        if env["MC_DEBUG_SHEET"] == "resolution" { model.showResolutionSheet = true }
+        if env["MC_DEBUG_SHEET"] == "fps" { model.showFpsSheet = true }
         if let z = env["MC_DEBUG_ZOOM"].flatMap(Double.init) { model.pps = TimelineLayout.clampPps(z) }
         if let spec = env["MC_DEBUG_EDIT"] {
             await settle(model)
@@ -920,7 +922,7 @@ final class DebugHooks {
         await settle(model)
         let pb = model.playback!
         let end = model.project.endTime
-        Self.out(String(format: "project: end=%.3fs clips=%d fps=%d", end, model.project.allClips.count, model.project.fps))
+        Self.out(String(format: "project: end=%.3fs clips=%d fps=%@", end, model.project.allClips.count, FrameRate.label(model.project.fps)))
         func sleep(_ s: Double) async { try? await Task.sleep(nanoseconds: UInt64(s * 1_000_000_000)) }
         /// 再生が始まる(ミックスの準備が終わる)まで待つ
         func waitPlaying() async -> Bool {
