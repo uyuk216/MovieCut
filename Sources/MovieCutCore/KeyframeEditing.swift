@@ -45,7 +45,7 @@ public enum KeyframeEditing {
             clip.keyframes[key]!.remove(at: i)
             if clip.keyframes[key]!.isEmpty {
                 clip.keyframes[key] = nil
-                clip.setStaticValue(Animation.clamp(key, removed.v, type: clip.type), of: key)
+                clip.setStaticValue(Animation.clamp(key, removed.v, in: clip), of: key)
             }
         } else {
             let v = Animation.value(of: key, in: clip, at: t)
@@ -66,7 +66,7 @@ public enum KeyframeEditing {
     /// 項目の値を、再生ヘッド(`t`)で書く。その項目にキーがあれば、ここのキーを更新(無ければ新しく足す)。
     /// キーが無ければ、設定値を書く(従来どおり)。キーを足すときのイージングは、前後のキーに合わせず「一定」。
     public static func setValue(_ clip: inout Clip, key: String, _ value: Double, at t: Double, tolerance tol: Double) {
-        let v = Animation.clamp(key, value, type: clip.type)
+        let v = Animation.clamp(key, value, in: clip)
         guard Animation.isAnimated(key, in: clip) else {
             clip.setStaticValue(v, of: key)
             return
@@ -106,7 +106,7 @@ public enum KeyframeEditing {
                 n += 1; removedAny = true
                 if clip.keyframes[key]!.isEmpty {
                     clip.keyframes[key] = nil
-                    clip.setStaticValue(Animation.clamp(key, removed.v, type: clip.type), of: key)
+                    clip.setStaticValue(Animation.clamp(key, removed.v, in: clip), of: key)
                     break
                 }
             }
@@ -120,7 +120,7 @@ public enum KeyframeEditing {
     public static func clearAll(_ clip: inout Clip, at t: Double) -> Int {
         let keys = clip.keyframes.filter { !$0.value.isEmpty }.keys.sorted()
         for key in keys {
-            clip.setStaticValue(Animation.clamp(key, Animation.value(of: key, in: clip, at: t), type: clip.type), of: key)
+            clip.setStaticValue(Animation.clamp(key, Animation.value(of: key, in: clip, at: t), in: clip), of: key)
         }
         clip.keyframes = [:]
         return keys.count

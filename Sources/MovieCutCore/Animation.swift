@@ -155,7 +155,7 @@ public enum Animation {
     public static func keys(for clip: Clip) -> [String] {
         switch clip.type {
         case .blur: return blurRegionKeys
-        case .image, .video, .text: return transformKeys + ["blur"]
+        case .image, .video, .text: return transformKeys + ["blur"] + clip.effectKeys
         default: return []
         }
     }
@@ -218,10 +218,24 @@ public enum Animation {
         }
     }
 
+    /// クリップ込みの範囲(エフェクトの引数は、そのエフェクトの仕様の範囲)。
+    public static func clamp(_ key: String, _ v: Double, in clip: Clip) -> Double {
+        if let s = EffectKey.spec(key, in: clip) { return s.clamp(v) }
+        return clamp(key, v, type: clip.type)
+    }
+
     public static func clamp(_ key: String, _ v: Double, type: ClipType) -> Double {
         let r = range(of: key, type: type)
         guard v.isFinite else { return r.lowerBound }
         return min(max(v, r.lowerBound), r.upperBound)
+    }
+
+    /// クリップ込みの名前(エフェクトの引数は「エフェクト名 引数名」)。
+    public static func label(of key: String, in clip: Clip) -> String {
+        if let (i, p) = EffectKey.parse(key), clip.effects.indices.contains(i), let k = clip.effects[i].known, let s = k.spec(p) {
+            return k.params.count > 1 ? "\(k.label) \(s.label)" : k.label
+        }
+        return label(of: key)
     }
 
     /// 画面に出す名前。

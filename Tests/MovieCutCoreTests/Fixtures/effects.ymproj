@@ -1,0 +1,56 @@
+{
+  "width": 1280,
+  "height": 720,
+  "fps": 30,
+  "bg": "#202020",
+  "codec": "h264",
+  "characters": [],
+  "tracks": [
+    {
+      "id": "et1",
+      "name": "エフェクト",
+      "clips": [
+        {
+          "id": "eimg",
+          "type": "image",
+          "src": "/tmp/none.png",
+          "start": 0,
+          "duration": 4,
+          "offset": 0,
+          "x": 0.5,
+          "y": 0.5,
+          "scale": 1,
+          "keyframes": { "fx.0.amount": [ { "t": 0, "v": 0 }, { "t": 2, "v": 0.5, "ease": "easeOut" } ] },
+          "effects": [
+            { "kind": "brightness", "params": { "amount": 0.3 } },
+            { "kind": "dropShadow", "params": { "dx": 10, "dy": 14, "blur": 8, "opacity": 0.5 }, "color": "#112233" },
+            { "kind": "outline", "enabled": false, "params": { "width": 4 }, "color": "#ffffff", "futureEffectKey": [1, 2] },
+            { "kind": "someFutureEffect", "params": { "strength": 3 } }
+          ],
+          "futureClipKey": "keep"
+        },
+        {
+          "id": "etxt",
+          "type": "text",
+          "text": "エフェクト",
+          "start": 1,
+          "duration": 3,
+          "offset": 0,
+          "x": 0.5,
+          "y": 0.2,
+          "fontSize": 80,
+          "effects": [ { "kind": "glow" }, { "kind": "gaussianBlur", "params": { "radius": 99999 } } ]
+        },
+        {
+          "id": "ebad",
+          "type": "image",
+          "src": "/tmp/none.png",
+          "start": 5,
+          "duration": 2,
+          "offset": 0,
+          "effects": "this is not an effect list"
+        }
+      ]
+    }
+  ]
+}

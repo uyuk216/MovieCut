@@ -17,7 +17,7 @@ public func parseHexColor(_ s: String) -> CGColor? {
 private let sRGB = CGColorSpace(name: CGColorSpace.sRGB)!
 private let bitmapInfo = CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
 /// CoreImage は sRGB(ガンマ空間)で処理して、CSS の blur() と同じ見た目にする。共有してコンテキスト作成コストを避ける。
-private let ciContext = CIContext(options: [.workingColorSpace: sRGB, .outputColorSpace: sRGB])
+let ciContext = CIContext(options: [.workingColorSpace: sRGB, .outputColorSpace: sRGB])
 
 // MARK: - クリップの動く値
 
@@ -127,7 +127,11 @@ public struct Renderer {
                         ctx.saveGState()
                         Renderer.clip(ctx, mask: m, W: W, H: H)
                     }
-                    if pose.blur > 0 {
+                    // エフェクトは、クリップ自身の画素(変形まで済み)にかけてから、不透明度・マスクで重ねる。無いクリップは従来の速い道
+                    let fx = c.hasActiveEffects ? EffectPipeline.resolve(c, atClipTime: t - c.start) : []
+                    if !fx.isEmpty {
+                        drawEffectedClip(c, pose: pose, effects: fx, t: t, ctx: ctx, W: W, H: H)
+                    } else if pose.blur > 0 {
                         drawBlurredClip(c, pose: pose, t: t, ctx: ctx, W: W, H: H)
                     } else {
                         ctx.saveGState()
@@ -313,6 +317,49 @@ public struct Renderer {
         default:
             return nil
         }
+    }
+
+    /// クリップの枠(回転も含めて囲む四角)。キャンバスの画素・左上原点。素材が読めなければ nil。
+    func contentBounds(_ c: Clip, pose: ClipPose, t: Double) -> CGRect? {
+        guard let size = objectSize(of: c, at: t) else { return nil }
+        // objectSize は設定・キーの拡大で測るので、トランジションの拡大ぶんを掛ける
+        let base = ClipPose(c, at: t).scale
+        let k = base > 0 ? pose.scale / base : 1
+        let w = size.width * k, h = size.height * k
+        let a = pose.rotation * .pi / 180
+        let bw = abs(w * cos(a)) + abs(h * sin(a)), bh = abs(w * sin(a)) + abs(h * cos(a))
+        // 文字は縁が枠の外へ出る
+        let pad = c.type == .text ? (c.fontSize ?? 80) * 0.2 : 0
+        return CGRect(x: pose.x * Double(project.width) - bw / 2 - pad, y: pose.y * Double(project.height) - bh / 2 - pad, width: bw + 2 * pad, height: bh + 2 * pad)
+    }
+
+    /// エフェクト付きのクリップ: 作業用の範囲(枠 + はみ出しの余白、キャンバス内)だけ透明なビットマップに描き、
+    /// CIFilter の連なりをかけ(`EffectPipeline`)、クリップごとのぼかしがあればその後にかけて、不透明度で重ねる。
+    func drawEffectedClip(_ c: Clip, pose: ClipPose, effects fx: [ResolvedEffect], t: Double, ctx: CGContext, W: Double, H: Double) {
+        let canvas = CGRect(x: 0, y: 0, width: W, height: H)
+        let resScale = (W * H / (1920.0 * 1080.0)).squareRoot()
+        let blurSigma = min(300, pose.blur)
+        let bounds = contentBounds(c, pose: pose, t: t) ?? canvas
+        let margin = EffectPipeline.margin(of: fx, scale: resScale) + 3 * blurSigma
+        let work = bounds.insetBy(dx: -margin, dy: -margin).integral.intersection(canvas)
+        guard !work.isNull, work.width >= 1, work.height >= 1 else { return }
+        let ww = Int(work.width), wh = Int(work.height)
+        guard let off = Renderer.makeContext(width: ww, height: wh) else { return }
+        off.translateBy(x: 0, y: CGFloat(wh))
+        off.scaleBy(x: 1, y: -1)
+        off.translateBy(x: CGFloat(-work.minX), y: CGFloat(-work.minY))
+        drawClipContent(c, pose: pose, t: t, ctx: off, W: W, H: H)
+        guard let snap = off.makeImage() else { return }
+        // 枠を作業範囲の座標(左下原点)へ
+        let localBounds = CGRect(x: bounds.minX - work.minX, y: Double(wh) - (bounds.minY - work.minY) - bounds.height, width: bounds.width, height: bounds.height)
+        let rect = CGRect(x: 0, y: 0, width: ww, height: wh)
+        var ci = EffectPipeline.apply(CIImage(cgImage: snap), effects: fx, bounds: localBounds, scale: resScale)
+        if blurSigma > 0 { ci = ci.applyingGaussianBlur(sigma: blurSigma) }
+        guard let out = EffectPipeline.makeImage(ci, from: rect) else { return }
+        ctx.saveGState()
+        ctx.setAlpha(CGFloat(pose.opacity))
+        drawCG(ctx, out, work)
+        ctx.restoreGState()
     }
 
     /// クリップごとのぼかし: 透明なビットマップに描いてぼかし、不透明度をかけて合成する。

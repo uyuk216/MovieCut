@@ -267,13 +267,15 @@ public struct Clip: Codable, Equatable, Identifiable {
     /// 映像のトランジション(画像・動画・文字)。頭(in)と終わり(out)。無いときはファイルに書かない。
     public var transitionIn: Transition? = nil
     public var transitionOut: Transition? = nil
+    /// 映像のエフェクト(画像・動画・文字)。リストの順にかかる。無いときはファイルに書かない。
+    public var effects: [Effect] = []
     /// 音声のフェード(音声・ボイス・動画)。秒。未設定 = なし。`fadeCurve` は "linear"(既定)/ "equalPower"。
     public var fadeIn: Double? = nil
     public var fadeOut: Double? = nil
     public var fadeCurve: String? = nil
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["id", "type", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "fadeIn", "fadeOut", "fadeCurve"]
+    static let knownKeys: Set<String> = ["id", "type", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve"]
 
     public init() {}
 
@@ -319,7 +321,9 @@ public struct Clip: Codable, Equatable, Identifiable {
         case "w": return wOrDefault
         case "h": return hOrDefault
         case "strength": return strengthOrDefault
-        default: return 0
+        default:
+            if let (i, p) = EffectKey.parse(key), effects.indices.contains(i) { return effects[i].value(p) }
+            return 0
         }
     }
 
@@ -335,7 +339,8 @@ public struct Clip: Codable, Equatable, Identifiable {
         case "w": w = v
         case "h": h = v
         case "strength": strength = v
-        default: break
+        default:
+            if let (i, p) = EffectKey.parse(key), effects.indices.contains(i) { effects[i].params[p] = v }
         }
     }
 
@@ -368,6 +373,10 @@ public struct Clip: Codable, Equatable, Identifiable {
             if let raw: JSONValue = l.value(key) {
                 if let tr: Transition = l.value(key) { self[keyPath: set] = tr } else { extra[key] = raw }
             }
+        }
+        // 読めなかったエフェクトの列も捨てずに、そのまま書き戻す
+        if let raw: JSONValue = l.value("effects") {
+            if let fx: [Effect] = l.value("effects") { effects = fx } else { extra["effects"] = raw }
         }
         // 読めなかったキーフレームは捨てずに、そのまま書き戻す(extra に回す)
         if let raw: JSONValue = l.value("keyframes") {
@@ -414,6 +423,7 @@ public struct Clip: Codable, Equatable, Identifiable {
         if !ks.isEmpty { try c.encode(ks, forKey: AnyKey("keyframes")) }
         try c.encodeIfPresent(transitionIn, forKey: AnyKey("transitionIn"))
         try c.encodeIfPresent(transitionOut, forKey: AnyKey("transitionOut"))
+        if !effects.isEmpty { try c.encode(effects, forKey: AnyKey("effects")) }
         try c.encodeIfPresent(fadeIn, forKey: AnyKey("fadeIn"))
         try c.encodeIfPresent(fadeOut, forKey: AnyKey("fadeOut"))
         try c.encodeIfPresent(fadeCurve, forKey: AnyKey("fadeCurve"))

@@ -79,6 +79,14 @@ struct AppCommands: Commands {
                     items(AppMenuSpec.transitionActions(s), run)
                 }
                 items(AppMenuSpec.transitionQuick(s), run)
+                Divider()
+                Menu("エフェクト") {
+                    items(AppMenuSpec.effectKindItems(s), run)
+                    Divider()
+                    Menu("プリセット") { items(AppMenuSpec.effectPresetItems(s), run) }
+                    Divider()
+                    items(AppMenuSpec.effectActions(s), run)
+                }
             }
         }
 

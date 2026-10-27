@@ -93,6 +93,7 @@ extension ProjectModel {
 
     static func undoName(forKey key: String) -> String {
         if let f = clipField(forKey: key) { return f.undoName }
+        if EffectKey.parse(key) != nil { return "エフェクトの変更" }
         return key == "rotation" ? "回転の変更" : "値の変更"
     }
 

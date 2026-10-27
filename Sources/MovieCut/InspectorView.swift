@@ -410,6 +410,7 @@ struct ClipInspector: View {
                 if c.type == .voice { voiceSections(c) }
                 if c.type == .text { textSections(c) }
                 if [ClipType.image, .video, .text].contains(c.type) { placeSections(c) }
+                if EffectEditing.supports(c.type) { effectSections(c) }
                 if TransitionEditing.supportsVideo(c.type) { transitionSections(c) }
                 if c.type == .blur { blurSections(c) }
                 if c.type == .video || c.type == .audio {
@@ -442,6 +443,92 @@ struct ClipInspector: View {
         InspectorSection(title: "音声")
         slider("音量", .volume, step: 0.05, format: Self.pct)
         audioFadeFields(c)
+    }
+
+    // MARK: エフェクト
+
+    private static func effectFormat(_ s: EffectParamSpec) -> (Double) -> String {
+        switch s.unit {
+        case .percent: return { "\(Int(($0 * 100).rounded()))%" }
+        case .px: return { "\(Int($0.rounded()))px" }
+        case .degrees: return { "\(Int($0.rounded()))°" }
+        case .plain: return { s.step >= 1 ? "\(Int($0.rounded()))" : String(format: "%.2f", $0) }
+        }
+    }
+
+    private func effectSlider(_ c: Clip, _ i: Int, _ s: EffectParamSpec) -> some View {
+        let key = EffectKey.make(i, s.key)
+        return LiveSlider(label: s.label, key: keyControl(key), value: model.animatedValue(key, of: c), range: s.range, step: s.step, format: Self.effectFormat(s),
+                          begin: { model.beginGesture() },
+                          change: { model.liveKeyed(key, $0, clipId: clipId) },
+                          end: { model.commitGesture("エフェクトの変更") })
+    }
+
+    private func iconButton(_ symbol: String, help: String, enabled: Bool = true, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol).font(.system(size: 11, weight: .semibold)).frame(width: 22, height: 22).contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(enabled ? Color.primary : Color.secondary.opacity(0.5))
+        .disabled(!enabled || model.isLocked)
+        .help(help)
+        .accessibilityLabel(help)
+    }
+
+    @ViewBuilder private func effectCard(_ c: Clip, _ i: Int) -> some View {
+        let e = c.effects[i]
+        let kind = e.known
+        let canReset: Bool = { var p = c; return EffectEditing.reset(&p, at: i) }()
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 2) {
+                Toggle("", isOn: Binding(get: { e.enabled }, set: { model.setEffectEnabled($0, at: i, clipId: clipId) }))
+                    .toggleStyle(.checkbox).labelsHidden().help("オン/オフ")
+                Text(kind?.label ?? "未対応: \(e.kind)")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(kind == nil || !e.enabled ? Color.secondary : Color.primary)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                iconButton("arrow.counterclockwise", help: "初期値に戻す", enabled: canReset) { model.resetEffect(at: i, clipId: clipId) }
+                iconButton("chevron.up", help: "上へ（先にかかる）", enabled: i > 0) { model.moveEffect(at: i, by: -1, clipId: clipId) }
+                iconButton("chevron.down", help: "下へ（後にかかる）", enabled: i < c.effects.count - 1) { model.moveEffect(at: i, by: 1, clipId: clipId) }
+                iconButton("xmark", help: "このエフェクトを外す") { model.removeEffect(at: i, clipId: clipId) }
+            }
+            if let kind {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(kind.params, id: \.key) { effectSlider(c, i, $0) }
+                    if kind.defaultColor != nil {
+                        ColorField(label: "色", hex: e.colorOrDefault) { model.coalescedEffectColor($0, at: i, clipId: clipId) }
+                    }
+                }
+                .opacity(e.enabled ? 1 : 0.45)
+            }
+        }
+        .padding(8)
+        .background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.06)))
+    }
+
+    @ViewBuilder private func effectSections(_ c: Clip) -> some View {
+        InspectorSection(title: "エフェクト")
+        if c.effects.isEmpty {
+            Text("エフェクトはありません").font(.system(size: 12)).foregroundStyle(.secondary)
+        }
+        ForEach(0..<c.effects.count, id: \.self) { effectCard(c, $0) }
+        HStack(spacing: 8) {
+            Menu {
+                ForEach(EffectKind.allCases, id: \.rawValue) { k in Button(k.label) { model.addEffect(k, clipId: clipId) } }
+            } label: { Text("＋ 追加") }
+                .menuStyle(.button)
+                .fixedSize()
+                .disabled(model.isLocked)
+            Menu {
+                ForEach(EffectPreset.allCases, id: \.rawValue) { p in Button(p.title) { model.applyEffectPreset(p) } }
+            } label: { Text("プリセット") }
+                .menuStyle(.button)
+                .fixedSize()
+                .disabled(model.isLocked)
+            Spacer()
+        }
+        .controlSize(.small)
     }
 
     // MARK: トランジションと音声フェード
