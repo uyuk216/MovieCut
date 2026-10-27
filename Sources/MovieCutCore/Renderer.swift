@@ -221,6 +221,14 @@ public struct Renderer {
 
     // MARK: クリップ本体
 
+    /// 動画クリップの、時刻 t(プロジェクトの時刻)に出すコマ。速度・逆再生・フリーズは `ClipTiming` で素材の時刻に直す
+    /// (速度 1・順再生は従来と同じ `t − start + offset`)。
+    func videoFrame(_ c: Clip, src: String, at t: Double) -> CGImage? {
+        let remap = c.hasTimeRemap
+        let st = remap ? ClipTiming.frameSourceTime(of: c, atClipTime: t - c.start, fps: project.fps) : t - c.start + c.offset
+        return assets.videoFrame(path: src, time: st, reverse: c.effectiveReverse, exact: remap)
+    }
+
     /// 上下反転した ctx(左上原点)に CGImage を rect へ描く。
     func drawCG(_ ctx: CGContext, _ img: CGImage, _ rect: CGRect) {
         ctx.saveGState()
@@ -237,7 +245,7 @@ public struct Renderer {
         case .image, .video:
             var img: CGImage?
             if let src = c.src {
-                img = c.type == .image ? assets.image(at: src) : assets.videoFrame(path: src, time: t - c.start + c.offset)
+                img = c.type == .image ? assets.image(at: src) : videoFrame(c, src: src, at: t)
             }
             guard var im = img, im.width > 0, im.height > 0 else { return }
             let w0 = Double(im.width), h0 = Double(im.height)
@@ -305,7 +313,7 @@ public struct Renderer {
             guard let src = c.src else { return nil }
             let size: CGSize?
             if c.type == .image { size = assets.image(at: src).map { CGSize(width: $0.width, height: $0.height) } }
-            else { size = assets.knownVideoSize(path: src) ?? assets.videoFrame(path: src, time: t - c.start + c.offset).map { CGSize(width: $0.width, height: $0.height) } }
+            else { size = assets.knownVideoSize(path: src) ?? videoFrame(c, src: src, at: t).map { CGSize(width: $0.width, height: $0.height) } }
             guard let s = size, s.width > 0, s.height > 0 else { return nil }
             let fit = min(W / s.width, H / s.height) * pose.scale
             let crop = c.cropOrDefault

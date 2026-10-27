@@ -611,8 +611,22 @@ final class TimelineCanvas: NSView {
                 }
             }
         }
+        // 速度・逆再生・静止の印(右上の小さな札)。狭いクリップには出さない
+        var labelRight = r.maxX - 4
+        if let badge = ClipTiming.badge(for: c), r.width >= 52 {
+            let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 10, weight: .bold), .foregroundColor: NSColor.white]
+            let size = (badge as NSString).size(withAttributes: attrs)
+            let box = NSRect(x: r.maxX - size.width - 12, y: r.minY + 4, width: size.width + 8, height: 15)
+            ctx.saveGState()
+            ctx.clip(to: r.insetBy(dx: 1, dy: 1))
+            NSColor(white: 0, alpha: 0.55).setFill()
+            NSBezierPath(roundedRect: box, xRadius: 7, yRadius: 7).fill()
+            (badge as NSString).draw(at: NSPoint(x: box.minX + 4, y: box.minY + (box.height - size.height) / 2), withAttributes: attrs)
+            ctx.restoreGState()
+            labelRight = box.minX - 3
+        }
         // ラベル
-        let labelRect = NSRect(x: textLeft, y: r.minY + 4, width: r.maxX - textLeft - 4, height: 15)
+        let labelRect = NSRect(x: textLeft, y: r.minY + 4, width: labelRight - textLeft, height: 15)
         if labelRect.width > 10 {
             ctx.saveGState()
             ctx.clip(to: r.insetBy(dx: 1, dy: 1))

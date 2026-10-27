@@ -80,6 +80,13 @@ struct AppCommands: Commands {
                 }
                 items(AppMenuSpec.transitionQuick(s), run)
                 Divider()
+                Menu("速度") {
+                    items(AppMenuSpec.speedItems(s), run)
+                    Divider()
+                    MenuItemView(spec: AppMenuSpec.freezeFrameItem(s), perform: run)
+                }
+                MenuItemView(spec: AppMenuSpec.freezeFrameItem(s), perform: run)
+                Divider()
                 Menu("エフェクト") {
                     items(AppMenuSpec.effectKindItems(s), run)
                     Divider()

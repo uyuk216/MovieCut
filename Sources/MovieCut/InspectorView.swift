@@ -413,7 +413,8 @@ struct ClipInspector: View {
                 if EffectEditing.supports(c.type) { effectSections(c) }
                 if TransitionEditing.supportsVideo(c.type) { transitionSections(c) }
                 if c.type == .blur { blurSections(c) }
-                if c.type == .video || c.type == .audio {
+                if Clip.supportsSpeed(c.type) { speedSections(c) }
+                if (c.type == .video || c.type == .audio) && !c.isFreeze {
                     InspectorSection(title: "音声")
                     slider("音量", .volume, step: 0.05, format: Self.pct)
                     audioFadeFields(c)
@@ -443,6 +444,50 @@ struct ClipInspector: View {
         InspectorSection(title: "音声")
         slider("音量", .volume, step: 0.05, format: Self.pct)
         audioFadeFields(c)
+    }
+
+    // MARK: 速度
+
+    /// 速度の Picker の選択肢の値(0 = プリセット以外)。
+    private static func speedPresetTag(_ v: Double) -> Double { ClipTiming.presets.first { abs($0 - v) < 1e-9 } ?? 0 }
+
+    @ViewBuilder private func speedSections(_ c: Clip) -> some View {
+        InspectorSection(title: c.isFreeze ? "フリーズフレーム" : "速度")
+        if c.isFreeze {
+            Text("素材の \(String(format: "%.3f", c.offset)) 秒のコマを止めています。長さは「長さ（秒）」で変えられます。")
+                .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        } else {
+            let sp = c.effectiveSpeed
+            InspectorField(label: "速度（倍）") {
+                HStack(spacing: 6) {
+                    Picker("", selection: Binding(get: { Self.speedPresetTag(sp) }, set: { v in if v > 0 { model.setSpeed(v, clipId: clipId) } })) {
+                        ForEach(ClipTiming.presets, id: \.self) { Text("×" + ClipTiming.formatSpeed($0)).tag($0) }
+                        if Self.speedPresetTag(sp) == 0 { Text("その他").tag(0.0) }
+                    }
+                    .labelsHidden()
+                    .frame(width: 84)
+                    NumField(value: sp, step: 0.05, decimals: 2,
+                             clamp: { ClipTiming.clampSpeed($0) },
+                             onCommit: { model.setSpeed($0, clipId: clipId) },
+                             onStep: { model.coalescedSpeed($0, clipId: clipId) })
+                }
+            }
+            LiveSlider(label: "つまみで調整", value: sp, range: ClipTiming.minSpeed...ClipTiming.maxSpeed, step: 0.05, format: { "×" + ClipTiming.formatSpeed($0) },
+                       begin: { model.beginGesture() },
+                       change: { model.liveSpeed($0, clipId: clipId) },
+                       end: { model.commitGesture(ProjectModel.speedUndoName) })
+            Toggle("逆再生", isOn: Binding(get: { c.effectiveReverse }, set: { model.setReverse($0, clipId: clipId) }))
+                .toggleStyle(.checkbox)
+            Toggle("音程を保つ", isOn: Binding(get: { c.keepPitchOrDefault }, set: { model.setKeepPitch($0, clipId: clipId) }))
+                .toggleStyle(.checkbox)
+                .disabled(sp == 1)
+                .help("オフにすると、速くしたぶん音が高く、遅くしたぶん低くなります")
+            HStack(spacing: 6) {
+                Text("元の長さ → 新しい長さ").font(.system(size: 12)).foregroundStyle(.secondary)
+                Spacer(minLength: 4)
+                Text(ClipTiming.lengthReadout(for: c)).font(.system(size: 12).monospacedDigit())
+            }
+        }
     }
 
     // MARK: エフェクト

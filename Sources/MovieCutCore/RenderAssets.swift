@@ -15,6 +15,7 @@ public final class RenderAssets {
     private var missingVideos: Set<String> = []
     private var exportMode = false
     private var sequentials: [String: SequentialVideoFrames] = [:]
+    private var reversers: [String: ReverseVideoFrames] = [:]
     private var videoSizes: [String: CGSize] = [:]
 
     public init() {}
@@ -78,14 +79,20 @@ public final class RenderAssets {
         lock.lock()
         exportMode = false
         let seqs = sequentials
+        let revs = reversers
         sequentials = [:]
+        reversers = [:]
         lock.unlock()
         seqs.values.forEach { $0.close() }
+        revs.values.forEach { $0.close() }
     }
 
     /// 動画の time 秒のフレーム。通常はパスごとに generator、書き出しモードでは順次読み。
-    public func videoFrame(path: String, time: Double) -> CGImage? {
-        let img = videoFrameUncounted(path: path, time: time)
+    /// - `reverse`: 逆再生のクリップ。書き出しモードでは、後ろから読んだ区間をメモリの束に置いて返す(`ReverseVideoFrames`)。
+    /// - `exact`: 速度が変わる・逆再生・フリーズのクリップ。generator の許容幅を 0 にして「その時刻に出ているコマ」を返す
+    ///   (書き出しの順次読みと同じコマになる)。速度 1 の順再生は従来どおり(許容幅 1/120 秒)。
+    public func videoFrame(path: String, time: Double, reverse: Bool = false, exact: Bool = false) -> CGImage? {
+        let img = videoFrameUncounted(path: path, time: time, reverse: reverse, exact: exact)
         if let img {
             lock.lock()
             if videoSizes[path] == nil { videoSizes[path] = CGSize(width: img.width, height: img.height) }
@@ -100,38 +107,49 @@ public final class RenderAssets {
         return videoSizes[path]
     }
 
-    private func videoFrameUncounted(path: String, time: Double) -> CGImage? {
+    private func videoFrameUncounted(path: String, time: Double, reverse: Bool, exact: Bool) -> CGImage? {
         lock.lock()
+        if exportMode, reverse, !missingVideos.contains(path) {
+            var rev = reversers[path]
+            if rev == nil {
+                rev = ReverseVideoFrames(url: URL(fileURLWithPath: path)) { [unowned self] t in self.generatorFrame(path: path, time: t, exact: true) }
+                reversers[path] = rev
+            }
+            lock.unlock()
+            return rev?.frame(at: time)
+        }
         if exportMode, !missingVideos.contains(path) {
             var seq = sequentials[path]
             if seq == nil {
-                seq = SequentialVideoFrames(url: URL(fileURLWithPath: path)) { [unowned self] t in self.generatorFrame(path: path, time: t) }
+                seq = SequentialVideoFrames(url: URL(fileURLWithPath: path)) { [unowned self] t in self.generatorFrame(path: path, time: t, exact: exact) }
                 sequentials[path] = seq
             }
             lock.unlock()
             return seq?.frame(at: time)
         }
         lock.unlock()
-        return generatorFrame(path: path, time: time)
+        return generatorFrame(path: path, time: time, exact: exact || reverse)
     }
 
     /// AVAssetImageGenerator で任意時刻のフレームを取る(正確・低速)。
-    func generatorFrame(path: String, time: Double) -> CGImage? {
+    func generatorFrame(path: String, time: Double, exact: Bool = false) -> CGImage? {
         lock.lock()
         if missingVideos.contains(path) { lock.unlock(); return nil }
-        var gen = generators[path]
+        let key = exact ? path + "\u{0}exact" : path
+        var gen = generators[key]
         if gen == nil {
             let g = AVAssetImageGenerator(asset: AVURLAsset(url: URL(fileURLWithPath: path)))
             g.appliesPreferredTrackTransform = true
-            let tol = CMTime(value: 1, timescale: 120)
+            let tol = exact ? CMTime.zero : CMTime(value: 1, timescale: 120)
             g.requestedTimeToleranceBefore = tol
             g.requestedTimeToleranceAfter = tol
-            generators[path] = g
+            generators[key] = g
             gen = g
         }
         lock.unlock()
         guard let g = gen else { return nil }
-        let t = CMTime(seconds: max(0, time), preferredTimescale: 600)
+        // exact は「その時刻に出ているコマ」。計算の誤差で 1 コマ手前にならないよう 1 ms 足す(順次読みの許容と同じ)
+        let t = CMTime(seconds: max(0, time + (exact ? 0.001 : 0)), preferredTimescale: 600)
         if let img = try? g.copyCGImage(at: t, actualTime: nil) { return img }
         lock.lock(); missingVideos.insert(path); lock.unlock()
         return nil

@@ -62,6 +62,9 @@ public enum ClipEditing {
         type == .video || type == .audio || type == .voice
     }
 
+    /// トリム・分割で offset を動かす(素材の時間が流れる)クリップか。フリーズ(1コマで止まる)は動かさない。
+    static func movesSource(_ clip: Clip) -> Bool { hasSourceTimeline(clip.type) && !clip.isFreeze }
+
     /// 本体のドラッグ: 頭と終わりの両方を吸着させる(startDrag と同じ: 頭を吸着 → 終わりを吸着したら終わりに合わせて戻す)。
     /// `targetTrackIndex` が別のレイヤーなら、そこへ移す(元のレイヤーから外して、行き先の末尾に足す)。nil / 範囲外 / 同じなら動かさない。
     public static func move(in project: Project, clipId: String, deltaT: Double, targetTrackIndex: Int?, playhead: Double, pps: Double, snapEnabled: Bool) -> Result {
@@ -90,7 +93,8 @@ public enum ClipEditing {
         return Result(project: p, guides: dedup(guides))
     }
 
-    /// 右端のトリム: duration = max(0.05, 吸着した終わり − 頭)。素材の時間軸があるクリップは (srcDuration − offset) も超えない。
+    /// 右端のトリム: duration = max(0.05, 吸着した終わり − 頭)。素材の時間軸があるクリップは (srcDuration − offset) ÷ 速度 も超えない。
+    /// 逆再生は右端が素材の頭側なので、縮めると offset が進み、延ばすと offset が戻る(0 まで)。
     public static func trimRight(in project: Project, clipId: String, deltaT: Double, playhead: Double, pps: Double, snapEnabled: Bool) -> Result {
         guard let loc = locate(clipId, in: project) else { return Result(project: project, guides: []) }
         var p = project
@@ -99,8 +103,16 @@ public enum ClipEditing {
         let sp = snapPoint(raw, excluding: clipId, project: project, playhead: playhead, pps: pps, enabled: snapEnabled)
         let ne = sp ?? raw
         var d = max(minDuration, ne - clip.start)
-        if hasSourceTimeline(clip.type), let src = clip.srcDuration {
-            d = max(minDuration, min(d, src - clip.offset))
+        if movesSource(clip) {
+            let rate = clip.effectiveSpeed
+            if clip.effectiveReverse {
+                // 逆再生は右端が素材の頭側(offset)。素材の頭より前へは延ばせない。縮めた分は offset が進む(見えているコマは動かない)
+                let dur0 = clip.duration
+                d = max(minDuration, min(d, dur0 + clip.offset / rate))
+                clip.offset = max(0, clip.offset - (d - dur0) * rate)
+            } else if let src = clip.srcDuration {
+                d = max(minDuration, min(d, (src - clip.offset) / rate))
+            }
         }
         clip.duration = d
         p.tracks[loc.track].clips[loc.index] = clip
@@ -110,7 +122,7 @@ public enum ClipEditing {
     }
 
     /// 左端のトリム: 新しい頭 = clamp(吸着(頭 + dt), 0, 終わり − 0.05)。d = 新しい頭 − 頭。duration −= d。
-    /// 素材の時間軸があるクリップ(video / audio / voice)だけ offset += d とし、素材の頭より左へは広げない(d ≥ −offset)。
+    /// 素材の時間軸があるクリップ(video / audio / voice)だけ offset += d × 速度 とし、素材の頭より左へは広げない(d ≥ −offset ÷ 速度)。逆再生は offset を動かさない。
     /// 画像・文字・ぼかしは offset に触らない(Electron 版は全種類に足していたが、意味がないので変えた)。
     public static func trimLeft(in project: Project, clipId: String, deltaT: Double, playhead: Double, pps: Double, snapEnabled: Bool) -> Result {
         guard let loc = locate(clipId, in: project) else { return Result(project: project, guides: []) }
@@ -124,13 +136,20 @@ public enum ClipEditing {
         let sp = snapPoint(raw, excluding: clipId, project: project, playhead: playhead, pps: pps, enabled: snapEnabled)
         let ns = min(max(0, sp ?? raw), maxStart)
         var d = ns - start0
-        let timed = hasSourceTimeline(clip.type)
-        if timed { d = max(d, -clip.offset) }
+        let moves = movesSource(clip)
+        let rate = clip.effectiveSpeed
+        let rev = clip.effectiveReverse
+        if moves && !rev { d = max(d, -clip.offset / rate) }
+        else if moves && rev, let src = clip.srcDuration {
+            // 逆再生は左端が素材の終わり側。素材の終わりを越えて延ばせない
+            d = max(d, -max(0, src - clip.offset - dur0 * rate) / rate)
+        }
         d = max(d, -start0)
         d = min(d, dur0 - minD)
         clip.start = start0 + d
         clip.duration = dur0 - d
-        if timed { clip.offset = clip.offset + d }
+        // 順再生は頭の側(offset)が進む。逆再生の頭は素材の終わりなので、offset は動かない
+        if moves && !rev { clip.offset = clip.offset + d * rate }
         // キーフレームは絵に付いたまま(頭が d 進んだら、頭からの時刻は −d)
         if clip.hasKeyframes { clip.keyframes = Animation.shifted(clip.keyframes, by: -d) }
         p.tracks[loc.track].clips[loc.index] = clip
@@ -158,7 +177,15 @@ public enum ClipEditing {
         right.id = newId()
         right.start = t
         right.duration = end - t
-        if hasSourceTimeline(clip.type) { right.offset = clip.offset + cut }
+        if movesSource(clip) {
+            let sp = clip.effectiveSpeed
+            if clip.effectiveReverse {
+                // 逆再生は、左の断片が素材の終わり側。右の断片の offset は元のまま
+                left.offset = clip.offset + (clip.duration - cut) * sp
+            } else {
+                right.offset = clip.offset + cut * sp
+            }
+        }
         // トランジション・音声フェード: 頭の効果は左、終わりの効果は右(切れ目に新しい効果は付けない)
         left.transitionOut = nil; left.fadeOut = nil
         right.transitionIn = nil; right.fadeIn = nil

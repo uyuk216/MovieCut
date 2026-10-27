@@ -273,9 +273,17 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var fadeIn: Double? = nil
     public var fadeOut: Double? = nil
     public var fadeCurve: String? = nil
+    /// 速度(動画・音声)。0.25〜4、未設定 = 1(等倍)。タイムラインの長さ `duration` はそのままで、使う素材の長さ = duration × speed。
+    public var speed: Double? = nil
+    /// 逆再生(動画・音声)。未設定 = しない。
+    public var reverse: Bool? = nil
+    /// 速度を変えたときに音程を保つか(動画・音声)。未設定 = 保つ。false は再生速度どおりに音程も変わる。
+    public var keepPitch: Bool? = nil
+    /// フリーズフレーム(動画だけ)。素材の `offset` の1コマを止めて出す静止画のクリップ。音は無音。未設定 = しない。
+    public var freeze: Bool? = nil
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["id", "type", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve"]
+    static let knownKeys: Set<String> = ["id", "type", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze"]
 
     public init() {}
 
@@ -367,7 +375,14 @@ public struct Clip: Codable, Equatable, Identifiable {
         rotation = l.double("rotation"); flipH = l.bool("flipH"); flipV = l.bool("flipV")
         crop = l.value("crop")
         fadeIn = l.double("fadeIn"); fadeOut = l.double("fadeOut"); fadeCurve = l.string("fadeCurve")
+        speed = l.double("speed"); reverse = l.bool("reverse"); keepPitch = l.bool("keepPitch"); freeze = l.bool("freeze")
         extra = l.extra()
+        // 速度まわりの項目が読めない型だったら、捨てずにそのまま書き戻す
+        for key in ["speed", "reverse", "keepPitch", "freeze"] {
+            guard let raw: JSONValue = l.value(key) else { continue }
+            let typedOK: Bool = key == "speed" ? speed != nil : (key == "reverse" ? reverse != nil : (key == "keepPitch" ? keepPitch != nil : freeze != nil))
+            if !typedOK { extra[key] = raw }
+        }
         // 読めなかったトランジションも捨てずに、そのまま書き戻す
         for (key, set) in [("transitionIn", \Clip.transitionIn), ("transitionOut", \Clip.transitionOut)] as [(String, WritableKeyPath<Clip, Transition?>)] {
             if let raw: JSONValue = l.value(key) {
@@ -427,6 +442,10 @@ public struct Clip: Codable, Equatable, Identifiable {
         try c.encodeIfPresent(fadeIn, forKey: AnyKey("fadeIn"))
         try c.encodeIfPresent(fadeOut, forKey: AnyKey("fadeOut"))
         try c.encodeIfPresent(fadeCurve, forKey: AnyKey("fadeCurve"))
+        try c.encodeIfPresent(speed, forKey: AnyKey("speed"))
+        try c.encodeIfPresent(reverse, forKey: AnyKey("reverse"))
+        try c.encodeIfPresent(keepPitch, forKey: AnyKey("keepPitch"))
+        try c.encodeIfPresent(freeze, forKey: AnyKey("freeze"))
     }
 }
 

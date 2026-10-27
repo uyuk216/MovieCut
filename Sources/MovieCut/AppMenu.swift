@@ -18,6 +18,8 @@ enum MenuCommand: Hashable {
     case transitionIn(TransitionKind?), transitionOut(TransitionKind?), fadeBoth, clearTransitions, crossfade, fadeInOut
     // エフェクト
     case effectAdd(EffectKind), effectPreset(EffectPreset), effectClear, effectCopy, effectPaste
+    // 速度・逆再生・フリーズフレーム
+    case speed(Double), toggleReverse, freezeFrame
     case zoomIn, zoomOut, zoomFit
     case resolution(String), swapResolution, fps(Double), fpsCustom, codec(String), background(String)
     case toggleSecondScreen, fullScreen, toggleStatusItem
@@ -128,6 +130,11 @@ struct MenuState: Equatable {
     var canEffect = false            // 映像のクリップ(画像・動画・文字)を選んでいる
     var hasEffects = false           // 選択クリップにエフェクトが 1 つでもある
     var canPasteEffects = false      // コピーしたエフェクトがある
+    // 速度
+    var canSpeed = false             // 動画か音声のクリップ(フリーズ以外)を選んでいる
+    var speedValue = 1.0             // 選択クリップの速度
+    var isReversed = false
+    var canFreezeFrame = false       // 動画クリップを選び、再生位置がその中
     /// メニューバーのアイコンを出す設定(「表示」メニューの切り替え)。
     var statusItemShown = true
 
@@ -180,6 +187,10 @@ struct MenuState: Equatable {
             transitionOutKind = c.transitionOut?.kind
             canEffect = EffectEditing.supports(c.type)
             hasEffects = !c.effects.isEmpty
+            canSpeed = SpeedEditing.supports(c)
+            speedValue = c.effectiveSpeed
+            isReversed = c.effectiveReverse
+            canFreezeFrame = SpeedEditing.canFreeze(c, at: t)
         }
         canPasteEffects = !m.effectClipboard.isEmpty
         hasPrevClip = ClipEditing.hasAdjacentClip(in: p, from: m.selectedClipId, forward: false, playhead: t)
@@ -406,6 +417,19 @@ enum AppMenuSpec {
          MenuItemSpec(command: .effectPaste, title: "エフェクトの貼り付け", shortcut: nil, enabled: s.canEdit && s.canEffect && s.canPasteEffects, checked: nil)]
     }
 
+    // MARK: 速度(クリップメニューのサブメニュー。ショートカットは付けない)
+
+    static let speedChoices: [(value: Double, title: String)] = [(0.25, "0.25倍"), (0.5, "0.5倍"), (1, "通常（1倍）"), (2, "2倍"), (4, "4倍")]
+
+    static func speedItems(_ s: MenuState) -> [MenuItemSpec] {
+        speedChoices.map { MenuItemSpec(command: .speed($0.value), title: $0.title, shortcut: nil, enabled: s.canEdit && s.canSpeed, checked: s.canSpeed ? abs(s.speedValue - $0.value) < 1e-9 : nil) }
+        + [MenuItemSpec(command: .toggleReverse, title: "逆再生にする", shortcut: nil, enabled: s.canEdit && s.canSpeed, checked: s.canSpeed ? s.isReversed : nil)]
+    }
+
+    static func freezeFrameItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .freezeFrame, title: "フリーズフレーム（静止画にする）", shortcut: nil, enabled: s.canEdit && s.canFreezeFrame, checked: nil)
+    }
+
     static func zoom(_ s: MenuState) -> [MenuItemSpec] {
         [MenuItemSpec(command: .zoomIn, title: "タイムラインを拡大", shortcut: cmd("+"), enabled: s.canEdit, checked: nil),
          MenuItemSpec(command: .zoomOut, title: "タイムラインを縮小", shortcut: cmd("-"), enabled: s.canEdit, checked: nil),
@@ -472,7 +496,7 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, settings(s), videoSettings(s)] + file(s) + [exportCurrent(s)] + exportPresets(s) + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + editAdd(s) + playback(s)
+        [about, settings(s), videoSettings(s)] + file(s) + [exportCurrent(s)] + exportPresets(s) + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + speedItems(s) + [freezeFrameItem(s)] + editAdd(s) + playback(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + [secondScreen(s), statusItemToggle(s), fullScreen(s)] + help.flatMap { $0 }
@@ -542,6 +566,9 @@ enum AppMenu {
             case .effectClear: m.clearEffectsSelected()
             case .effectCopy: m.copyEffectsSelected()
             case .effectPaste: m.pasteEffectsSelected()
+            case .speed(let v): m.setSpeedSelected(v)
+            case .toggleReverse: m.toggleReverseSelected()
+            case .freezeFrame: m.freezeFrameSelected()
             case .delete: m.deleteSelected()
             case .addText: m.addTextClip()
             case .addBlur: m.addBlurClip()

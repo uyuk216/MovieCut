@@ -54,17 +54,23 @@ extension ClipEditing {
         let cut = t - c.start
         c.duration -= cut
         c.start = t
-        if hasSourceTimeline(c.type) { c.offset += cut }
+        // 順再生は offset が進む。逆再生は頭が素材の終わりなので offset はそのまま(長さだけ縮む)
+        if movesSource(c) && !c.effectiveReverse { c.offset += cut * c.effectiveSpeed }
         if c.hasKeyframes { c.keyframes = Animation.shifted(c.keyframes, by: -cut) }
         p.tracks[loc.track].clips[loc.index] = c
         return p
     }
 
-    /// `t` より後ろを切り落とす: 長さを (t − 頭) に。頭と offset はそのまま。
+    /// `t` より後ろを切り落とす: 長さを (t − 頭) に。頭と offset はそのまま(逆再生は終わりが素材の頭側なので offset が進む)。
     public static func trimAfter(in project: Project, clipId: String, at t: Double) -> Project? {
         guard let loc = locate(clipId, in: project), canTrim(project.tracks[loc.track].clips[loc.index], at: t) else { return nil }
         var p = project
-        p.tracks[loc.track].clips[loc.index].duration = t - p.tracks[loc.track].clips[loc.index].start
+        var c = p.tracks[loc.track].clips[loc.index]
+        let oldDuration = c.duration
+        c.duration = t - c.start
+        // 逆再生は終わりが素材の頭側(offset)なので、切った分だけ offset が進む
+        if movesSource(c) && c.effectiveReverse { c.offset += (oldDuration - c.duration) * c.effectiveSpeed }
+        p.tracks[loc.track].clips[loc.index] = c
         return p
     }
 

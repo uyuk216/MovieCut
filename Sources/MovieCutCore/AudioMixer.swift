@@ -202,6 +202,8 @@ public enum AudioMixer {
         var startFrame: Int
         var endFrame: Int
         var offset: Double
+        /// 速度・逆再生のかかったクリップ(音声を一時ファイルに作ってから読む。`offset` はその一時ファイルの中の位置)
+        var remapped = false
         var gain: Float
         /// フェード(クリップ本来の頭からのサンプル数)。`fadeStart` は負の開始を切る前の頭、`length` はクリップ全体の長さ。
         var fadeStart = 0
@@ -219,14 +221,16 @@ public enum AudioMixer {
         var items: [Item] = []
         for tr in project.tracks where !tr.isMuted {
             for c in tr.clips where c.type == .audio || c.type == .voice || c.type == .video {
-                guard let s = c.src, !s.isEmpty, c.duration > 0 else { continue }
+                guard let s = c.src, !s.isEmpty, c.duration > 0, !c.isFreeze else { continue }   // フリーズフレームは無音
                 var sf = Int((c.start * sr).rounded())
                 let fullStart = sf, fullLength = Int((c.duration * sr).rounded())
                 let ef = min(total, sf + fullLength)
-                var off = c.offset
+                let remap = c.hasAudioRemap
+                // 速度・逆再生は、タイムライン上の長さに直した一時ファイルを読む(その中の位置 = クリップの頭からの秒)
+                var off = remap ? 0 : c.offset
                 if sf < 0 { off += Double(-sf) / sr; sf = 0 }  // 負の開始は頭を切る
                 guard ef > sf else { continue }
-                var item = Item(clip: c, startFrame: sf, endFrame: ef, offset: off, gain: Float(c.volume ?? 1))
+                var item = Item(clip: c, startFrame: sf, endFrame: ef, offset: off, remapped: remap, gain: Float(c.volume ?? 1))
                 if c.hasAudioFade {
                     item.fadeStart = fullStart; item.length = fullLength
                     item.fadeInFrames = min(fullLength, Int((c.fadeInOrDefault * sr).rounded()))
@@ -261,6 +265,9 @@ public enum AudioMixer {
         var sources: [Int: PCMSource] = [:]
         var failed: Set<Int> = []
         var opened = 0
+        // 速度・逆再生用の一時ファイル置き場(ミックスを終えたら消す)
+        let remapDir = FileManager.default.temporaryDirectory.appendingPathComponent("moviecut-remap-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: remapDir) }
         var cs = 0
         while cs < total {
             let ce = min(total, cs + chunk)
@@ -269,7 +276,7 @@ public enum AudioMixer {
             for (idx, it) in items.enumerated() where it.startFrame < ce && it.endFrame > cs && !failed.contains(idx) {
                 let src: PCMSource
                 if let s = sources[idx] { src = s } else {
-                    guard let s = try openSource(it.clip, offset: it.offset) else { failed.insert(idx); continue }
+                    guard let s = try openItem(it, remapDir: remapDir) else { failed.insert(idx); continue }
                     sources[idx] = s; opened += 1; src = s
                 }
                 let a = max(cs, it.startFrame), b = min(ce, it.endFrame)
@@ -304,19 +311,40 @@ public enum AudioMixer {
         return MixResult(duration: Double(total) / sr, sourceCount: opened)
     }
 
+    /// ミキサーが読むソースを開く。速度・逆再生のクリップは、音声を作り直した一時ファイルから。作り直せないときは警告を出して無音にする。
+    private static func openItem(_ it: Item, remapDir: URL) throws -> PCMSource? {
+        guard it.remapped else { return try openSource(it.clip, offset: it.offset, span: it.clip.duration) }
+        let c = it.clip
+        let url: URL
+        do {
+            url = try AudioRemap.render(clip: c, open: { clip, off, span in try openSource(clip, offset: off, span: span) }, in: remapDir)
+        } catch {
+            if case AudioMixerError.cannotRead = error { throw error }
+            if case AudioRemap.Failure.noSource = error { return nil }   // 音声トラックが無い動画: 無音でよい(警告は要らない)
+            FileHandle.standardError.write(Data("警告: 速度・逆再生の音声を作れなかったので無音にします(\((c.src as NSString?)?.lastPathComponent ?? "?"): \(error))\n".utf8))
+            return nil
+        }
+        do { return try FilePCMSource(url: url, offset: it.offset) }
+        catch {
+            FileHandle.standardError.write(Data("警告: 速度・逆再生の音声を読めなかったので無音にします(\(error))\n".utf8))
+            return nil
+        }
+    }
+
     /// クリップの音声を開く。video に音声が無い・読めないときは nil(無音扱い)、audio / voice が読めないときは例外。
-    private static func openSource(_ c: Clip, offset: Double) throws -> PCMSource? {
+    /// `span` は読む長さ(秒。動画の音声トラックを範囲で読むのに使う)。
+    private static func openSource(_ c: Clip, offset: Double, span: Double) throws -> PCMSource? {
         let url = URL(fileURLWithPath: c.src ?? "")
         if c.type == .video {
             guard FileManager.default.fileExists(atPath: url.path) else { return nil }
-            return AssetPCMSource(url: url, offset: offset, duration: c.duration)
+            return AssetPCMSource(url: url, offset: offset, duration: span)
         }
         do {
             return try FilePCMSource(url: url, offset: offset)
         } catch {
             // mp4 の音声など AVAudioFile で開けないものは AVAssetReader で
             if FileManager.default.fileExists(atPath: url.path),
-               let s = AssetPCMSource(url: url, offset: offset, duration: c.duration) { return s }
+               let s = AssetPCMSource(url: url, offset: offset, duration: span) { return s }
             throw AudioMixerError.cannotRead(path: url.path, underlying: error)
         }
     }
