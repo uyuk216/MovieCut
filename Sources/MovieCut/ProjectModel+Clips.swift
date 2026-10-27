@@ -9,8 +9,16 @@ extension ProjectModel {
     /// 「クリップを複製」(⌘D): 元のすぐ後ろ(重なるなら空いているレイヤー)へ。複製を選択する。1 回の Undo。
     @discardableResult
     func duplicateSelected() -> Bool {
-        guard let id = selectedClipId, !isLocked, let r = ClipEditing.duplicate(in: project, clipId: id) else { return false }
-        edit("クリップの複製") { $0 = r.project }
+        guard !isLocked else { return false }
+        if selectedClipIDs.count > 1 {
+            // 複数: 選択の全体の終わりに、同じレイヤー・同じ相対位置で(貼り付けと同じ規則)。ロックされたレイヤーへは置かない
+            guard let r = ClipEditing.duplicate(in: project, clipIds: selectedClipIDs) else { return false }
+            guard edit("クリップの複製", { $0 = r.project }) else { return false }
+            setSelection(ClipSelection(ids: Set(r.newIds), primary: r.newIds.first))
+            return true
+        }
+        guard let id = selectedClipId, let r = ClipEditing.duplicate(in: project, clipId: id) else { return false }
+        guard edit("クリップの複製", { $0 = r.project }) else { return false }
         selectedClipId = r.newId
         return true
     }
@@ -19,24 +27,25 @@ extension ProjectModel {
     @discardableResult
     func trimSelectedBeforePlayhead() -> Bool {
         guard let id = selectedClipId, !isLocked, let p = ClipEditing.trimBefore(in: project, clipId: id, at: currentTime) else { return false }
-        edit("再生位置より前を切り落とす") { $0 = p }
-        return true
+        return edit("再生位置より前を切り落とす") { $0 = p }
     }
 
     /// 「再生位置より後ろを切り落とす」(⌥⌘])。
     @discardableResult
     func trimSelectedAfterPlayhead() -> Bool {
         guard let id = selectedClipId, !isLocked, let p = ClipEditing.trimAfter(in: project, clipId: id, at: currentTime) else { return false }
-        edit("再生位置より後ろを切り落とす") { $0 = p }
-        return true
+        return edit("再生位置より後ろを切り落とす") { $0 = p }
     }
 
     /// 「すき間を詰めて削除」(⌥⌘⌫): 同じレイヤーの後ろのクリップを左へ詰める。選択は外れる。
     @discardableResult
     func rippleDeleteSelected() -> Bool {
-        guard let id = selectedClipId, !isLocked, let p = ClipEditing.rippleDelete(in: project, clipId: id) else { return false }
-        edit("すき間を詰めて削除") { $0 = p }
-        selectedClipId = nil
+        guard !selectedClipIDs.isEmpty, !isLocked else { return false }
+        let ids = LayerEditing.editableIds(selectedClipIDs, in: project)
+        guard !ids.isEmpty else { statusText = Self.lockedNotice; return false }
+        guard let p = ClipEditing.rippleDelete(in: project, clipIds: ids) else { return false }
+        guard edit("すき間を詰めて削除", { $0 = p }) else { return false }
+        deselectRemoving(ids)
         return true
     }
 
@@ -44,7 +53,7 @@ extension ProjectModel {
     @discardableResult
     func selectAdjacentClip(forward: Bool) -> Bool {
         guard !isLocked, let id = ClipEditing.adjacentClipId(in: project, from: selectedClipId, forward: forward, playhead: currentTime) else { return false }
-        selectedClipId = id   // タイムラインが行を見える所までスクロールする
+        selectOnly(id)   // タイムラインが行を見える所までスクロールする
         return true
     }
 
@@ -52,8 +61,7 @@ extension ProjectModel {
     @discardableResult
     func moveSelectedToAdjacentLayer(up: Bool) -> Bool {
         guard let id = selectedClipId, !isLocked, let p = ClipEditing.moveToAdjacentLayer(in: project, clipId: id, delta: up ? -1 : 1) else { return false }
-        edit(up ? "上のレイヤーへ移動" : "下のレイヤーへ移動") { $0 = p }
-        return true
+        return edit(up ? "上のレイヤーへ移動" : "下のレイヤーへ移動") { $0 = p }
     }
 
     /// 「選択クリップの音声を作り直す」(⌥⌘R): ボイスクリップのときだけ。

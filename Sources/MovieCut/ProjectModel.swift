@@ -118,10 +118,24 @@ final class ProjectModel: ObservableObject {
     @Published var selectedClipId: String? {
         // クリップを選んだら、プロパティ欄はキャラの表示をやめてクリップの表示にする
         didSet {
-            if selectedClipId != nil { characterPanelActive = false }
+            if selectedClipId != nil { characterPanelActive = false; selectedLayerIndex = nil }
             if selectedClipId != oldValue { focusedAnimatableKey = nil }
+            // A6: 複数選択。主(selectedClipId)を直接入れ替えたときは単一選択に戻す(setSelection は先に集合を入れるので、含まれていれば残す)
+            if let id = selectedClipId {
+                if !selectedClipIDs.contains(id) { selectedClipIDs = [id] }
+            } else if !selectedClipIDs.isEmpty {
+                selectedClipIDs = []
+            }
         }
     }
+    /// A6: 選んでいるクリップの全部(主を含む)。単一選択のときは主だけ。主が nil なら空。
+    @Published var selectedClipIDs: Set<String> = []
+    /// A6: ヘッダーを押して選んだレイヤー(貼り付けの行き先)。クリップを選ぶと外れる。
+    @Published var selectedLayerIndex: Int?
+    /// A6: コピーしたクリップ(アプリ内。一般のペーストボードにも JSON で書く)。
+    var clipClipboard: ClipClipboard?
+    /// A6: クリップをコピーする先のペーストボード(テストでは専用のものに差し替える)。
+    var clipPasteboard: NSPasteboard = .general
     /// 最後に触った(◇ を押した・値を編集した)動かせる項目。メニューの「キーフレームを追加/削除」などの対象(無ければ全項目)。
     @Published var focusedAnimatableKey: String?
     /// 「エフェクトのコピー」で覚えたエフェクト(貼り付けで、選択クリップの後ろに足す。キーフレームは付いてこない)。
@@ -230,18 +244,34 @@ final class ProjectModel: ObservableObject {
     // MARK: 編集 / Undo
 
     /// すべての編集の入口。変化があれば Undo に登録する。
-    func edit(_ name: String, _ body: (inout Project) -> Void) {
+    /// ロックされたレイヤーのクリップに触れる編集は、`enforcesLock` が true(既定)のとき断る(状態欄に理由を出す)。
+    /// 解像度の変更のように、ロックされたレイヤーも含めて全体を直す編集だけ false で呼ぶ。
+    @discardableResult
+    func edit(_ name: String, enforcesLock: Bool = true, _ body: (inout Project) -> Void) -> Bool {
         var p = project
         body(&p)
-        guard p != project else { return }
+        guard p != project else { return false }
+        if enforcesLock, LayerEditing.violatesLock(old: project, new: p) {
+            statusText = Self.lockedNotice
+            return false
+        }
         replace(with: p, name: name)
+        return true
     }
+
+    static let lockedNotice = "ロックされたレイヤーのクリップは編集できません"
 
     private func replace(with new: Project, name: String) {
         let old = project
         project = new
         // Undo / Redo でクリップが無くなったら、選択も外す
-        if let id = selectedClipId, !new.allClips.contains(where: { $0.id == id }) { selectedClipId = nil }
+        if let id = selectedClipId, !new.allClips.contains(where: { $0.id == id }) {
+            let s = TimelineSelection.pruned(selection, in: new)
+            if s.primary == nil { selectedClipId = nil } else { setSelection(s) }
+        } else if selectedClipIDs.count > 1 {
+            let s = TimelineSelection.pruned(selection, in: new)
+            if s != selection { setSelection(s) }
+        }
         playback?.projectDidChange()   // 編集したら再生は止める
         let um = effectiveUndoManager
         um.beginUndoGrouping()
@@ -336,7 +366,7 @@ final class ProjectModel: ObservableObject {
             errorMessage = "このサイズ(\(w)×\(h))は大きすぎて書き出せません。8192×4320 相当の面積までです。"
             return
         }
-        edit("解像度の変更") { p in
+        edit("解像度の変更", enforcesLock: false) { p in
             p = p.scaledForResolution(newWidth: w, newHeight: h)
             if w * h >= 3840 * 2160 || !OutputPlan.h264Supports(width: w, height: h) { p.codec = "hevc" }
         }
@@ -374,7 +404,7 @@ final class ProjectModel: ObservableObject {
 
     /// 設定シートの「適用」。1 回の Undo にまとめる。
     func applySettings(_ d: VideoSettingsDraft, original: VideoSettingsDraft) {
-        edit("動画設定") { p in
+        edit("動画設定", enforcesLock: false) { p in
             let w = max(16, d.width), h = max(16, d.height)
             if w != p.width || h != p.height, OutputPlan.hevcSupports(width: w, height: h) {
                 p = p.scaledForResolution(newWidth: w, newHeight: h)
@@ -421,7 +451,7 @@ final class ProjectModel: ObservableObject {
         }
         do {
             let added = try await ScriptTimeline.add(lines: lines, to: &work, voice: provider, directory: FileManager.default.temporaryDirectory, selectedCharId: effectiveSelectedCharId)
-            edit("台本から音声を作る") { $0.tracks = work.tracks }
+            edit("台本から音声を作る", enforcesLock: false) { $0.tracks = work.tracks }
             statusText = "\(added.count) 個のセリフを並べました"
             onFitTimeline()
             noteFallbackIfUsed(provider.inner)

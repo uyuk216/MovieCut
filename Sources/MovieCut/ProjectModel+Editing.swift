@@ -23,16 +23,19 @@ extension ProjectModel {
     func splitSelected() -> Bool {
         guard let id = selectedClipId, !isLocked,
               let r = ClipEditing.split(in: project, clipId: id, at: currentTime) else { return false }
-        edit("クリップの分割") { $0 = r.project }
-        return true
+        return edit("クリップの分割") { $0 = r.project }
     }
 
-    /// Delete: 選択中のクリップを消して選択を外す。できたら true。
+    /// Delete: 選択中のクリップ(複数なら全部)を消して選択を外す。1 回の Undo。できたら true。
+    /// ロックされたレイヤーのクリップは消さない(選択に残す)。
     @discardableResult
     func deleteSelected() -> Bool {
-        guard let id = selectedClipId, !isLocked, let p = ClipEditing.delete(in: project, clipId: id) else { return false }
-        edit("クリップの削除") { $0 = p }
-        selectedClipId = nil
+        guard !selectedClipIDs.isEmpty, !isLocked else { return false }
+        let ids = LayerEditing.editableIds(selectedClipIDs, in: project)
+        guard !ids.isEmpty else { statusText = Self.lockedNotice; return false }
+        guard let p = ClipEditing.delete(in: project, clipIds: ids) else { return false }
+        guard edit("クリップの削除", { $0 = p }) else { return false }
+        deselectRemoving(ids)
         return true
     }
 
@@ -104,7 +107,8 @@ extension ProjectModel {
 
     /// ドラッグ中: Undo に登録せずに差し替える(プレビューは model.project を見ているのでそのまま追従する)。
     func updateGesture(_ p: Project) {
-        guard gestureBase != nil, p != project else { return }
+        guard let base = gestureBase, p != project else { return }
+        if LayerEditing.violatesLock(old: base, new: p) { return }   // ロックされたレイヤーのクリップは動かさない
         project = p
         playback.projectDidChange()
     }

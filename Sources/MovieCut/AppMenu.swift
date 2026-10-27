@@ -5,6 +5,8 @@ import MovieCutCore
 enum MenuCommand: Hashable {
     case about, settings, videoSettings
     case addMedia, export, exportPreset(ExportPreset)
+    // A6: クリップのコピー / 切り取り / 貼り付け / 全選択(ショートカットは持たない: ⌘C ⌘X ⌘V ⌘A は responder chain が受ける)と、レイヤー
+    case copyClips, cutClips, pasteClips, selectAllClips, layerLock, layerSolo, layerHeight(LayerHeight)
     case split, delete, addText, addBlur, addCharacter, makeVoices
     // クリップ(M7)
     case duplicate, rippleDelete, trimBefore, trimAfter, prevClip, nextClip, moveLayerUp, moveLayerDown, addLayer, regenerateVoice
@@ -89,6 +91,15 @@ struct MenuState: Equatable {
     var isLocked = false
     var canExport = false
     var hasSelection = false
+    /// A6: 選んでいるクリップの数 / 貼り付けられるものがある / クリップが 1 つでもある
+    var selectionCount = 0
+    var canPasteClips = false
+    var hasClips = false
+    /// A6: メニューの対象のレイヤー(選んだクリップのレイヤー、無ければヘッダーで選んだレイヤー)の状態
+    var hasLayerTarget = false
+    var layerLocked = false
+    var layerSolo = false
+    var layerHeight = LayerHeight.normal
     var canSplit = false
     var resolutionKey = ""
     var fps = 0.0
@@ -159,6 +170,15 @@ struct MenuState: Equatable {
         isLocked = m.isLocked
         canExport = m.canExport
         hasSelection = m.selectedClip != nil
+        selectionCount = m.selectedClipIDs.count
+        canPasteClips = m.canPasteClips
+        hasClips = !m.project.allClips.isEmpty
+        if let li = m.targetLayerIndex, m.project.tracks.indices.contains(li) {
+            hasLayerTarget = true
+            layerLocked = m.project.tracks[li].isLocked
+            layerSolo = m.project.tracks[li].isSolo
+            layerHeight = LayerHeight.of(m.project.tracks[li])
+        }
         canSplit = m.canSplit
         resolutionKey = m.resolutionKey
         fps = m.project.fps
@@ -315,6 +335,29 @@ enum AppMenuSpec {
     /// クリップメニューの全項目(区切りごとのグループ)。
     static func clipMenu(_ s: MenuState) -> [[MenuItemSpec]] {
         [clipAdd(s), clipEdit(s), clipTrim(s), clipNavigate(s), clipLayerAndVoice(s)]
+    }
+
+    /// 編集メニューのクリップのコピー / 切り取り / 貼り付け / 全選択。ショートカットは付けない(⌘C ⌘X ⌘V ⌘A は標準の項目が responder chain で
+    /// 受けるので、入力欄のコピーと貼り付けを壊さない)。このメニュー項目は、フォーカスがどこにあってもクリップに対して働く。
+    static func clipboardItems(_ s: MenuState) -> [MenuItemSpec] {
+        [MenuItemSpec(command: .copyClips, title: "クリップをコピー", shortcut: nil, enabled: s.canEdit && s.selectionCount > 0, checked: nil),
+         MenuItemSpec(command: .cutClips, title: "クリップを切り取り", shortcut: nil, enabled: s.canEdit && s.selectionCount > 0, checked: nil),
+         MenuItemSpec(command: .pasteClips, title: "クリップを貼り付け", shortcut: nil, enabled: s.canEdit && s.canPasteClips, checked: nil),
+         MenuItemSpec(command: .selectAllClips, title: "すべてのクリップを選択", shortcut: nil, enabled: s.canEdit && s.hasClips, checked: nil)]
+    }
+
+    /// クリップメニュー ▸ レイヤー(ロック・ソロ・高さ)。対象は選んだクリップのレイヤー(無ければヘッダーで選んだレイヤー)。
+    static func layerItems(_ s: MenuState) -> [MenuItemSpec] {
+        let on = s.canEdit && s.hasLayerTarget
+        return [MenuItemSpec(command: .layerLock, title: "レイヤーをロック", shortcut: nil, enabled: on, checked: on ? s.layerLocked : false),
+                MenuItemSpec(command: .layerSolo, title: "レイヤーをソロ", shortcut: nil, enabled: on, checked: on ? s.layerSolo : false)]
+    }
+
+    static func layerHeightItems(_ s: MenuState) -> [MenuItemSpec] {
+        let on = s.canEdit && s.hasLayerTarget
+        return LayerHeight.allCases.map {
+            MenuItemSpec(command: .layerHeight($0), title: "高さ: \($0.title)", shortcut: nil, enabled: on, checked: on && s.layerHeight == $0)
+        }
     }
 
     /// 編集メニューに残すもの(キャラクターと台本)。
@@ -514,7 +557,7 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, settings(s), videoSettings(s)] + file(s) + [exportCurrent(s)] + exportPresets(s) + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + editAdd(s) + playback(s)
+        [about, settings(s), videoSettings(s)] + file(s) + [exportCurrent(s)] + exportPresets(s) + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + editAdd(s) + clipboardItems(s) + layerItems(s) + layerHeightItems(s) + playback(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + [secondScreen(s), statusItemToggle(s), fullScreen(s)] + help.flatMap { $0 }
@@ -546,6 +589,13 @@ enum AppMenu {
             case .split: m.splitSelected()
             case .duplicate: m.duplicateSelected()
             case .rippleDelete: m.rippleDeleteSelected()
+            case .copyClips: m.copySelection()
+            case .cutClips: m.cutSelection()
+            case .pasteClips: m.pasteClips()
+            case .selectAllClips: m.selectAllClips()
+            case .layerLock: if let i = m.targetLayerIndex { m.toggleLayerLock(i) }
+            case .layerSolo: if let i = m.targetLayerIndex { m.toggleLayerSolo(i) }
+            case .layerHeight(let h): if let i = m.targetLayerIndex { m.setLayerHeight(i, h) }
             case .trimBefore: m.trimSelectedBeforePlayhead()
             case .trimAfter: m.trimSelectedAfterPlayhead()
             case .prevClip: m.selectAdjacentClip(forward: false)

@@ -169,10 +169,16 @@ public struct Track: Codable, Equatable, Identifiable {
     public var name: String = ""
     public var hidden: Bool? = nil
     public var muted: Bool? = nil
+    /// A6: ロック(このレイヤーのクリップは編集・移動・削除できない)。オン以外は書かない。
+    public var locked: Bool? = nil
+    /// A6: ソロ(どれかのレイヤーがソロなら、ソロのレイヤーだけ音が出る)。オン以外は書かない。
+    public var solo: Bool? = nil
+    /// A6: 行の高さ("small" / "large")。標準は書かない。知らない値は標準として読む(値そのものは書き戻す)。
+    public var height: String? = nil
     public var clips: [Clip] = []
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["id", "name", "hidden", "muted", "clips"]
+    static let knownKeys: Set<String> = ["id", "name", "hidden", "muted", "locked", "solo", "height", "clips"]
 
     public init() {}
     public init(name: String) { self.name = name }
@@ -181,6 +187,8 @@ public struct Track: Codable, Equatable, Identifiable {
 
     public var isHidden: Bool { hidden ?? false }
     public var isMuted: Bool { muted ?? false }
+    public var isLocked: Bool { locked ?? false }
+    public var isSolo: Bool { solo ?? false }
 
     public init(from decoder: Decoder) throws {
         let l = Lenient(c: try decoder.container(keyedBy: AnyKey.self), known: Self.knownKeys)
@@ -188,8 +196,15 @@ public struct Track: Codable, Equatable, Identifiable {
         name = l.string("name") ?? name
         hidden = l.bool("hidden")
         muted = l.bool("muted")
+        locked = l.bool("locked")
+        solo = l.bool("solo")
+        height = l.string("height")
         clips = l.value("clips") ?? []
         extra = l.extra()
+        // 型が違って読めなかった A6 の項目は、捨てずにそのまま書き戻す
+        for (key, ok) in [("locked", locked != nil), ("solo", solo != nil), ("height", height != nil)] where !ok {
+            if let raw: JSONValue = l.value(key) { extra[key] = raw }
+        }
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -199,6 +214,9 @@ public struct Track: Codable, Equatable, Identifiable {
         try c.encode(name, forKey: AnyKey("name"))
         try c.encodeIfPresent(hidden, forKey: AnyKey("hidden"))
         try c.encodeIfPresent(muted, forKey: AnyKey("muted"))
+        try c.encodeIfPresent(locked, forKey: AnyKey("locked"))
+        try c.encodeIfPresent(solo, forKey: AnyKey("solo"))
+        try c.encodeIfPresent(height, forKey: AnyKey("height"))
         try c.encode(clips, forKey: AnyKey("clips"))
     }
 }

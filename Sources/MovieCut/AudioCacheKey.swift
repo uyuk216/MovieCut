@@ -37,9 +37,12 @@ struct AudioCacheKey: Hashable {
             }
             if items.isEmpty { continue }   // 音のないレイヤー(消音や追加を含む)は鍵に影響しない
             items.sort()
-            lines.append("T\(i)|muted=\(tr.isMuted ? 1 : 0)")
+            lines.append("T\(i)|muted=\(tr.isMuted ? 1 : 0)" + (tr.isSolo ? "|solo=1" : ""))
             lines.append(contentsOf: items)
         }
+        // ソロがあるときだけ鍵に足す(音のないソロのレイヤーでも、ほかのレイヤーが消えるので)
+        let solos = project.tracks.indices.filter { project.tracks[$0].isSolo }
+        if !solos.isEmpty { lines.append("SOLO|" + solos.map(String.init).joined(separator: ",")) }
         let digest = SHA256.hash(data: Data(lines.joined(separator: "\n").utf8))
         return AudioCacheKey(value: digest.map { String(format: "%02x", $0) }.joined())
     }

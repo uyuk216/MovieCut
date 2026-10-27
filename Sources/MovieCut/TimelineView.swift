@@ -89,7 +89,8 @@ struct TimelineRepresentable: NSViewRepresentable {
 
     private var state: TimelineState {
         TimelineState(project: model.project, revision: model.projectRevision, selectedId: model.selectedClipId,
-                      time: model.currentTime, pps: model.pps, playing: model.isPlaying)
+                      time: model.currentTime, pps: model.pps, playing: model.isPlaying,
+                      selectedIds: model.selectedClipIDs, selectedLayer: model.selectedLayerIndex)
     }
 }
 
@@ -100,6 +101,9 @@ struct TimelineState {
     var time: Double
     var pps: Double
     var playing: Bool
+    /// A6: 選んでいるクリップの全部(主を含む)と、ヘッダーで選んだレイヤー
+    var selectedIds: Set<String> = []
+    var selectedLayer: Int? = nil
 }
 
 // MARK: - 本体(自前描画)
@@ -112,6 +116,9 @@ final class TimelineCanvas: NSView {
     private var revision = -1
     private(set) var geometry = TimelineGeometry()
     private var selectedId: String?
+    /// A6: 選んでいるクリップの全部と、ヘッダーで選んだレイヤー
+    private var selectedIds: Set<String> = []
+    private var selectedLayer: Int?
     private var time = 0.0
     private var playing = false
     private var isScrubbing = false
@@ -130,7 +137,20 @@ final class TimelineCanvas: NSView {
         var base = Project()
         var lastTarget: Int
         var lastPoint: NSPoint
+        /// 押した時点の選択(複数選択のドラッグ移動はこの全員を動かす)
+        var ids: Set<String> = []
+        /// 複数選択の中のクリップを、動かさずに離したとき単一選択に戻す先
+        var collapseTo: String?
     }
+    /// 何もない所を押している最中の操作。3pt 動くまでは「クリック」(離したら選択を外して、その時刻へ移動)、動かしたらラバーバンド。
+    struct Rubber {
+        var origin: NSPoint
+        var current: NSPoint
+        var base: ClipSelection
+        var additive: Bool
+        var active = false
+    }
+    private(set) var rubber: Rubber?
     /// 押している最中のクリップ操作(3pt 動くまでは「クリック」で、active は false)。
     private(set) var drag: ClipDrag?
     /// ルーラーの旗(マーカー)を押している最中の操作(3pt 動くまでは「クリック」= その時刻へ移動)。
@@ -194,7 +214,13 @@ final class TimelineCanvas: NSView {
         wantsLayer = true
         layerContentsRedrawPolicy = .onSetNeedsDisplay
         registerForDraggedTypes([.fileURL])
+        mediaObserver = NotificationCenter.default.addObserver(forName: TimelineMediaCache.didLoad, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.needsDisplay = true }
+        }
     }
+
+    private var mediaObserver: Any?
+    deinit { if let o = mediaObserver { NotificationCenter.default.removeObserver(o) } }
 
     // MARK: マーカー(ルーラーの旗)
 
@@ -317,9 +343,12 @@ final class TimelineCanvas: NSView {
             projectEnd = project.endTime
             charColors = [:]; charNames = [:]
             for c in project.characters { charColors[c.id] = nsColor(hex: c.color) ?? .gray; charNames[c.id] = c.name }
+            geometry.setRowHeights(LayerEditing.rowHeights(project).map { CGFloat($0) })
             if grew { geometry.scrollY = maxScrollY }   // ＋レイヤーで足した行が見えるように
             full = true
         }
+        if s.selectedIds != selectedIds { selectedIds = s.selectedIds; full = true }
+        if s.selectedLayer != selectedLayer { selectedLayer = s.selectedLayer; full = true }
         if s.selectedId != selectedId {
             selectedId = s.selectedId; full = true
             // メニューやボタンで追加・選択されたクリップの行が画面外なら、見える所までスクロールする(マウスで押したときは動かさない)
@@ -358,7 +387,7 @@ final class TimelineCanvas: NSView {
     }
 
     private var maxScrollX: CGFloat { TimelineGeometry.maxScrollX(projectEnd: projectEnd, pps: geometry.pps, viewWidth: bounds.width) }
-    private var maxScrollY: CGFloat { TimelineGeometry.maxScrollY(rowCount: project.tracks.count, viewHeight: bounds.height) }
+    private var maxScrollY: CGFloat { geometry.maxScrollY(rowCount: project.tracks.count, viewHeight: bounds.height) }
 
     /// スクロール位置を範囲内に収める。動いたら true。
     @discardableResult
@@ -429,7 +458,7 @@ final class TimelineCanvas: NSView {
 
     /// その行が縦に全部見えるようにスクロールする。
     private func revealRow(_ i: Int) {
-        let top = geometry.rowTop(i), bottom = top + TimelineLayout.rowHeight
+        let top = geometry.rowTop(i), bottom = top + geometry.rowHeight(i)
         if top < TimelineLayout.rulerHeight { geometry.scrollY -= TimelineLayout.rulerHeight - top }
         else if bottom > bounds.height { geometry.scrollY += bottom - bounds.height }
         clampScroll()
@@ -447,7 +476,7 @@ final class TimelineCanvas: NSView {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         let g = geometry
         let W = bounds.width, H = bounds.height
-        let hw = TimelineLayout.headerWidth, rh = TimelineLayout.rulerHeight, rowH = TimelineLayout.rowHeight
+        let hw = TimelineLayout.headerWidth, rh = TimelineLayout.rulerHeight
         let rows = project.tracks.count
 
         ctx.saveGState()
@@ -455,18 +484,25 @@ final class TimelineCanvas: NSView {
         TimelinePalette.areaBG.setFill()
         dirtyRect.fill()
 
-        // 見えている行の範囲
-        let firstRow = max(0, Int(((dirtyRect.minY - rh + g.scrollY) / rowH).rounded(.down)))
-        let lastRow = min(rows - 1, Int(((dirtyRect.maxY - rh + g.scrollY) / rowH).rounded(.down)))
+        // 見えている行の範囲(行の高さはレイヤーごとに違う)
+        var firstRow = rows, lastRow = -1
+        for i in 0..<rows {
+            let t = g.rowTop(i)
+            if t + g.rowHeight(i) <= max(dirtyRect.minY, rh) { continue }
+            if t >= dirtyRect.maxY { break }
+            firstRow = min(firstRow, i); lastRow = i
+        }
 
         // 行の背景と下線
         let contentRect = NSRect(x: hw, y: rh, width: max(0, W - hw), height: max(0, H - rh))
         if firstRow <= lastRow {
             for i in firstRow...lastRow {
                 let top = g.rowTop(i)
+                let rowH = g.rowHeight(i)
                 let row = NSRect(x: hw, y: top, width: W - hw, height: rowH)
                 if i % 2 == 1 { rgbaWhite(0.035).setFill(); row.fill() }
                 if project.tracks[i].isHidden { NSColor(white: 0, alpha: 0.28).setFill(); row.fill() }
+                if project.tracks[i].isLocked { NSColor(white: 0, alpha: 0.2).setFill(); row.fill() }
                 TimelinePalette.rowLine.setFill()
                 NSRect(x: hw, y: top + rowH - 1, width: W - hw, height: 1).fill()
             }
@@ -476,7 +512,7 @@ final class TimelineCanvas: NSView {
         var drawn = 0
         ctx.saveGState()
         ctx.clip(to: contentRect.intersection(dirtyRect))
-        var selectedDraw: (Clip, CGRect, Int)?
+        var selectedDraw: [(Clip, CGRect, Int)] = []
         let visibleL = hw - 8, visibleR = W + 8
         if firstRow <= lastRow {
             for i in firstRow...lastRow {
@@ -484,16 +520,19 @@ final class TimelineCanvas: NSView {
                 for c in tr.clips {
                     let r = g.clipRect(start: c.start, duration: c.duration, track: i)
                     if r.maxX < visibleL || r.minX > visibleR || !r.intersects(dirtyRect) { continue }
-                    if c.id == selectedId { selectedDraw = (c, r, i); continue }
+                    if c.id == selectedId || selectedIds.contains(c.id) { selectedDraw.append((c, r, i)); continue }
                     drawClip(c, rect: r, track: tr, selected: false, ctx: ctx)
                     drawn += 1
                 }
             }
         }
-        if let (c, r, i) = selectedDraw {
-            drawClip(c, rect: r, track: project.tracks[i], selected: true, ctx: ctx)
+        // 選択中のものは最後(手前)。主のクリップが一番手前
+        for (c, r, i) in selectedDraw.sorted(by: { ($0.0.id == selectedId ? 1 : 0) < ($1.0.id == selectedId ? 1 : 0) }) {
+            let primary = c.id == selectedId
+            drawClip(c, rect: r, track: project.tracks[i], selected: primary, secondary: !primary, ctx: ctx)
             drawn += 1
         }
+        if let rb = rubber, rb.active { drawRubberBand(rb) }
         ctx.restoreGState()
         lastDrawClipCount = drawn
         drawMarkerLines(ctx: ctx, contentRect: contentRect)
@@ -552,7 +591,20 @@ final class TimelineCanvas: NSView {
         }
     }
 
-    private func drawClip(_ c: Clip, rect r: CGRect, track: Track, selected: Bool, ctx: CGContext) {
+    /// ラバーバンドの四角(押した点と今の点)。
+    func rubberRect(_ rb: Rubber) -> NSRect {
+        NSRect(x: min(rb.origin.x, rb.current.x), y: min(rb.origin.y, rb.current.y), width: abs(rb.origin.x - rb.current.x), height: abs(rb.origin.y - rb.current.y))
+    }
+
+    private func drawRubberBand(_ rb: Rubber) {
+        let r = rubberRect(rb)
+        TimelinePalette.accent.withAlphaComponent(0.14).setFill(); r.fill()
+        let b = NSBezierPath(rect: r.insetBy(dx: 0.5, dy: 0.5))
+        b.lineWidth = 1
+        TimelinePalette.accent.withAlphaComponent(0.9).setStroke(); b.stroke()
+    }
+
+    private func drawClip(_ c: Clip, rect r: CGRect, track: Track, selected: Bool, secondary: Bool = false, ctx: CGContext) {
         var fill: NSColor
         var leftBorder: NSColor?
         if c.type == .voice {
@@ -562,7 +614,7 @@ final class TimelineCanvas: NSView {
         } else {
             fill = TimelinePalette.color(for: c.type)
         }
-        if selected { fill = fill.blended(withFraction: 0.12, of: .white) ?? fill }   // filter: brightness(1.12) ぶん
+        if selected || secondary { fill = fill.blended(withFraction: 0.12, of: .white) ?? fill }   // filter: brightness(1.12) ぶん
         let alpha: CGFloat = track.isHidden ? 0.4 : (track.isMuted && c.type != .blur && c.type != .image && c.type != .text ? 0.78 : 1)
         let path = NSBezierPath(roundedRect: r, xRadius: 4, yRadius: 4)
 
@@ -597,7 +649,14 @@ final class TimelineCanvas: NSView {
             ctx.restoreGState()
             textLeft += 3
         }
+        let hasMedia = drawMedia(c, rect: r, path: path, ctx: ctx)
         drawTransitionWedges(c, rect: r, selected: selected, path: path, ctx: ctx)
+        if secondary {
+            // 複数選択の主でないクリップ: 枠線だけ(つまみや光彩は主のものだけ)
+            let o = NSBezierPath(roundedRect: r.insetBy(dx: -1, dy: -1), xRadius: 5, yRadius: 5)
+            o.lineWidth = 2
+            TimelinePalette.selection.withAlphaComponent(0.85).setStroke(); o.stroke()
+        }
         if selected && c.hasKeyframes { drawKeyframeDiamonds(c, rect: r, ctx: ctx) }
         if selected {
             let o = NSBezierPath(roundedRect: r.insetBy(dx: -1, dy: -1), xRadius: 5, yRadius: 5)
@@ -630,22 +689,142 @@ final class TimelineCanvas: NSView {
         if labelRect.width > 10 {
             ctx.saveGState()
             ctx.clip(to: r.insetBy(dx: 1, dy: 1))
-            (clipLabel(c) as NSString).draw(in: labelRect, withAttributes: [.font: Self.labelFont, .foregroundColor: NSColor.white, .paragraphStyle: Self.truncStyle])
+            let label = clipLabel(c) as NSString
+            let attrs: [NSAttributedString.Key: Any] = [.font: Self.labelFont, .foregroundColor: NSColor.white, .paragraphStyle: Self.truncStyle]
+            if hasMedia {
+                // サムネイルや波形の上でも読めるよう、文字の下に暗い下地を敷く
+                let tw = min(labelRect.width, ceil(label.size(withAttributes: attrs).width) + 2)
+                NSColor(white: 0, alpha: 0.5).setFill()
+                NSBezierPath(roundedRect: NSRect(x: labelRect.minX - 3, y: labelRect.minY - 1, width: tw + 6, height: 17), xRadius: 3, yRadius: 3).fill()
+            }
+            label.draw(in: labelRect, withAttributes: attrs)
             ctx.restoreGState()
         }
         ctx.restoreGState()
     }
 
+    // MARK: サムネイルと波形(A6)
+
+    /// 画像を、タイルいっぱいに(はみ出す分は切って)描く。
+    private func drawAspectFill(_ img: CGImage, in tile: NSRect) {
+        let iw = CGFloat(img.width), ih = CGFloat(img.height)
+        guard iw > 0, ih > 0, tile.width > 0, tile.height > 0 else { return }
+        var src = NSRect(x: 0, y: 0, width: iw, height: ih)
+        let ia = iw / ih, ta = tile.width / tile.height
+        if ia > ta { let w = ih * ta; src.origin.x = (iw - w) / 2; src.size.width = w }
+        else { let h = iw / ta; src.origin.y = (ih - h) / 2; src.size.height = h }
+        NSImage(cgImage: img, size: NSSize(width: iw, height: ih))
+            .draw(in: tile, from: src, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: [.interpolation: NSImageInterpolation.low.rawValue])
+    }
+
+    /// 動画・画像のサムネイルの帯と、音のあるクリップの波形を、クリップの中に描く(見えている部分だけ)。
+    /// まだできていないものは何も描かない(クリップの色のまま)。作るのは裏で、できたら描き直される。
+    /// 何か描いたら true(ラベルの下に暗い下地を敷くため)。
+    private func drawMedia(_ c: Clip, rect r: CGRect, path: NSBezierPath, ctx: CGContext) -> Bool {
+        guard r.width >= 16, let src = c.src, !src.isEmpty else { return false }
+        let cache = TimelineMediaCache.shared
+        let hw = TimelineLayout.headerWidth
+        let visL = max(r.minX, hw), visR = min(r.maxX, bounds.width)
+        guard visR > visL else { return false }
+        var drew = false
+        ctx.saveGState()
+        path.addClip()
+        if c.type == .video || c.type == .image {
+            let tileW = max(24, r.height * 16 / 9)
+            let n = ThumbnailPlan.tileCount(width: Double(r.width), tileWidth: Double(tileW))
+            if n > 0 {
+                let w = r.width / CGFloat(n)
+                let i0 = max(0, Int(((visL - r.minX) / w).rounded(.down))), i1 = min(n - 1, Int(((visR - r.minX) / w).rounded(.down)))
+                if i0 <= i1 {
+                    for i in i0...i1 {
+                        let t = c.type == .image ? 0 : ThumbnailPlan.time(for: c, tile: i, of: n)
+                        if let img = cache.thumbnail(path: src, time: t, isImage: c.type == .image) {
+                            drawAspectFill(img, in: NSRect(x: r.minX + w * CGFloat(i), y: r.minY, width: w + 0.5, height: r.height))
+                            drew = true
+                        }
+                    }
+                }
+            }
+        }
+        if (c.type == .audio || c.type == .voice || c.type == .video), !c.isFreeze, let peaks = cache.waveform(path: src) {
+            let span = r.width
+            let f0 = Double((visL - r.minX) / span), f1 = Double((visR - r.minX) / span)
+            let range = WaveformPeaks.sourceRange(for: c)
+            let a = range.from + (range.to - range.from) * f0, b = range.from + (range.to - range.from) * f1
+            let barW: CGFloat = 2
+            let count = max(1, Int(((visR - visL) / barW).rounded(.up)))
+            let cols = peaks.columns(from: a, to: b, count: count)
+            let isVideo = c.type == .video
+            var bars: [CGRect] = []
+            bars.reserveCapacity(cols.count)
+            let maxH = isVideo ? r.height * 0.4 : r.height - 8
+            for (k, v) in cols.enumerated() {
+                let h = max(0.8, CGFloat(pow(Double(min(1, v)), 0.7)) * maxH)
+                let x = visL + CGFloat(k) * barW
+                bars.append(isVideo ? CGRect(x: x, y: r.maxY - 2 - h, width: barW - 0.5, height: h)
+                                    : CGRect(x: x, y: r.midY - h / 2, width: barW - 0.5, height: h))
+            }
+            if isVideo {
+                NSColor(white: 0, alpha: 0.3).setFill()
+                NSRect(x: visL, y: r.maxY - 2 - maxH - 2, width: visR - visL, height: maxH + 4).fill()
+            }
+            ctx.setFillColor(NSColor(white: 1, alpha: isVideo ? 0.8 : 0.6).cgColor)
+            ctx.addRects(bars)
+            ctx.fillPath()
+            drew = true
+        }
+        ctx.restoreGState()
+        return drew
+    }
+
     private func drawHeader(row i: Int, top: CGFloat, ctx: CGContext) {
         let tr = project.tracks[i]
         let hw = TimelineLayout.headerWidth
+        let rowH = geometry.rowHeight(i)
+        if selectedLayer == i {
+            TimelinePalette.accent.withAlphaComponent(0.18).setFill()
+            NSRect(x: 0, y: top, width: hw - 1, height: rowH - 1).fill()
+            TimelinePalette.accent.setFill()
+            NSRect(x: 0, y: top, width: 2.5, height: rowH - 1).fill()
+        }
         TimelinePalette.rowLine.setFill()
-        NSRect(x: 0, y: top + TimelineLayout.rowHeight - 1, width: hw, height: 1).fill()
-        let nameRect = NSRect(x: 5, y: top + 4, width: hw - 10, height: 14)
-        (tr.name as NSString).draw(in: nameRect, withAttributes: [.font: Self.headFont, .foregroundColor: TimelinePalette.label, .paragraphStyle: Self.truncStyle])
-        let chips = TimelineLayout.chipRects(rowTop: top)
+        NSRect(x: 0, y: top + rowH - 1, width: hw, height: 1).fill()
+        if renamingRow != i {
+            let nameRect = NSRect(x: 6, y: top + (rowH < 40 ? 2 : 4), width: hw - 48, height: 14)
+            (tr.name as NSString).draw(in: nameRect, withAttributes: [.font: Self.headFont, .foregroundColor: TimelinePalette.label, .paragraphStyle: Self.truncStyle])
+        }
+        drawLockButton(rect: TimelineLayout.lockRect(rowTop: top), on: tr.isLocked)
+        drawSoloButton(rect: TimelineLayout.soloRect(rowTop: top), on: tr.isSolo)
+        let chips = TimelineLayout.chipRects(rowTop: top, rowHeight: rowH)
         drawChip("隠す", rect: chips.hide, on: tr.isHidden)
         drawChip("消音", rect: chips.mute, on: tr.isMuted)
+    }
+
+    /// ロックの錠前(オンは赤の塗りつぶしで掛け金が閉じ、オフは薄い輪郭で掛け金が開く)。パスで描く(描画のたびに画像を作らない)。
+    private func drawLockButton(rect r: CGRect, on: Bool) {
+        let color = on ? rgb(0xff4f6a) : NSColor(white: 1, alpha: 0.4)
+        let body = NSRect(x: r.midX - 5, y: r.midY - 1, width: 10, height: 7.5)
+        let shackle = NSBezierPath()
+        let top = body.minY - 4.5
+        shackle.move(to: NSPoint(x: body.minX + 2, y: body.minY))
+        shackle.line(to: NSPoint(x: body.minX + 2, y: top + 2.5))
+        shackle.appendArc(withCenter: NSPoint(x: body.midX, y: top + 2.5), radius: 3, startAngle: 180, endAngle: 0, clockwise: false)
+        // 開いているときは右側の脚を短くする
+        shackle.line(to: NSPoint(x: body.maxX - 2, y: on ? body.minY : body.minY - 2.5))
+        shackle.lineWidth = 1.5
+        color.setStroke(); shackle.stroke()
+        let b = NSBezierPath(roundedRect: body, xRadius: 1.5, yRadius: 1.5)
+        if on { color.setFill(); b.fill() } else { b.lineWidth = 1.2; color.setStroke(); b.stroke() }
+    }
+
+    /// ソロの「S」(オンは黄色の地)。
+    private func drawSoloButton(rect r: CGRect, on: Bool) {
+        let box = NSBezierPath(roundedRect: r.insetBy(dx: 1, dy: 1), xRadius: 3, yRadius: 3)
+        if on { TimelinePalette.selection.setFill(); box.fill() }
+        else { NSColor(white: 1, alpha: 0.3).setStroke(); box.lineWidth = 1; box.stroke() }
+        let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 10, weight: .bold), .foregroundColor: on ? NSColor.black : NSColor(white: 1, alpha: 0.6)]
+        let sz = ("S" as NSString).size(withAttributes: attrs)
+        ("S" as NSString).draw(at: NSPoint(x: r.midX - sz.width / 2, y: r.midY - sz.height / 2), withAttributes: attrs)
     }
 
     private func drawChip(_ title: String, rect r: CGRect, on: Bool) {
@@ -843,11 +1022,12 @@ final class TimelineCanvas: NSView {
 
     override func mouseDown(with e: NSEvent) {
         window?.makeFirstResponder(self)
-        mouseDown(at: point(e))
+        endRename(commit: true)
+        mouseDown(at: point(e), modifiers: e.modifierFlags, clickCount: e.clickCount)
     }
 
-    /// テストからも呼べるよう、イベントから切り離した入口。
-    func mouseDown(at p: NSPoint) {
+    /// テストからも呼べるよう、イベントから切り離した入口。⌘ はトグル、⇧ は範囲(同じレイヤー)を足す。
+    func mouseDown(at p: NSPoint, modifiers: NSEvent.ModifierFlags = [], clickCount: Int = 1) {
         mouseIsDown = true
         let hw = TimelineLayout.headerWidth
         if p.y < TimelineLayout.rulerHeight {
@@ -860,9 +1040,14 @@ final class TimelineCanvas: NSView {
         }
         if p.x < hw {
             if let i = geometry.rowIndex(forY: p.y, rowCount: project.tracks.count) {
-                let chips = TimelineLayout.chipRects(rowTop: geometry.rowTop(i))
+                let top = geometry.rowTop(i)
+                let chips = TimelineLayout.chipRects(rowTop: top, rowHeight: geometry.rowHeight(i))
                 if chips.hide.contains(p) { model?.toggleTrack(i, .hidden) }
                 else if chips.mute.contains(p) { model?.toggleTrack(i, .muted) }
+                else if TimelineLayout.lockRect(rowTop: top).contains(p) { model?.toggleLayerLock(i) }
+                else if TimelineLayout.soloRect(rowTop: top).contains(p) { model?.toggleLayerSolo(i) }
+                else if clickCount >= 2 { beginRenameLayer(i) }       // 名前のダブルクリック: その場で名前を変える
+                else { model?.selectLayer(i) }                        // ヘッダー: レイヤーを選ぶ(貼り付けの行き先)
             }
             return
         }
@@ -874,17 +1059,33 @@ final class TimelineCanvas: NSView {
             keyDrag = KeyDrag(clipId: hit.clipId, time: hit.time, downPoint: p, downTime: geometry.time(forX: p.x))
             return
         }
+        let mod: SelectionModifier = modifiers.contains(.command) ? .command : (modifiers.contains(.shift) ? .shift : .none)
         if let id = clipId(at: p) {
-            model?.selectedClipId = id
-            guard let m = model, !m.isLocked, let loc = ClipEditing.locate(id, in: project) else { return }
+            guard let m = model else { return }
+            if mod != .none {
+                // ⌘-クリック = トグル、⇧-クリック = 足す。ドラッグは始めない
+                m.setSelection(TimelineSelection.click(m.selection, on: id, modifier: mod, in: project))
+                return
+            }
+            var collapse: String?
+            if m.selectedClipIDs.count > 1, m.selectedClipIDs.contains(id) {
+                // 選択の中のクリップを押した: 選択はそのまま、これを主にして、まとめてドラッグできるようにする(動かさずに離せば、これだけの選択に戻す)
+                m.setSelection(ClipSelection(ids: m.selectedClipIDs, primary: id))
+                collapse = id
+            } else {
+                m.selectOnly(id)
+            }
+            guard !m.isLocked, let loc = ClipEditing.locate(id, in: project), !project.tracks[loc.track].isLocked else { return }   // ロックされたレイヤーのクリップは動かさない
             let c = project.tracks[loc.track].clips[loc.index]
             let r = geometry.clipRect(start: c.start, duration: c.duration, track: loc.track)
             let z = min(Self.edgeZone, r.width / 3)
             let mode: DragMode = p.x - r.minX < z ? .trimLeft : (r.maxX - p.x < z ? .trimRight : .move)
-            drag = ClipDrag(clipId: id, mode: mode, downPoint: p, downTime: geometry.time(forX: p.x), lastTarget: loc.track, lastPoint: p)
+            if mode != .move && collapse != nil { m.selectOnly(id); collapse = nil }     // 端のトリムは 1 つのクリップだけ
+            drag = ClipDrag(clipId: id, mode: mode, downPoint: p, downTime: geometry.time(forX: p.x), lastTarget: loc.track, lastPoint: p,
+                            ids: m.selectedClipIDs, collapseTo: collapse)
         } else {
-            model?.selectedClipId = nil     // 何もない所: 選択を外して、その時刻へ(シーク)
-            beginScrub(at: p)
+            // 何もない所: 動かさずに離せば「選択を外して、その時刻へ(シーク)」、3pt 以上動かせばラバーバンド
+            rubber = Rubber(origin: p, current: p, base: model?.selection ?? .empty, additive: mod != .none)
         }
     }
 
@@ -943,6 +1144,17 @@ final class TimelineCanvas: NSView {
             }
             return
         }
+        if var rb = rubber {
+            if !rb.active {
+                guard hypot(p.x - rb.origin.x, p.y - rb.origin.y) >= Self.dragThreshold else { return }
+                rb.active = true
+            }
+            rb.current = p
+            rubber = rb
+            updateRubberSelection(rb)
+            needsDisplay = true
+            return
+        }
         guard var d = drag else { return }
         if !d.active {
             // 3pt 動くまではクリック扱い
@@ -995,6 +1207,22 @@ final class TimelineCanvas: NSView {
             needsDisplay = true
             return
         }
+        if let rb = rubber {
+            rubber = nil
+            if !rb.active, !rb.additive, let m = model {
+                m.selectOnly(nil)                                  // 何もない所: 選択を外して、その時刻へ
+                if let row = geometry.rowIndex(forY: rb.origin.y, rowCount: project.tracks.count), rb.origin.x >= TimelineLayout.headerWidth {
+                    m.selectLayer(row)                             // 押した行を貼り付けの行き先にする
+                } else {
+                    m.selectedLayerIndex = nil
+                }
+                beginScrub(at: rb.origin)
+                isScrubbing = false
+                m.playback.endScrub()
+            }
+            needsDisplay = true
+            return
+        }
         if isScrubbing {
             isScrubbing = false
             model?.playback.endScrub()
@@ -1003,6 +1231,7 @@ final class TimelineCanvas: NSView {
         guard let d = drag else { return }
         drag = nil
         stopAutoScroll()
+        if !d.active, let id = d.collapseTo { model?.selectOnly(id) }   // 動かさずに離した: 複数選択の中の 1 つだけにする
         if d.active {
             snapGuides = []
             let name: String
@@ -1026,7 +1255,7 @@ final class TimelineCanvas: NSView {
         switch d.mode {
         case .move:
             if let row = geometry.rowIndex(forY: p.y, rowCount: d.base.tracks.count) { d.lastTarget = row; drag = d }
-            result = ClipEditing.move(in: d.base, clipId: d.clipId, deltaT: dt, targetTrackIndex: d.lastTarget, playhead: m.currentTime, pps: geometry.pps, snapEnabled: m.snapEnabled)
+            result = m.projectMoving(base: d.base, ids: d.ids, primary: d.clipId, deltaT: dt, targetTrack: d.lastTarget)
         case .trimLeft:
             result = ClipEditing.trimLeft(in: d.base, clipId: d.clipId, deltaT: dt, playhead: m.currentTime, pps: geometry.pps, snapEnabled: m.snapEnabled)
         case .trimRight:
@@ -1083,9 +1312,10 @@ final class TimelineCanvas: NSView {
     /// `hold` なら離さずに止める(途中の絵を撮る用)。dt は秒、`targetTrack` は移動先のレイヤー。
     func debugDrag(clipId: String, mode: DragMode, deltaT: Double, targetTrack: Int? = nil, hold: Bool = false) {
         guard let m = model, let loc = ClipEditing.locate(clipId, in: m.project) else { return }
-        m.selectedClipId = clipId
+        if !m.selectedClipIDs.contains(clipId) { m.selectOnly(clipId) } else if m.selectedClipId != clipId { m.setSelection(ClipSelection(ids: m.selectedClipIDs, primary: clipId)) }
         m.beginGesture()
-        var d = ClipDrag(clipId: clipId, mode: mode, downPoint: .zero, downTime: 0, lastTarget: targetTrack ?? loc.track, lastPoint: .zero)
+        var d = ClipDrag(clipId: clipId, mode: mode, downPoint: .zero, downTime: 0, lastTarget: targetTrack ?? loc.track, lastPoint: .zero,
+                         ids: m.selectedClipIDs.contains(clipId) ? m.selectedClipIDs : [clipId])
         d.active = true
         d.base = m.project
         drag = d
@@ -1102,7 +1332,8 @@ final class TimelineCanvas: NSView {
     func syncFromModel() {
         guard let m = model else { return }
         apply(TimelineState(project: m.project, revision: m.projectRevision, selectedId: m.selectedClipId,
-                            time: m.currentTime, pps: m.pps, playing: m.isPlaying))
+                            time: m.currentTime, pps: m.pps, playing: m.isPlaying,
+                            selectedIds: m.selectedClipIDs, selectedLayer: m.selectedLayerIndex))
     }
 
     // MARK: ドラッグ&ドロップ(Finder から素材)
@@ -1174,5 +1405,171 @@ final class TimelineCanvas: NSView {
     override func magnify(with e: NSEvent) {
         let p = convert(e.locationInWindow, from: nil)
         setPps(geometry.pps * Double(1 + e.magnification), anchorX: p.x, updateModel: true)
+    }
+
+    // MARK: 複数選択(ラバーバンド)
+
+    /// ラバーバンドの四角に(少しでも)かかるクリップを選ぶ。⇧/⌘ で始めたなら、押す前の選択に足す。
+    func updateRubberSelection(_ rb: Rubber) {
+        guard let m = model else { return }
+        let r = rubberRect(rb)
+        let t0 = max(0, geometry.time(forX: r.minX)), t1 = geometry.time(forX: r.maxX)
+        var first: Int?, last: Int?
+        for i in project.tracks.indices {
+            let top = geometry.rowTop(i), bottom = top + geometry.rowHeight(i)
+            if bottom > r.minY && top < r.maxY && bottom > TimelineLayout.rulerHeight {
+                if first == nil { first = i }
+                last = i
+            }
+        }
+        var hits: [String] = []
+        if let f = first, let l = last, t1 >= t0 {
+            hits = TimelineSelection.clips(in: project, timeRange: t0...t1, rows: f...l)
+        }
+        let new = TimelineSelection.rubberBand(base: rb.base, hits: hits, additive: rb.additive, in: project)
+        if new != m.selection { m.setSelection(new) }
+    }
+
+    // MARK: レイヤー名のその場編集
+
+    private(set) var renamingRow: Int?
+    private var renameField: NSTextField?
+
+    /// ヘッダーの名前をその場で書き換える欄を出す(Enter か他を押すと確定、Esc でやめる)。ロックの有無に関係なく変えられる。
+    func beginRenameLayer(_ i: Int) {
+        guard project.tracks.indices.contains(i), model?.isLocked != true else { return }
+        endRename(commit: true)
+        let top = geometry.rowTop(i)
+        let f = NSTextField(frame: NSRect(x: 4, y: top + (geometry.rowHeight(i) < 40 ? 1 : 3), width: TimelineLayout.headerWidth - 44, height: 17))
+        f.stringValue = project.tracks[i].name
+        f.font = Self.headFont
+        f.isBordered = false
+        f.focusRingType = .none
+        f.drawsBackground = true
+        f.backgroundColor = rgb(0x15161a)
+        f.textColor = TimelinePalette.text0
+        f.delegate = self
+        f.cell?.isScrollable = true
+        renameField = f
+        renamingRow = i
+        addSubview(f)
+        window?.makeFirstResponder(f)
+        f.currentEditor()?.selectAll(nil)
+        needsDisplay = true
+    }
+
+    /// 名前の編集を終える。`commit` なら入力した名前に変える(空・同じなら何もしない)。
+    func endRename(commit: Bool) {
+        guard let f = renameField, let row = renamingRow else { return }
+        let text = f.stringValue
+        renameField = nil; renamingRow = nil
+        f.delegate = nil
+        f.removeFromSuperview()
+        if window?.firstResponder !== self { window?.makeFirstResponder(self) }
+        if commit { model?.renameLayer(row, to: text) }
+        needsDisplay = true
+    }
+
+    /// 検証用: 名前の欄に文字を入れて確定する。
+    func debugCommitRename(_ text: String) {
+        renameField?.stringValue = text
+        endRename(commit: true)
+    }
+
+    // MARK: 右クリックのメニュー(ヘッダー = レイヤー、クリップ = コピー・貼り付けなど)
+
+    /// ヘッダーの右クリックのメニュー(検証用に行から作れる)。
+    func layerContextMenu(row i: Int) -> NSMenu? {
+        guard let m = model, m.project.tracks.indices.contains(i) else { return nil }
+        let tr = m.project.tracks[i]
+        let menu = NSMenu()
+        func add(_ title: String, checked: Bool = false, _ run: @escaping () -> Void) {
+            let item = NSMenuItem(title: title, action: #selector(MenuAction.run), keyEquivalent: "")
+            let a = MenuAction(run)
+            item.target = a
+            item.representedObject = a      // メニューが生きている間、実行する側を保つ
+            item.state = checked ? .on : .off
+            menu.addItem(item)
+        }
+        add("名前を変更…") { [weak self] in self?.beginRenameLayer(i) }
+        menu.addItem(.separator())
+        add("ロック", checked: tr.isLocked) { m.toggleLayerLock(i) }
+        add("ソロ", checked: tr.isSolo) { m.toggleLayerSolo(i) }
+        menu.addItem(.separator())
+        for h in LayerHeight.allCases { add("高さ: \(h.title)", checked: LayerHeight.of(tr) == h) { m.setLayerHeight(i, h) } }
+        return menu
+    }
+
+    /// クリップの右クリックのメニュー。
+    func clipContextMenu() -> NSMenu? {
+        guard let m = model else { return nil }
+        let menu = NSMenu()
+        func add(_ title: String, enabled: Bool = true, _ run: @escaping () -> Void) {
+            let item = NSMenuItem(title: title, action: #selector(MenuAction.run), keyEquivalent: "")
+            let a = MenuAction(run)
+            item.target = a
+            item.representedObject = a
+            item.isEnabled = enabled
+            menu.addItem(item)
+        }
+        add("コピー", enabled: !m.selectedClipIDs.isEmpty) { m.copySelection() }
+        add("切り取り", enabled: !m.selectedClipIDs.isEmpty) { m.cutSelection() }
+        add("貼り付け", enabled: m.canPasteClips) { m.pasteClips() }
+        menu.addItem(.separator())
+        add("複製", enabled: !m.selectedClipIDs.isEmpty) { m.duplicateSelected() }
+        add("削除", enabled: !m.selectedClipIDs.isEmpty) { m.deleteSelected() }
+        add("すき間を詰めて削除", enabled: !m.selectedClipIDs.isEmpty) { m.rippleDeleteSelected() }
+        return menu
+    }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let p = point(event)
+        guard p.y >= TimelineLayout.rulerHeight, let m = model else { return nil }
+        if p.x < TimelineLayout.headerWidth {
+            guard let i = geometry.rowIndex(forY: p.y, rowCount: project.tracks.count) else { return nil }
+            m.selectLayer(i)
+            return layerContextMenu(row: i)
+        }
+        if let id = clipId(at: p) {
+            if !m.selectedClipIDs.contains(id) { m.selectOnly(id) }      // 選択の外を右クリックしたら、それだけを選ぶ
+            return clipContextMenu()
+        }
+        return nil
+    }
+
+    // MARK: 標準の編集コマンド(responder chain)
+
+    /// ⌘C ⌘X ⌘V ⌘A はメニューの標準項目から、先頭の responder へ届く。タイムラインにフォーカスがあるときだけ、クリップに対して働く
+    /// (入力欄にフォーカスがあれば、入力欄がコピー・貼り付けを受ける)。
+    @objc func copy(_ sender: Any?) { model?.copySelection() }
+    @objc func cut(_ sender: Any?) { model?.cutSelection() }
+    @objc func paste(_ sender: Any?) { model?.pasteClips() }
+    @objc override func selectAll(_ sender: Any?) { model?.selectAllClips() }
+}
+
+/// メニュー項目から呼ばれる処理の入れ物。
+final class MenuAction: NSObject {
+    let body: () -> Void
+    init(_ body: @escaping () -> Void) { self.body = body }
+    @objc func run() { body() }
+}
+
+extension TimelineCanvas: NSTextFieldDelegate, NSUserInterfaceValidations {
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        if commandSelector == #selector(NSResponder.insertNewline(_:)) { endRename(commit: true); return true }
+        if commandSelector == #selector(NSResponder.cancelOperation(_:)) { endRename(commit: false); return true }
+        return false
+    }
+
+    func controlTextDidEndEditing(_ obj: Notification) { endRename(commit: true) }
+
+    func validateUserInterfaceItem(_ item: NSValidatedUserInterfaceItem) -> Bool {
+        guard let m = model, !m.isLocked else { return false }
+        switch item.action {
+        case #selector(copy(_:)), #selector(cut(_:)): return !m.selectedClipIDs.isEmpty
+        case #selector(paste(_:)): return m.canPasteClips
+        case #selector(selectAll(_:)): return !m.project.allClips.isEmpty
+        default: return true
+        }
     }
 }

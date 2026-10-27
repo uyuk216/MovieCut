@@ -7,6 +7,8 @@ import MovieCutCore
 /// プロパティ欄の表示の種類。
 enum InspectorMode: Equatable {
     case clip(String)
+    /// A6: 複数のクリップを選んでいる(個数)。
+    case multi(Int)
     case character(String)
     case none
 }
@@ -17,6 +19,7 @@ extension ProjectModel {
 
     /// クリップが選ばれていればクリップ → キャラが選ばれていればキャラ → 何もなければヒント。
     var inspectorMode: InspectorMode {
+        if selectedClipIDs.count > 1 { return .multi(selectedClipIDs.count) }
         if let c = selectedClip { return .clip(c.id) }
         if characterPanelActive, let id = effectiveSelectedCharId { return .character(id) }
         return .none

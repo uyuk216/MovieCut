@@ -4,11 +4,13 @@ import CoreGraphics
 /// タイムラインの寸法と時間↔座標の計算(描画から切り離して試せるようにした純粋な部分)。
 /// style.css の .track(40pt)/ #ruler(22pt)/ .track-head(90pt)/ .clip(top 3, 高さ 34)と同じ値。
 enum TimelineLayout {
-    static let headerWidth: CGFloat = 90
+    static let headerWidth: CGFloat = 112
     static let rulerHeight: CGFloat = 22
     static let rowHeight: CGFloat = 40
     static let clipTop: CGFloat = 3
     static let clipHeight: CGFloat = 34
+    /// 行の高さに対するクリップの高さ(上 3pt・下 3pt の余白)。標準の行(40pt)で 34pt。
+    static func clipHeight(forRow h: CGFloat) -> CGFloat { h - 2 * clipTop }
     static let minClipWidth: CGFloat = 4
 
     static let minPps = 5.0
@@ -49,11 +51,15 @@ enum TimelineLayout {
         return String(format: "%02d:%02d.%d", tenths / 600, (tenths / 10) % 60, tenths % 10)
     }
 
-    /// 行ヘッダー内の「隠す」「消音」ボタンの矩形(行の上端を 0 とした座標)。
-    static func chipRects(rowTop: CGFloat) -> (hide: CGRect, mute: CGRect) {
-        let y = rowTop + 21
+    /// 行ヘッダー内の「隠す」「消音」ボタンの矩形(`rowTop` は行の上端の y。ボタンは行の下寄せ)。
+    static func chipRects(rowTop: CGFloat, rowHeight h: CGFloat = rowHeight) -> (hide: CGRect, mute: CGRect) {
+        let y = rowTop + h - 19
         return (CGRect(x: 5, y: y, width: 38, height: 16), CGRect(x: 46, y: y, width: 38, height: 16))
     }
+
+    /// 行ヘッダーのロックとソロのボタン(名前の行の右端)。
+    static func lockRect(rowTop: CGFloat) -> CGRect { CGRect(x: headerWidth - 39, y: rowTop + 2, width: 17, height: 17) }
+    static func soloRect(rowTop: CGFloat) -> CGRect { CGRect(x: headerWidth - 21, y: rowTop + 2, width: 17, height: 17) }
 }
 
 /// スクロール位置と拡大率から、座標を計算する。座標は左上原点(ヘッダー列とルーラーを含むビュー座標)。
@@ -61,17 +67,50 @@ struct TimelineGeometry: Equatable {
     var pps: Double = TimelineLayout.defaultPps
     var scrollX: CGFloat = 0
     var scrollY: CGFloat = 0
+    /// 各行の上端の位置(行の高さの累積。個数は行数 + 1)。空なら全部の行が標準の高さ。
+    var rowOffsets: [CGFloat] = []
+
+    /// 行ごとの高さを設定する(レイヤーの高さ)。
+    mutating func setRowHeights(_ heights: [CGFloat]) {
+        if heights.allSatisfy({ $0 == TimelineLayout.rowHeight }) { rowOffsets = []; return }
+        var acc: [CGFloat] = [0]
+        for h in heights { acc.append(acc[acc.count - 1] + h) }
+        rowOffsets = acc
+    }
+
+    /// 行 i のコンテンツ内の上端(スクロール前)。範囲外は標準の高さで続ける。
+    func rowOffset(_ i: Int) -> CGFloat {
+        if rowOffsets.isEmpty { return CGFloat(i) * TimelineLayout.rowHeight }
+        if i < 0 { return CGFloat(i) * TimelineLayout.rowHeight }
+        if i < rowOffsets.count { return rowOffsets[i] }
+        return rowOffsets[rowOffsets.count - 1] + CGFloat(i - (rowOffsets.count - 1)) * TimelineLayout.rowHeight
+    }
+
+    func rowHeight(_ i: Int) -> CGFloat { rowOffset(i + 1) - rowOffset(i) }
+
+    /// 行 `count` 本ぶんの高さの合計。
+    func totalRowsHeight(rowCount: Int) -> CGFloat { rowOffset(rowCount) }
+
+    func maxScrollY(rowCount: Int, viewHeight: CGFloat) -> CGFloat {
+        max(0, totalRowsHeight(rowCount: rowCount) - (viewHeight - TimelineLayout.rulerHeight))
+    }
 
     func x(forTime t: Double) -> CGFloat { TimelineLayout.headerWidth + CGFloat(t * pps) - scrollX }
     func time(forX x: CGFloat) -> Double { Double(x - TimelineLayout.headerWidth + scrollX) / pps }
 
-    func rowTop(_ index: Int) -> CGFloat { TimelineLayout.rulerHeight + CGFloat(index) * TimelineLayout.rowHeight - scrollY }
+    func rowTop(_ index: Int) -> CGFloat { TimelineLayout.rulerHeight + rowOffset(index) - scrollY }
 
     /// y 座標が指す行(範囲外は nil)。
     func rowIndex(forY y: CGFloat, rowCount: Int) -> Int? {
         guard y >= TimelineLayout.rulerHeight else { return nil }
-        let i = Int(((y - TimelineLayout.rulerHeight + scrollY) / TimelineLayout.rowHeight).rounded(.down))
-        return (0..<rowCount).contains(i) ? i : nil
+        let cy = y - TimelineLayout.rulerHeight + scrollY
+        guard cy >= 0 else { return nil }
+        if rowOffsets.isEmpty {
+            let i = Int((cy / TimelineLayout.rowHeight).rounded(.down))
+            return (0..<rowCount).contains(i) ? i : nil
+        }
+        for i in 0..<min(rowCount, rowOffsets.count - 1) where cy < rowOffsets[i + 1] { return i }
+        return nil
     }
 
     /// クリップの矩形。極端に短いクリップでも幅は 4pt 以上。
@@ -79,7 +118,7 @@ struct TimelineGeometry: Equatable {
         CGRect(x: x(forTime: start),
                y: rowTop(track) + TimelineLayout.clipTop,
                width: max(TimelineLayout.minClipWidth, CGFloat(duration * pps)),
-               height: TimelineLayout.clipHeight)
+               height: TimelineLayout.clipHeight(forRow: rowHeight(track)))
     }
 
     static func maxScrollX(projectEnd: Double, pps: Double, viewWidth: CGFloat) -> CGFloat {

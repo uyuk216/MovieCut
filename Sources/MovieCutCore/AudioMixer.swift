@@ -229,7 +229,7 @@ public enum AudioMixer {
         let total = Int((project.endTime * sr).rounded())
         // 対象クリップを開始フレーム順に
         var items: [Item] = []
-        for tr in project.tracks where !tr.isMuted {
+        for tr in project.tracks where project.isAudible(tr) {
             for c in tr.clips where c.type == .audio || c.type == .voice || c.type == .video {
                 guard let s = c.src, !s.isEmpty, c.duration > 0, !c.isFreeze else { continue }   // フリーズフレームは無音
                 var sf = Int((c.start * sr).rounded())

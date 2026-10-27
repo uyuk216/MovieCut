@@ -270,6 +270,8 @@ struct InspectorView: View {
                     switch model.inspectorMode {
                     case .clip(let id):
                         ClipInspector(model: model, clipId: id).id(id)
+                    case .multi(let n):
+                        MultiSelectionInspector(model: model, count: n)
                     case .character(let id):
                         CharacterInspector(model: model, speakers: speakers, charId: id).id(id)
                     case .none:
@@ -284,6 +286,40 @@ struct InspectorView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+}
+
+// MARK: - 複数選択(A6)
+
+/// 複数のクリップを選んでいるときのプロパティ欄: 個数と、まとめてできる操作だけ(項目ごとの編集は 1 つ選んだときに)。
+struct MultiSelectionInspector: View {
+    @ObservedObject var model: ProjectModel
+    let count: Int
+
+    enum Title {
+        static func selected(_ n: Int) -> String { "\(n)個のクリップを選択中" }
+        static let duplicate = "複製"
+        static let delete = "削除"
+        static let rippleDelete = "すき間を詰めて削除"
+        static let copy = "コピー"
+        static let hint = "項目を編集するには、クリップを 1 つだけ選びます。移動・削除・コピーは選んだ全部にかかります。"
+        static let all = [duplicate, delete, rippleDelete, copy]
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(Title.selected(count)).font(.system(size: 14, weight: .semibold))
+            Text(Title.hint).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 8) {
+                Button(Title.duplicate) { model.duplicateSelected() }
+                Button(Title.delete) { model.deleteSelected() }
+            }
+            HStack(spacing: 8) {
+                Button(Title.rippleDelete) { model.rippleDeleteSelected() }
+                Button(Title.copy) { model.copySelection() }
+            }
+        }
+        .disabled(model.isLocked)
     }
 }
 

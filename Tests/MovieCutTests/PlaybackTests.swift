@@ -53,8 +53,9 @@ final class PlaybackTests: XCTestCase {
 
     func testTimeXRoundTrip() {
         var g = TimelineGeometry(); g.pps = 80; g.scrollX = 200
-        XCTAssertEqual(g.x(forTime: 0), 90 - 200, accuracy: 1e-9)
-        XCTAssertEqual(g.x(forTime: 5), 90 + 400 - 200, accuracy: 1e-9)
+        let hw = TimelineLayout.headerWidth   // A6: ロックとソロのボタンのために 90 → 112
+        XCTAssertEqual(g.x(forTime: 0), hw - 200, accuracy: 1e-9)
+        XCTAssertEqual(g.x(forTime: 5), hw + 400 - 200, accuracy: 1e-9)
         XCTAssertEqual(g.time(forX: g.x(forTime: 3.25)), 3.25, accuracy: 1e-9)
     }
 
@@ -81,7 +82,7 @@ final class PlaybackTests: XCTestCase {
     func testClipRectGeometry() {
         var g = TimelineGeometry(); g.pps = 40
         let r = g.clipRect(start: 2, duration: 1.5, track: 2)
-        XCTAssertEqual(r, CGRect(x: 90 + 80, y: 22 + 80 + 3, width: 60, height: 34))
+        XCTAssertEqual(r, CGRect(x: TimelineLayout.headerWidth + 80, y: 22 + 80 + 3, width: 60, height: 34))
         // 極端に短いクリップ
         XCTAssertEqual(g.clipRect(start: 0, duration: 0.001, track: 0).width, 4)
         XCTAssertEqual(g.clipRect(start: 0, duration: 0, track: 0).width, 4)

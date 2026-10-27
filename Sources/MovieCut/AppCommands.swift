@@ -56,6 +56,8 @@ struct AppCommands: Commands {
         CommandGroup(after: .pasteboard) {
             MenuSection { s, run in
                 Divider()
+                items(AppMenuSpec.clipboardItems(s), run)
+                Divider()
                 items(AppMenuSpec.editAdd(s), run)
             }
         }
@@ -67,6 +69,12 @@ struct AppCommands: Commands {
                 ForEach(Array(groups.enumerated()), id: \.offset) { i, g in
                     if i > 0 { Divider() }
                     items(g, run)
+                }
+                Divider()
+                Menu("レイヤー") {
+                    items(AppMenuSpec.layerItems(s), run)
+                    Divider()
+                    items(AppMenuSpec.layerHeightItems(s), run)
                 }
                 Divider()
                 Menu("キーフレーム") { items(AppMenuSpec.keyframeItems(s), run) }
