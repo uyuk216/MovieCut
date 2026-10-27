@@ -281,9 +281,13 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var keepPitch: Bool? = nil
     /// フリーズフレーム(動画だけ)。素材の `offset` の1コマを止めて出す静止画のクリップ。音は無音。未設定 = しない。
     public var freeze: Bool? = nil
+    /// 音声エフェクト(EQ・コンプレッサー・リバーブ・ノーマライズ。音声・ボイス・動画)。無いときはファイルに書かない。
+    public var audioFx: AudioFx? = nil
+    /// 左右の振り分け(−1〜1、等パワー)。未設定 = 中央。
+    public var pan: Double? = nil
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["id", "type", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze"]
+    static let knownKeys: Set<String> = ["id", "type", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "audioFx", "pan"]
 
     public init() {}
 
@@ -329,6 +333,7 @@ public struct Clip: Codable, Equatable, Identifiable {
         case "w": return wOrDefault
         case "h": return hOrDefault
         case "strength": return strengthOrDefault
+        case "volume": return volumeOrDefault
         default:
             if let (i, p) = EffectKey.parse(key), effects.indices.contains(i) { return effects[i].value(p) }
             return 0
@@ -347,6 +352,7 @@ public struct Clip: Codable, Equatable, Identifiable {
         case "w": w = v
         case "h": h = v
         case "strength": strength = v
+        case "volume": volume = v
         default:
             if let (i, p) = EffectKey.parse(key), effects.indices.contains(i) { effects[i].params[p] = v }
         }
@@ -376,11 +382,20 @@ public struct Clip: Codable, Equatable, Identifiable {
         crop = l.value("crop")
         fadeIn = l.double("fadeIn"); fadeOut = l.double("fadeOut"); fadeCurve = l.string("fadeCurve")
         speed = l.double("speed"); reverse = l.bool("reverse"); keepPitch = l.bool("keepPitch"); freeze = l.bool("freeze")
+        pan = l.double("pan"); audioFx = l.value("audioFx")
         extra = l.extra()
         // 速度まわりの項目が読めない型だったら、捨てずにそのまま書き戻す
-        for key in ["speed", "reverse", "keepPitch", "freeze"] {
+        for key in ["speed", "reverse", "keepPitch", "freeze", "pan", "audioFx"] {
             guard let raw: JSONValue = l.value(key) else { continue }
-            let typedOK: Bool = key == "speed" ? speed != nil : (key == "reverse" ? reverse != nil : (key == "keepPitch" ? keepPitch != nil : freeze != nil))
+            let typedOK: Bool
+            switch key {
+            case "speed": typedOK = speed != nil
+            case "reverse": typedOK = reverse != nil
+            case "keepPitch": typedOK = keepPitch != nil
+            case "freeze": typedOK = freeze != nil
+            case "pan": typedOK = pan != nil
+            default: typedOK = audioFx != nil
+            }
             if !typedOK { extra[key] = raw }
         }
         // 読めなかったトランジションも捨てずに、そのまま書き戻す
@@ -446,6 +461,8 @@ public struct Clip: Codable, Equatable, Identifiable {
         try c.encodeIfPresent(reverse, forKey: AnyKey("reverse"))
         try c.encodeIfPresent(keepPitch, forKey: AnyKey("keepPitch"))
         try c.encodeIfPresent(freeze, forKey: AnyKey("freeze"))
+        if let fx = audioFx, !fx.isEmpty { try c.encode(fx, forKey: AnyKey("audioFx")) }
+        try c.encodeIfPresent(pan, forKey: AnyKey("pan"))
     }
 }
 

@@ -20,6 +20,8 @@ enum MenuCommand: Hashable {
     case effectAdd(EffectKind), effectPreset(EffectPreset), effectClear, effectCopy, effectPaste
     // 速度・逆再生・フリーズフレーム
     case speed(Double), toggleReverse, freezeFrame
+    // 音声(ノーマライズ・音量の段階・ボイス向けプリセット・エフェクトを外す)
+    case audioNormalize, audioVolumeUp, audioVolumeDown, audioVoicePreset, audioClear
     case zoomIn, zoomOut, zoomFit
     case resolution(String), swapResolution, fps(Double), fpsCustom, codec(String), background(String)
     case toggleSecondScreen, fullScreen, toggleStatusItem
@@ -135,6 +137,9 @@ struct MenuState: Equatable {
     var speedValue = 1.0             // 選択クリップの速度
     var isReversed = false
     var canFreezeFrame = false       // 動画クリップを選び、再生位置がその中
+    // 音声
+    var canAudioFx = false           // 音声・ボイス・動画(フリーズ以外)のクリップを選んでいる
+    var hasAudioFx = false           // 選択クリップに音声エフェクトかパンがある
     /// メニューバーのアイコンを出す設定(「表示」メニューの切り替え)。
     var statusItemShown = true
 
@@ -191,6 +196,8 @@ struct MenuState: Equatable {
             speedValue = c.effectiveSpeed
             isReversed = c.effectiveReverse
             canFreezeFrame = SpeedEditing.canFreeze(c, at: t)
+            canAudioFx = AudioFxEditing.supports(c)
+            hasAudioFx = AudioFxEditing.hasAnyFx(c)
         }
         canPasteEffects = !m.effectClipboard.isEmpty
         hasPrevClip = ClipEditing.hasAdjacentClip(in: p, from: m.selectedClipId, forward: false, playhead: t)
@@ -430,6 +437,17 @@ enum AppMenuSpec {
         MenuItemSpec(command: .freezeFrame, title: "フリーズフレーム（静止画にする）", shortcut: nil, enabled: s.canEdit && s.canFreezeFrame, checked: nil)
     }
 
+    // MARK: 音声(クリップメニューのサブメニュー。ショートカットは付けない)
+
+    static func audioItems(_ s: MenuState) -> [MenuItemSpec] {
+        let on = s.canEdit && s.canAudioFx
+        return [MenuItemSpec(command: .audioNormalize, title: "ノーマライズ（ピーク −1 dB）", shortcut: nil, enabled: on, checked: nil),
+                MenuItemSpec(command: .audioVolumeUp, title: "音量を上げる（+3 dB）", shortcut: nil, enabled: on, checked: nil),
+                MenuItemSpec(command: .audioVolumeDown, title: "音量を下げる（−3 dB）", shortcut: nil, enabled: on, checked: nil),
+                MenuItemSpec(command: .audioVoicePreset, title: "ボイス向けプリセット（EQ + コンプレッサー）", shortcut: nil, enabled: on, checked: nil),
+                MenuItemSpec(command: .audioClear, title: "音声エフェクトをすべて外す", shortcut: nil, enabled: s.canEdit && s.hasAudioFx, checked: nil)]
+    }
+
     static func zoom(_ s: MenuState) -> [MenuItemSpec] {
         [MenuItemSpec(command: .zoomIn, title: "タイムラインを拡大", shortcut: cmd("+"), enabled: s.canEdit, checked: nil),
          MenuItemSpec(command: .zoomOut, title: "タイムラインを縮小", shortcut: cmd("-"), enabled: s.canEdit, checked: nil),
@@ -496,7 +514,7 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, settings(s), videoSettings(s)] + file(s) + [exportCurrent(s)] + exportPresets(s) + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + speedItems(s) + [freezeFrameItem(s)] + editAdd(s) + playback(s)
+        [about, settings(s), videoSettings(s)] + file(s) + [exportCurrent(s)] + exportPresets(s) + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + editAdd(s) + playback(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + [secondScreen(s), statusItemToggle(s), fullScreen(s)] + help.flatMap { $0 }
@@ -569,6 +587,11 @@ enum AppMenu {
             case .speed(let v): m.setSpeedSelected(v)
             case .toggleReverse: m.toggleReverseSelected()
             case .freezeFrame: m.freezeFrameSelected()
+            case .audioNormalize: m.normalizePeakSelected()
+            case .audioVolumeUp: m.stepVolumeSelected(db: 3)
+            case .audioVolumeDown: m.stepVolumeSelected(db: -3)
+            case .audioVoicePreset: m.applyVoicePresetSelected()
+            case .audioClear: m.clearAudioFxSelected()
             case .delete: m.deleteSelected()
             case .addText: m.addTextClip()
             case .addBlur: m.addBlurClip()

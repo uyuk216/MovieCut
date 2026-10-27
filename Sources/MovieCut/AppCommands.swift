@@ -87,6 +87,8 @@ struct AppCommands: Commands {
                 }
                 MenuItemView(spec: AppMenuSpec.freezeFrameItem(s), perform: run)
                 Divider()
+                Menu("音声") { items(AppMenuSpec.audioItems(s), run) }
+                Divider()
                 Menu("エフェクト") {
                     items(AppMenuSpec.effectKindItems(s), run)
                     Divider()

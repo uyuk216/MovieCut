@@ -150,12 +150,16 @@ public enum Animation {
     public static let transformKeys = ["x", "y", "scale", "rotation", "opacity"]
     /// ぼかし範囲のクリップで動かせる項目。
     public static let blurRegionKeys = ["x", "y", "w", "h", "strength"]
+    /// 音量(音声・ボイス・動画)。値は倍率(1 = 等倍、0〜2)。
+    public static let volumeKey = "volume"
 
     /// そのクリップの種類で動かせる項目(クリップごとのぼかし "blur" を持つ画像・動画・文字は blur も)。
     public static func keys(for clip: Clip) -> [String] {
         switch clip.type {
         case .blur: return blurRegionKeys
-        case .image, .video, .text: return transformKeys + ["blur"] + clip.effectKeys
+        case .video: return transformKeys + ["blur"] + clip.effectKeys + [volumeKey]
+        case .image, .text: return transformKeys + ["blur"] + clip.effectKeys
+        case .audio, .voice: return clip.isFreeze ? [] : [volumeKey]
         default: return []
         }
     }
@@ -214,6 +218,7 @@ public enum Animation {
         case "rotation": return -3600...3600
         case "opacity": return 0...1
         case "blur", "strength": return 0...300
+        case "volume": return 0...2
         default: return -1e9...1e9
         }
     }
@@ -250,6 +255,7 @@ public enum Animation {
         case "w": return "幅"
         case "h": return "高さ"
         case "strength": return "ぼかしの強さ"
+        case "volume": return "音量"
         default: return key
         }
     }

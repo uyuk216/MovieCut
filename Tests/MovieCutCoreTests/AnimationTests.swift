@@ -144,7 +144,9 @@ final class AnimationTests: XCTestCase {
         c.type = .image
         XCTAssertEqual(Animation.keys(for: c), ["x", "y", "scale", "rotation", "opacity", "blur"])
         c.type = .audio
-        XCTAssertEqual(Animation.keys(for: c), [])
+        XCTAssertEqual(Animation.keys(for: c), ["volume"])      // 音声は音量だけ動かせる(A-5)
+        c.type = .text
+        XCTAssertFalse(Animation.keys(for: c).contains("volume"))
     }
 
     func testShiftSplitHelpers() {

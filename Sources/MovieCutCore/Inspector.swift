@@ -84,6 +84,7 @@ public enum ClipField: CaseIterable {
         case .w: return "w"
         case .h: return "h"
         case .strength: return "strength"
+        case .volume: return "volume"
         default: return nil
         }
     }

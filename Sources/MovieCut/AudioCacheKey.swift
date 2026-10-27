@@ -4,7 +4,7 @@ import MovieCutCore
 
 /// 再生用にミックスした音声(CAF)の「どのプロジェクトのものか」を表す鍵。
 /// 音に関係する項目(audio / voice / video クリップの src・開始・長さ・オフセット・音量・速度・逆再生、レイヤーの消音、
-/// 素材ファイルの更新日時)だけから作る。文字の色や位置、隠すなどを変えても変わらない。
+/// 素材ファイルの更新日時、音声エフェクト・パン・音量のキー)だけから作る。文字の色や位置、隠すなどを変えても変わらない。
 struct AudioCacheKey: Hashable {
     let value: String
 
@@ -28,7 +28,12 @@ struct AudioCacheKey: Hashable {
                     remap = "|rate=\(c.effectiveSpeed),rev=\(c.effectiveReverse ? 1 : 0)"
                     if c.effectiveSpeed != 1 && !c.keepPitchOrDefault { remap += ",pitch=0" }
                 }
-                items.append("\(c.type.rawValue)|\(src)|\(c.start)|\(c.duration)|\(c.offset)|\(c.volumeOrDefault)|\(date)\(fade)\(remap)")
+                // 音声エフェクト・パン・音量のキーも、あるときだけ鍵に足す(どれも無いクリップの鍵は従来と同じ)
+                var extras = ""
+                if let fx = c.audioFx, fx.isActive { extras += "|fx=\(fx.cacheToken)" }
+                if c.hasPan { extras += "|pan=\(c.panOrDefault)" }
+                if c.hasVolumeKeys { extras += "|vk=" + (c.keyframes["volume"] ?? []).map { "\($0.t):\($0.v):\($0.ease.token)" }.joined(separator: ",") }
+                items.append("\(c.type.rawValue)|\(src)|\(c.start)|\(c.duration)|\(c.offset)|\(c.volumeOrDefault)|\(date)\(fade)\(remap)\(extras)")
             }
             if items.isEmpty { continue }   // 音のないレイヤー(消音や追加を含む)は鍵に影響しない
             items.sort()

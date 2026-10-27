@@ -261,9 +261,9 @@ final class KeyframeAppTests: XCTestCase {
         XCTAssertTrue(s.hasKeyframes); XCTAssertTrue(s.hasPrevKeyframe); XCTAssertTrue(s.hasNextKeyframe)
         m.currentTime = 4
         XCTAssertFalse(MenuState(model: m).hasNextKeyframe)
-        m.selectedClipId = "m"; m.currentTime = 15            // 音声: 動かす項目なし
+        m.selectedClipId = "m"; m.currentTime = 15            // 音声: 動かせるのは音量だけ(A-5)。プリセットは不可
         s = MenuState(model: m)
-        XCTAssertFalse(s.canKeyframe); XCTAssertFalse(s.canAnimatePreset)
+        XCTAssertTrue(s.canKeyframe); XCTAssertFalse(s.canAnimatePreset)
         m.selectedClipId = "k"; m.currentTime = 12            // ぼかし範囲: ◇ は使えるがプリセットは不可
         s = MenuState(model: m)
         XCTAssertTrue(s.canKeyframe); XCTAssertFalse(s.canAnimatePreset)

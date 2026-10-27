@@ -377,6 +377,9 @@ struct ClipInspector: View {
         }
     }
 
+    /// 撮影・試験用: 音声エフェクトの節を全部開く。
+    static var expandAudioFx = false
+
     private static let pct: (Double) -> String = { "\(Int(($0 * 100).rounded()))%" }
     private static let px: (Double) -> String = { "\(Int($0.rounded()))px" }
 
@@ -418,6 +421,7 @@ struct ClipInspector: View {
                     InspectorSection(title: "音声")
                     slider("音量", .volume, step: 0.05, format: Self.pct)
                     audioFadeFields(c)
+                    AudioFxPanel(model: model, clipId: clipId, forceExpanded: Self.expandAudioFx)
                 }
             }
             .onDisappear { model.flushCoalesced() }
@@ -444,6 +448,7 @@ struct ClipInspector: View {
         InspectorSection(title: "音声")
         slider("音量", .volume, step: 0.05, format: Self.pct)
         audioFadeFields(c)
+        AudioFxPanel(model: model, clipId: clipId, forceExpanded: Self.expandAudioFx)
     }
 
     // MARK: 速度

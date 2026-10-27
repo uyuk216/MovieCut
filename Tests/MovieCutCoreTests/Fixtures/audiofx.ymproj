@@ -1,0 +1,64 @@
+{
+  "width": 1280,
+  "height": 720,
+  "fps": 30,
+  "bg": "#101010",
+  "codec": "h264",
+  "characters": [],
+  "tracks": [
+    {
+      "id": "at1",
+      "name": "音声エフェクト",
+      "clips": [
+        {
+          "id": "afull",
+          "type": "audio",
+          "src": "/tmp/none.wav",
+          "srcDuration": 10,
+          "start": 0,
+          "duration": 6,
+          "offset": 0,
+          "volume": 0.9,
+          "pan": -0.35,
+          "keyframes": {
+            "volume": [
+              { "t": 0, "v": 0.2 },
+              { "t": 2, "v": 1, "ease": "easeInOut" },
+              { "t": 5, "v": 0.6 }
+            ]
+          },
+          "audioFx": {
+            "eq": { "low": 3, "mid": -2, "high": 4.5, "band4": 1 },
+            "compressor": { "threshold": -24, "ratio": 4, "attack": 6, "release": 150, "makeup": 2.5 },
+            "reverb": { "mix": 0.3, "size": "hall" },
+            "normalize": { "targetDb": -14, "mode": "loudness" },
+            "futureFx": "keep"
+          },
+          "futureClipKey": [1, 2]
+        },
+        {
+          "id": "aoff",
+          "type": "voice",
+          "src": "/tmp/none.wav",
+          "start": 6,
+          "duration": 2,
+          "offset": 0,
+          "audioFx": {
+            "compressor": { "enabled": false, "ratio": 8 },
+            "reverb": {}
+          }
+        },
+        {
+          "id": "abad",
+          "type": "video",
+          "src": "/tmp/none.mp4",
+          "start": 8,
+          "duration": 2,
+          "offset": 0,
+          "audioFx": "not an object",
+          "pan": "left"
+        }
+      ]
+    }
+  ]
+}

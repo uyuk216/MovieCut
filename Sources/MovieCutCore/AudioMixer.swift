@@ -207,11 +207,21 @@ public enum AudioMixer {
         var gain: Float
         /// フェード(クリップ本来の頭からのサンプル数)。`fadeStart` は負の開始を切る前の頭、`length` はクリップ全体の長さ。
         var fadeStart = 0
+        /// クリップ本来の頭(負の開始を切る前)のフレーム。音量キーの時刻の基準。
+        var fullStart = 0
         var length = 0
         var fadeInFrames = 0
         var fadeOutFrames = 0
         var equalPower = false
         var hasFade: Bool { fadeInFrames > 0 || fadeOutFrames > 0 }
+        /// 音量のキーフレーム(あるときだけ。倍率はサンプルごとに決まり、`gain` は使わない)
+        var volumeEnv: VolumeEnvelope?
+        /// 音声エフェクト(効くものがあるときだけ)
+        var fx: AudioFx?
+        /// パン(中央以外のときだけ)
+        var pan: (l: Float, r: Float)?
+        /// 速い道(エフェクト・音量キー・パンが無い)で足りるか
+        var plain: Bool { volumeEnv == nil && fx == nil && pan == nil }
     }
 
     static func mixdownDetailed(project: Project, to url: URL) throws -> MixResult {
@@ -231,12 +241,16 @@ public enum AudioMixer {
                 if sf < 0 { off += Double(-sf) / sr; sf = 0 }  // 負の開始は頭を切る
                 guard ef > sf else { continue }
                 var item = Item(clip: c, startFrame: sf, endFrame: ef, offset: off, remapped: remap, gain: Float(c.volume ?? 1))
+                item.fullStart = fullStart
                 if c.hasAudioFade {
                     item.fadeStart = fullStart; item.length = fullLength
                     item.fadeInFrames = min(fullLength, Int((c.fadeInOrDefault * sr).rounded()))
                     item.fadeOutFrames = min(fullLength, Int((c.fadeOutOrDefault * sr).rounded()))
                     item.equalPower = c.fadeIsEqualPower
                 }
+                if c.hasVolumeKeys { item.volumeEnv = VolumeEnvelope(c.keyframes["volume"], sr: sr) }
+                if let fx = c.audioFx, fx.isActive { item.fx = fx }
+                if c.hasPan { item.pan = AudioPan.gains(c.panOrDefault) }
                 items.append(item)
             }
         }
@@ -263,6 +277,8 @@ public enum AudioMixer {
         defer { mL.deallocate(); mR.deallocate(); tL.deallocate(); tR.deallocate() }
 
         var sources: [Int: PCMSource] = [:]
+        var chains: [Int: AudioFxChain] = [:]      // エフェクトの状態(クリップごと、塊をまたいで続く)
+        var normGains: [Int: Float] = [:]          // ノーマライズの倍率(クリップを一度測って決める)
         var failed: Set<Int> = []
         var opened = 0
         // 速度・逆再生用の一時ファイル置き場(ミックスを終えたら消す)
@@ -278,12 +294,28 @@ public enum AudioMixer {
                 if let s = sources[idx] { src = s } else {
                     guard let s = try openItem(it, remapDir: remapDir) else { failed.insert(idx); continue }
                     sources[idx] = s; opened += 1; src = s
+                    if let fx = it.fx {
+                        if fx.hasChain { chains[idx] = AudioFxChain(fx, sr: sr) }
+                        if let n = fx.normalize, n.isActive { normGains[idx] = try normalizeGain(for: it, fx: fx, normalize: n, remapDir: remapDir, tL: tL, tR: tR) }
+                    }
                 }
                 let a = max(cs, it.startFrame), b = min(ce, it.endFrame)
                 let got = src.read(left: tL, right: tR, frames: b - a)
                 let base = a - cs
-                let g = it.gain
-                if it.hasFade {
+                let g = it.gain * (normGains[idx] ?? 1)
+                if !it.plain {
+                    chains[idx]?.process(tL, tR, got)
+                    // エフェクト後の音に、音量(キーがあればサンプルごと)・フェード・パンをかける
+                    let pl = it.pan?.l ?? 1, pr = it.pan?.r ?? 1
+                    let ng = normGains[idx] ?? 1
+                    for k in 0..<got {
+                        let pos = a + k - it.fullStart
+                        var fg = it.volumeEnv.map { $0.gain(at: pos) * ng } ?? g
+                        if it.hasFade { fg *= AudioFade.gain(pos: pos, length: it.length, fadeIn: it.fadeInFrames, fadeOut: it.fadeOutFrames, equalPower: it.equalPower) }
+                        mL[base + k] += tL[k] * fg * pl
+                        mR[base + k] += tR[k] * fg * pr
+                    }
+                } else if it.hasFade {
                     // フェード: サンプルごとに倍率をかける(クリップ本来の頭からの位置で決まるので、10 秒の塊の境目でも途切れない)
                     for k in 0..<got {
                         let fg = g * AudioFade.gain(pos: a + k - it.fadeStart, length: it.length, fadeIn: it.fadeInFrames, fadeOut: it.fadeOutFrames, equalPower: it.equalPower)
@@ -309,6 +341,25 @@ public enum AudioMixer {
             cs = ce
         }
         return MixResult(duration: Double(total) / sr, sourceCount: opened)
+    }
+
+    /// ノーマライズの倍率: クリップの使う範囲をもう一度読み、EQ → コンプレッサー → リバーブをかけた音のピーク(またはラウドネス)を測って決める。
+    private static func normalizeGain(for it: Item, fx: AudioFx, normalize n: AudioFx.Normalize, remapDir: URL,
+                                      tL: UnsafeMutablePointer<Float>, tR: UnsafeMutablePointer<Float>) throws -> Float {
+        guard let src = try openItem(it, remapDir: remapDir) else { return 1 }
+        let chain: AudioFxChain? = fx.hasChain ? AudioFxChain(fx, sr: mixSampleRate) : nil
+        let meter = LevelMeter()
+        var left = it.endFrame - it.startFrame
+        let block = 16384
+        while left > 0 {
+            let want = min(block, left)
+            let got = src.read(left: tL, right: tR, frames: want)
+            if got <= 0 { break }
+            chain?.process(tL, tR, got)
+            meter.add(tL, tR, got)
+            left -= got
+        }
+        return AudioNormalizer.gain(n, meter: meter)
     }
 
     /// ミキサーが読むソースを開く。速度・逆再生のクリップは、音声を作り直した一時ファイルから。作り直せないときは警告を出して無音にする。
