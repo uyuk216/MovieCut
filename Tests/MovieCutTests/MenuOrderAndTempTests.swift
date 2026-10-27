@@ -9,8 +9,8 @@ final class MenuOrderAndTempTests: XCTestCase {
     // MARK: 並び
 
     func testOrderedPutsClipPlaybackGoBeforeView() {
-        let swiftUIOrder = ["Movie Cut", "ファイル", "編集", "表示", "クリップ", "再生", "移動", "ウィンドウ", "ヘルプ"]
-        XCTAssertEqual(MenuOrder.ordered(swiftUIOrder), ["Movie Cut", "ファイル", "編集", "クリップ", "再生", "移動", "表示", "ウィンドウ", "ヘルプ"])
+        let swiftUIOrder = ["Movie Cut", "ファイル", "編集", "表示", "クリップ", "再生", "移動", "出力", "ウィンドウ", "ヘルプ"]
+        XCTAssertEqual(MenuOrder.ordered(swiftUIOrder), ["Movie Cut", "ファイル", "編集", "クリップ", "再生", "移動", "出力", "表示", "ウィンドウ", "ヘルプ"])
         // M5 のときの崩れ(再生が表示の後ろ)
         XCTAssertEqual(MenuOrder.ordered(["Movie Cut", "ファイル", "編集", "表示", "再生", "ウィンドウ", "ヘルプ"]), ["Movie Cut", "ファイル", "編集", "再生", "表示", "ウィンドウ", "ヘルプ"])
         // すでに正しければそのまま(2 回やっても同じ)
@@ -37,22 +37,22 @@ final class MenuOrderAndTempTests: XCTestCase {
     }
 
     func testFixReordersTheRealMenuKeepingItemsAndSubmenus() {
-        let m = menu(["Movie Cut", "ファイル", "編集", "表示", "クリップ", "再生", "移動", "ウィンドウ", "ヘルプ"])
+        let m = menu(["Movie Cut", "ファイル", "編集", "表示", "クリップ", "再生", "移動", "出力", "ウィンドウ", "ヘルプ"])
         let originals = Dictionary(uniqueKeysWithValues: m.items.map { (MenuOrder.title(of: $0), $0) })
         XCTAssertTrue(MenuOrder.fix(m))
-        XCTAssertEqual(m.items.map(MenuOrder.title(of:)), ["Movie Cut", "ファイル", "編集", "クリップ", "再生", "移動", "表示", "ウィンドウ", "ヘルプ"])
+        XCTAssertEqual(m.items.map(MenuOrder.title(of:)), ["Movie Cut", "ファイル", "編集", "クリップ", "再生", "移動", "出力", "表示", "ウィンドウ", "ヘルプ"])
         for it in m.items { XCTAssertTrue(it === originals[MenuOrder.title(of: it)], "項目そのものを移すだけ(作り直さない)") }
         XCTAssertEqual(m.items[3].submenu?.items.first?.title, "項目-クリップ")
         XCTAssertFalse(MenuOrder.fix(m), "2 回目は何も変えない")
-        XCTAssertEqual(m.items.count, 9)
+        XCTAssertEqual(m.items.count, 10)
     }
 
     func testFixFindsWindowAndHelpMenusByIdentityEvenWithLocalizedTitles() {
         // 実機の順(ヘルプが先、ウインドウが後)。ウインドウ / ヘルプはシステムの題ではなく windowsMenu / helpMenu で判定する
-        let m = menu(["Movie Cut", "ファイル", "編集", "クリップ", "再生", "移動", "表示", "Aide", "Fenster"])
-        let help = m.items[7].submenu!, windows = m.items[8].submenu!
+        let m = menu(["Movie Cut", "ファイル", "編集", "クリップ", "再生", "移動", "出力", "表示", "Aide", "Fenster"])
+        let help = m.items[8].submenu!, windows = m.items[9].submenu!
         XCTAssertTrue(MenuOrder.fix(m, windowsMenu: windows, helpMenu: help))
-        XCTAssertEqual(m.items.map(MenuOrder.title(of:)), ["Movie Cut", "ファイル", "編集", "クリップ", "再生", "移動", "表示", "Fenster", "Aide"])
+        XCTAssertEqual(m.items.map(MenuOrder.title(of:)), ["Movie Cut", "ファイル", "編集", "クリップ", "再生", "移動", "出力", "表示", "Fenster", "Aide"])
         XCTAssertFalse(MenuOrder.fix(m, windowsMenu: windows, helpMenu: help), "2 回目は何も変えない")
         // 実機の表記のまま: 題で判定(ヘルプを必ず最後に)
         let m2 = menu(["Movie Cut", "ファイル", "編集", "表示", "ヘルプ", "ウインドウ"])
@@ -69,18 +69,18 @@ final class MenuOrderAndTempTests: XCTestCase {
     }
 
     func testWatcherFixesTheOrderOnTheNextRunLoopTurnWhenTheMenuIsRebuilt() {
-        let m = menu(["Movie Cut", "ファイル", "編集", "クリップ", "再生", "移動", "表示", "ウィンドウ", "ヘルプ"])
+        let m = menu(["Movie Cut", "ファイル", "編集", "クリップ", "再生", "移動", "出力", "表示", "ウィンドウ", "ヘルプ"])
         MenuOrder.uninstall()
         MenuOrder.install(menu: { m })
         defer { MenuOrder.uninstall() }
-        XCTAssertEqual(m.items.map(MenuOrder.title(of:)), ["Movie Cut", "ファイル", "編集", "クリップ", "再生", "移動", "表示", "ウィンドウ", "ヘルプ"])
+        XCTAssertEqual(m.items.map(MenuOrder.title(of:)), ["Movie Cut", "ファイル", "編集", "クリップ", "再生", "移動", "出力", "表示", "ウィンドウ", "ヘルプ"])
         // SwiftUI が「表示」を CommandMenu の前に置き直した(= 追加の通知が来る)
         let view = m.items.first { MenuOrder.title(of: $0) == "表示" }!
         m.removeItem(view)
         m.insertItem(view, at: 3)
         XCTAssertEqual(m.items.map(MenuOrder.title(of:))[3], "表示", "通知の中ではまだ直さない")
         RunLoop.main.run(until: Date().addingTimeInterval(0.2))
-        XCTAssertEqual(m.items.map(MenuOrder.title(of:)), ["Movie Cut", "ファイル", "編集", "クリップ", "再生", "移動", "表示", "ウィンドウ", "ヘルプ"], "次の run loop で直る(アプリの更新を待たない)")
+        XCTAssertEqual(m.items.map(MenuOrder.title(of:)), ["Movie Cut", "ファイル", "編集", "クリップ", "再生", "移動", "出力", "表示", "ウィンドウ", "ヘルプ"], "次の run loop で直る(アプリの更新を待たない)")
         // 項目の追加(新しい CommandMenu)でも。題の無い項目(知らない題)はヘルプの前へ直す(1 回だけ)
         let n = MenuOrder.fixCount
         m.addItem(NSMenuItem(title: "", action: nil, keyEquivalent: ""))

@@ -3,7 +3,7 @@ import MovieCutCore
 
 /// メニューバーの項目が呼ぶ操作(ツールバーと同じモデルの関数に行き着く)。
 enum MenuCommand: Hashable {
-    case about, settings
+    case about, settings, videoSettings
     case addMedia, export, exportPreset(ExportPreset)
     case split, delete, addText, addBlur, addCharacter, makeVoices
     // クリップ(M7)
@@ -13,7 +13,7 @@ enum MenuCommand: Hashable {
     case goStart, goEnd, prevEdit, nextEdit, prevLine, nextLine, jumpToTime
     case addMarker, renameMarker, prevMarker, nextMarker, deleteMarker, clearMarkers, jumpToMarker(String)
     case zoomIn, zoomOut, zoomFit
-    case resolution(String), codec(String), background(String)
+    case resolution(String), fps(Int), codec(String), background(String)
     case toggleSecondScreen, fullScreen, toggleStatusItem
     case helpVoicevox, helpAquestalk, helpLicense, helpThirdParty
 }
@@ -81,6 +81,7 @@ struct MenuState: Equatable {
     var hasSelection = false
     var canSplit = false
     var resolutionKey = ""
+    var fps = 0
     var codec = ""
     var bg = ""
     var isSecondScreenOpen = false
@@ -121,6 +122,7 @@ struct MenuState: Equatable {
         hasSelection = m.selectedClip != nil
         canSplit = m.canSplit
         resolutionKey = m.resolutionKey
+        fps = m.project.fps
         codec = m.project.codec
         bg = m.project.bg
         isSecondScreenOpen = m.isSecondScreenOpen
@@ -166,13 +168,31 @@ enum AppMenuSpec {
         MenuItemSpec(command: .settings, title: "設定…", shortcut: cmd(","), enabled: s.canEdit, checked: nil)
     }
 
+    /// 出力 ▸ 動画の設定…(設定シート。⌘, の「設定…」と同じ操作でショートカットは持たない)。
+    static func videoSettings(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .videoSettings, title: "動画の設定…", shortcut: nil, enabled: s.canEdit, checked: nil)
+    }
+
+    static let fpsPresets = [24, 30, 60]
+
+    /// FPS のラジオ。24 / 30 / 60 以外のときは、チェック付きの項目がもう 1 つ増える。
+    static func fpsItems(_ s: MenuState) -> [MenuItemSpec] {
+        var items = fpsPresets.map {
+            MenuItemSpec(command: .fps($0), title: "\($0) fps", shortcut: nil, enabled: s.canEdit, checked: $0 == s.fps)
+        }
+        if s.hasDocument, s.fps > 0, !fpsPresets.contains(s.fps) {
+            items.append(MenuItemSpec(command: .fps(s.fps), title: "\(s.fps) fps", shortcut: nil, enabled: s.canEdit, checked: true))
+        }
+        return items
+    }
+
     static func file(_ s: MenuState) -> [MenuItemSpec] {
         [MenuItemSpec(command: .addMedia, title: "素材を追加…", shortcut: cmd("i"), enabled: s.canEdit, checked: nil)]
     }
 
-    /// ファイル ▸ 書き出し: 現在の設定(⌘E)と、書き出しプリセット。
+    /// 出力 ▸ MP4 を書き出す…(⌘E)と、書き出しプリセット。
     static func exportCurrent(_ s: MenuState) -> MenuItemSpec {
-        MenuItemSpec(command: .export, title: "現在の設定で書き出す…", shortcut: cmd("e"), enabled: s.canEdit && s.canExport, checked: nil)
+        MenuItemSpec(command: .export, title: "MP4 を書き出す…", shortcut: cmd("e"), enabled: s.canEdit && s.canExport, checked: nil)
     }
 
     static func exportPresets(_ s: MenuState) -> [MenuItemSpec] {
@@ -324,9 +344,9 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, settings(s)] + file(s) + [exportCurrent(s)] + exportPresets(s) + clipMenu(s).flatMap { $0 } + editAdd(s) + playback(s)
+        [about, settings(s), videoSettings(s)] + file(s) + [exportCurrent(s)] + exportPresets(s) + clipMenu(s).flatMap { $0 } + editAdd(s) + playback(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerList(s)
-            + zoom(s) + resolutions(s) + [customResolution(s)] + codecItems(s) + backgroundItems(s)
+            + zoom(s) + resolutions(s) + [customResolution(s)] + fpsItems(s) + codecItems(s) + backgroundItems(s)
             + [secondScreen(s), statusItemToggle(s), fullScreen(s)] + help.flatMap { $0 }
     }
 }
@@ -349,7 +369,7 @@ enum AppMenu {
         default:
             guard let m = model else { return }
             switch c {
-            case .settings: m.openSettings()
+            case .settings, .videoSettings: m.openSettings()
             case .addMedia: m.chooseAndAddMedia()
             case .export: m.chooseAndExport()
             case .exportPreset(let p): m.chooseAndExport(preset: p)
@@ -391,6 +411,7 @@ enum AppMenu {
             case .zoomOut: m.zoomTimeline(by: 1 / zoomStep)
             case .zoomFit: m.onFitTimeline()
             case .resolution(let key): m.selectResolution(key)
+            case .fps(let f): m.setFps(f)
             case .codec(let k): m.setCodec(k)
             case .background(let k): m.setBackground(k)
             case .toggleSecondScreen: m.toggleSecondScreen()

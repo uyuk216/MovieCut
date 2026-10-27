@@ -73,7 +73,7 @@ final class MenuM7Tests: XCTestCase {
 
     func testExportMenuAndStatusItemToggleSpec() {
         let s = state()
-        XCTAssertEqual(AppMenuSpec.exportCurrent(s).title, "現在の設定で書き出す…")
+        XCTAssertEqual(AppMenuSpec.exportCurrent(s).title, "MP4 を書き出す…")
         XCTAssertEqual(AppMenuSpec.exportCurrent(s).shortcut, sc("e", .command))
         XCTAssertEqual(AppMenuSpec.exportPresets(s).map(\.title), ["YouTube 1080p", "YouTube 4K", "ショート縦", "軽量 720p", "音声のみ"])
         XCTAssertTrue(AppMenuSpec.exportPresets(s).allSatisfy { $0.shortcut == nil && $0.enabled })

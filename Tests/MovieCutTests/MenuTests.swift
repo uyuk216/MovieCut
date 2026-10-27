@@ -17,7 +17,7 @@ final class MenuTests: XCTestCase {
         var s = MenuState()
         s.hasDocument = true
         s.canExport = true
-        s.resolutionKey = "1920x1080"; s.codec = "h264"; s.bg = "#000000"
+        s.resolutionKey = "1920x1080"; s.fps = 60; s.codec = "h264"; s.bg = "#000000"
         configure(&s)
         return s
     }
@@ -35,7 +35,7 @@ final class MenuTests: XCTestCase {
         let file = AppMenuSpec.file(s)
         XCTAssertEqual(file.map(\.title), ["素材を追加…"])
         XCTAssertEqual(file.map(\.shortcut), [sc("i", .command)])
-        XCTAssertEqual(AppMenuSpec.exportCurrent(s).title, "現在の設定で書き出す…")
+        XCTAssertEqual(AppMenuSpec.exportCurrent(s).title, "MP4 を書き出す…")
         XCTAssertEqual(AppMenuSpec.exportCurrent(s).shortcut, sc("e", .command))
         XCTAssertEqual(AppMenuSpec.clipEdit(s).map(\.title), ["クリップを分割", "クリップを複製", "クリップを削除", "すき間を詰めて削除"])
         // 編集メニューに残るのはキャラクターと台本だけ。テキスト・ぼかし範囲はクリップメニューへ移った
@@ -174,6 +174,46 @@ final class MenuTests: XCTestCase {
         XCTAssertEqual(list.last?.command, .resolution("1234x567"))
         XCTAssertEqual(list.filter { $0.checked == true }.count, 1)
         XCTAssertEqual(list.last?.checked, true)
+    }
+
+    func testFpsRadioChecksCurrentValueAndAddsExtraEntry() {
+        for f in AppMenuSpec.fpsPresets {
+            let list = AppMenuSpec.fpsItems(state { $0.fps = f })
+            XCTAssertEqual(list.map(\.title), ["24 fps", "30 fps", "60 fps"])
+            XCTAssertEqual(list.filter { $0.checked == true }.map(\.command), [.fps(f)])
+        }
+        let odd = AppMenuSpec.fpsItems(state { $0.fps = 25 })
+        XCTAssertEqual(odd.map(\.title), ["24 fps", "30 fps", "60 fps", "25 fps"])
+        XCTAssertEqual(odd.filter { $0.checked == true }.map(\.command), [.fps(25)])
+        XCTAssertTrue(AppMenuSpec.fpsItems(MenuState()).allSatisfy { !$0.enabled && $0.checked != true }, "書類なしは無効")
+        XCTAssertTrue(AppMenuSpec.fpsItems(state { $0.isLocked = true }).allSatisfy { !$0.enabled }, "書き出し中は無効")
+    }
+
+    func testFpsMenuIsUndoableThroughModel() {
+        let m = makeModel()
+        XCTAssertEqual(m.project.fps, 60)
+        AppMenu.perform(.fps(30), model: m)
+        XCTAssertEqual(m.project.fps, 30)
+        XCTAssertEqual(MenuState(model: m).fps, 30)
+        m.effectiveUndoManager.undo()
+        XCTAssertEqual(m.project.fps, 60)
+    }
+
+    func testVideoSettingsItemOpensTheSheetLikeSettings() {
+        let s = state()
+        XCTAssertEqual(AppMenuSpec.videoSettings(s).title, "動画の設定…")
+        XCTAssertNil(AppMenuSpec.videoSettings(s).shortcut, "⌘, は設定…が持つ")
+        XCTAssertFalse(AppMenuSpec.videoSettings(MenuState()).enabled)
+        XCTAssertFalse(AppMenuSpec.videoSettings(state { $0.isLocked = true }).enabled)
+        let m = makeModel()
+        AppMenu.perform(.videoSettings, model: m)
+        XCTAssertTrue(m.showSettings)
+    }
+
+    func testOutputMenuOrderIsBetweenGoAndView() {
+        XCTAssertEqual(MenuOrder.desired, ["ファイル", "編集", "クリップ", "再生", "移動", "出力", "表示", "ウィンドウ", "ヘルプ"])
+        XCTAssertEqual(MenuOrder.ordered(["Movie Cut", "ヘルプ", "表示", "出力", "ウィンドウ", "移動", "再生", "クリップ", "編集", "ファイル"]),
+                       ["Movie Cut", "ファイル", "編集", "クリップ", "再生", "移動", "出力", "表示", "ウィンドウ", "ヘルプ"])
     }
 
     func testCodecAndBackgroundRadios() {

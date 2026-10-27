@@ -53,6 +53,12 @@ extension ProjectModel {
         preset?.suggestedFileName(documentName: documentName) ?? documentName + ".mp4"
     }
 
+    /// フレームレート(メニューの 24 / 30 / 60)。Undo できる。
+    func setFps(_ fps: Int) {
+        guard fps >= 1, fps <= 240, fps != project.fps, !isLocked else { return }
+        edit("FPS の変更") { $0.fps = fps }
+    }
+
     /// 書き出し形式(メニューの H.264 / HEVC)。Undo できる。
     func setCodec(_ codec: String) {
         guard ["h264", "hevc"].contains(codec), !isLocked else { return }

@@ -137,23 +137,29 @@ struct ContentView: View {
 struct ToolbarBar: View {
     @ObservedObject var model: ProjectModel
 
+    /// ツールバーのボタンの題(試験が「解像度・設定・書き出しがウィンドウに無い」ことを確かめるための一覧。解像度・設定・書き出しはメニューバーの「出力」へ移した)。
+    enum Title {
+        static let addMedia = "素材を追加", text = "テキスト", blur = "ぼかし範囲", split = "分割", delete = "削除"
+        static let all = [addMedia, text, blur, split, delete]
+    }
+
     var body: some View {
         HStack(spacing: 8) {
             Group {
-                Button("素材を追加") { model.chooseAndAddMedia() }
+                Button(Title.addMedia) { model.chooseAndAddMedia() }
                     .help("画像・動画・音声を再生ヘッドの位置に追加(Finder からのドラッグ&ドロップも可)")
-                Button("テキスト") { model.addTextClip() }
+                Button(Title.text) { model.addTextClip() }
                     .help("一番上のレイヤーに文字を追加")
-                Button("ぼかし範囲") { model.addBlurClip() }
+                Button(Title.blur) { model.addBlurClip() }
                     .help("一番上のレイヤーにぼかし範囲を追加")
             }
             .disabled(model.isLocked)
             Divider().frame(height: 18)
             Group {
-                Button("分割") { model.splitSelected() }
+                Button(Title.split) { model.splitSelected() }
                     .disabled(model.isLocked || !model.canSplit)
                     .help("選択中のクリップを再生ヘッドで分割(S)")
-                Button("削除") { model.deleteSelected() }
+                Button(Title.delete) { model.deleteSelected() }
                     .disabled(model.isLocked || model.selectedClip == nil)
                     .help("選択中のクリップを削除(Delete)")
             }
@@ -162,11 +168,6 @@ struct ToolbarBar: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-            Button("設定") { model.showSettings = true }
-                .disabled(model.isLocked)
-            Button("MP4 書き出し") { model.chooseAndExport() }
-                .buttonStyle(.borderedProminent)
-                .disabled(!model.canExport)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
@@ -305,32 +306,21 @@ struct CenterPanel: View {
 struct TransportBar: View {
     @ObservedObject var model: ProjectModel
 
-    private var resolutionBinding: Binding<String> {
-        Binding(get: { model.resolutionKey }, set: { model.selectResolution($0) })
+    /// 再生バーの固定の題(解像度ピッカーは「出力」メニューへ移した)。
+    enum Title {
+        static let toStart = "⏮", play = "▶", pause = "⏸", openSecond = "別画面に表示", closeSecond = "別画面を閉じる"
+        static let all = [toStart, play, pause, openSecond, closeSecond]
     }
 
     var body: some View {
         HStack(spacing: 10) {
-            Button("⏮") { model.playback.goToStart() }
+            Button(Title.toStart) { model.playback.goToStart() }
                 .help("先頭へ(Home)")
-            Button(model.isPlaying ? "⏸" : "▶") { model.playback.togglePlay() }
+            Button(model.isPlaying ? Title.pause : Title.play) { model.playback.togglePlay() }
                 .help("再生 / 一時停止(Space)")
                 .disabled(model.isLocked)
-            Button(model.isSecondScreenOpen ? "別画面を閉じる" : "別画面に表示") { model.toggleSecondScreen() }
+            Button(model.isSecondScreenOpen ? Title.closeSecond : Title.openSecond) { model.toggleSecondScreen() }
                 .help("外付け画面にプレビューを全画面で出す(Esc で閉じる)")
-            HStack(spacing: 6) {
-                Text("解像度")
-                Picker("解像度", selection: resolutionBinding) {
-                    ForEach(ResolutionPresets.items, id: \.key) { Text($0.label).tag($0.key) }
-                    if !ResolutionPresets.isPreset(model.resolutionKey) {
-                        Text(String(format: "%d×%d", model.project.width, model.project.height)).tag(model.resolutionKey)
-                    }
-                    Divider()
-                    Text("自由…").tag(ResolutionPresets.customKey)
-                }
-                .labelsHidden()
-                .frame(width: 170)
-            }
             Text("\(timecode(model.currentTime)) / \(timecode(model.project.endTime))")
                 .monospacedDigit()
                 .foregroundStyle(.secondary)

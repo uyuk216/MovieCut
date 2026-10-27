@@ -33,7 +33,7 @@ moviecut-cli export in.mcpjc out.mp4 --preset short        # 1080×1920 H.264
 moviecut-cli export in.mcpjc out.mp4 --preset light        # 1280×720 H.264、fps は 30 まで
 moviecut-cli export in.mcpjc out.m4a --preset audio        # 音声のみ(AAC 256 kbps・48 kHz)
 ```
-アプリでは「ファイル ▸ 書き出し ▸ …」の同じプリセットを使えます。プリセットはプロジェクトの写しに当てるので、元のプロジェクトは変わりません。
+アプリでは「出力 ▸ 書き出しプリセット ▸ …」の同じプリセットを使えます。プリセットはプロジェクトの写しに当てるので、元のプロジェクトは変わりません。
 
 ## プロジェクトファイル
 新しい形式は `.mcpjc` です。旧 `.ymproj` も開けます(「保存」は元のファイルへ同じ形式で書き戻し、「別名で保存…」は `.mcpjc` を提案します)。

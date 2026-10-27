@@ -45,15 +45,10 @@ struct AppCommands: Commands {
             MenuSection { s, run in MenuItemView(spec: AppMenuSpec.settings(s), perform: run) }
         }
 
-        // ファイル(⌘P のプリントは menu.js に無く、別画面表示と衝突するので、その場所に素材追加と書き出しを置く)
+        // ファイル(⌘P のプリントは menu.js に無く、別画面表示と衝突するので、その場所に素材追加を置く)
         CommandGroup(replacing: .printItem) {
             MenuSection { s, run in
                 items(AppMenuSpec.file(s), run)
-                Menu("書き出し") {
-                    MenuItemView(spec: AppMenuSpec.exportCurrent(s), perform: run)
-                    Divider()
-                    items(AppMenuSpec.exportPresets(s), run)
-                }
             }
         }
 
@@ -65,7 +60,7 @@ struct AppCommands: Commands {
             }
         }
 
-        // クリップ / 再生 / 移動。SwiftUI は CommandMenu を「表示」の後ろへ置くので、順番は MenuOrder が起動後に直す。
+        // クリップ / 再生 / 移動 / 出力。SwiftUI は CommandMenu を「表示」の後ろへ置くので、順番は MenuOrder が起動後に直す。
         CommandMenu("クリップ") {
             MenuSection { s, run in
                 let groups = AppMenuSpec.clipMenu(s)
@@ -99,18 +94,29 @@ struct AppCommands: Commands {
             }
         }
 
-        // 表示
-        CommandGroup(before: .toolbar) {
+        // 出力(解像度・FPS・書き出し形式・背景色・動画の設定・書き出し)
+        CommandMenu("出力") {
             MenuSection { s, run in
-                items(AppMenuSpec.zoom(s), run)
-                Divider()
                 Menu("解像度") {
                     items(AppMenuSpec.resolutions(s), run)
                     Divider()
                     MenuItemView(spec: AppMenuSpec.customResolution(s), perform: run)
                 }
+                Menu("FPS") { items(AppMenuSpec.fpsItems(s), run) }
                 Menu("書き出し形式") { items(AppMenuSpec.codecItems(s), run) }
                 Menu("背景色") { items(AppMenuSpec.backgroundItems(s), run) }
+                Divider()
+                MenuItemView(spec: AppMenuSpec.videoSettings(s), perform: run)
+                Divider()
+                MenuItemView(spec: AppMenuSpec.exportCurrent(s), perform: run)
+                Menu("書き出しプリセット") { items(AppMenuSpec.exportPresets(s), run) }
+            }
+        }
+
+        // 表示
+        CommandGroup(before: .toolbar) {
+            MenuSection { s, run in
+                items(AppMenuSpec.zoom(s), run)
                 Divider()
                 MenuItemView(spec: AppMenuSpec.secondScreen(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.statusItemToggle(s), perform: run)

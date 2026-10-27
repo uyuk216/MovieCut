@@ -44,7 +44,7 @@ import MovieCutCore
 /// - `MC_DEBUG_SECOND=1`      別画面ウィンドウを開き、`MC_SNAPSHOT_DIR` があれば `<dir>/second.png` にも書く(`window.png` と同時)。
 /// - `MC_DEBUG_MENU=1`        メニューバー(`NSApp.mainMenu`)の全項目(題・キー・有効・チェック・サブメニュー)を標準出力へ。
 ///   `MC_DEBUG_MENU=export` なら書き出し中(`MC_DEBUG_EXPORT` と一緒に使う)の状態を出す。`MC_DEBUG_MENU=1,export` なら両方(カンマ区切り)。
-/// - `MC_DEBUG_MENU_CLICK="解像度/縦 1080×1920;背景色/白;…"` メニュー項目を `NSMenu.performActionForItem(at:)` で本当に押し、そのたびに状態を出す。
+/// - `MC_DEBUG_MENU_CLICK="出力/解像度/縦 1080×1920;背景色/白;…"` メニュー項目を `NSMenu.performActionForItem(at:)` で本当に押し、そのたびに状態を出す。
 ///   `MC_DEBUG_MENU_SCRIPT` で台本欄の文字を先に入れられる。
 /// - `MC_DEBUG_DEPS=missing`   依存チェックの結果を「VOICEVOX も AquesTalkPlayer も無い」に固定する(バナーの確認用)。
 /// - `MC_DEBUG_EDITED=1`      編集 → 保存で、ウィンドウの「未保存の点」(isDocumentEdited)が変わるかを出す(MC_OPEN の一時コピーで使う)。
@@ -555,7 +555,7 @@ final class DebugHooks {
         title == name || title.hasPrefix(name + "  (")
     }
 
-    /// 「解像度/縦 1080×1920」のような道筋で項目を探す(最初の名前は、メニューバーのどの階層にあってもよい)。
+    /// 「出力/解像度/縦 1080×1920」(「解像度/…」のように途中からでも探せる)のような道筋で項目を探す(最初の名前は、メニューバーのどの階層にあってもよい)。
     private static func findMenuItem(_ path: [String], in menu: NSMenu) -> (NSMenu, Int)? {
         func descend(_ menu: NSMenu, _ rest: ArraySlice<String>) -> (NSMenu, Int)? {
             guard let first = rest.first, let i = menu.items.firstIndex(where: { Self.titleMatches($0.title, first) }) else { return nil }
