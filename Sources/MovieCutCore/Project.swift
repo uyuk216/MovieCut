@@ -264,9 +264,16 @@ public struct Clip: Codable, Equatable, Identifiable {
     /// キーフレーム: 項目名("x" "y" "scale" "rotation" "opacity" "blur" / ぼかし範囲は "x" "y" "w" "h" "strength")→ キー列。
     /// 空のときはファイルに書かない。時刻はクリップの頭からの秒。
     public var keyframes: [String: [Keyframe]] = [:]
+    /// 映像のトランジション(画像・動画・文字)。頭(in)と終わり(out)。無いときはファイルに書かない。
+    public var transitionIn: Transition? = nil
+    public var transitionOut: Transition? = nil
+    /// 音声のフェード(音声・ボイス・動画)。秒。未設定 = なし。`fadeCurve` は "linear"(既定)/ "equalPower"。
+    public var fadeIn: Double? = nil
+    public var fadeOut: Double? = nil
+    public var fadeCurve: String? = nil
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["id", "type", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "rotation", "flipH", "flipV", "crop", "keyframes"]
+    static let knownKeys: Set<String> = ["id", "type", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "fadeIn", "fadeOut", "fadeCurve"]
 
     public init() {}
 
@@ -293,6 +300,12 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var cropOrDefault: Crop { crop ?? Crop() }
     /// キーが 1 つでもあるか(描画の速い道の判定)。
     public var hasKeyframes: Bool { !keyframes.isEmpty }
+    /// トランジションが 1 つでもあるか(描画の速い道の判定)。
+    public var hasTransition: Bool { transitionIn != nil || transitionOut != nil }
+    public var fadeInOrDefault: Double { max(0, fadeIn ?? 0) }
+    public var fadeOutOrDefault: Double { max(0, fadeOut ?? 0) }
+    public var fadeIsEqualPower: Bool { fadeCurve == "equalPower" }
+    public var hasAudioFade: Bool { fadeInOrDefault > 0 || fadeOutOrDefault > 0 }
 
     /// 項目名で読む、いまの設定値(キーを見ない)。未設定は既定値。
     public func staticValue(of key: String) -> Double {
@@ -348,7 +361,14 @@ public struct Clip: Codable, Equatable, Identifiable {
         w = l.double("w"); h = l.double("h"); strength = l.double("strength"); shape = l.string("shape")
         rotation = l.double("rotation"); flipH = l.bool("flipH"); flipV = l.bool("flipV")
         crop = l.value("crop")
+        fadeIn = l.double("fadeIn"); fadeOut = l.double("fadeOut"); fadeCurve = l.string("fadeCurve")
         extra = l.extra()
+        // 読めなかったトランジションも捨てずに、そのまま書き戻す
+        for (key, set) in [("transitionIn", \Clip.transitionIn), ("transitionOut", \Clip.transitionOut)] as [(String, WritableKeyPath<Clip, Transition?>)] {
+            if let raw: JSONValue = l.value(key) {
+                if let tr: Transition = l.value(key) { self[keyPath: set] = tr } else { extra[key] = raw }
+            }
+        }
         // 読めなかったキーフレームは捨てずに、そのまま書き戻す(extra に回す)
         if let raw: JSONValue = l.value("keyframes") {
             if let ks: [String: [Keyframe]] = l.value("keyframes") {
@@ -392,6 +412,11 @@ public struct Clip: Codable, Equatable, Identifiable {
         try c.encodeIfPresent(crop, forKey: AnyKey("crop"))
         let ks = keyframes.filter { !$0.value.isEmpty }
         if !ks.isEmpty { try c.encode(ks, forKey: AnyKey("keyframes")) }
+        try c.encodeIfPresent(transitionIn, forKey: AnyKey("transitionIn"))
+        try c.encodeIfPresent(transitionOut, forKey: AnyKey("transitionOut"))
+        try c.encodeIfPresent(fadeIn, forKey: AnyKey("fadeIn"))
+        try c.encodeIfPresent(fadeOut, forKey: AnyKey("fadeOut"))
+        try c.encodeIfPresent(fadeCurve, forKey: AnyKey("fadeCurve"))
     }
 }
 

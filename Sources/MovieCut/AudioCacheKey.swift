@@ -20,7 +20,9 @@ struct AudioCacheKey: Hashable {
                 // ミキサーが読み飛ばすもの(src なし・長さ 0 以下)は音に関係しない
                 guard let src = c.src, !src.isEmpty, c.duration > 0 else { continue }
                 let date = fileDate(src).map { String($0.timeIntervalSinceReferenceDate) } ?? "-"
-                items.append("\(c.type.rawValue)|\(src)|\(c.start)|\(c.duration)|\(c.offset)|\(c.volumeOrDefault)|\(date)")
+                // フェードがあるときだけ鍵に足す(無いプロジェクトの鍵は従来と同じ)
+                let fade = c.hasAudioFade ? "|fade=\(c.fadeInOrDefault),\(c.fadeOutOrDefault),\(c.fadeCurve ?? "linear")" : ""
+                items.append("\(c.type.rawValue)|\(src)|\(c.start)|\(c.duration)|\(c.offset)|\(c.volumeOrDefault)|\(date)\(fade)")
             }
             if items.isEmpty { continue }   // 音のないレイヤー(消音や追加を含む)は鍵に影響しない
             items.sort()

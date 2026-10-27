@@ -410,10 +410,12 @@ struct ClipInspector: View {
                 if c.type == .voice { voiceSections(c) }
                 if c.type == .text { textSections(c) }
                 if [ClipType.image, .video, .text].contains(c.type) { placeSections(c) }
+                if TransitionEditing.supportsVideo(c.type) { transitionSections(c) }
                 if c.type == .blur { blurSections(c) }
                 if c.type == .video || c.type == .audio {
                     InspectorSection(title: "音声")
                     slider("音量", .volume, step: 0.05, format: Self.pct)
+                    audioFadeFields(c)
                 }
             }
             .onDisappear { model.flushCoalesced() }
@@ -439,6 +441,87 @@ struct ClipInspector: View {
         fontPicker(c)
         InspectorSection(title: "音声")
         slider("音量", .volume, step: 0.05, format: Self.pct)
+        audioFadeFields(c)
+    }
+
+    // MARK: トランジションと音声フェード
+
+    /// 種類の Picker の選択肢の値: "" = なし、それ以外は kind の文字列(知らない種類もそのまま選択中として出す)。
+    private func kindPicker(_ c: Clip, _ edge: TransitionEdge) -> some View {
+        let cur = TransitionEditing.transition(c, edge)
+        return Picker("", selection: Binding(
+            get: { cur?.kind ?? "" },
+            set: { v in model.setTransitionKind(v.isEmpty ? nil : TransitionKind(rawValue: v), edge: edge, clipId: clipId) })) {
+            Text("なし").tag("")
+            ForEach(TransitionKind.allCases, id: \.rawValue) { Text($0.label).tag($0.rawValue) }
+            if let cur, cur.known == nil { Text("（未対応: \(cur.kind)）").tag(cur.kind) }
+        }
+        .labelsHidden()
+    }
+
+    private func easePicker(_ tr: MovieCutCore.Transition, _ edge: TransitionEdge) -> some View {
+        Picker("", selection: Binding(get: { tr.ease }, set: { model.setTransitionEase($0, edge: edge, clipId: clipId) })) {
+            ForEach(TransitionEditing.easeChoices, id: \.label) { Text($0.label).tag($0.ease) }
+            if !TransitionEditing.easeChoices.contains(where: { $0.ease == tr.ease }) { Text("（その他）").tag(tr.ease) }
+        }
+        .labelsHidden()
+    }
+
+    @ViewBuilder private func transitionRow(_ c: Clip, _ edge: TransitionEdge) -> some View {
+        let tr = TransitionEditing.transition(c, edge)
+        HStack(alignment: .center, spacing: 8) {
+            Text(edge.label).font(.system(size: 12)).foregroundStyle(.secondary).frame(width: 28, alignment: .leading)
+            kindPicker(c, edge)
+        }
+        if let tr {
+            HStack(alignment: .top, spacing: 10) {
+                InspectorField(label: "長さ（秒）") {
+                    NumField(value: tr.effectiveDuration(clipDuration: c.duration), step: 0.1, decimals: 2,
+                             clamp: { MovieCutCore.Transition.clampedDuration($0, clipDuration: c.duration) },
+                             onCommit: { model.setTransitionDuration($0, edge: edge, clipId: clipId) },
+                             onStep: { model.coalescedTransitionDuration($0, edge: edge, clipId: clipId) })
+                }
+                InspectorField(label: "進み方") { easePicker(tr, edge) }
+            }
+        }
+    }
+
+    @ViewBuilder private func transitionSections(_ c: Clip) -> some View {
+        InspectorSection(title: "トランジション")
+        transitionRow(c, .in)
+        transitionRow(c, .out)
+        if TransitionEditing.supportsAudio(c.type) {
+            Toggle("映像のトランジションと同じ長さで音声もフェード",
+                   isOn: Binding(get: { TransitionEditing.isAudioLinked(c) }, set: { model.setAudioLinked($0, clipId: clipId) }))
+                .toggleStyle(.checkbox)
+                .font(.system(size: 12))
+                .disabled(!c.hasTransition && !TransitionEditing.isAudioLinked(c))
+        }
+    }
+
+    @ViewBuilder private func audioFadeFields(_ c: Clip) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            InspectorField(label: "フェードイン（秒）") {
+                NumField(value: c.fadeInOrDefault, step: 0.1, decimals: 2, clamp: { min(max($0, 0), c.duration) },
+                         onCommit: { model.setAudioFade($0, edge: .in, clipId: clipId) },
+                         onStep: { model.coalescedAudioFade($0, edge: .in, clipId: clipId) })
+            }
+            InspectorField(label: "フェードアウト（秒）") {
+                NumField(value: c.fadeOutOrDefault, step: 0.1, decimals: 2, clamp: { min(max($0, 0), c.duration) },
+                         onCommit: { model.setAudioFade($0, edge: .out, clipId: clipId) },
+                         onStep: { model.coalescedAudioFade($0, edge: .out, clipId: clipId) })
+            }
+        }
+        if c.hasAudioFade {
+            InspectorField(label: "フェードの曲線") {
+                Picker("", selection: Binding(get: { c.fadeIsEqualPower }, set: { model.setFadeCurve(equalPower: $0, clipId: clipId) })) {
+                    Text("直線").tag(false)
+                    Text("等パワー").tag(true)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+            }
+        }
     }
 
     @ViewBuilder private func textSections(_ c: Clip) -> some View {

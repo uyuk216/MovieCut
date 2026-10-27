@@ -159,6 +159,9 @@ public enum ClipEditing {
         right.start = t
         right.duration = end - t
         if hasSourceTimeline(clip.type) { right.offset = clip.offset + cut }
+        // トランジション・音声フェード: 頭の効果は左、終わりの効果は右(切れ目に新しい効果は付けない)
+        left.transitionOut = nil; left.fadeOut = nil
+        right.transitionIn = nil; right.fadeIn = nil
         // キーフレームは切れ目で振り分ける(両側に境目のキーを足して、値が途切れないようにする)
         if clip.hasKeyframes {
             let parts = Animation.split(clip.keyframes, at: cut)

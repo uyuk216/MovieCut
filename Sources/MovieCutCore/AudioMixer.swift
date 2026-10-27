@@ -203,6 +203,13 @@ public enum AudioMixer {
         var endFrame: Int
         var offset: Double
         var gain: Float
+        /// フェード(クリップ本来の頭からのサンプル数)。`fadeStart` は負の開始を切る前の頭、`length` はクリップ全体の長さ。
+        var fadeStart = 0
+        var length = 0
+        var fadeInFrames = 0
+        var fadeOutFrames = 0
+        var equalPower = false
+        var hasFade: Bool { fadeInFrames > 0 || fadeOutFrames > 0 }
     }
 
     static func mixdownDetailed(project: Project, to url: URL) throws -> MixResult {
@@ -214,11 +221,19 @@ public enum AudioMixer {
             for c in tr.clips where c.type == .audio || c.type == .voice || c.type == .video {
                 guard let s = c.src, !s.isEmpty, c.duration > 0 else { continue }
                 var sf = Int((c.start * sr).rounded())
-                let ef = min(total, sf + Int((c.duration * sr).rounded()))
+                let fullStart = sf, fullLength = Int((c.duration * sr).rounded())
+                let ef = min(total, sf + fullLength)
                 var off = c.offset
                 if sf < 0 { off += Double(-sf) / sr; sf = 0 }  // 負の開始は頭を切る
                 guard ef > sf else { continue }
-                items.append(Item(clip: c, startFrame: sf, endFrame: ef, offset: off, gain: Float(c.volume ?? 1)))
+                var item = Item(clip: c, startFrame: sf, endFrame: ef, offset: off, gain: Float(c.volume ?? 1))
+                if c.hasAudioFade {
+                    item.fadeStart = fullStart; item.length = fullLength
+                    item.fadeInFrames = min(fullLength, Int((c.fadeInOrDefault * sr).rounded()))
+                    item.fadeOutFrames = min(fullLength, Int((c.fadeOutOrDefault * sr).rounded()))
+                    item.equalPower = c.fadeIsEqualPower
+                }
+                items.append(item)
             }
         }
         items.sort { $0.startFrame < $1.startFrame }
@@ -261,9 +276,18 @@ public enum AudioMixer {
                 let got = src.read(left: tL, right: tR, frames: b - a)
                 let base = a - cs
                 let g = it.gain
-                for k in 0..<got {
-                    mL[base + k] += tL[k] * g
-                    mR[base + k] += tR[k] * g
+                if it.hasFade {
+                    // フェード: サンプルごとに倍率をかける(クリップ本来の頭からの位置で決まるので、10 秒の塊の境目でも途切れない)
+                    for k in 0..<got {
+                        let fg = g * AudioFade.gain(pos: a + k - it.fadeStart, length: it.length, fadeIn: it.fadeInFrames, fadeOut: it.fadeOutFrames, equalPower: it.equalPower)
+                        mL[base + k] += tL[k] * fg
+                        mR[base + k] += tR[k] * fg
+                    }
+                } else {
+                    for k in 0..<got {
+                        mL[base + k] += tL[k] * g
+                        mR[base + k] += tR[k] * g
+                    }
                 }
                 if it.endFrame <= ce { sources[idx] = nil }
             }

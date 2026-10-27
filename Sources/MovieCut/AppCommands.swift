@@ -71,6 +71,14 @@ struct AppCommands: Commands {
                 Divider()
                 Menu("キーフレーム") { items(AppMenuSpec.keyframeItems(s), run) }
                 Menu("アニメーション") { items(AppMenuSpec.animationItems(s), run) }
+                Divider()
+                Menu("トランジション") {
+                    Menu("開始") { items(AppMenuSpec.transitionKindItems(s, edge: .in), run) }
+                    Menu("終了") { items(AppMenuSpec.transitionKindItems(s, edge: .out), run) }
+                    Divider()
+                    items(AppMenuSpec.transitionActions(s), run)
+                }
+                items(AppMenuSpec.transitionQuick(s), run)
             }
         }
 

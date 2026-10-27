@@ -24,6 +24,8 @@ private let ciContext = CIContext(options: [.workingColorSpace: sRGB, .outputCol
 /// 時刻 t(プロジェクトの時刻)でのクリップの位置・拡大・回転・不透明度・ぼかし。キーがなければ設定値そのまま(従来と同じ速さ)。
 struct ClipPose {
     var x: Double, y: Double, scale: Double, rotation: Double, opacity: Double, blur: Double
+    /// トランジションで位置・大きさ・回転が動いている(文字のビットマップキャッシュを使えない)。
+    var transitionMoves = false
 
     init(_ c: Clip, at t: Double) {
         if c.keyframes.isEmpty {
@@ -35,6 +37,17 @@ struct ClipPose {
             scale = Animation.value(of: "scale", in: c, at: r); rotation = Animation.value(of: "rotation", in: c, at: r)
             opacity = min(max(Animation.value(of: "opacity", in: c, at: r), 0), 1); blur = max(0, Animation.value(of: "blur", in: c, at: r))
         }
+    }
+
+    /// トランジションの補正を上から重ねる(不透明度は掛け算、拡大は掛け算、位置はキャンバスの割合で足す、回転・ぼかしは足す)。
+    /// ぼかしは 1920×1080 での px なので、`blurScale` で解像度に合わせる。
+    mutating func apply(_ s: TransitionState, blurScale: Double) {
+        x += s.offsetX; y += s.offsetY
+        scale *= s.scaleMul
+        rotation += s.rotationAdd
+        opacity = min(max(opacity * s.opacityMul, 0), 1)
+        blur += s.blurAdd * blurScale
+        transitionMoves = s.movesGeometry
     }
 
     /// 回転・反転が無い(切り抜きは絵そのものを切るので関係ない)。文字は拡大・切り抜きも「無し」のとき。
@@ -99,7 +112,21 @@ public struct Renderer {
                 case .blur:
                     drawBlurRegion(c, t: t, ctx: ctx, W: W, H: H)
                 case .image, .video, .text:
-                    let pose = ClipPose(c, at: t)
+                    var pose = ClipPose(c, at: t)
+                    var mask: TransitionMask?
+                    if c.hasTransition {
+                        // トランジション: キーフレームの値の上に重ねる(効く時間の外では何も変わらない)
+                        let st = transitionState(c, pose: pose, t: t, W: W, H: H)
+                        if !st.isIdentity {
+                            pose.apply(st, blurScale: (W * H / (1920.0 * 1080.0)).squareRoot())
+                            mask = st.mask
+                            if pose.opacity <= 0 || (mask?.isEmpty ?? false) { continue }
+                        }
+                    }
+                    if let m = mask {
+                        ctx.saveGState()
+                        Renderer.clip(ctx, mask: m, W: W, H: H)
+                    }
                     if pose.blur > 0 {
                         drawBlurredClip(c, pose: pose, t: t, ctx: ctx, W: W, H: H)
                     } else {
@@ -108,6 +135,7 @@ public struct Renderer {
                         drawClipContent(c, pose: pose, t: t, ctx: ctx, W: W, H: H)
                         ctx.restoreGState()
                     }
+                    if mask != nil { ctx.restoreGState() }
                 case .voice:
                     if let id = c.charId { speaking[id] = c }
                     if c.subtitle != false { subtitles.append(c) }
@@ -137,6 +165,45 @@ public struct Renderer {
         for c in subtitles {
             let ch = project.characters.first { $0.id == c.charId }
             drawText(c.text ?? "", x: W / 2, y: H * 0.88, size: c.fontSize ?? 64, color: "#ffffff", font: c.fontOrDefault, outline: ch?.color ?? "#000000", ctx: ctx)
+        }
+    }
+
+    // MARK: トランジション
+
+    /// 時刻 t のクリップのトランジション補正。スライドのときだけ、クリップの枠の大きさ(画面の外へ出し切る移動量)を測る。
+    func transitionState(_ c: Clip, pose: ClipPose, t: Double, W: Double, H: Double) -> TransitionState {
+        var size: (w: Double, h: Double) = (0, 0)
+        let needsSize = (c.transitionIn?.known?.isSlide ?? false) || (c.transitionOut?.known?.isSlide ?? false)
+        if needsSize, let s = objectSize(of: c, at: t), W > 0, H > 0 { size = (s.width / W, s.height / H) }
+        return TransitionMath.apply(c, t: t, center: (pose.x, pose.y), size: size)
+    }
+
+    /// 左上原点の ctx を、トランジションの形で切り抜く(この後の描画はその内側だけ)。
+    static func clip(_ ctx: CGContext, mask: TransitionMask, W: Double, H: Double) {
+        switch mask {
+        case .rect(let x, let y, let w, let h):
+            ctx.clip(to: CGRect(x: x * W, y: y * H, width: w * W, height: h * H))
+        case .circle(let r):
+            let R = r * (W * W + H * H).squareRoot() / 2
+            ctx.addEllipse(in: CGRect(x: W / 2 - R, y: H / 2 - R, width: 2 * R, height: 2 * R))
+            ctx.clip()
+        case .clock(let f):
+            guard f < 1 else { return }
+            // 12 時から時計回り(画面では角度が増える向き)に f 周ぶんの扇形。半径は四隅に届く大きさ
+            let R = (W * W + H * H).squareRoot()
+            let cx = W / 2, cy = H / 2
+            let sweep = min(max(f, 0), 1) * 2 * Double.pi
+            let steps = max(2, Int((sweep / (Double.pi / 180)).rounded(.up)))
+            let a0 = -Double.pi / 2
+            let path = CGMutablePath()
+            path.move(to: CGPoint(x: cx, y: cy))
+            for i in 0...steps {
+                let a = a0 + sweep * Double(i) / Double(steps)
+                path.addLine(to: CGPoint(x: cx + R * cos(a), y: cy + R * sin(a)))
+            }
+            path.closeSubpath()
+            ctx.addPath(path)
+            ctx.clip()
         }
     }
 
@@ -188,7 +255,7 @@ public struct Renderer {
             let geometryAnimated = c.hasKeyframes && ["x", "y", "scale", "rotation"].contains { Animation.isAnimated($0, in: c) }
             if pose.isPlain(c) {
                 drawText(c.text ?? "", x: pose.x * W, y: pose.y * H, size: size, color: c.colorOrDefault, font: c.fontOrDefault, outline: c.outlineOrDefault, ctx: ctx,
-                         cacheable: !geometryAnimated && (pose.opacity >= 1 || blurred))
+                         cacheable: !geometryAnimated && !pose.transitionMoves && (pose.opacity >= 1 || blurred))
             } else {
                 ctx.saveGState()
                 pose.concat(c, ctx: ctx, W: W, H: H)

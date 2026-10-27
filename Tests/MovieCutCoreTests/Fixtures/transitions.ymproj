@@ -1,0 +1,72 @@
+{
+  "width": 1280,
+  "height": 720,
+  "fps": 30,
+  "bg": "#102030",
+  "codec": "h264",
+  "characters": [],
+  "tracks": [
+    {
+      "id": "tt1",
+      "name": "トランジション",
+      "clips": [
+        {
+          "id": "timg",
+          "type": "image",
+          "src": "/tmp/none.png",
+          "start": 0,
+          "duration": 4,
+          "offset": 0,
+          "x": 0.5,
+          "y": 0.5,
+          "scale": 1,
+          "opacity": 1,
+          "transitionIn": { "kind": "zoom", "duration": 0.8, "ease": "easeOut" },
+          "transitionOut": { "kind": "slideLeft", "duration": 0.6, "futureTransitionKey": [1, 2] },
+          "futureClipKey": "keep"
+        },
+        {
+          "id": "ttxt",
+          "type": "text",
+          "text": "ぼかして登場",
+          "start": 1,
+          "duration": 3,
+          "offset": 0,
+          "x": 0.5,
+          "y": 0.2,
+          "fontSize": 80,
+          "transitionIn": { "kind": "blur", "duration": 1 },
+          "transitionOut": { "kind": "someFutureKind", "duration": 0.5, "params": { "angle": 30 } }
+        },
+        {
+          "id": "tbad",
+          "type": "image",
+          "src": "/tmp/none.png",
+          "start": 5,
+          "duration": 2,
+          "offset": 0,
+          "transitionIn": "this is not a transition"
+        }
+      ]
+    },
+    {
+      "id": "tt2",
+      "name": "音声",
+      "clips": [
+        {
+          "id": "taud",
+          "type": "audio",
+          "src": "/tmp/none.wav",
+          "srcDuration": 6,
+          "start": 0,
+          "duration": 6,
+          "offset": 0,
+          "volume": 1,
+          "fadeIn": 0.5,
+          "fadeOut": 1.25,
+          "fadeCurve": "equalPower"
+        }
+      ]
+    }
+  ]
+}

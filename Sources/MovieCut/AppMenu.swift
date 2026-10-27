@@ -14,6 +14,8 @@ enum MenuCommand: Hashable {
     case addMarker, renameMarker, prevMarker, nextMarker, deleteMarker, clearMarkers, jumpToMarker(String)
     // キーフレーム / アニメーション
     case toggleKeyframe, prevKeyframe, nextKeyframe, clearKeyframes, animationPreset(AnimationPreset)
+    // トランジション(kind が nil = なし)
+    case transitionIn(TransitionKind?), transitionOut(TransitionKind?), fadeBoth, clearTransitions, crossfade, fadeInOut
     case zoomIn, zoomOut, zoomFit
     case resolution(String), swapResolution, fps(Double), fpsCustom, codec(String), background(String)
     case toggleSecondScreen, fullScreen, toggleStatusItem
@@ -114,6 +116,12 @@ struct MenuState: Equatable {
     var hasPrevKeyframe = false
     var hasNextKeyframe = false
     var canAnimatePreset = false     // 画像・動画・文字のクリップを選んでいる
+    // トランジション
+    var canTransition = false        // 映像のクリップ(画像・動画・文字)を選んでいる
+    var hasTransitions = false
+    var canFadeInOut = false         // 映像か音声のクリップを選んでいる
+    var transitionInKind: String?    // 選択クリップの頭・終わりの種類(なければ nil)
+    var transitionOutKind: String?
     /// メニューバーのアイコンを出す設定(「表示」メニューの切り替え)。
     var statusItemShown = true
 
@@ -159,6 +167,11 @@ struct MenuState: Equatable {
             hasPrevKeyframe = KeyframeEditing.previousKeyTime(c, key: ks, before: rel, tolerance: tol) != nil
             hasNextKeyframe = KeyframeEditing.nextKeyTime(c, key: ks, after: rel, tolerance: tol) != nil
             canAnimatePreset = [ClipType.image, .video, .text].contains(c.type)
+            canTransition = TransitionEditing.supportsVideo(c.type)
+            hasTransitions = c.hasTransition
+            canFadeInOut = TransitionEditing.supportsVideo(c.type) || TransitionEditing.supportsAudio(c.type)
+            transitionInKind = c.transitionIn?.kind
+            transitionOutKind = c.transitionOut?.kind
         }
         hasPrevClip = ClipEditing.hasAdjacentClip(in: p, from: m.selectedClipId, forward: false, playhead: t)
         hasNextClip = ClipEditing.hasAdjacentClip(in: p, from: m.selectedClipId, forward: true, playhead: t)
@@ -345,6 +358,29 @@ enum AppMenuSpec {
         }
     }
 
+    // MARK: トランジション(クリップメニューのサブメニュー)
+
+    /// 開始 / 終了の種類の選択(なし + 全種類。いまの種類に ✓)。
+    static func transitionKindItems(_ s: MenuState, edge: TransitionEdge) -> [MenuItemSpec] {
+        let current = edge == .in ? s.transitionInKind : s.transitionOutKind
+        func cmd(_ k: TransitionKind?) -> MenuCommand { edge == .in ? .transitionIn(k) : .transitionOut(k) }
+        let none = MenuItemSpec(command: cmd(nil), title: "なし", shortcut: nil, enabled: s.canEdit && s.canTransition, checked: current == nil)
+        return [none] + TransitionKind.allCases.map {
+            MenuItemSpec(command: cmd($0), title: $0.label, shortcut: nil, enabled: s.canEdit && s.canTransition, checked: current == $0.rawValue)
+        }
+    }
+
+    static func transitionActions(_ s: MenuState) -> [MenuItemSpec] {
+        [MenuItemSpec(command: .fadeBoth, title: "両方にフェードを付ける", shortcut: MenuShortcut(key: "f", modifiers: [.option, .command]), enabled: s.canEdit && s.canTransition, checked: nil),
+         MenuItemSpec(command: .clearTransitions, title: "トランジションをすべて外す", shortcut: nil, enabled: s.canEdit && s.hasTransitions, checked: nil)]
+    }
+
+    /// クリップメニュー直下の 2 項目。
+    static func transitionQuick(_ s: MenuState) -> [MenuItemSpec] {
+        [MenuItemSpec(command: .crossfade, title: "クロスフェードにする", shortcut: nil, enabled: s.canEdit && s.canTransition, checked: nil),
+         MenuItemSpec(command: .fadeInOut, title: "フェードイン・アウトを付ける", shortcut: nil, enabled: s.canEdit && s.canFadeInOut, checked: nil)]
+    }
+
     static func zoom(_ s: MenuState) -> [MenuItemSpec] {
         [MenuItemSpec(command: .zoomIn, title: "タイムラインを拡大", shortcut: cmd("+"), enabled: s.canEdit, checked: nil),
          MenuItemSpec(command: .zoomOut, title: "タイムラインを縮小", shortcut: cmd("-"), enabled: s.canEdit, checked: nil),
@@ -411,7 +447,7 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, settings(s), videoSettings(s)] + file(s) + [exportCurrent(s)] + exportPresets(s) + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + editAdd(s) + playback(s)
+        [about, settings(s), videoSettings(s)] + file(s) + [exportCurrent(s)] + exportPresets(s) + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + editAdd(s) + playback(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + [secondScreen(s), statusItemToggle(s), fullScreen(s)] + help.flatMap { $0 }
@@ -470,6 +506,12 @@ enum AppMenu {
             case .nextKeyframe: m.seekKeyframe(forward: true)
             case .clearKeyframes: m.clearKeyframes()
             case .animationPreset(let p): m.applyAnimationPreset(p)
+            case .transitionIn(let k): m.setTransitionKind(k, edge: .in)
+            case .transitionOut(let k): m.setTransitionKind(k, edge: .out)
+            case .fadeBoth: m.fadeBothSelected()
+            case .clearTransitions: m.clearTransitionsSelected()
+            case .crossfade: m.crossfadeSelected()
+            case .fadeInOut: m.fadeInOutSelected()
             case .delete: m.deleteSelected()
             case .addText: m.addTextClip()
             case .addBlur: m.addBlurClip()

@@ -153,6 +153,17 @@ final class TimelineCanvas: NSView {
         var base = Project()
     }
     private(set) var keyDrag: KeyDrag?
+    /// 選択クリップの頭・終わりのトランジション(音声フェード)の三角の先端を押している最中の操作。動かすと長さが変わる。
+    struct WedgeDrag {
+        var clipId: String
+        var edge: TransitionEdge
+        var audio: Bool
+        var downX: CGFloat
+        var startSeconds: Double
+        var active = false
+        var base = Project()
+    }
+    private(set) var wedgeDrag: WedgeDrag?
     /// 吸着の案内線の時刻(ドラッグ中だけ)。
     private(set) var snapGuides: [Double] = []
     /// ポインタが左右の端 30pt 以内にあるときの自動スクロールの向き(-1 左 / 0 なし / 1 右)。
@@ -586,6 +597,7 @@ final class TimelineCanvas: NSView {
             ctx.restoreGState()
             textLeft += 3
         }
+        drawTransitionWedges(c, rect: r, selected: selected, path: path, ctx: ctx)
         if selected && c.hasKeyframes { drawKeyframeDiamonds(c, rect: r, ctx: ctx) }
         if selected {
             let o = NSBezierPath(roundedRect: r.insetBy(dx: -1, dy: -1), xRadius: 5, yRadius: 5)
@@ -680,6 +692,85 @@ final class TimelineCanvas: NSView {
 
     // MARK: マウス
 
+    // MARK: トランジション / フェードの三角(クリップの頭と終わり)
+
+    static let wedgeHandleRadius: CGFloat = 4
+    static let wedgeHit: CGFloat = 7
+
+    /// 頭(終わり)に描く三角の長さ(秒)。映像のクリップはトランジションの長さ、無ければ音声のフェード。音声だけのときは `audio` が true。
+    func wedgeInfo(_ c: Clip, _ edge: TransitionEdge) -> (seconds: Double, audio: Bool)? {
+        if TransitionEditing.supportsVideo(c.type), let tr = TransitionEditing.transition(c, edge) {
+            return (tr.effectiveDuration(clipDuration: c.duration), false)
+        }
+        if TransitionEditing.supportsAudio(c.type) {
+            let a = edge == .in ? c.fadeInOrDefault : c.fadeOutOrDefault
+            if a > 0 { return (min(a, c.duration), true) }
+        }
+        return nil
+    }
+
+    /// 三角の幅(pt)。クリップの幅の半分まで。
+    func wedgeWidth(_ seconds: Double, rect r: CGRect) -> CGFloat {
+        min(CGFloat(seconds * geometry.pps), r.width / 2)
+    }
+
+    /// 三角の先端(つまみ)の位置。
+    func wedgeHandle(_ c: Clip, _ edge: TransitionEdge, rect r: CGRect) -> NSPoint? {
+        guard let info = wedgeInfo(c, edge) else { return nil }
+        let w = wedgeWidth(info.seconds, rect: r)
+        return NSPoint(x: edge == .in ? r.minX + w : r.maxX - w, y: r.minY + 7)
+    }
+
+    private func drawTransitionWedges(_ c: Clip, rect r: CGRect, selected: Bool, path: NSBezierPath, ctx: CGContext) {
+        guard c.hasTransition || c.hasAudioFade else { return }
+        ctx.saveGState()
+        path.addClip()
+        for edge in [TransitionEdge.in, .out] {
+            guard let info = wedgeInfo(c, edge) else { continue }
+            let w = wedgeWidth(info.seconds, rect: r)
+            guard w >= 1 else { continue }
+            let tri = NSBezierPath()
+            if edge == .in {
+                tri.move(to: NSPoint(x: r.minX, y: r.maxY)); tri.line(to: NSPoint(x: r.minX + w, y: r.minY)); tri.line(to: NSPoint(x: r.minX + w, y: r.maxY))
+            } else {
+                tri.move(to: NSPoint(x: r.maxX - w, y: r.minY)); tri.line(to: NSPoint(x: r.maxX, y: r.maxY)); tri.line(to: NSPoint(x: r.maxX - w, y: r.maxY))
+            }
+            tri.close()
+            NSColor(white: 1, alpha: info.audio ? 0.2 : 0.3).setFill(); tri.fill()
+            let edgeLine = NSBezierPath()
+            if edge == .in { edgeLine.move(to: NSPoint(x: r.minX, y: r.maxY)); edgeLine.line(to: NSPoint(x: r.minX + w, y: r.minY)) }
+            else { edgeLine.move(to: NSPoint(x: r.maxX - w, y: r.minY)); edgeLine.line(to: NSPoint(x: r.maxX, y: r.maxY)) }
+            edgeLine.lineWidth = 1
+            NSColor(white: 1, alpha: 0.75).setStroke(); edgeLine.stroke()
+        }
+        ctx.restoreGState()
+        if selected {
+            for edge in [TransitionEdge.in, .out] {
+                guard let pt = wedgeHandle(c, edge, rect: r) else { continue }
+                let rad = Self.wedgeHandleRadius
+                let dot = NSBezierPath(ovalIn: NSRect(x: pt.x - rad, y: pt.y - rad, width: rad * 2, height: rad * 2))
+                NSColor.white.setFill(); dot.fill()
+                dot.lineWidth = 1
+                NSColor(white: 0, alpha: 0.65).setStroke(); dot.stroke()
+            }
+        }
+    }
+
+    /// 点の下にある、選択クリップの三角のつまみ。
+    func wedgeHit(at p: NSPoint) -> (clipId: String, edge: TransitionEdge, audio: Bool, seconds: Double)? {
+        guard let id = selectedId, let loc = ClipEditing.locate(id, in: project) else { return nil }
+        let c = project.tracks[loc.track].clips[loc.index]
+        let r = geometry.clipRect(start: c.start, duration: c.duration, track: loc.track)
+        var best: (edge: TransitionEdge, audio: Bool, seconds: Double, d: CGFloat)?
+        for edge in [TransitionEdge.in, .out] {
+            guard let info = wedgeInfo(c, edge), let pt = wedgeHandle(c, edge, rect: r),
+                  abs(p.x - pt.x) <= Self.wedgeHit, abs(p.y - pt.y) <= Self.wedgeHit else { continue }
+            let d = abs(p.x - pt.x)
+            if best == nil || d < best!.d { best = (edge, info.audio, info.seconds, d) }
+        }
+        return best.map { (id, $0.edge, $0.audio, $0.seconds) }
+    }
+
     // MARK: キーフレームの菱形(選択クリップの下端)
 
     static let diamondHalf: CGFloat = 4
@@ -761,6 +852,10 @@ final class TimelineCanvas: NSView {
             }
             return
         }
+        if let hit = wedgeHit(at: p), let m = model, !m.isLocked {
+            wedgeDrag = WedgeDrag(clipId: hit.clipId, edge: hit.edge, audio: hit.audio, downX: p.x, startSeconds: hit.seconds)
+            return
+        }
         if let hit = keyframeHit(at: p), let m = model, !m.isLocked {
             keyDrag = KeyDrag(clipId: hit.clipId, time: hit.time, downPoint: p, downTime: geometry.time(forX: p.x))
             return
@@ -783,6 +878,23 @@ final class TimelineCanvas: NSView {
 
     func mouseDragged(to p: NSPoint) {
         if isScrubbing { scrub(to: p); return }
+        if var wd = wedgeDrag {
+            if !wd.active {
+                guard abs(p.x - wd.downX) >= Self.dragThreshold, let m = model else { return }
+                m.beginGesture()
+                wd.active = true
+                wd.base = m.project
+                wedgeDrag = wd
+            }
+            let dt = Double(p.x - wd.downX) / geometry.pps
+            let secs = max(MovieCutCore.Transition.minDuration, wd.startSeconds + (wd.edge == .in ? dt : -dt))
+            if let moved = model?.projectSettingFadeLength(base: wd.base, clipId: wd.clipId, edge: wd.edge, seconds: secs, audio: wd.audio) {
+                model?.updateGesture(moved)
+            }
+            syncFromModel()
+            needsDisplay = true
+            return
+        }
         if var kd = keyDrag {
             if !kd.active {
                 guard abs(p.x - kd.downPoint.x) >= Self.dragThreshold, let m = model else { return }
@@ -838,6 +950,15 @@ final class TimelineCanvas: NSView {
 
     func mouseUp() {
         mouseIsDown = false
+        if let wd = wedgeDrag {
+            wedgeDrag = nil
+            if wd.active {
+                model?.commitGesture(wd.audio ? "フェードの長さの変更" : "トランジションの長さの変更")     // 変わっていれば 1 回の Undo
+                syncFromModel()
+            }
+            needsDisplay = true
+            return
+        }
         if let kd = keyDrag {
             keyDrag = nil
             if kd.active {
