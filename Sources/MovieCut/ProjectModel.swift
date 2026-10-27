@@ -117,8 +117,13 @@ final class ProjectModel: ObservableObject {
     var gestureBase: Project?
     @Published var selectedClipId: String? {
         // クリップを選んだら、プロパティ欄はキャラの表示をやめてクリップの表示にする
-        didSet { if selectedClipId != nil { characterPanelActive = false } }
+        didSet {
+            if selectedClipId != nil { characterPanelActive = false }
+            if selectedClipId != oldValue { focusedAnimatableKey = nil }
+        }
     }
+    /// 最後に触った(◇ を押した・値を編集した)動かせる項目。メニューの「キーフレームを追加/削除」などの対象(無ければ全項目)。
+    @Published var focusedAnimatableKey: String?
     @Published var selectedCharId: String?
     /// 左の一覧でキャラを選んだ状態(クリップが選ばれていなければ、プロパティ欄にキャラの設定が出る)。
     @Published var characterPanelActive = false

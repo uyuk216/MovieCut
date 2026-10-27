@@ -73,6 +73,21 @@ public enum ClipField: CaseIterable {
         }
     }
 
+    /// この項目がキーフレームで動かせるとき、そのキーの名前。
+    public var animationKey: String? {
+        switch self {
+        case .x: return "x"
+        case .y: return "y"
+        case .scale: return "scale"
+        case .opacity: return "opacity"
+        case .blur: return "blur"
+        case .w: return "w"
+        case .h: return "h"
+        case .strength: return "strength"
+        default: return nil
+        }
+    }
+
     /// 編集履歴に出す名前。
     public var undoName: String {
         switch self {

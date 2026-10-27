@@ -15,6 +15,7 @@ public final class RenderAssets {
     private var missingVideos: Set<String> = []
     private var exportMode = false
     private var sequentials: [String: SequentialVideoFrames] = [:]
+    private var videoSizes: [String: CGSize] = [:]
 
     public init() {}
 
@@ -84,6 +85,22 @@ public final class RenderAssets {
 
     /// 動画の time 秒のフレーム。通常はパスごとに generator、書き出しモードでは順次読み。
     public func videoFrame(path: String, time: Double) -> CGImage? {
+        let img = videoFrameUncounted(path: path, time: time)
+        if let img {
+            lock.lock()
+            if videoSizes[path] == nil { videoSizes[path] = CGSize(width: img.width, height: img.height) }
+            lock.unlock()
+        }
+        return img
+    }
+
+    /// 一度でもフレームを読んだ動画の大きさ(プレビューの取っ手用)。まだなら nil。
+    public func knownVideoSize(path: String) -> CGSize? {
+        lock.lock(); defer { lock.unlock() }
+        return videoSizes[path]
+    }
+
+    private func videoFrameUncounted(path: String, time: Double) -> CGImage? {
         lock.lock()
         if exportMode, !missingVideos.contains(path) {
             var seq = sequentials[path]

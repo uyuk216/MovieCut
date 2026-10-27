@@ -20,12 +20,31 @@ struct PreviewView: NSViewRepresentable {
         context.coordinator.view = v
         v.setPlaceholder(project: project)
         context.coordinator.request(project: project, time: time, assets: assets, epoch: epoch)
+        if !fullscreen { v.model = model; v.updateOverlay(Self.overlayTarget(model: model, project: project, time: time, assets: assets)) }
         return v
     }
 
     func updateNSView(_ nsView: PreviewCanvasView, context: Context) {
         context.coordinator.request(project: project, time: time, assets: assets, epoch: epoch)
+        if !fullscreen { nsView.model = model; nsView.updateOverlay(Self.overlayTarget(model: model, project: project, time: time, assets: assets)) }
     }
+
+    /// 選択クリップの枠(直接操作の取っ手)。画像・動画・文字を選んでいて、再生ヘッドがその中にあり、止まっているときだけ。
+    @MainActor
+    static func overlayTarget(model: ProjectModel, project: Project, time: Double, assets: RenderAssets) -> PreviewOverlayTarget? {
+        guard !model.isPlaying, !model.isLocked, let c = model.selectedClip,
+              [ClipType.image, .video, .text].contains(c.type), time >= c.start, time < c.start + c.duration,
+              let size = Renderer(project: project, assets: assets).objectSize(of: c, at: time) else { return nil }
+        let canvas = CGSize(width: project.width, height: project.height)
+        return PreviewOverlayTarget(clipId: c.id, box: TransformBox.make(clip: c, objectSize: size, at: time - c.start, canvas: canvas), canvas: canvas)
+    }
+}
+
+/// プレビュー上の選択枠: どのクリップの、画面(キャンバスの画素)のどこにあるか。
+struct PreviewOverlayTarget: Equatable {
+    var clipId: String
+    var box: TransformBox
+    var canvas: CGSize
 }
 
 /// 描画要求をまとめる(古い要求は捨てて、最新だけ描く)。
@@ -86,6 +105,23 @@ final class PreviewCanvasView: NSView {
     private var hasImage = false
 
     private let fullscreen: Bool
+    weak var model: ProjectModel?
+
+    // 直接操作(選択枠 + 4 つの角 + 回転の取っ手)
+    private let outlineLayer = CAShapeLayer()
+    private let handleLayer = CAShapeLayer()
+    private(set) var overlay: PreviewOverlayTarget?
+    struct ManipulationDrag {
+        var kind: DirectManipulation.Kind
+        var clipId: String
+        var start: CGPoint          // キャンバスの画素
+        var base: Clip
+        var relTime: Double
+        var name: String
+    }
+    private(set) var manipulation: ManipulationDrag?
+    /// 取っ手に反応する半径(ビューの pt)。
+    static let handleRadius: CGFloat = 9
 
     init(fullscreen: Bool = false) {
         self.fullscreen = fullscreen
@@ -107,6 +143,16 @@ final class PreviewCanvasView: NSView {
         frameLayer.shadowOffset = CGSize(width: 0, height: -2)
         frameLayer.masksToBounds = false
         root.addSublayer(frameLayer)
+        outlineLayer.fillColor = nil
+        outlineLayer.strokeColor = NSColor(srgbRed: 1, green: 0.85, blue: 0.31, alpha: 1).cgColor
+        outlineLayer.lineWidth = 1.5
+        outlineLayer.isHidden = true
+        handleLayer.fillColor = NSColor.white.cgColor
+        handleLayer.strokeColor = NSColor(white: 0, alpha: 0.7).cgColor
+        handleLayer.lineWidth = 1
+        handleLayer.isHidden = true
+        root.addSublayer(outlineLayer)
+        root.addSublayer(handleLayer)
     }
     required init?(coder: NSCoder) { fatalError() }
 
@@ -154,6 +200,95 @@ final class PreviewCanvasView: NSView {
         relayout()
     }
 
+    // MARK: 選択枠と直接操作
+
+    /// キャンバスの画素 → ビューの座標(ビューは y 上向き、キャンバスは y 下向き)。
+    func viewPoint(_ p: CGPoint, canvas: CGSize) -> CGPoint {
+        let f = frameLayer.frame
+        return CGPoint(x: f.minX + p.x / canvas.width * f.width, y: f.maxY - p.y / canvas.height * f.height)
+    }
+
+    func canvasPoint(_ v: CGPoint, canvas: CGSize) -> CGPoint {
+        let f = frameLayer.frame
+        guard f.width > 0, f.height > 0 else { return .zero }
+        return CGPoint(x: (v.x - f.minX) / f.width * canvas.width, y: (f.maxY - v.y) / f.height * canvas.height)
+    }
+
+    func updateOverlay(_ t: PreviewOverlayTarget?) {
+        if manipulation != nil { overlay = t ?? overlay; redrawOverlay(); return }   // ドラッグ中は枠を作り直さない(動きに追従して描き直すだけ)
+        overlay = t
+        redrawOverlay()
+    }
+
+    private func redrawOverlay() {
+        guard let o = overlay, o.canvas.width > 0, frameLayer.frame.width > 0 else {
+            outlineLayer.isHidden = true; handleLayer.isHidden = true
+            return
+        }
+        let corners = o.box.corners.map { viewPoint($0, canvas: o.canvas) }
+        let rot = viewPoint(o.box.rotationHandle, canvas: o.canvas)
+        let top = viewPoint(CGPoint(x: (o.box.corners[0].x + o.box.corners[1].x) / 2, y: (o.box.corners[0].y + o.box.corners[1].y) / 2), canvas: o.canvas)
+        let outline = CGMutablePath()
+        outline.addLines(between: corners + [corners[0]])
+        outline.move(to: top); outline.addLine(to: rot)
+        let handles = CGMutablePath()
+        for c in corners { handles.addRect(CGRect(x: c.x - 4, y: c.y - 4, width: 8, height: 8)) }
+        handles.addEllipse(in: CGRect(x: rot.x - 5, y: rot.y - 5, width: 10, height: 10))
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        outlineLayer.path = outline
+        handleLayer.path = handles
+        outlineLayer.isHidden = false; handleLayer.isHidden = false
+        CATransaction.commit()
+    }
+
+    /// 取っ手に反応する半径をキャンバスの画素に直したもの。
+    private func hitRadius(canvas: CGSize) -> Double {
+        let f = frameLayer.frame
+        return f.width > 0 ? Double(Self.handleRadius) * canvas.width / f.width : Double(Self.handleRadius)
+    }
+
+    /// 試験用: 映像の枠(ビューの座標)。
+    var frameForTest: CGRect { frameLayer.frame }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func mouseDown(with event: NSEvent) { beginManipulation(atViewPoint: convert(event.locationInWindow, from: nil)) }
+    override func mouseDragged(with event: NSEvent) { dragManipulation(toViewPoint: convert(event.locationInWindow, from: nil), snapRotation: event.modifierFlags.contains(.shift)) }
+    override func mouseUp(with event: NSEvent) { endManipulation() }
+
+    /// 押した: 枠の本体・角・回転の取っ手に当たれば、ドラッグを始める(元のクリップを覚える)。当たらなければ false。
+    @discardableResult
+    func beginManipulation(atViewPoint v: CGPoint) -> Bool {
+        guard let o = overlay, let m = model, !m.isLocked, let c = m.clip(o.clipId) else { return false }
+        let p = canvasPoint(v, canvas: o.canvas)
+        let kind: DirectManipulation.Kind, name: String
+        switch o.box.hitTest(p, radius: hitRadius(canvas: o.canvas)) {
+        case .body: kind = .move; name = "プレビューで移動"
+        case .corner: kind = .scale; name = "プレビューで拡大"
+        case .rotation: kind = .rotate; name = "プレビューで回転"
+        case .none: return false
+        }
+        m.beginGesture()           // 再生を止め、元の状態を覚える
+        manipulation = ManipulationDrag(kind: kind, clipId: c.id, start: p, base: c, relTime: min(max(m.currentTime - c.start, 0), c.duration), name: name)
+        return true
+    }
+
+    func dragManipulation(toViewPoint v: CGPoint, snapRotation: Bool = false) {
+        guard let d = manipulation, let o = overlay, let m = model, let base = m.gestureBase,
+              let loc = ClipEditing.locate(d.clipId, in: base) else { return }
+        let p = canvasPoint(v, canvas: o.canvas)
+        let c = DirectManipulation.apply(d.kind, to: d.base, at: d.relTime, tolerance: m.keyTolerance, from: d.start, to: p, canvas: o.canvas, snapRotation: snapRotation)
+        var pr = base
+        pr.tracks[loc.track].clips[loc.index] = c
+        m.updateGesture(pr)
+    }
+
+    func endManipulation() {
+        guard let d = manipulation else { return }
+        manipulation = nil
+        model?.commitGesture(d.name)       // 変わっていれば 1 回の Undo
+    }
+
     private func relayout() {
         let avail = fullscreen ? bounds : bounds.insetBy(dx: 12, dy: 12)
         guard avail.width > 4, avail.height > 4, aspect.width > 0, aspect.height > 0 else { return }
@@ -163,5 +298,6 @@ final class PreviewCanvasView: NSView {
         CATransaction.setDisableActions(true)
         frameLayer.frame = CGRect(x: (bounds.width - w) / 2, y: (bounds.height - h) / 2, width: w, height: h)
         CATransaction.commit()
+        redrawOverlay()
     }
 }

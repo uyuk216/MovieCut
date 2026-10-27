@@ -55,6 +55,7 @@ extension ClipEditing {
         c.duration -= cut
         c.start = t
         if hasSourceTimeline(c.type) { c.offset += cut }
+        if c.hasKeyframes { c.keyframes = Animation.shifted(c.keyframes, by: -cut) }
         p.tracks[loc.track].clips[loc.index] = c
         return p
     }

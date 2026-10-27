@@ -1,0 +1,185 @@
+{
+  "aquestalkCommand" : "say {text}",
+  "bg" : "#ffffff",
+  "characters" : [
+    {
+      "alwaysShow" : false,
+      "color" : "#7ac943",
+      "engine" : "voicevox",
+      "flip" : false,
+      "futureCharKey" : [
+        1,
+        2
+      ],
+      "id" : "ch1",
+      "imgClosed" : "/a/c.png",
+      "imgOpen" : "/a/o.png",
+      "intonation" : 1,
+      "name" : "A",
+      "pitch" : 0,
+      "scale" : 1.2,
+      "speaker" : 3,
+      "speed" : 1,
+      "x" : 0.8,
+      "y" : 0.7
+    },
+    {
+      "alwaysShow" : true,
+      "color" : "#e8384f",
+      "engine" : "aquestalk",
+      "flip" : true,
+      "id" : "ch2",
+      "imgClosed" : null,
+      "imgOpen" : null,
+      "name" : "B",
+      "scale" : 1,
+      "speed" : 100,
+      "voice" : "れいむ",
+      "x" : 0.2,
+      "y" : 0.7
+    }
+  ],
+  "codec" : "hevc",
+  "fps" : 30,
+  "futureProjectKey" : {
+    "l" : [
+      true,
+      null
+    ],
+    "n" : 1,
+    "s" : "x"
+  },
+  "height" : 1080,
+  "tracks" : [
+    {
+      "clips" : [
+        {
+          "blur" : 4,
+          "duration" : 2,
+          "futureClipKey" : "keep",
+          "id" : "c1",
+          "offset" : 0,
+          "opacity" : 0.8,
+          "scale" : 1.5,
+          "src" : "/a/b.png",
+          "start" : 0,
+          "type" : "image",
+          "x" : 0.5,
+          "y" : 0.5
+        },
+        {
+          "blur" : 0,
+          "duration" : 2,
+          "id" : "c2",
+          "offset" : 1.25,
+          "src" : "/a/v.mp4",
+          "srcDuration" : 12.5,
+          "start" : 0,
+          "type" : "video",
+          "volume" : 0.5
+        }
+      ],
+      "futureTrackKey" : {
+        "a" : [
+          1,
+          2,
+          {
+            "b" : null
+          }
+        ]
+      },
+      "id" : "t1",
+      "name" : "背景"
+    },
+    {
+      "clips" : [
+        {
+          "duration" : 2,
+          "id" : "c3",
+          "offset" : 0,
+          "src" : "/a/s.wav",
+          "srcDuration" : 3,
+          "start" : 0,
+          "type" : "audio",
+          "volume" : 1.5
+        }
+      ],
+      "id" : "t2",
+      "muted" : true,
+      "name" : "音"
+    },
+    {
+      "clips" : [
+        {
+          "blur" : 24,
+          "color" : "#ffffff",
+          "duration" : 2,
+          "font" : "YuGothic",
+          "fontSize" : 96,
+          "id" : "c4",
+          "offset" : 0,
+          "opacity" : 1,
+          "outline" : "#000000",
+          "start" : 0,
+          "text" : "こんにちは",
+          "type" : "text",
+          "x" : 0.5,
+          "y" : 0.15
+        },
+        {
+          "charId" : "ch1",
+          "duration" : 2,
+          "font" : "Klee",
+          "fontSize" : 64,
+          "id" : "c5",
+          "offset" : 0,
+          "src" : "/a/v.wav",
+          "start" : 0,
+          "subtitle" : true,
+          "text" : "やあ",
+          "type" : "voice",
+          "volume" : 1
+        },
+        {
+          "duration" : 2,
+          "h" : 0.2,
+          "id" : "c6",
+          "offset" : 0,
+          "shape" : "rect",
+          "start" : 0,
+          "strength" : 24,
+          "type" : "blur",
+          "w" : 0.3,
+          "x" : 0.5,
+          "y" : 0.5
+        },
+        {
+          "duration" : 2,
+          "h" : 0.2,
+          "id" : "c7",
+          "offset" : 0,
+          "shape" : "ellipse",
+          "start" : 0,
+          "strength" : 30,
+          "type" : "blur",
+          "w" : 0.2,
+          "x" : 0.3,
+          "y" : 0.6
+        },
+        {
+          "duration" : 2,
+          "id" : "c8",
+          "offset" : 0,
+          "start" : 0,
+          "type" : "hologram",
+          "weird" : true
+        }
+      ],
+      "hidden" : true,
+      "id" : "t3",
+      "name" : "文字"
+    }
+  ],
+  "voicevoxUrl" : "http://127.0.0.1:50021",
+  "width" : 1920
+}

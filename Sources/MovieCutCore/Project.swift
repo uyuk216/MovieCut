@@ -256,9 +256,17 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var h: Double? = nil
     public var strength: Double? = nil
     public var shape: String? = nil
+    // 変形(画像・動画・文字)。どれも未設定が既定(0 度・反転なし・切り抜きなし)。ファイルには既定でないときだけ書く。
+    public var rotation: Double? = nil
+    public var flipH: Bool? = nil
+    public var flipV: Bool? = nil
+    public var crop: Crop? = nil
+    /// キーフレーム: 項目名("x" "y" "scale" "rotation" "opacity" "blur" / ぼかし範囲は "x" "y" "w" "h" "strength")→ キー列。
+    /// 空のときはファイルに書かない。時刻はクリップの頭からの秒。
+    public var keyframes: [String: [Keyframe]] = [:]
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["id", "type", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape"]
+    static let knownKeys: Set<String> = ["id", "type", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "rotation", "flipH", "flipV", "crop", "keyframes"]
 
     public init() {}
 
@@ -279,6 +287,49 @@ public struct Clip: Codable, Equatable, Identifiable {
     /// text は 80、voice(字幕)は 64
     public var fontSizeOrDefault: Double { fontSize ?? (type == .voice ? 64 : 80) }
     public var subtitleOrDefault: Bool { subtitle ?? false }
+    public var rotationOrDefault: Double { rotation ?? 0 }
+    public var flipHOrDefault: Bool { flipH ?? false }
+    public var flipVOrDefault: Bool { flipV ?? false }
+    public var cropOrDefault: Crop { crop ?? Crop() }
+    /// キーが 1 つでもあるか(描画の速い道の判定)。
+    public var hasKeyframes: Bool { !keyframes.isEmpty }
+
+    /// 項目名で読む、いまの設定値(キーを見ない)。未設定は既定値。
+    public func staticValue(of key: String) -> Double {
+        switch key {
+        case "x": return xOrDefault
+        case "y": return yOrDefault
+        case "scale": return scaleOrDefault
+        case "opacity": return opacityOrDefault
+        case "rotation": return rotationOrDefault
+        case "blur": return blurOrDefault
+        case "w": return wOrDefault
+        case "h": return hOrDefault
+        case "strength": return strengthOrDefault
+        default: return 0
+        }
+    }
+
+    /// 項目名で設定値を書く(rotation = 0 は未設定に戻す)。範囲は呼び出し側で整える。
+    public mutating func setStaticValue(_ v: Double, of key: String) {
+        switch key {
+        case "x": x = v
+        case "y": y = v
+        case "scale": scale = v
+        case "opacity": opacity = v
+        case "rotation": rotation = v == 0 ? nil : v
+        case "blur": blur = v
+        case "w": w = v
+        case "h": h = v
+        case "strength": strength = v
+        default: break
+        }
+    }
+
+    /// 時刻 t(プロジェクトの時刻)での、項目の値。
+    public func value(of key: String, atProjectTime t: Double) -> Double {
+        Animation.value(of: key, in: self, at: t - start)
+    }
 
     public init(from decoder: Decoder) throws {
         let l = Lenient(c: try decoder.container(keyedBy: AnyKey.self), known: Self.knownKeys)
@@ -295,7 +346,17 @@ public struct Clip: Codable, Equatable, Identifiable {
         color = l.string("color"); outline = l.string("outline"); font = l.string("font")
         charId = l.string("charId"); subtitle = l.bool("subtitle")
         w = l.double("w"); h = l.double("h"); strength = l.double("strength"); shape = l.string("shape")
+        rotation = l.double("rotation"); flipH = l.bool("flipH"); flipV = l.bool("flipV")
+        crop = l.value("crop")
         extra = l.extra()
+        // 読めなかったキーフレームは捨てずに、そのまま書き戻す(extra に回す)
+        if let raw: JSONValue = l.value("keyframes") {
+            if let ks: [String: [Keyframe]] = l.value("keyframes") {
+                keyframes = ks.filter { !$0.value.isEmpty }
+            } else {
+                extra["keyframes"] = raw
+            }
+        }
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -325,5 +386,45 @@ public struct Clip: Codable, Equatable, Identifiable {
         try c.encodeIfPresent(h, forKey: AnyKey("h"))
         try c.encodeIfPresent(strength, forKey: AnyKey("strength"))
         try c.encodeIfPresent(shape, forKey: AnyKey("shape"))
+        try c.encodeIfPresent(rotation, forKey: AnyKey("rotation"))
+        try c.encodeIfPresent(flipH, forKey: AnyKey("flipH"))
+        try c.encodeIfPresent(flipV, forKey: AnyKey("flipV"))
+        try c.encodeIfPresent(crop, forKey: AnyKey("crop"))
+        let ks = keyframes.filter { !$0.value.isEmpty }
+        if !ks.isEmpty { try c.encode(ks, forKey: AnyKey("keyframes")) }
     }
+}
+
+/// 切り抜き: 元の画像(文字は描いた文字の枠)の左・上・右・下を、それぞれ何割切り落とすか。各 0〜0.95、左+右 < 1、上+下 < 1。
+public struct Crop: Codable, Equatable, Sendable {
+    public var l: Double = 0
+    public var t: Double = 0
+    public var r: Double = 0
+    public var b: Double = 0
+    public static let maxEdge = 0.95
+    public init() {}
+    public init(l: Double, t: Double, r: Double, b: Double) { self.l = l; self.t = t; self.r = r; self.b = b }
+
+    enum CodingKeys: String, CodingKey { case l, t, r, b }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let raw = Crop(l: (try? c.decodeIfPresent(Double.self, forKey: .l)) ?? 0, t: (try? c.decodeIfPresent(Double.self, forKey: .t)) ?? 0,
+                       r: (try? c.decodeIfPresent(Double.self, forKey: .r)) ?? 0, b: (try? c.decodeIfPresent(Double.self, forKey: .b)) ?? 0)
+        self = raw.normalized
+    }
+
+    public var isEmpty: Bool { l == 0 && t == 0 && r == 0 && b == 0 }
+
+    /// 範囲(各辺 0〜0.95、向かい合う辺の和が 1 未満)に収める。
+    public var normalized: Crop {
+        func e(_ v: Double) -> Double { v.isFinite ? min(max(v, 0), Crop.maxEdge) : 0 }
+        var o = Crop(l: e(l), t: e(t), r: e(r), b: e(b))
+        if o.l + o.r > 0.99 { let k = 0.99 / (o.l + o.r); o.l *= k; o.r *= k }
+        if o.t + o.b > 0.99 { let k = 0.99 / (o.t + o.b); o.t *= k; o.b *= k }
+        return o
+    }
+
+    /// 残る部分の大きさ(元に対する割合)。
+    public var keptWidth: Double { 1 - l - r }
+    public var keptHeight: Double { 1 - t - b }
 }

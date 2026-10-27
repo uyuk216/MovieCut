@@ -68,6 +68,9 @@ struct AppCommands: Commands {
                     if i > 0 { Divider() }
                     items(g, run)
                 }
+                Divider()
+                Menu("キーフレーム") { items(AppMenuSpec.keyframeItems(s), run) }
+                Menu("アニメーション") { items(AppMenuSpec.animationItems(s), run) }
             }
         }
 

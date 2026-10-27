@@ -19,6 +19,40 @@ private let bitmapInfo = CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmap
 /// CoreImage は sRGB(ガンマ空間)で処理して、CSS の blur() と同じ見た目にする。共有してコンテキスト作成コストを避ける。
 private let ciContext = CIContext(options: [.workingColorSpace: sRGB, .outputColorSpace: sRGB])
 
+// MARK: - クリップの動く値
+
+/// 時刻 t(プロジェクトの時刻)でのクリップの位置・拡大・回転・不透明度・ぼかし。キーがなければ設定値そのまま(従来と同じ速さ)。
+struct ClipPose {
+    var x: Double, y: Double, scale: Double, rotation: Double, opacity: Double, blur: Double
+
+    init(_ c: Clip, at t: Double) {
+        if c.keyframes.isEmpty {
+            x = c.xOrDefault; y = c.yOrDefault; scale = c.scaleOrDefault
+            rotation = c.rotationOrDefault; opacity = c.opacityOrDefault; blur = c.blurOrDefault
+        } else {
+            let r = t - c.start
+            x = Animation.value(of: "x", in: c, at: r); y = Animation.value(of: "y", in: c, at: r)
+            scale = Animation.value(of: "scale", in: c, at: r); rotation = Animation.value(of: "rotation", in: c, at: r)
+            opacity = min(max(Animation.value(of: "opacity", in: c, at: r), 0), 1); blur = max(0, Animation.value(of: "blur", in: c, at: r))
+        }
+    }
+
+    /// 回転・反転が無い(切り抜きは絵そのものを切るので関係ない)。文字は拡大・切り抜きも「無し」のとき。
+    func isPlain(_ c: Clip) -> Bool {
+        if rotation != 0 || c.flipHOrDefault || c.flipVOrDefault { return false }
+        if c.type == .text { return scale == 1 && (c.crop?.isEmpty ?? true) }
+        return true
+    }
+
+    /// (x, y) へ移して、反転 → 回転(時計回り)をかける。拡大は大きさに含めてあるので、文字のときだけここで掛ける。
+    func concat(_ c: Clip, ctx: CGContext, W: Double, H: Double) {
+        ctx.translateBy(x: CGFloat(x * W), y: CGFloat(y * H))
+        if rotation != 0 { ctx.rotate(by: CGFloat(rotation * .pi / 180)) }
+        if c.flipHOrDefault || c.flipVOrDefault { ctx.scaleBy(x: c.flipHOrDefault ? -1 : 1, y: c.flipVOrDefault ? -1 : 1) }
+        if c.type == .text, scale != 1 { ctx.scaleBy(x: CGFloat(scale), y: CGFloat(scale)) }
+    }
+}
+
 // MARK: - Renderer
 
 /// 時刻 t のフレームを描く(renderer.js draw() と同じ)。座標は左上原点、ctx は project.width × project.height。
@@ -63,14 +97,15 @@ public struct Renderer {
             for c in tr.clips where t >= c.start && t < c.start + c.duration {
                 switch c.type {
                 case .blur:
-                    drawBlurRegion(c, ctx: ctx, W: W, H: H)
+                    drawBlurRegion(c, t: t, ctx: ctx, W: W, H: H)
                 case .image, .video, .text:
-                    if c.blurOrDefault > 0 {
-                        drawBlurredClip(c, t: t, ctx: ctx, W: W, H: H)
+                    let pose = ClipPose(c, at: t)
+                    if pose.blur > 0 {
+                        drawBlurredClip(c, pose: pose, t: t, ctx: ctx, W: W, H: H)
                     } else {
                         ctx.saveGState()
-                        ctx.setAlpha(CGFloat(c.opacityOrDefault))
-                        drawClipContent(c, t: t, ctx: ctx, W: W, H: H)
+                        ctx.setAlpha(CGFloat(pose.opacity))
+                        drawClipContent(c, pose: pose, t: t, ctx: ctx, W: W, H: H)
                         ctx.restoreGState()
                     }
                 case .voice:
@@ -125,32 +160,101 @@ public struct Renderer {
     }
 
     /// image / video / text を現在の alpha で描く。
-    func drawClipContent(_ c: Clip, t: Double, ctx: CGContext, W: Double, H: Double) {
+    /// 順序: 切り抜き → 反転 → 拡大 → (クリップの中心まわりに)回転 → (x, y) へ移動。何も変形しないクリップは従来と同じ描き方。
+    func drawClipContent(_ c: Clip, pose: ClipPose, t: Double, ctx: CGContext, W: Double, H: Double) {
         switch c.type {
         case .image, .video:
             var img: CGImage?
             if let src = c.src {
                 img = c.type == .image ? assets.image(at: src) : assets.videoFrame(path: src, time: t - c.start + c.offset)
             }
-            guard let im = img, im.width > 0, im.height > 0 else { return }
+            guard var im = img, im.width > 0, im.height > 0 else { return }
             let w0 = Double(im.width), h0 = Double(im.height)
-            let fit = min(W / w0, H / h0) * c.scaleOrDefault
-            let w = w0 * fit, h = h0 * fit
-            drawCG(ctx, im, CGRect(x: c.xOrDefault * W - w / 2, y: c.yOrDefault * H - h / 2, width: w, height: h))
+            let fit = min(W / w0, H / h0) * pose.scale
+            if let crop = c.crop, !crop.isEmpty, let cut = Renderer.cropped(im, crop) { im = cut }
+            let w = Double(im.width) * fit, h = Double(im.height) * fit
+            if pose.isPlain(c) {
+                drawCG(ctx, im, CGRect(x: pose.x * W - w / 2, y: pose.y * H - h / 2, width: w, height: h))
+            } else {
+                ctx.saveGState()
+                pose.concat(c, ctx: ctx, W: W, H: H)
+                drawCG(ctx, im, CGRect(x: -w / 2, y: -h / 2, width: w, height: h))
+                ctx.restoreGState()
+            }
         case .text:
-            drawText(c.text ?? "", x: c.xOrDefault * W, y: c.yOrDefault * H, size: c.fontSize ?? 80, color: c.colorOrDefault, font: c.fontOrDefault, outline: c.outlineOrDefault, ctx: ctx, cacheable: c.opacityOrDefault >= 1 || c.blurOrDefault > 0)
+            let size = c.fontSize ?? 80
+            let blurred = pose.blur > 0
+            // 位置・拡大・回転が動く文字は、位置ごとにキャッシュしても使い回せないので直接描く
+            let geometryAnimated = c.hasKeyframes && ["x", "y", "scale", "rotation"].contains { Animation.isAnimated($0, in: c) }
+            if pose.isPlain(c) {
+                drawText(c.text ?? "", x: pose.x * W, y: pose.y * H, size: size, color: c.colorOrDefault, font: c.fontOrDefault, outline: c.outlineOrDefault, ctx: ctx,
+                         cacheable: !geometryAnimated && (pose.opacity >= 1 || blurred))
+            } else {
+                ctx.saveGState()
+                pose.concat(c, ctx: ctx, W: W, H: H)
+                var ox = 0.0, oy = 0.0
+                if let crop = c.crop, !crop.isEmpty {
+                    // 切り抜きは、描いた文字の枠(幅 = 一番長い行、高さ = 行数 × 行間)に対して
+                    let box = textBlockSize(c.text ?? "", size: size, font: c.fontOrDefault)
+                    let kw = box.width * crop.keptWidth, kh = box.height * crop.keptHeight
+                    ctx.clip(to: CGRect(x: -kw / 2, y: -kh / 2, width: kw, height: kh))
+                    ox = -(crop.l - crop.r) / 2 * box.width
+                    oy = -(crop.t - crop.b) / 2 * box.height
+                }
+                drawText(c.text ?? "", x: ox, y: oy, size: size, color: c.colorOrDefault, font: c.fontOrDefault, outline: c.outlineOrDefault, ctx: ctx, cacheable: false)
+                ctx.restoreGState()
+            }
         default:
             break
         }
     }
 
+    /// 切り抜き(画素に丸める)。範囲が空になるときは nil。
+    static func cropped(_ im: CGImage, _ crop: Crop) -> CGImage? {
+        let w = Double(im.width), h = Double(im.height)
+        let x0 = (crop.l * w).rounded(), y0 = (crop.t * h).rounded()
+        let x1 = max(x0 + 1, (w - crop.r * w).rounded()), y1 = max(y0 + 1, (h - crop.b * h).rounded())
+        return im.cropping(to: CGRect(x: x0, y: y0, width: min(x1, w) - x0, height: min(y1, h) - y0))
+    }
+
+    /// 文字の枠(幅 = 一番長い行の幅、高さ = 行数 × 文字の大きさ × 1.2)。
+    func textBlockSize(_ text: String, size: Double, font: String) -> CGSize {
+        let lines = text.components(separatedBy: "\n")
+        let f = TextCache.font(name: font, size: size)
+        let w = lines.map { TextCache.layout(f, font: font, line: $0).width }.max() ?? 0
+        return CGSize(width: w, height: Double(lines.count) * size * 1.2)
+    }
+
+    /// 画面に置いたときの、クリップの枠の大きさ(拡大を反映、回転は含まない)。素材が読めなければ nil。プレビューの取っ手用。
+    public func objectSize(of c: Clip, at t: Double) -> CGSize? {
+        let W = Double(project.width), H = Double(project.height)
+        let pose = ClipPose(c, at: t)
+        switch c.type {
+        case .image, .video:
+            guard let src = c.src else { return nil }
+            let size: CGSize?
+            if c.type == .image { size = assets.image(at: src).map { CGSize(width: $0.width, height: $0.height) } }
+            else { size = assets.knownVideoSize(path: src) ?? assets.videoFrame(path: src, time: t - c.start + c.offset).map { CGSize(width: $0.width, height: $0.height) } }
+            guard let s = size, s.width > 0, s.height > 0 else { return nil }
+            let fit = min(W / s.width, H / s.height) * pose.scale
+            let crop = c.cropOrDefault
+            return CGSize(width: s.width * crop.keptWidth * fit, height: s.height * crop.keptHeight * fit)
+        case .text:
+            let box = textBlockSize(c.text ?? "", size: c.fontSize ?? 80, font: c.fontOrDefault)
+            let crop = c.cropOrDefault
+            return CGSize(width: box.width * crop.keptWidth * pose.scale, height: box.height * crop.keptHeight * pose.scale)
+        default:
+            return nil
+        }
+    }
+
     /// クリップごとのぼかし: 透明なビットマップに描いてぼかし、不透明度をかけて合成する。
-    func drawBlurredClip(_ c: Clip, t: Double, ctx: CGContext, W: Double, H: Double) {
-        let sigma = min(300, c.blurOrDefault)
+    func drawBlurredClip(_ c: Clip, pose: ClipPose, t: Double, ctx: CGContext, W: Double, H: Double) {
+        let sigma = min(300, pose.blur)
         guard let off = Renderer.makeContext(width: Int(W), height: Int(H)) else { return }
         off.translateBy(x: 0, y: CGFloat(off.height))
         off.scaleBy(x: 1, y: -1)
-        drawClipContent(c, t: t, ctx: off, W: W, H: H)
+        drawClipContent(c, pose: pose, t: t, ctx: off, W: W, H: H)
         guard let snap = off.makeImage() else { return }
         // 範囲を σ の3倍ぶん広げて、縁が自然に薄れるようにする(透明部分は透明のまま)
         let ci = CIImage(cgImage: snap)
@@ -158,16 +262,17 @@ public struct Renderer {
         let rect = CGRect(x: 0, y: 0, width: W, height: H)
         guard let out = ciContext.createCGImage(blurred, from: rect, format: .BGRA8, colorSpace: sRGB) else { return }
         ctx.saveGState()
-        ctx.setAlpha(CGFloat(c.opacityOrDefault))
+        ctx.setAlpha(CGFloat(pose.opacity))
         drawCG(ctx, out, rect)
         ctx.restoreGState()
     }
 
     /// ぼかし範囲: ここまでに描いたキャンバスを、四角/楕円の内側だけぼかして描き直す。
-    func drawBlurRegion(_ c: Clip, ctx: CGContext, W: Double, H: Double) {
-        let bw = c.wOrDefault * W, bh = c.hOrDefault * H
-        let bx = c.xOrDefault * W, by = c.yOrDefault * H
-        let sigma = max(0, c.strengthOrDefault)
+    func drawBlurRegion(_ c: Clip, t: Double, ctx: CGContext, W: Double, H: Double) {
+        let r = t - c.start
+        let bw = Animation.value(of: "w", in: c, at: r) * W, bh = Animation.value(of: "h", in: c, at: r) * H
+        let bx = Animation.value(of: "x", in: c, at: r) * W, by = Animation.value(of: "y", in: c, at: r) * H
+        let sigma = max(0, Animation.value(of: "strength", in: c, at: r))
         let shapeRect = CGRect(x: bx - bw / 2, y: by - bh / 2, width: bw, height: bh)
         let canvas = CGRect(x: 0, y: 0, width: W, height: H)
         // 画素に揃えた取得範囲(キャンバス内)

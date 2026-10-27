@@ -37,6 +37,10 @@ extension Project {
                 }
                 if let b = c.blur, b > 0 { c.blur = (b * k).rounded() }
                 if c.type == .blur, let s = c.strength, s > 0 { c.strength = (s * k).rounded() }
+                // 動くぼかし(キー)の値も同じ比で直す
+                for key in ["blur", "strength"] where c.keyframes[key] != nil {
+                    c.keyframes[key] = c.keyframes[key]!.map { Keyframe(t: $0.t, v: ($0.v * k).rounded(), ease: $0.ease) }
+                }
                 p.tracks[ti].clips[ci] = c
             }
         }

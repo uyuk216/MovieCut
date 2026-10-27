@@ -131,6 +131,8 @@ public enum ClipEditing {
         clip.start = start0 + d
         clip.duration = dur0 - d
         if timed { clip.offset = clip.offset + d }
+        // キーフレームは絵に付いたまま(頭が d 進んだら、頭からの時刻は −d)
+        if clip.hasKeyframes { clip.keyframes = Animation.shifted(clip.keyframes, by: -d) }
         p.tracks[loc.track].clips[loc.index] = clip
         let guides = [sp].compactMap { $0 }.filter { abs($0 - clip.start) < 1e-9 }
         return Result(project: p, guides: guides)
@@ -157,6 +159,12 @@ public enum ClipEditing {
         right.start = t
         right.duration = end - t
         if hasSourceTimeline(clip.type) { right.offset = clip.offset + cut }
+        // キーフレームは切れ目で振り分ける(両側に境目のキーを足して、値が途切れないようにする)
+        if clip.hasKeyframes {
+            let parts = Animation.split(clip.keyframes, at: cut)
+            left.keyframes = parts.left
+            right.keyframes = parts.right
+        }
         return (left, right)
     }
 

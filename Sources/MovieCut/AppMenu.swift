@@ -12,6 +12,8 @@ enum MenuCommand: Hashable {
     // 移動(M7)
     case goStart, goEnd, prevEdit, nextEdit, prevLine, nextLine, jumpToTime
     case addMarker, renameMarker, prevMarker, nextMarker, deleteMarker, clearMarkers, jumpToMarker(String)
+    // キーフレーム / アニメーション
+    case toggleKeyframe, prevKeyframe, nextKeyframe, clearKeyframes, animationPreset(AnimationPreset)
     case zoomIn, zoomOut, zoomFit
     case resolution(String), swapResolution, fps(Double), fpsCustom, codec(String), background(String)
     case toggleSecondScreen, fullScreen, toggleStatusItem
@@ -106,6 +108,12 @@ struct MenuState: Equatable {
     var markerAtPlayhead = false
     var hasPrevMarker = false
     var hasNextMarker = false
+    // キーフレーム
+    var canKeyframe = false          // 選択クリップが動かせる種類で、再生位置がその中
+    var hasKeyframes = false         // 選択クリップにキーが 1 つでもある
+    var hasPrevKeyframe = false
+    var hasNextKeyframe = false
+    var canAnimatePreset = false     // 画像・動画・文字のクリップを選んでいる
     /// メニューバーのアイコンを出す設定(「表示」メニューの切り替え)。
     var statusItemShown = true
 
@@ -142,6 +150,15 @@ struct MenuState: Equatable {
                 canMoveUp = loc.track > 0
                 canMoveDown = loc.track < p.tracks.count - 1
             }
+        }
+        if let c = m.selectedClip {
+            let ks = m.keyframeTargetKey
+            canKeyframe = !Animation.keys(for: c).isEmpty && t >= c.start - ClipEditing.timeEpsilon && t <= c.start + c.duration + ClipEditing.timeEpsilon
+            hasKeyframes = c.hasKeyframes
+            let tol = m.keyTolerance, rel = t - c.start
+            hasPrevKeyframe = KeyframeEditing.previousKeyTime(c, key: ks, before: rel, tolerance: tol) != nil
+            hasNextKeyframe = KeyframeEditing.nextKeyTime(c, key: ks, after: rel, tolerance: tol) != nil
+            canAnimatePreset = [ClipType.image, .video, .text].contains(c.type)
         }
         hasPrevClip = ClipEditing.hasAdjacentClip(in: p, from: m.selectedClipId, forward: false, playhead: t)
         hasNextClip = ClipEditing.hasAdjacentClip(in: p, from: m.selectedClipId, forward: true, playhead: t)
@@ -313,6 +330,21 @@ enum AppMenuSpec {
         s.markers.map { MenuItemSpec(command: .jumpToMarker($0.id), title: markerTitle($0), shortcut: nil, enabled: s.canEdit, checked: nil) }
     }
 
+    // MARK: キーフレーム / アニメーション(クリップメニューのサブメニュー)
+
+    static func keyframeItems(_ s: MenuState) -> [MenuItemSpec] {
+        [MenuItemSpec(command: .toggleKeyframe, title: "キーフレームを追加/削除", shortcut: MenuShortcut(key: "k", modifiers: [.option, .command]), enabled: s.canEdit && s.canKeyframe, checked: nil),
+         MenuItemSpec(command: .prevKeyframe, title: "前のキーフレームへ", shortcut: MenuShortcut(key: ",", modifiers: [.option, .command]), enabled: s.canEdit && s.hasPrevKeyframe, checked: nil),
+         MenuItemSpec(command: .nextKeyframe, title: "次のキーフレームへ", shortcut: MenuShortcut(key: ".", modifiers: [.option, .command]), enabled: s.canEdit && s.hasNextKeyframe, checked: nil),
+         MenuItemSpec(command: .clearKeyframes, title: "すべてのキーフレームを消去", shortcut: nil, enabled: s.canEdit && s.hasKeyframes, checked: nil)]
+    }
+
+    static func animationItems(_ s: MenuState) -> [MenuItemSpec] {
+        AnimationPreset.allCases.map {
+            MenuItemSpec(command: .animationPreset($0), title: $0.title, shortcut: nil, enabled: s.canEdit && s.canAnimatePreset, checked: nil)
+        }
+    }
+
     static func zoom(_ s: MenuState) -> [MenuItemSpec] {
         [MenuItemSpec(command: .zoomIn, title: "タイムラインを拡大", shortcut: cmd("+"), enabled: s.canEdit, checked: nil),
          MenuItemSpec(command: .zoomOut, title: "タイムラインを縮小", shortcut: cmd("-"), enabled: s.canEdit, checked: nil),
@@ -379,7 +411,7 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, settings(s), videoSettings(s)] + file(s) + [exportCurrent(s)] + exportPresets(s) + clipMenu(s).flatMap { $0 } + editAdd(s) + playback(s)
+        [about, settings(s), videoSettings(s)] + file(s) + [exportCurrent(s)] + exportPresets(s) + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + editAdd(s) + playback(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + [secondScreen(s), statusItemToggle(s), fullScreen(s)] + help.flatMap { $0 }
@@ -433,6 +465,11 @@ enum AppMenu {
             case .deleteMarker: m.deleteMarkerAtPlayhead()
             case .clearMarkers: m.clearMarkers()
             case .jumpToMarker(let id): m.jumpToMarker(id: id)
+            case .toggleKeyframe: m.toggleKeyframeFromMenu()
+            case .prevKeyframe: m.seekKeyframe(forward: false)
+            case .nextKeyframe: m.seekKeyframe(forward: true)
+            case .clearKeyframes: m.clearKeyframes()
+            case .animationPreset(let p): m.applyAnimationPreset(p)
             case .delete: m.deleteSelected()
             case .addText: m.addTextClip()
             case .addBlur: m.addBlurClip()

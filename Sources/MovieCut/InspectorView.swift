@@ -18,19 +18,70 @@ struct InspectorSection: View {
     }
 }
 
-/// ラベルを上に置いた項目。
+/// 項目のキーフレームの操作(◇ と ◀ ▶)に必要なもの。
+struct KeyframeControl {
+    var state: KeyframeEditing.KeyState
+    var canPrev: Bool
+    var canNext: Bool
+    var toggle: () -> Void
+    var prev: () -> Void
+    var next: () -> Void
+}
+
+/// ◇(キーなし)/ ◆(ここにキーがある)/ 半塗り(動く項目だが、ここにキーは無い)。
+struct KeyframeDiamond: View {
+    let state: KeyframeEditing.KeyState
+    let action: () -> Void
+
+    static func symbol(_ s: KeyframeEditing.KeyState) -> String {
+        switch s {
+        case .none: return "diamond"
+        case .between: return "diamond.lefthalf.filled"
+        case .onKey: return "diamond.fill"
+        }
+    }
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: Self.symbol(state))
+                .font(.system(size: 13))
+                .foregroundStyle(state == .none ? Color.secondary : Color.accentColor)
+                .frame(width: 22, height: 22)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(state == .onKey ? "ここのキーフレームを消す" : "ここにキーフレームを足す")
+        .accessibilityLabel(state == .onKey ? "キーフレームを消す" : "キーフレームを追加")
+    }
+}
+
+/// ラベルを上に置いた項目。`key` があれば、ラベルの横に ◀ ▶(動く項目のとき)、コントロールの右に ◇ を出す。
 struct InspectorField<Content: View>: View {
     let label: String
     var trailing: String?
+    var key: KeyframeControl?
     @ViewBuilder var content: Content
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            HStack {
+            HStack(spacing: 2) {
                 Text(label).font(.system(size: 12)).foregroundStyle(.secondary)
+                if let key, key.state != .none {
+                    Button(action: key.prev) { Image(systemName: "chevron.left").font(.system(size: 9, weight: .semibold)).frame(width: 16, height: 16).contentShape(Rectangle()) }
+                        .buttonStyle(.plain).disabled(!key.canPrev).help("前のキーフレームへ")
+                    Button(action: key.next) { Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).frame(width: 16, height: 16).contentShape(Rectangle()) }
+                        .buttonStyle(.plain).disabled(!key.canNext).help("次のキーフレームへ")
+                }
                 Spacer(minLength: 4)
                 if let trailing { Text(trailing).font(.system(size: 12).monospacedDigit()).foregroundStyle(.primary) }
             }
-            content
+            if let key {
+                HStack(spacing: 2) {
+                    content
+                    KeyframeDiamond(state: key.state, action: key.toggle)
+                }
+            } else {
+                content
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -84,6 +135,7 @@ struct NumField: View {
 /// スライダー(ラベルの右に現在の値)。ドラッグの間は Undo に積まず、離したときに 1 回だけ登録する。
 struct LiveSlider: View {
     let label: String
+    var key: KeyframeControl?
     let value: Double
     let range: ClosedRange<Double>
     let step: Double
@@ -93,7 +145,7 @@ struct LiveSlider: View {
     let end: () -> Void
 
     var body: some View {
-        InspectorField(label: label, trailing: format(value)) {
+        InspectorField(label: label, trailing: format(value), key: key) {
             // step を渡すと目盛りが並んで見づらいので、丸めは自分でやる
             Slider(value: Binding(get: { value }, set: { change(step > 0 ? (($0 / step).rounded() * step) : $0) }), in: range) { editing in
                 if editing { begin() } else { end() }
@@ -243,20 +295,71 @@ struct ClipInspector: View {
 
     private var clip: Clip? { model.clip(clipId) }
 
-    // 数値欄 / スライダー
+    /// ◇ ◀ ▶ の操作(その種類のクリップで動かせない項目には出さない)。
+    private func keyControl(_ key: String?) -> KeyframeControl? {
+        guard let key, let c = clip, Animation.keys(for: c).contains(key) else { return nil }
+        let rel = model.currentTime - c.start, tol = model.keyTolerance
+        return KeyframeControl(
+            state: model.keyState(key, of: c),
+            canPrev: KeyframeEditing.previousKeyTime(c, key: key, before: rel, tolerance: tol) != nil,
+            canNext: KeyframeEditing.nextKeyTime(c, key: key, after: rel, tolerance: tol) != nil,
+            toggle: { model.toggleKeyframe(key, clipId: clipId) },
+            prev: { model.seekKeyframe(forward: false, key: key) },
+            next: { model.seekKeyframe(forward: true, key: key) })
+    }
+
+    /// 項目の、再生ヘッドでの値(キーがあれば補間後)。
+    private func shown(_ key: String?, _ f: ClipField?) -> Double {
+        guard let c = clip else { return 0 }
+        if let key { return model.animatedValue(key, of: c) }
+        return f.map { $0.value(of: c) } ?? 0
+    }
+
+    // 数値欄 / スライダー(キーフレームで動かせる項目は、キーがあればここのキーを編集する)
     private func num(_ label: String, _ f: ClipField, step: Double = 0.01, decimals: Int = 2) -> some View {
-        InspectorField(label: label) {
-            NumField(value: clip.map { f.value(of: $0) } ?? 0, step: step, decimals: decimals, clamp: { f.clamp($0) },
-                     onCommit: { model.setClipField(f, $0, clipId: clipId) },
-                     onStep: { model.coalescedClipField(f, $0, clipId: clipId) })
+        let key = f.animationKey
+        return InspectorField(label: label, key: keyControl(key)) {
+            NumField(value: shown(key, f), step: step, decimals: decimals,
+                     clamp: { v in
+                         if let key, let c = clip, Animation.isAnimated(key, in: c) { return Animation.clamp(key, v, type: c.type) }
+                         return f.clamp(v)
+                     },
+                     onCommit: { key != nil ? model.setKeyed(key!, $0, clipId: clipId) : model.setClipField(f, $0, clipId: clipId) },
+                     onStep: { key != nil ? model.coalescedKeyed(key!, $0, clipId: clipId) : model.coalescedClipField(f, $0, clipId: clipId) })
         }
     }
 
     private func slider(_ label: String, _ f: ClipField, step: Double, format: @escaping (Double) -> String) -> some View {
-        LiveSlider(label: label, value: clip.map { f.value(of: $0) } ?? 0, range: f.range, step: step, format: format,
-                   begin: { model.beginGesture() },
-                   change: { model.liveClipField(f, $0, clipId: clipId) },
-                   end: { model.commitGesture(f.undoName) })
+        let key = f.animationKey
+        return LiveSlider(label: label, key: keyControl(key), value: shown(key, f), range: f.range, step: step, format: format,
+                          begin: { model.beginGesture() },
+                          change: { key != nil ? model.liveKeyed(key!, $0, clipId: clipId) : model.liveClipField(f, $0, clipId: clipId) },
+                          end: { model.commitGesture(f.undoName) })
+    }
+
+    private func rotationField() -> some View {
+        InspectorField(label: "回転（°）", key: keyControl("rotation")) {
+            NumField(value: shown("rotation", nil), step: 1, decimals: 1,
+                     clamp: { Animation.clamp("rotation", $0, type: clip?.type ?? .image) },
+                     onCommit: { model.setKeyed("rotation", $0, clipId: clipId) },
+                     onStep: { model.coalescedKeyed("rotation", $0, clipId: clipId) })
+        }
+    }
+
+    private func flipToggles(_ c: Clip) -> some View {
+        HStack(spacing: 14) {
+            Toggle("左右反転", isOn: Binding(get: { c.flipHOrDefault }, set: { model.setFlip(horizontal: true, $0, clipId: clipId) }))
+            Toggle("上下反転", isOn: Binding(get: { c.flipVOrDefault }, set: { model.setFlip(horizontal: false, $0, clipId: clipId) }))
+        }
+        .toggleStyle(.checkbox)
+    }
+
+    private func cropField(_ edge: CropEdge, _ c: Clip) -> some View {
+        InspectorField(label: "\(edge.label)（%）") {
+            NumField(value: edge.value(of: c.cropOrDefault) * 100, step: 1, decimals: 0, clamp: { min(max($0, 0), Crop.maxEdge * 100) },
+                     onCommit: { model.setCropEdge(edge, $0 / 100, clipId: clipId) },
+                     onStep: { model.coalescedCropEdge(edge, $0 / 100, clipId: clipId) })
+        }
     }
 
     private func fontPicker(_ c: Clip) -> some View {
@@ -357,10 +460,34 @@ struct ClipInspector: View {
             num("横位置", .x)
             num("縦位置", .y)
         }
-        if c.type == .image || c.type == .video { num("拡大", .scale, step: 0.05) }
+        InspectorSection(title: "変形")
+        HStack(alignment: .top, spacing: 10) {
+            num("拡大", .scale, step: 0.05)
+            rotationField()
+        }
+        flipToggles(c)
+        InspectorSection(title: "切り抜き")
+        HStack(alignment: .top, spacing: 10) {
+            cropField(.left, c)
+            cropField(.top, c)
+        }
+        HStack(alignment: .top, spacing: 10) {
+            cropField(.right, c)
+            cropField(.bottom, c)
+        }
+        Button { model.resetTransform(clipId: clipId) } label: { Text("変形をリセット").frame(maxWidth: .infinity) }
+            .controlSize(.small)
+            .disabled(model.isLocked || !Self.hasTransform(c))
+            .help("回転・反転・切り抜き・拡大を元に戻します")
         InspectorSection(title: "見た目")
         slider("不透明度", .opacity, step: 0.01, format: Self.pct)
         slider("ぼかし（px）", .blur, step: 1, format: Self.px)
+    }
+
+    /// 「変形をリセット」で戻るものがあるか。
+    static func hasTransform(_ c: Clip) -> Bool {
+        var probe = c
+        return KeyframeEditing.resetTransform(&probe)
     }
 
     @ViewBuilder private func blurSections(_ c: Clip) -> some View {

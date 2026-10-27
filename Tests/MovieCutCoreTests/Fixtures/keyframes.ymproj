@@ -1,0 +1,91 @@
+{
+  "width": 1280,
+  "height": 720,
+  "fps": 30,
+  "bg": "#102030",
+  "codec": "h264",
+  "characters": [],
+  "tracks": [
+    {
+      "id": "kt1",
+      "name": "変形",
+      "clips": [
+        {
+          "id": "kimg",
+          "type": "image",
+          "src": "/tmp/none.png",
+          "start": 1,
+          "duration": 4,
+          "offset": 0,
+          "x": 0.5,
+          "y": 0.5,
+          "scale": 1,
+          "opacity": 1,
+          "blur": 0,
+          "rotation": 15,
+          "flipH": true,
+          "flipV": false,
+          "crop": { "l": 0.1, "t": 0, "r": 0.2, "b": 0.05 },
+          "keyframes": {
+            "x": [ { "t": 0, "v": 0.2 }, { "t": 2, "v": 0.8, "ease": "easeInOut" }, { "t": 4, "v": 0.5, "ease": "hold" } ],
+            "y": [ { "t": 0, "v": 0.3, "ease": "easeIn" }, { "t": 3, "v": 0.7, "ease": "easeOut" } ],
+            "scale": [ { "t": 0, "v": 0.5, "ease": "bezier:0.25,0.1,0.25,1" }, { "t": 4, "v": 1.5 } ],
+            "rotation": [ { "t": 0, "v": 0 }, { "t": 4, "v": 360 } ],
+            "opacity": [ { "t": 0, "v": 0 }, { "t": 1, "v": 1 }, { "t": 3, "v": 1 }, { "t": 4, "v": 0 } ],
+            "blur": [ { "t": 0, "v": 12 }, { "t": 1, "v": 0 } ],
+            "futureProperty": [ { "t": 0, "v": 1 } ]
+          },
+          "futureClipKey": "keep"
+        },
+        {
+          "id": "ktxt",
+          "type": "text",
+          "text": "動く文字",
+          "start": 0,
+          "duration": 3,
+          "offset": 0,
+          "x": 0.5,
+          "y": 0.15,
+          "fontSize": 80,
+          "color": "#ffffff",
+          "outline": "#000000",
+          "font": "Hiragino Sans",
+          "opacity": 1,
+          "rotation": -10,
+          "keyframes": {
+            "x": [ { "t": 0, "v": -0.2, "ease": "easeOut" }, { "t": 1, "v": 0.5 } ]
+          }
+        },
+        {
+          "id": "kblur",
+          "type": "blur",
+          "start": 0,
+          "duration": 3,
+          "offset": 0,
+          "x": 0.5,
+          "y": 0.5,
+          "w": 0.3,
+          "h": 0.3,
+          "strength": 24,
+          "shape": "rect",
+          "keyframes": {
+            "x": [ { "t": 0, "v": 0.2 }, { "t": 3, "v": 0.8 } ],
+            "y": [ { "t": 0, "v": 0.5 } ],
+            "w": [ { "t": 0, "v": 0.1 }, { "t": 3, "v": 0.4 } ],
+            "h": [ { "t": 0, "v": 0.1 }, { "t": 3, "v": 0.4 } ],
+            "strength": [ { "t": 0, "v": 5 }, { "t": 3, "v": 40 } ]
+          }
+        },
+        {
+          "id": "kbad",
+          "type": "image",
+          "src": "/tmp/none.png",
+          "start": 6,
+          "duration": 1,
+          "offset": 0,
+          "keyframes": "this is not a keyframe table"
+        }
+      ]
+    }
+  ]
+}

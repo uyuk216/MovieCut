@@ -1,0 +1,120 @@
+{
+  "aquestalkCommand" : "/Applications/AquesTalkPlayer.app/Contents/MacOS/AquesTalkPlayer -P {voice} -T {text} -W {out}",
+  "bg" : "#000000",
+  "characters" : [
+    {
+      "alwaysShow" : true,
+      "color" : "#e8384f",
+      "engine" : "aquestalk",
+      "flip" : true,
+      "id" : "vco9c7j8",
+      "imgClosed" : null,
+      "imgOpen" : null,
+      "name" : "霊夢",
+      "scale" : 1,
+      "speed" : 100,
+      "voice" : "れいむ",
+      "x" : 0.18,
+      "y" : 0.72
+    },
+    {
+      "alwaysShow" : true,
+      "color" : "#f2c53d",
+      "engine" : "aquestalk",
+      "flip" : false,
+      "id" : "jkfyiuq5",
+      "imgClosed" : null,
+      "imgOpen" : null,
+      "name" : "魔理沙",
+      "scale" : 1,
+      "speed" : 100,
+      "voice" : "まりさ",
+      "x" : 0.82,
+      "y" : 0.72
+    },
+    {
+      "alwaysShow" : true,
+      "color" : "#7ac943",
+      "engine" : "voicevox",
+      "flip" : false,
+      "id" : "1x4n8me9",
+      "imgClosed" : null,
+      "imgOpen" : null,
+      "intonation" : 1,
+      "name" : "ずんだもん",
+      "pitch" : 0,
+      "scale" : 1,
+      "speaker" : 3,
+      "speed" : 1,
+      "x" : 0.82,
+      "y" : 0.72
+    }
+  ],
+  "codec" : "hevc",
+  "fps" : 60,
+  "height" : 2160,
+  "tracks" : [
+    {
+      "clips" : [
+        {
+          "charId" : "vco9c7j8",
+          "duration" : 1.1295,
+          "font" : "Hiragino Maru Gothic ProN",
+          "fontSize" : 128,
+          "id" : "dcckleee",
+          "offset" : 0,
+          "src" : "/private/tmp/claude-501/-Users-USER------------/07529bfa-5715-4444-bf9c-c37229b6ab4d/scratchpad/menu-check-userdata/voices/d92a85f4a0f15292da03d7635ed6eff987853470.wav",
+          "start" : 0,
+          "subtitle" : true,
+          "text" : "テストです",
+          "type" : "voice",
+          "volume" : 1
+        }
+      ],
+      "id" : "jdqrsyab",
+      "name" : "レイヤー1"
+    },
+    {
+      "clips" : [
+
+      ],
+      "id" : "oj4aw2wd",
+      "name" : "レイヤー2"
+    },
+    {
+      "clips" : [
+
+      ],
+      "id" : "k3vgxeus",
+      "name" : "レイヤー3"
+    },
+    {
+      "clips" : [
+
+      ],
+      "id" : "tg7ivdrc",
+      "name" : "レイヤー4"
+    },
+    {
+      "clips" : [
+        {
+          "duration" : 3,
+          "h" : 0.3,
+          "id" : "l91vo3uv",
+          "offset" : 0,
+          "shape" : "rect",
+          "start" : 0,
+          "strength" : 48,
+          "type" : "blur",
+          "w" : 0.3,
+          "x" : 0.5,
+          "y" : 0.5
+        }
+      ],
+      "id" : "hkj1db9r",
+      "name" : "レイヤー5"
+    }
+  ],
+  "voicevoxUrl" : "http://127.0.0.1:50021",
+  "width" : 3840
+}

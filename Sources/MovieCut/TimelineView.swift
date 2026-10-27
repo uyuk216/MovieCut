@@ -142,6 +142,17 @@ final class TimelineCanvas: NSView {
         var base = Project()
     }
     private(set) var markerDrag: MarkerDrag?
+    /// 選択クリップの下端の菱形(キーフレーム)を押している最中の操作。動かさずに離せばその時刻へ移動、動かせば全項目のキーをまとめて動かす。
+    struct KeyDrag {
+        var clipId: String
+        /// 押した菱形のキーの時刻(クリップの頭からの秒)
+        var time: Double
+        var downPoint: NSPoint
+        var downTime: Double
+        var active = false
+        var base = Project()
+    }
+    private(set) var keyDrag: KeyDrag?
     /// 吸着の案内線の時刻(ドラッグ中だけ)。
     private(set) var snapGuides: [Double] = []
     /// ポインタが左右の端 30pt 以内にあるときの自動スクロールの向き(-1 左 / 0 なし / 1 右)。
@@ -575,6 +586,7 @@ final class TimelineCanvas: NSView {
             ctx.restoreGState()
             textLeft += 3
         }
+        if selected && c.hasKeyframes { drawKeyframeDiamonds(c, rect: r, ctx: ctx) }
         if selected {
             let o = NSBezierPath(roundedRect: r.insetBy(dx: -1, dy: -1), xRadius: 5, yRadius: 5)
             o.lineWidth = 2
@@ -668,6 +680,47 @@ final class TimelineCanvas: NSView {
 
     // MARK: マウス
 
+    // MARK: キーフレームの菱形(選択クリップの下端)
+
+    static let diamondHalf: CGFloat = 4
+    static let diamondHit: CGFloat = 7
+
+    /// 選択クリップのキー(時刻ごと)の菱形の中心。クリップの外に出たキーは出さない。
+    func keyframeDiamondCenters(_ c: Clip, rect r: CGRect) -> [(time: Double, point: NSPoint)] {
+        guard c.hasKeyframes else { return [] }
+        return KeyframeEditing.keyTimes(c).filter { $0 >= -1e-9 && $0 <= c.duration + 1e-9 }.map { t in
+            (t, NSPoint(x: r.minX + CGFloat(t * geometry.pps), y: r.maxY - 7))
+        }
+    }
+
+    private func drawKeyframeDiamonds(_ c: Clip, rect r: CGRect, ctx: CGContext) {
+        let h = Self.diamondHalf
+        ctx.saveGState()
+        ctx.clip(to: r.insetBy(dx: 0, dy: 0))
+        for (_, pt) in keyframeDiamondCenters(c, rect: r) {
+            let d = NSBezierPath()
+            d.move(to: NSPoint(x: pt.x, y: pt.y - h)); d.line(to: NSPoint(x: pt.x + h, y: pt.y))
+            d.line(to: NSPoint(x: pt.x, y: pt.y + h)); d.line(to: NSPoint(x: pt.x - h, y: pt.y)); d.close()
+            NSColor.white.setFill(); d.fill()
+            d.lineWidth = 1
+            NSColor(white: 0, alpha: 0.65).setStroke(); d.stroke()
+        }
+        ctx.restoreGState()
+    }
+
+    /// 点の下にある、選択クリップのキーの菱形(時刻はクリップの頭からの秒)。
+    func keyframeHit(at p: NSPoint) -> (clipId: String, time: Double)? {
+        guard let id = selectedId, let loc = ClipEditing.locate(id, in: project) else { return nil }
+        let c = project.tracks[loc.track].clips[loc.index]
+        let r = geometry.clipRect(start: c.start, duration: c.duration, track: loc.track)
+        var best: (Double, Double)?
+        for (t, pt) in keyframeDiamondCenters(c, rect: r) where abs(p.x - pt.x) <= Self.diamondHit && abs(p.y - pt.y) <= Self.diamondHit + 1 {
+            let d = abs(p.x - pt.x)
+            if best == nil || d < best!.1 { best = (t, d) }
+        }
+        return best.map { (id, $0.0) }
+    }
+
     private func point(_ e: NSEvent) -> NSPoint { convert(e.locationInWindow, from: nil) }
 
     /// 点の下で一番手前のクリップ(後から描くもの、選択中のものが前)。
@@ -708,6 +761,10 @@ final class TimelineCanvas: NSView {
             }
             return
         }
+        if let hit = keyframeHit(at: p), let m = model, !m.isLocked {
+            keyDrag = KeyDrag(clipId: hit.clipId, time: hit.time, downPoint: p, downTime: geometry.time(forX: p.x))
+            return
+        }
         if let id = clipId(at: p) {
             model?.selectedClipId = id
             guard let m = model, !m.isLocked, let loc = ClipEditing.locate(id, in: project) else { return }
@@ -726,6 +783,24 @@ final class TimelineCanvas: NSView {
 
     func mouseDragged(to p: NSPoint) {
         if isScrubbing { scrub(to: p); return }
+        if var kd = keyDrag {
+            if !kd.active {
+                guard abs(p.x - kd.downPoint.x) >= Self.dragThreshold, let m = model else { return }
+                m.beginGesture()
+                kd.active = true
+                kd.base = m.project
+                keyDrag = kd
+            }
+            let target = kd.time + geometry.time(forX: p.x) - kd.downTime
+            if let moved = model?.projectMovingKeys(base: kd.base, clipId: kd.clipId, from: kd.time, to: target) {
+                model?.updateGesture(moved)
+            } else if let m = model {
+                m.updateGesture(kd.base)       // 動かせない(元の位置に戻した)
+            }
+            syncFromModel()
+            needsDisplay = true
+            return
+        }
         if var md = markerDrag {
             if !md.active {
                 guard hypot(p.x - md.downPoint.x, p.y - md.downPoint.y) >= Self.dragThreshold, let m = model else { return }
@@ -763,6 +838,17 @@ final class TimelineCanvas: NSView {
 
     func mouseUp() {
         mouseIsDown = false
+        if let kd = keyDrag {
+            keyDrag = nil
+            if kd.active {
+                model?.commitGesture("キーフレームの移動")     // 変わっていれば 1 回の Undo
+                syncFromModel()
+            } else if let start = ClipEditing.locate(kd.clipId, in: project).map({ project.tracks[$0.track].clips[$0.index].start }) {
+                model?.playback.seek(to: start + kd.time)       // 菱形のクリック: その時刻へ
+            }
+            needsDisplay = true
+            return
+        }
         if let md = markerDrag {
             markerDrag = nil
             if md.active {
