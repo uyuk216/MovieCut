@@ -58,7 +58,8 @@ struct TimelineSection: View {
                 Text("拡大")
                 Slider(value: $model.pps, in: TimelineLayout.minPps...TimelineLayout.maxPps).frame(width: 140)
                 Button("全体表示") { model.onFitTimeline() }
-                Toggle("吸着", isOn: $model.snapEnabled)
+                Toggle("ぴったり揃える", isOn: $model.snapEnabled)
+                    .help("クリップを動かすとき、ほかのクリップの端・再生ヘッド・0秒に自動で揃えます")
                 Spacer()
             }
             .padding(.horizontal, 10).padding(.vertical, 6)
