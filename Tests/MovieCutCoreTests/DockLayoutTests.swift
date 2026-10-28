@@ -15,18 +15,18 @@ final class DockLayoutTests: XCTestCase {
 
     // MARK: 初期配置とプリセット
 
-    func testDefaultIsTodaysArrangement() {
+    func testDefaultIsYMM4Arrangement() {
         let d = DockLayout.default
         assertValid(d)
-        XCTAssertEqual(d.docked, [.characters, .preview, .inspector, .timeline])
-        guard case .split(let axis, _, let top, let bottom)? = d.root else { return XCTFail() }
-        XCTAssertEqual(axis, .vertical)                                                  // 上段 / 下段
-        XCTAssertEqual(bottom, .group(DockGroup(panels: [.timeline])))                   // 下段 = タイムライン
-        guard case .split(.horizontal, _, let left, let rest) = top else { return XCTFail() }
-        XCTAssertEqual(left, .group(DockGroup(panels: [.characters])))                    // 左 = キャラクター
-        guard case .split(.horizontal, _, let mid, let right) = rest else { return XCTFail() }
-        XCTAssertEqual(mid, .group(DockGroup(panels: [.preview])))                        // 中央 = プレビュー
-        XCTAssertEqual(right, .group(DockGroup(panels: [.inspector])))                    // 右 = プロパティ
+        XCTAssertEqual(Set(d.docked), Set(DockPanel.allCases))
+        guard case .split(let axis, let cf, let left, let right)? = d.root else { return XCTFail() }
+        XCTAssertEqual(axis, .horizontal)                                                // 左の列 / 右の列
+        XCTAssertEqual(cf, 0.66, accuracy: 0.001)
+        XCTAssertEqual(right, .group(DockGroup(panels: [.inspector, .characters], active: .inspector)))  // 右 = プロパティ|キャラクター(タブ)
+        guard case .split(.vertical, let vf, let top, let bottom) = left else { return XCTFail() }
+        XCTAssertEqual(vf, 0.62, accuracy: 0.001)
+        XCTAssertEqual(top, .group(DockGroup(panels: [.preview])))                        // 左上 = プレビュー
+        XCTAssertEqual(bottom, .group(DockGroup(panels: [.timeline])))                    // 左下 = タイムライン
     }
 
     func testPresetsAreValid() {
@@ -202,10 +202,10 @@ final class DockLayoutTests: XCTestCase {
         XCTAssertTrue(l.setFraction(at: [], to: 5))
         guard case .split(_, let f, _, _)? = l.root else { return XCTFail() }
         XCTAssertEqual(f, DockLayout.maxFraction)
-        XCTAssertTrue(l.setFraction(at: [false, true], to: -3))
-        guard case .split(_, _, let top, _)? = l.root, case .split(_, _, _, let rest) = top, case .split(_, let f2, _, _) = rest else { return XCTFail() }
+        XCTAssertTrue(l.setFraction(at: [false], to: -3))
+        guard case .split(_, _, let top, _)? = l.root, case .split(_, let f2, _, _) = top else { return XCTFail() }
         XCTAssertEqual(f2, DockLayout.minFraction)
-        XCTAssertFalse(l.setFraction(at: [false, true], to: -3), "同じ値は変更なし")
+        XCTAssertFalse(l.setFraction(at: [false], to: -3), "同じ値は変更なし")
         XCTAssertFalse(l.setFraction(at: [true], to: 0.5), "グループには比率が無い")
         l.setFraction(at: [], to: .nan)
         assertValid(l, "NaN")

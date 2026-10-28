@@ -7,7 +7,7 @@ import MovieCutCore
 /// 変わるたびに UserDefaults へ書き(`defaults` が nil のときは書かない)、起動時に読み戻す(壊れていれば初期配置)。
 @MainActor
 final class DockStore: ObservableObject {
-    static let defaultsKey = "dockLayout.v1"
+    static let defaultsKey = "dockLayout.v2"
 
     @Published private(set) var layout: DockLayout
     private let defaults: UserDefaults?

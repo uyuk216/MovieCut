@@ -205,13 +205,12 @@ public struct DockLayout: Equatable, Codable {
 
     private static func leaf(_ p: DockPanel) -> DockNode { .group(DockGroup(panels: [p])) }
 
-    /// 初期配置 = これまでの画面そのもの: 上段に キャラクター | プレビュー | プロパティ、下段にタイムライン。
+    /// 初期配置 = YMM4 の初期画面に倣う: 左の列(約66%)= 上にプレビュー(再生バーつき・列の約62%)/ 下にタイムライン、
+    /// 右の列(約34%)= プロパティとキャラクターを同じグループのタブに(プロパティが前)。
     public static let `default` = DockLayout(root:
-        .split(axis: .vertical, fraction: 0.7,
-               first: .split(axis: .horizontal, fraction: 0.22,
-                             first: leaf(.characters),
-                             second: .split(axis: .horizontal, fraction: 0.74, first: leaf(.preview), second: leaf(.inspector))),
-               second: leaf(.timeline)))
+        .split(axis: .horizontal, fraction: 0.66,
+               first: .split(axis: .vertical, fraction: 0.62, first: leaf(.preview), second: leaf(.timeline)),
+               second: .group(DockGroup(panels: [.inspector, .characters], active: .inspector))))
 
     public static func preset(_ p: DockPreset) -> DockLayout {
         switch p {
@@ -378,13 +377,24 @@ public struct DockLayout: Equatable, Codable {
         guard location(of: panel) != .docked else { return false }
         take(panel)
         guard root != nil else { root = Self.leaf(panel); return true }
+        // プロパティとキャラクターは初期配置で同じタブグループ: 相方がドッキング中ならそのグループへ戻す
+        if panel == .inspector || panel == .characters {
+            let mate: DockPanel = panel == .inspector ? .characters : .inspector
+            if root?.group(containing: mate) != nil {
+                root = root?.mapGroup(containing: mate) { g in
+                    var list = g.panels
+                    list.insert(panel, at: panel == .inspector ? 0 : list.count)
+                    return .group(DockGroup(panels: list, active: .inspector))
+                }
+                return true
+            }
+        }
         // 初期配置での隣(その部分木の外側に置く): (隣のパネルたち, 自分を置く端, 自分の割合)
         let anchors: [DockPanel], edge: DockEdge, fraction: Double
         switch panel {
-        case .characters: (anchors, edge, fraction) = ([.preview, .inspector], .left, 0.22)
-        case .inspector: (anchors, edge, fraction) = ([.preview], .right, 0.26)
-        case .timeline: (anchors, edge, fraction) = ([.characters, .preview, .inspector], .bottom, 0.3)
-        case .preview: (anchors, edge, fraction) = ([.inspector], .left, 0.74)
+        case .characters, .inspector: (anchors, edge, fraction) = ([.preview, .timeline], .right, 0.34)
+        case .timeline: (anchors, edge, fraction) = ([.preview], .bottom, 0.38)
+        case .preview: (anchors, edge, fraction) = ([.timeline], .top, 0.62)
         }
         // ドッキング中の隣だけで数える。1 つもいなければ全体の端に置く
         var near = Set(anchors.filter { root?.group(containing: $0) != nil })
