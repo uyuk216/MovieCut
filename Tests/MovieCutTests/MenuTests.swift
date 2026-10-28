@@ -56,14 +56,7 @@ final class MenuTests: XCTestCase {
         XCTAssertEqual(AppMenuSpec.customFps(s).title, "カスタム…")
         XCTAssertEqual(AppMenuSpec.codecItems(s).map(\.title), ["H.264", "HEVC"])
         XCTAssertEqual(AppMenuSpec.backgroundItems(s).map(\.title), ["黒", "白", "緑（クロマキー）"])
-        XCTAssertEqual(AppMenuSpec.secondScreen(s).title, "プレビューを別画面に表示")
-        XCTAssertEqual(AppMenuSpec.secondScreen(s).shortcut, sc("p", .command))
         XCTAssertEqual(AppMenuSpec.help.map { $0.map(\.title) }, [["VOICEVOX 公式サイト", "AquesTalkPlayer 公式サイト"], ["ライセンス", "第三者の規約"]])
-    }
-
-    func testSecondScreenTitleChangesWhenOpen() {
-        XCTAssertEqual(AppMenuSpec.secondScreen(state { $0.isSecondScreenOpen = true }).title, "別画面を閉じる")
-        XCTAssertEqual(AppMenuSpec.secondScreen(state()).title, "プレビューを別画面に表示")
     }
 
     func testNoDuplicateAcceleratorsAndNoClashWithSystemOnes() {
@@ -298,7 +291,6 @@ final class MenuTests: XCTestCase {
         m.showResolutionSheet = false
         AppMenu.perform(.settings, model: m)
         XCTAssertTrue(m.showSettings)
-        AppMenu.perform(.toggleSecondScreen, model: nil)   // ドキュメントが無くても落ちない
         AppMenu.perform(.addText, model: nil)
     }
 

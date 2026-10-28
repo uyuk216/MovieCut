@@ -74,10 +74,11 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
 音声: VOICEVOX(/Applications/VOICEVOX.app/Contents/Resources/vv-engine/run を 127.0.0.1:50021 で自動起動、cpu_num_threads は perflevel0 のコア数、/speakers /audio_query /synthesis、結果は Application Support にキャッシュ)、AquesTalkPlayer(`/Applications/AquesTalkPlayer.app/Contents/MacOS/AquesTalkPlayer -P プリセット -T テキスト -W out.wav`)、無ければ `say -v Kyoko` で代用。
 クリップ: 画像/動画/音声/テキスト/音声(ボイス)/ぼかし範囲。クリップごとのぼかし(画像・動画・文字)、不透明度、拡大、位置、音量、トリム(offset)、テキストの文字・大きさ・色・縁色・フォント。ボイスは字幕 ON/OFF・サイズ・フォント・音量、セリフやキャラを変えると音声を作り直す。
 描画順: レイヤー順(隠したレイヤーは飛ばす)→ 立ち絵(音声の音量エンベロープ 1/60 秒単位 RMS>0.03 で口開き)→ 字幕(白文字 + キャラ色の縁)。ぼかし範囲は自分より前に描いたものだけを四角/楕円でぼかす。
-タイムライン: レイヤー追加、隠す/消音、ドラッグ移動(レイヤー間も)、左右端トリム、分割(S)、削除、吸着(約8pt)、ルーラーでシーク、拡大スライダー、全体表示、Cmd+ホイール/ピンチで拡大、ホイール横スクロール(縦にあふれないとき)、再生ヘッド、ルーラー目盛、キャラ色のボイスクリップ、選択の強調、タイムライン高さのドラッグ変更(保存)、スクロールバーは出さない。
+タイムライン: レイヤー追加、隠す/消音、ドラッグ移動(レイヤー間も)、左右端トリム、分割(S)、削除、吸着(約8pt)、ルーラーでシーク、拡大スライダー、全体表示、Cmd+ホイール/ピンチで拡大、ホイール横スクロール(縦にあふれないとき)、再生ヘッド、ルーラー目盛、キャラ色のボイスクリップ、選択の強調、タイムラインの高さは仕切りのドラッグで変更(配置と一緒に保存。下の「画面のドッキング」)、スクロールバーは出さない。
 再生: 再生/停止(Space)、先頭(Home)、1コマ送り/戻し(←/→)、動画クリップ同期、途中からの音声再生、消音レイヤー、終端で停止、二重再生防止。
 フレームレート: Core の `FrameRate { num, den }` が正確な分数(23.976→24000/1001, 29.97→30000/1001, 47.952→48000/1001, 59.94→60000/1001, 119.88→120000/1001(±0.01)、それ以外は分母 1000 を約分: 12.5→25/2)。書き出し(CMTime(i×den, num)、コマ数 ceil(長さ×fps−1e-6)、トラックの時間の目盛りは num の整数倍)・コマ送り・マーカー許容差はすべてこれを通す。サイズの決まり(`OutputPlan`): 書き出しは偶数に切り下げ、H.264 は 4096×2304 相当(各辺 4096・面積 4096×2304)まで、超えると**その書き出しだけ自動で HEVC**(シート・ステータスに「このサイズは H.264 で書き出せないので HEVC で書き出します」)、HEVC は 8192×4320 相当の面積までで超えると書き出す前に断る。幅×高さ×fps が 3840×2160×120 を超えると「とても時間がかかります」の注意(止めはしない)。
-プレビュー: 本当の縦横比の枠(灰色の下地)、左上に「W×H · Nfps」、別画面(内蔵以外で最大の画面)に全画面表示。
+プレビュー: 本当の縦横比の枠(灰色の下地)、左上に「W×H · Nfps」。(別画面への全画面表示は無くした。⌘P は空き)
+画面のドッキング: キャラクター / プレビュー(+ 再生バー)/ プロパティ / タイムラインを、タブにまとめる・分離する・別ウインドウに出す(下の「画面のドッキング」)。
 書き出し: H.264/HEVC (VideoToolbox) + AAC 256k、再生を待たず高速に、進捗表示、Dock の進行バーと完了時バウンス、Finder で表示、失敗時のエラー表示、2回連続OK。
 メニュー: ファイル/編集/クリップ/再生/移動/出力/表示/ウィンドウ/ヘルプ(設定… Cmd+,。出力メニューに 解像度(7 プリセット ✓・最近使ったカスタム・カスタム…・縦横を入れ替える)・FPS(6 プリセット ✓・最近使ったカスタム・カスタム…)・書き出し形式・背景色のラジオ、動画の設定…、MP4 を書き出す… Cmd+E、書き出しプリセット。ウィンドウ内には解像度ピッカー・設定・書き出しのボタンは置かない)。Space/S/Delete/Home/End/矢印は入力欄で打てるよう通常キーのまま(KeyRouter)。メニューの項目は `AppMenuSpec`(項目表)→ `AppCommands`(SwiftUI)→ `AppMenu.perform`(モデルの関数)の 1 本道で、項目表を単体テストが見る。
 設定シート: VOICEVOX の URL、ゆっくり用の実行コマンド(任意)、動画設定。
@@ -114,6 +115,15 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
 - **書き出しプリセット**(`ExportPreset`): YouTube 1080p(1920×1080 H.264)/ YouTube 4K(3840×2160 HEVC)/ ショート縦(1080×1920 H.264)/ 軽量 720p(1280×720 H.264・fps は min(元, 30))/ 音声のみ(AAC 256 kbps 48 kHz の .m4a)。プロジェクトの**写し**に `scaledForResolution` + コーデック + fps を当てて書き出すので、ドキュメントは変わらない。保存パネルの提案名は `<書類名>-<プリセット>.mp4|.m4a`。
 - **状態アイコン**(メニューバー右側、`StatusBar.swift`): SF Symbol「film」(テンプレート画像)。書き出しの進み具合(`ExportStatusCenter`)・VOICEVOX(`GET /version` を、メニューを開いている間だけ 3 秒に 1 回、非同期で)・最近のプロジェクト。ロジックは `StatusItemPresenting` プロトコルの向こうにあり、静かな検証(`MC_DEBUG_*`)では本物の NSStatusItem を作らない。表示の設定は UserDefaults `showMenuBarIcon`(既定 ON、「表示」メニューで切り替え)。LSUIElement にはしないので Dock のふるまいは変わらない。
 - **再生用の一時ファイル**: `$TMPDIR/MovieCut-playback/` にまとめ、起動時に 1 日より古いものを消し、書類を閉じるとき・終了するときに自分の分を消す(`PlaybackTempFiles`)。
+
+## 画面のドッキング(パネルの配置)
+- **パネル**: `DockPanel` = キャラクター(`characters`。左のキャラ一覧 + 台本)/ プレビュー(`preview`。プレビュー + 再生バー)/ プロパティ(`inspector`)/ タイムライン(`timeline`)。どのパネルも、ドッキング(木のどこか)・別ウインドウ(`floating`)・閉じている(`closed`)のちょうど 1 か所にある。
+- **モデル**(`MovieCutCore/DockLayout.swift`、UI なしの純粋なモデル): `DockLayout { root: DockNode?, floating, closed }`。`DockNode` は `group(DockGroup{panels, active})`(= タブのグループ)か `split(axis: horizontal|vertical, fraction, first, second)`(fraction = first の割合、0.1〜0.9 に丸める)。操作は `moveToTab(…ofGroupContaining:at:)`(タブとして合流・同じグループなら並べ替え)/ `moveToEdge(…)`(グループの端に分割を作る)/ `detach`(別ウインドウへ)/ `attach`(初期配置での隣の横へ戻す)/ `close` / `toggle` / `setActive` / `setFraction(at:)` / `apply(DockPreset)`。不変条件: 全パネルがちょうど 1 か所、空のグループなし、`active` は所属内、比率は範囲内、木の深さは 16 まで(`isValid`)。操作はこれを保つ(乱数で 4000 回操作する試験あり)。
+- **初期配置** = これまでの画面: 縦分割(上 0.7 / 下 タイムライン)の上段が 横分割(キャラクター 0.22 | 横分割(プレビュー 0.74 | プロパティ))。プリセット(表示 ▸ レイアウト): 初期配置に戻す / 1つのタブにまとめる(プレビューが前)/ すべて分離(2×2: 上段 キャラクター | プレビュー、下段 タイムライン | プロパティ)/ プレビューを大きく(右に キャラクター+プロパティのタブ、下にタイムライン)。
+- **保存**: アプリ全体の設定(書類には保存しない)。UserDefaults `dockLayout.v1` に JSON で、変わるたびに(仕切りのドラッグは離したときに)書き、起動時に読む。形: `{"root":{"kind":"split","axis":"vertical","fraction":0.7,"first":{…},"second":{"kind":"group","panels":["timeline"],"active":"timeline"}},"floating":[],"closed":[]}`。壊れた・足りない・重複した・知らないパネルを含む JSON は初期配置。比率だけ範囲外なら丸めて使う。別ウインドウに出ていたパネルは、起動時に初期の位置へ戻す(ウインドウの復元はしない)。静かな検証(`MC_DEBUG_*`)では書かない。
+- **画面**(`DockViews.swift`): 各グループにタブバー(26pt、前のタブを強調)。タブは SwiftUI の `onDrag` / `onDrop`(型 `jp.local.moviecut.dock-panel`)でドラッグ: 他のグループのタブバー・中央に落とすとタブとして合流、辺の 25% に落とすとその側に分割(ハイライトを出す。判定は Core の `DockDropZone`)、タブの上に落とすとその位置へ差し込む。仕切りは 6pt のドラッグ(最小 120pt)。タブの右クリック: 「別ウインドウで開く」「閉じる」。パネルが 1 つも無いときは案内と「初期配置に戻す」。操作ロック(書き出し中)は、これまでどおりタイムライン以外に効く。
+- **別ウインドウ**(`DockWindows.swift`): 書類ごとの `DockWindowManager` が `floating` に合わせて `NSWindow`(`DockPanelWindow`)を開閉し、同じ `ProjectModel` を表示する(編集・再生・プレビューは同じ状態で動く。UndoManager は書類のもの)。ウインドウを閉じるとドッキングに戻る。書類を閉じるときは配置を変えずにウインドウだけ閉じる。別ウインドウが前面でも `KeyRouter`(Space・S・Delete など)が効く。
+- **メニュー**(表示): パネル ▸ キャラクター / プレビュー / プロパティ / タイムライン(出ているものに ✓、選ぶと閉じる / 開く)、レイアウト ▸ 4 つのプリセット。ショートカットは付けない。`AppMenuSpec.dockPanels` / `dockLayouts` → `AppMenu.perform` → `AppServices.panelDock`(`DockStore`)。
 
 ## 確認の取り方 (エージェント共通)
 - `swift build` と `swift test` が通ること。ヘッドレスは moviecut-cli で ffprobe / 画像を使って確かめる。

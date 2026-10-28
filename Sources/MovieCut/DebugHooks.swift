@@ -41,7 +41,6 @@ import MovieCutCore
 /// - `MC_DEBUG_VOICE_EDIT=<新しいセリフ>` 選択中(`MC_DEBUG_SELECT_CLIP`)のボイスクリップのセリフを、プロパティ欄のセリフ欄と同じ関数
 ///   (`setVoiceText`)で書き換え、前後の `src` / 長さ / WAV の実長 / offset を出し、Undo して元に戻ったことも出す。
 ///   最後に Redo までして Undo の状態を出す。`MC_DEBUG_SCRIPT` のあとに実行される。
-/// - `MC_DEBUG_SECOND=1`      別画面ウィンドウを開き、`MC_SNAPSHOT_DIR` があれば `<dir>/second.png` にも書く(`window.png` と同時)。
 /// - `MC_DEBUG_MENU=1`        メニューバー(`NSApp.mainMenu`)の全項目(題・キー・有効・チェック・サブメニュー)を標準出力へ。
 ///   `MC_DEBUG_MENU=export` なら書き出し中(`MC_DEBUG_EXPORT` と一緒に使う)の状態を出す。`MC_DEBUG_MENU=1,export` なら両方(カンマ区切り)。
 /// - `MC_DEBUG_MENU_CLICK="出力/解像度/縦 1080×1920;背景色/白;…"` メニュー項目を `NSMenu.performActionForItem(at:)` で本当に押し、そのたびに状態を出す。
@@ -94,7 +93,7 @@ final class DebugHooks {
 
     private var active: Bool {
         ["MC_SNAPSHOT_DIR", "MC_DEBUG_SIZE", "MC_DEBUG_SCRIPT", "MC_DEBUG_EXPORT", "MC_DEBUG_SHEET", "MC_DEBUG_ZOOM", "MC_DEBUG_WINDOW", "MC_DEBUG_SELECT_CLIP",
-         "MC_DEBUG_TIME", "MC_DEBUG_PLAY", "MC_DEBUG_SEEK_TEST", "MC_DEBUG_DRAWTIME", "MC_DEBUG_SECOND", "MC_DEBUG_EDIT", "MC_DEBUG_HOLD_DRAG", "MC_DEBUG_SELECT_CHAR", "MC_DEBUG_DELETE_CHAR", "MC_DEBUG_VOICE_EDIT", "MC_DEBUG_INSPECTOR_SCROLL",
+         "MC_DEBUG_TIME", "MC_DEBUG_PLAY", "MC_DEBUG_SEEK_TEST", "MC_DEBUG_DRAWTIME", "MC_DEBUG_EDIT", "MC_DEBUG_HOLD_DRAG", "MC_DEBUG_SELECT_CHAR", "MC_DEBUG_DELETE_CHAR", "MC_DEBUG_VOICE_EDIT", "MC_DEBUG_INSPECTOR_SCROLL",
          "MC_DEBUG_MENU", "MC_DEBUG_MENU_CLICK", "MC_DEBUG_MENU_KEYS", "MC_DEBUG_EDITED", "MC_DEBUG_QUIT", "MC_DEBUG_FRAME", "MC_DEBUG_HANGWATCH", "MC_DEBUG_SWEEP", "MC_DEBUG_STATUS"].contains { env[$0] != nil }
     }
 
@@ -343,17 +342,12 @@ final class DebugHooks {
                 Self.out("inspector-scroll: bottom doc=\(Int(doc.frame.height)) view=\(Int(sv.contentView.bounds.height))")
             } else { Self.out("inspector-scroll: scroll view not found") }
         }
-        if env["MC_DEBUG_SECOND"] != nil {
-            model.toggleSecondScreen()
-            Self.out("second: open=\(model.isSecondScreenOpen) frame=\(model.secondScreen.window.map { NSStringFromRect($0.frame) } ?? "-")")
-        }
 
         if env["MC_SNAPSHOT_DIR"] != nil {
             await settle(model)
             // 依存チェックの結果(バナー)が出るまで待つ
             var bw = 0.0
             while AppServices.deps.checkCount == 0 && !AppServices.deps.dismissedThisSession && bw < 8 { try? await Task.sleep(nanoseconds: 50_000_000); bw += 0.05 }
-            if env["MC_DEBUG_SECOND"] != nil { try? await Task.sleep(nanoseconds: 800_000_000) }
             try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             snapshot(model)
         }
@@ -879,8 +873,6 @@ final class DebugHooks {
             }
             w.setFrame(f0, display: true)
         }
-        phase("second screen open/close")
-        model.toggleSecondScreen(); await sleep(0.7); model.toggleSecondScreen(); await sleep(0.5)
         if let out = env["MC_DEBUG_SWEEP_EXPORT"] {
             phase("export")
             let r = await model.runExport(to: URL(fileURLWithPath: out))
@@ -1009,7 +1001,6 @@ final class DebugHooks {
             if let cv = win.contentView { dump(cv, 0) }
         }
         if let png = Self.png(of: win) { try? png.write(to: url.appendingPathComponent("window.png")) }
-        if let second = model.secondScreen.window, let png = Self.png(of: second) { try? png.write(to: url.appendingPathComponent("second.png")) }
         if let sheet = win.attachedSheet, let png = Self.png(of: sheet, over: NSColor(calibratedWhite: 0.2, alpha: 1)) {
             try? png.write(to: url.appendingPathComponent("sheet.png"))
         }

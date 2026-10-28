@@ -265,7 +265,7 @@ final class PlaybackTests: XCTestCase {
         XCTAssertEqual(log, [.playPause, .stepForward])
     }
 
-    // MARK: モデル・別画面
+    // MARK: モデル
 
     func testTrackActionsAreUndoable() {
         let m = ProjectModel(project: .new())
@@ -278,12 +278,5 @@ final class PlaybackTests: XCTestCase {
         XCTAssertEqual(m.project.tracks.count, 6)
         m.effectiveUndoManager.undo()
         XCTAssertEqual(m.project.tracks.count, 5)
-    }
-
-    func testSecondScreenPicksLargestNonBuiltin() {
-        typealias S = SecondScreenController.ScreenInfo
-        XCTAssertEqual(SecondScreenController.pickTarget([S(isBuiltin: true, area: 100), S(isBuiltin: false, area: 50), S(isBuiltin: false, area: 80)]), 2)
-        XCTAssertNil(SecondScreenController.pickTarget([S(isBuiltin: true, area: 100)]))
-        XCTAssertNil(SecondScreenController.pickTarget([]))
     }
 }

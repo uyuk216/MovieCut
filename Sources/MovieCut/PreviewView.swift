@@ -8,25 +8,23 @@ struct PreviewView: NSViewRepresentable {
     let time: Double
     let assets: RenderAssets
     let model: ProjectModel
-    /// 別画面(全画面・黒背景・余白なし)用。
-    var fullscreen = false
     /// 同じ時刻・同じ内容でも描き直したいときに増やす(再生を止めたとき、正確なフレームに戻す)。
     var epoch = 0
 
-    func makeCoordinator() -> PreviewCoordinator { PreviewCoordinator(model: model, isPrimary: !fullscreen) }
+    func makeCoordinator() -> PreviewCoordinator { PreviewCoordinator(model: model) }
 
     func makeNSView(context: Context) -> PreviewCanvasView {
-        let v = PreviewCanvasView(fullscreen: fullscreen)
+        let v = PreviewCanvasView()
         context.coordinator.view = v
         v.setPlaceholder(project: project)
         context.coordinator.request(project: project, time: time, assets: assets, epoch: epoch)
-        if !fullscreen { v.model = model; v.updateOverlay(Self.overlayTarget(model: model, project: project, time: time, assets: assets)) }
+        v.model = model; v.updateOverlay(Self.overlayTarget(model: model, project: project, time: time, assets: assets))
         return v
     }
 
     func updateNSView(_ nsView: PreviewCanvasView, context: Context) {
         context.coordinator.request(project: project, time: time, assets: assets, epoch: epoch)
-        if !fullscreen { nsView.model = model; nsView.updateOverlay(Self.overlayTarget(model: model, project: project, time: time, assets: assets)) }
+        nsView.model = model; nsView.updateOverlay(Self.overlayTarget(model: model, project: project, time: time, assets: assets))
     }
 
     /// 選択クリップの枠(直接操作の取っ手)。画像・動画・文字を選んでいて、再生ヘッドがその中にあり、止まっているときだけ。
@@ -51,8 +49,6 @@ struct PreviewOverlayTarget: Equatable {
 final class PreviewCoordinator {
     weak var view: PreviewCanvasView?
     let model: ProjectModel
-    /// 検証用の数え上げ(落としたフレームなど)は主画面のぶんだけ。
-    let isPrimary: Bool
     private let queue = DispatchQueue(label: "moviecut.preview.render", qos: .userInitiated)
     private let lock = NSLock()
     private var pending: (project: Project, time: Double, assets: RenderAssets, seq: Int)?
@@ -63,7 +59,7 @@ final class PreviewCoordinator {
     private var lastEpoch = -1
     private var seq = 0
 
-    init(model: ProjectModel, isPrimary: Bool = true) { self.model = model; self.isPrimary = isPrimary }
+    init(model: ProjectModel) { self.model = model }
 
     func request(project: Project, time: Double, assets: RenderAssets, epoch: Int = 0) {
         if lastEpoch == epoch && lastTime == time && lastProject == project { return }
@@ -74,7 +70,7 @@ final class PreviewCoordinator {
         view?.setPlaceholder(project: project)
         lock.lock()
         // まだ描かれていない古い要求を上書きした = そのフレームは描かれずに落ちた
-        if pending != nil, isPrimary { MainActor.assumeIsolated { model.previewDropped += 1 } }
+        if pending != nil { MainActor.assumeIsolated { model.previewDropped += 1 } }
         pending = (project, time, assets, mySeq)
         let start = !running
         running = true
@@ -104,7 +100,6 @@ final class PreviewCanvasView: NSView {
     private var aspect = CGSize(width: 16, height: 9)
     private var hasImage = false
 
-    private let fullscreen: Bool
     weak var model: ProjectModel?
 
     // 直接操作(選択枠 + 4 つの角 + 回転の取っ手)
@@ -123,22 +118,21 @@ final class PreviewCanvasView: NSView {
     /// 取っ手に反応する半径(ビューの pt)。
     static let handleRadius: CGFloat = 9
 
-    init(fullscreen: Bool = false) {
-        self.fullscreen = fullscreen
+    init() {
         super.init(frame: .zero)
         wantsLayer = true
         let root = CALayer()
-        root.cornerRadius = fullscreen ? 0 : 8
+        root.cornerRadius = 8
         root.masksToBounds = true
-        root.backgroundColor = fullscreen ? NSColor.black.cgColor : Self.checkerColor()
+        root.backgroundColor = Self.checkerColor()
         layer = root
         frameLayer.contentsGravity = .resize
         frameLayer.magnificationFilter = .linear
         frameLayer.minificationFilter = .trilinear
-        frameLayer.borderWidth = fullscreen ? 0 : 1
+        frameLayer.borderWidth = 1
         frameLayer.borderColor = NSColor(white: 1, alpha: 0.35).cgColor
         frameLayer.shadowColor = NSColor.black.cgColor
-        frameLayer.shadowOpacity = fullscreen ? 0 : 0.45
+        frameLayer.shadowOpacity = 0.45
         frameLayer.shadowRadius = 8
         frameLayer.shadowOffset = CGSize(width: 0, height: -2)
         frameLayer.masksToBounds = false
@@ -290,7 +284,7 @@ final class PreviewCanvasView: NSView {
     }
 
     private func relayout() {
-        let avail = fullscreen ? bounds : bounds.insetBy(dx: 12, dy: 12)
+        let avail = bounds.insetBy(dx: 12, dy: 12)
         guard avail.width > 4, avail.height > 4, aspect.width > 0, aspect.height > 0 else { return }
         let k = min(avail.width / aspect.width, avail.height / aspect.height)
         let w = (aspect.width * k).rounded(), h = (aspect.height * k).rounded()

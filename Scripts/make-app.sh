@@ -55,6 +55,11 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>UTExportedTypeDeclarations</key>
   <array>
     <dict>
+      <key>UTTypeIdentifier</key><string>jp.local.moviecut.dock-panel</string>
+      <key>UTTypeDescription</key><string>Movie Cut パネル(画面内のドラッグ用)</string>
+      <key>UTTypeConformsTo</key><array><string>public.data</string></array>
+    </dict>
+    <dict>
       <key>UTTypeIdentifier</key><string>jp.local.moviecut.project</string>
       <key>UTTypeDescription</key><string>Movie Cut プロジェクト</string>
       <key>UTTypeConformsTo</key><array><string>public.json</string></array>

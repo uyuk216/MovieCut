@@ -7,6 +7,13 @@ import MovieCutCore
 /// アプリ全体で 1 つだけ持つもの(VOICEVOX エンジンは終了時に止める)。
 enum AppServices {
     static let engine = VoicevoxEngine()
+    /// 画面のドッキング(パネルの配置)。アプリ全体で 1 つ。静かな検証(MC_DEBUG_*)では UserDefaults に書かない。試験は差し替える。
+    @MainActor static var panelDock: DockStore = makePanelDock()
+    @MainActor static func makePanelDock(defaults: UserDefaults? = DebugHooks.isQuiet ? nil : .standard) -> DockStore {
+        let s = DockStore(defaults: defaults)
+        s.onChange = { ActiveDocument.shared.refresh() }
+        return s
+    }
     /// VOICEVOX の話者一覧(キャラの一覧とプロパティ欄で共有)。
     @MainActor static let speakers = SpeakerCatalog()
     /// 一度だけ出すお知らせ(Kyoko の代用など)。アプリを起動している間に 1 回。
@@ -167,7 +174,6 @@ final class ProjectModel: ObservableObject {
     @Published var pps: Double = TimelineLayout.defaultPps
     @Published var snapEnabled = true
     @Published var isPlaying = false
-    @Published var isSecondScreenOpen = false
     /// 増やすと、同じ時刻でもプレビューを描き直す(再生を止めたとき)。
     @Published var previewEpoch = 0
 
@@ -191,9 +197,10 @@ final class ProjectModel: ObservableObject {
     var previewIdle = false
     /// 描画が間に合わず、描かれずに捨てられたフレームの数(再生中の検証用)。
     var previewDropped = 0
-    /// 再生・別画面・キー操作(ドキュメントを閉じるときに手放す)。
+    /// 再生・キー操作(ドキュメントを閉じるときに手放す)。
     var playback: PlaybackController!
-    let secondScreen = SecondScreenController()
+    /// 別ウインドウに出したパネル(画面のドッキング)。
+    var dockWindows: DockWindowManager?
     /// 編集済みの通知の差し替え(テスト用)。nil なら NSDocument に伝える。
     var editedTimer: Timer?
     var documentChangeHook: ((NSDocument.ChangeType) -> Void)?
@@ -321,34 +328,32 @@ final class ProjectModel: ObservableObject {
         }
     }
 
-    // MARK: ウィンドウの付き合い(キー操作・別画面・終了)
+    // MARK: ウィンドウの付き合い(キー操作・終了)
 
     /// ドキュメントの画面が出たときに 1 回。Space / ←→ / Home を受ける。
     func installKeyboard() {
-        keyRouter.windows = { [weak self] in [self?.window, self?.secondScreen.window] }
+        keyRouter.windows = { [weak self] in [self?.window] + (self?.dockWindows?.allWindows ?? []) }
         keyRouter.handlers = [
             .playPause: { [weak self] in guard let m = self, !m.isLocked else { return false }; m.playback.togglePlay(); return true },
             .stepBack: { [weak self] in guard let m = self, !m.isLocked else { return false }; m.playback.step(frames: -1); return true },
             .stepForward: { [weak self] in guard let m = self, !m.isLocked else { return false }; m.playback.step(frames: 1); return true },
             .toStart: { [weak self] in guard let m = self, !m.isLocked else { return false }; m.playback.goToStart(); return true },
             .toEnd: { [weak self] in guard let m = self, !m.isLocked else { return false }; m.goToEnd(); return true },
-            // 分割 / 削除 / 選択解除は、ドキュメントのウィンドウが前面のときだけ(別画面の Esc は別画面が閉じる)
-            .split: { [weak self] in guard let m = self, !m.isLocked, m.window?.isKeyWindow == true, m.canSplit else { return false }; return m.splitSelected() },
-            .delete: { [weak self] in guard let m = self, !m.isLocked, m.window?.isKeyWindow == true, m.selectedClip != nil else { return false }; return m.deleteSelected() },
-            .zoomIn: { [weak self] in guard let m = self, !m.isLocked, m.window?.isKeyWindow == true else { return false }; m.zoomTimeline(by: AppMenu.zoomStep); return true },
-            .deselect: { [weak self] in guard let m = self, m.window?.isKeyWindow == true, m.selectedClipId != nil else { return false }; m.selectedClipId = nil; return true },
+            // 分割 / 削除 / 選択解除は、ドキュメントのウィンドウが前面のときだけ
+            .split: { [weak self] in guard let m = self, !m.isLocked, m.isDocumentKeyWindow, m.canSplit else { return false }; return m.splitSelected() },
+            .delete: { [weak self] in guard let m = self, !m.isLocked, m.isDocumentKeyWindow, m.selectedClip != nil else { return false }; return m.deleteSelected() },
+            .zoomIn: { [weak self] in guard let m = self, !m.isLocked, m.isDocumentKeyWindow else { return false }; m.zoomTimeline(by: AppMenu.zoomStep); return true },
+            .deselect: { [weak self] in guard let m = self, m.isDocumentKeyWindow, m.selectedClipId != nil else { return false }; m.selectedClipId = nil; return true },
         ]
         keyRouter.install()
         playback.warmUp()
     }
 
-    func toggleSecondScreen() { secondScreen.toggle(model: self) }
-
-    /// ドキュメントを閉じるとき: 再生・エンジン・別画面・キー監視を手放す。
+    /// ドキュメントを閉じるとき: 再生・エンジン・キー監視を手放す。
     func shutdown() {
         editedTimer?.invalidate(); editedTimer = nil
         keyRouter.uninstall()
-        secondScreen.close()
+        dockWindows?.closeAll(); dockWindows = nil
         playback.shutdown()
     }
 

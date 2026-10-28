@@ -26,7 +26,9 @@ enum MenuCommand: Hashable {
     case audioNormalize, audioVolumeUp, audioVolumeDown, audioVoicePreset, audioClear
     case zoomIn, zoomOut, zoomFit
     case resolution(String), swapResolution, fps(Double), fpsCustom, codec(String), background(String)
-    case toggleSecondScreen, fullScreen, toggleStatusItem
+    case fullScreen, toggleStatusItem
+    // 画面のドッキング(パネルの表示と、配置のプリセット)
+    case dockPanel(DockPanel), dockLayout(DockPreset)
     case helpVoicevox, helpAquestalk, helpLicense, helpThirdParty
 }
 
@@ -110,7 +112,8 @@ struct MenuState: Equatable {
     var h264Unsupported = false
     var codec = ""
     var bg = ""
-    var isSecondScreenOpen = false
+    /// 画面に出ているパネル(ドッキング or 別ウインドウ)。アプリ全体の設定。
+    var dockVisible = Set(DockPanel.allCases)
     // クリップ(M7)
     var canTrim = false              // 再生位置が選択クリップの中
     var isVoiceSelected = false
@@ -165,6 +168,7 @@ struct MenuState: Equatable {
     @MainActor
     init(model: ProjectModel?) {
         statusItemShown = AppServices.statusBar.isEnabled
+        dockVisible = Set(DockPanel.allCases.filter { AppServices.panelDock.layout.isVisible($0) })
         guard let m = model else { return }
         hasDocument = true
         isLocked = m.isLocked
@@ -187,7 +191,6 @@ struct MenuState: Equatable {
         h264Unsupported = !OutputPlan.h264Supports(width: m.project.width, height: m.project.height)
         codec = m.project.codec
         bg = m.project.bg
-        isSecondScreenOpen = m.isSecondScreenOpen
         let p = m.project, t = m.currentTime
         if let c = m.selectedClip {
             canTrim = ClipEditing.canTrim(c, at: t)
@@ -535,8 +538,14 @@ enum AppMenuSpec {
         backgrounds.map { MenuItemSpec(command: .background($0.key), title: $0.label, shortcut: nil, enabled: s.canEdit, checked: s.bg.lowercased() == $0.key) }
     }
 
-    static func secondScreen(_ s: MenuState) -> MenuItemSpec {
-        MenuItemSpec(command: .toggleSecondScreen, title: s.isSecondScreenOpen ? "別画面を閉じる" : "プレビューを別画面に表示", shortcut: cmd("p"), enabled: s.canEdit, checked: nil)
+    /// 表示 ▸ パネル: 出ていれば ✓。選ぶと閉じる / 開く。
+    static func dockPanels(_ s: MenuState) -> [MenuItemSpec] {
+        DockPanel.allCases.map { MenuItemSpec(command: .dockPanel($0), title: $0.title, shortcut: nil, enabled: s.canEdit, checked: s.dockVisible.contains($0)) }
+    }
+
+    /// 表示 ▸ レイアウト: 初期配置に戻す / 1つのタブにまとめる / すべて分離 / プレビューを大きく。
+    static func dockLayouts(_ s: MenuState) -> [MenuItemSpec] {
+        DockPreset.allCases.map { MenuItemSpec(command: .dockLayout($0), title: $0.title, shortcut: nil, enabled: s.canEdit, checked: nil) }
     }
 
     static func statusItemToggle(_ s: MenuState) -> MenuItemSpec {
@@ -560,7 +569,7 @@ enum AppMenuSpec {
         [about, settings(s), videoSettings(s)] + file(s) + [exportCurrent(s)] + exportPresets(s) + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + editAdd(s) + clipboardItems(s) + layerItems(s) + layerHeightItems(s) + playback(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
-            + [secondScreen(s), statusItemToggle(s), fullScreen(s)] + help.flatMap { $0 }
+            + dockPanels(s) + dockLayouts(s) + [statusItemToggle(s), fullScreen(s)] + help.flatMap { $0 }
     }
 }
 
@@ -576,6 +585,8 @@ enum AppMenu {
         case .helpAquestalk: openURL(DependencyStatus.aquestalkURL)
         case .helpLicense: HelpDocs.open(.license)
         case .helpThirdParty: HelpDocs.open(.thirdParty)
+        case .dockPanel(let p): AppServices.panelDock.toggle(p)
+        case .dockLayout(let pr): AppServices.panelDock.apply(pr)
         case .toggleStatusItem:
             AppServices.statusBar.setEnabled(!AppServices.statusBar.isEnabled)
             ActiveDocument.shared.refresh()
@@ -660,7 +671,6 @@ enum AppMenu {
             case .fpsCustom: m.openFpsSheet()
             case .codec(let k): m.setCodec(k)
             case .background(let k): m.setBackground(k)
-            case .toggleSecondScreen: m.toggleSecondScreen()
             case .fullScreen: m.window?.toggleFullScreen(nil)
             default: break
             }

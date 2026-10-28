@@ -43,32 +43,25 @@ struct WindowAccessor: NSViewRepresentable {
 struct ContentView: View {
     @ObservedObject var model: ProjectModel
     var fileURL: URL?
+    @ObservedObject var dock: DockStore
+    /// false なら、別ウインドウのパネルを画面に出さない(試験用)。
+    private let presentsDockWindows: Bool
     @Environment(\.undoManager) private var undoManager
 
-    @AppStorage("timelineHeight") private var timelineHeight: Double = 230
-    @State private var dragStartHeight: Double?
+    @MainActor init(model: ProjectModel, fileURL: URL?, dock: DockStore? = nil, presentsDockWindows: Bool = true) {
+        self.model = model
+        self.fileURL = fileURL
+        self.presentsDockWindows = presentsDockWindows
+        self.dock = dock ?? AppServices.panelDock
+    }
 
     var body: some View {
-        GeometryReader { geo in
-            let h = min(max(timelineHeight, 160), max(160, geo.size.height * 0.55))
-            VStack(spacing: 0) {
-                DependencyBannerBar(center: AppServices.deps)
-                ToolbarBar(model: model)
-                Divider()
-                HStack(spacing: 0) {
-                    LeftPanel(model: model, speakers: AppServices.speakers, scriptText: $model.scriptText)
-                        .frame(width: 300)
-                    Divider()
-                    CenterPanel(model: model)
-                    Divider()
-                    InspectorView(model: model, speakers: AppServices.speakers)
-                        .frame(width: 280)
-                }
-                .disabled(model.isLocked)
-                splitter(totalHeight: geo.size.height)
-                TimelineSection(model: model)
-                    .frame(height: h)
-            }
+        VStack(spacing: 0) {
+            DependencyBannerBar(center: AppServices.deps)
+            ToolbarBar(model: model)
+            Divider()
+            // キャラクター・プレビュー・プロパティ・タイムライン(初期配置はこれまでの画面と同じ。並べ替えは DockLayout)
+            DockHost(model: model, store: dock)
         }
         .frame(minWidth: 1100, minHeight: 700)
         .background(Color(nsColor: .windowBackgroundColor))
@@ -98,6 +91,7 @@ struct ContentView: View {
             model.undoManager = undoManager
             model.fileURL = fileURL
             model.installKeyboard()
+            model.installDock(store: dock, presents: presentsDockWindows)
             if model.window?.isMainWindow == true { ActiveDocument.shared.activate(model) }
             DebugHooks.shared.attach(model)
         }
@@ -111,26 +105,6 @@ struct ContentView: View {
         }
         .onChange(of: undoManager) { _, new in model.undoManager = new }
         .onChange(of: fileURL) { _, new in model.fileURL = new }
-    }
-
-    /// タイムラインとの境のドラッグ(高さは UserDefaults に保存、160〜ウィンドウの 55%)。
-    private func splitter(totalHeight: CGFloat) -> some View {
-        ZStack {
-            Rectangle().fill(Color(nsColor: .separatorColor)).frame(height: 1)
-            Rectangle().fill(Color.clear).frame(height: 7)
-        }
-        .frame(height: 7)
-        .contentShape(Rectangle())
-        .onHover { inside in if inside { NSCursor.resizeUpDown.push() } else { NSCursor.pop() } }
-        .gesture(
-            DragGesture(minimumDistance: 0, coordinateSpace: .global)
-                .onChanged { v in
-                    if dragStartHeight == nil { dragStartHeight = min(max(timelineHeight, 160), max(160, totalHeight * 0.55)) }
-                    let proposed = (dragStartHeight ?? 230) - Double(v.translation.height)
-                    timelineHeight = min(max(proposed, 160), max(160, Double(totalHeight) * 0.55))
-                }
-                .onEnded { _ in dragStartHeight = nil }
-        )
     }
 }
 
@@ -310,8 +284,8 @@ struct TransportBar: View {
 
     /// 再生バーの固定の題(解像度ピッカーは「出力」メニューへ移した)。
     enum Title {
-        static let toStart = "⏮", play = "▶", pause = "⏸", openSecond = "別画面に表示", closeSecond = "別画面を閉じる"
-        static let all = [toStart, play, pause, openSecond, closeSecond]
+        static let toStart = "⏮", play = "▶", pause = "⏸"
+        static let all = [toStart, play, pause]
     }
 
     var body: some View {
@@ -321,8 +295,6 @@ struct TransportBar: View {
             Button(model.isPlaying ? Title.pause : Title.play) { model.playback.togglePlay() }
                 .help("再生 / 一時停止(Space)")
                 .disabled(model.isLocked)
-            Button(model.isSecondScreenOpen ? Title.closeSecond : Title.openSecond) { model.toggleSecondScreen() }
-                .help("外付け画面にプレビューを全画面で出す(Esc で閉じる)")
             Text("\(timecode(model.currentTime)) / \(timecode(model.project.endTime))")
                 .monospacedDigit()
                 .foregroundStyle(.secondary)

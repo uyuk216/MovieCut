@@ -45,7 +45,7 @@ struct AppCommands: Commands {
             MenuSection { s, run in MenuItemView(spec: AppMenuSpec.settings(s), perform: run) }
         }
 
-        // ファイル(⌘P のプリントは menu.js に無く、別画面表示と衝突するので、その場所に素材追加を置く)
+        // ファイル(⌘P のプリントは使わない。その場所に素材追加などを置く)
         CommandGroup(replacing: .printItem) {
             MenuSection { s, run in
                 items(AppMenuSpec.file(s), run)
@@ -169,7 +169,9 @@ struct AppCommands: Commands {
             MenuSection { s, run in
                 items(AppMenuSpec.zoom(s), run)
                 Divider()
-                MenuItemView(spec: AppMenuSpec.secondScreen(s), perform: run)
+                Menu("パネル") { items(AppMenuSpec.dockPanels(s), run) }
+                Menu("レイアウト") { items(AppMenuSpec.dockLayouts(s), run) }
+                Divider()
                 MenuItemView(spec: AppMenuSpec.statusItemToggle(s), perform: run)
                 Divider()
             }
