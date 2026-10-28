@@ -42,6 +42,7 @@ final class DockStore: ObservableObject {
     func setActive(_ p: DockPanel) { mutate { $0.setActive(p) } }
     func moveToTab(_ p: DockPanel, ofGroupContaining t: DockPanel, at i: Int? = nil) { mutate { $0.moveToTab(p, ofGroupContaining: t, at: i) } }
     func moveToEdge(_ p: DockPanel, _ e: DockEdge, ofGroupContaining t: DockPanel) { mutate { $0.moveToEdge(p, e, ofGroupContaining: t) } }
+    func moveToRootEdge(_ p: DockPanel, _ e: DockEdge) { mutate { $0.moveToRootEdge(p, e, fraction: DockDropTarget.outerFraction) } }
     func detach(_ p: DockPanel) { mutate { $0.detach(p) } }
     func attach(_ p: DockPanel) { mutate { $0.attach(p) } }
     func close(_ p: DockPanel) { mutate { $0.close(p) } }

@@ -26,7 +26,9 @@ enum MenuCommand: Hashable {
     case audioNormalize, audioVolumeUp, audioVolumeDown, audioVoicePreset, audioClear
     case zoomIn, zoomOut, zoomFit
     case resolution(String), swapResolution, fps(Double), fpsCustom, codec(String), background(String)
-    case fullScreen, toggleStatusItem
+    case fullScreen
+    // 表示 ▸ プレビューの背景(アプリ全体の設定)
+    case previewBackground(PreviewBackground)
     // 画面のドッキング(パネルの表示と、配置のプリセット)
     case dockPanel(DockPanel), dockLayout(DockPreset)
     case helpVoicevox, helpAquestalk, helpLicense, helpThirdParty
@@ -154,8 +156,8 @@ struct MenuState: Equatable {
     // 音声
     var canAudioFx = false           // 音声・ボイス・動画(フリーズ以外)のクリップを選んでいる
     var hasAudioFx = false           // 選択クリップに音声エフェクトかパンがある
-    /// メニューバーのアイコンを出す設定(「表示」メニューの切り替え)。
-    var statusItemShown = true
+    /// 表示 ▸ プレビューの背景(アプリ全体の設定)。
+    var previewBackground = PreviewBackground.default
 
     struct MarkerItem: Equatable {
         var id: String
@@ -167,7 +169,7 @@ struct MenuState: Equatable {
 
     @MainActor
     init(model: ProjectModel?) {
-        statusItemShown = AppServices.statusBar.isEnabled
+        previewBackground = PreviewBackgroundStore.current
         dockVisible = Set(DockPanel.allCases.filter { AppServices.panelDock.layout.isVisible($0) })
         guard let m = model else { return }
         hasDocument = true
@@ -548,8 +550,9 @@ enum AppMenuSpec {
         DockPreset.allCases.map { MenuItemSpec(command: .dockLayout($0), title: $0.title, shortcut: nil, enabled: s.canEdit, checked: nil) }
     }
 
-    static func statusItemToggle(_ s: MenuState) -> MenuItemSpec {
-        MenuItemSpec(command: .toggleStatusItem, title: "メニューバーアイコンを表示", shortcut: nil, enabled: true, checked: s.statusItemShown)
+    /// 表示 ▸ プレビューの背景: 暗い灰色 / 黒 / 白 / 中間グレー / 緑 / 青(ラジオ)。
+    static func previewBackgroundItems(_ s: MenuState) -> [MenuItemSpec] {
+        PreviewBackground.allCases.map { MenuItemSpec(command: .previewBackground($0), title: $0.title, shortcut: nil, enabled: true, checked: s.previewBackground == $0) }
     }
 
     /// 標準の「全画面表示」(⌃⌘F)。ウィンドウがあれば使える(書き出し中でも構わない)。
@@ -569,7 +572,7 @@ enum AppMenuSpec {
         [about, settings(s), videoSettings(s)] + file(s) + [exportCurrent(s)] + exportPresets(s) + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + editAdd(s) + clipboardItems(s) + layerItems(s) + layerHeightItems(s) + playback(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
-            + dockPanels(s) + dockLayouts(s) + [statusItemToggle(s), fullScreen(s)] + help.flatMap { $0 }
+            + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + [fullScreen(s)] + help.flatMap { $0 }
     }
 }
 
@@ -587,8 +590,8 @@ enum AppMenu {
         case .helpThirdParty: HelpDocs.open(.thirdParty)
         case .dockPanel(let p): AppServices.panelDock.toggle(p)
         case .dockLayout(let pr): AppServices.panelDock.apply(pr)
-        case .toggleStatusItem:
-            AppServices.statusBar.setEnabled(!AppServices.statusBar.isEnabled)
+        case .previewBackground(let b):
+            PreviewBackgroundStore.set(b)
             ActiveDocument.shared.refresh()
         default:
             guard let m = model else { return }

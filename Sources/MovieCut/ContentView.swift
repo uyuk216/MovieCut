@@ -263,15 +263,7 @@ struct CenterPanel: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ZStack(alignment: .topLeading) {
-                PreviewView(project: model.project, time: model.currentTime, assets: model.assets, model: model, epoch: model.previewEpoch)
-                Text(VideoText.chip(width: model.project.width, height: model.project.height, fps: model.project.fps))
-                    .font(.system(size: 12))
-                    .padding(.horizontal, 9).padding(.vertical, 3)
-                    .background(Capsule().fill(Color.black.opacity(0.6)))
-                    .padding(8)
-                    .allowsHitTesting(false)
-            }
+            PreviewView(project: model.project, time: model.currentTime, assets: model.assets, model: model, epoch: model.previewEpoch)
             .padding(10)
             TransportBar(model: model)
                 .padding(.bottom, 10)
@@ -298,6 +290,12 @@ struct TransportBar: View {
             Text("\(timecode(model.currentTime)) / \(timecode(model.project.endTime))")
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
+            // 解像度・fps は映像の上に重ねず、再生バーの時刻の右に小さく出す
+            Text(VideoText.chip(width: model.project.width, height: model.project.height, fps: model.project.fps))
+                .font(.system(size: 11))
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+                .help("プロジェクトの解像度とフレームレート(出力メニューで変えられます)")
         }
     }
 }

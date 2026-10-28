@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 import MovieCutCore
 
-/// プレビュー本体。時刻 t のフレームを背景スレッドで描き、灰色の市松の上に本当の縦横比で置く。
+/// プレビュー本体。時刻 t のフレームを背景スレッドで描き、設定した単色の背景の上に本当の縦横比で置く。
 struct PreviewView: NSViewRepresentable {
     let project: Project
     let time: Double
@@ -94,7 +94,7 @@ final class PreviewCoordinator {
     }
 }
 
-/// レイヤーで描く NSView。背景は市松、中央にフレーム(1pt の枠 + 影)。
+/// レイヤーで描く NSView。背景は単色(表示 ▸ プレビューの背景。既定は暗い灰色)、中央にフレーム(1pt の枠 + 影)。
 final class PreviewCanvasView: NSView {
     private let frameLayer = CALayer()
     private var aspect = CGSize(width: 16, height: 9)
@@ -124,8 +124,10 @@ final class PreviewCanvasView: NSView {
         let root = CALayer()
         root.cornerRadius = 8
         root.masksToBounds = true
-        root.backgroundColor = Self.checkerColor()
+        root.backgroundColor = Self.cgColor(for: PreviewBackgroundStore.current)
         layer = root
+        rootLayer = root
+        NotificationCenter.default.addObserver(self, selector: #selector(backgroundChanged), name: PreviewBackgroundStore.didChange, object: nil)
         frameLayer.contentsGravity = .resize
         frameLayer.magnificationFilter = .linear
         frameLayer.minificationFilter = .trilinear
@@ -150,19 +152,24 @@ final class PreviewCanvasView: NSView {
     }
     required init?(coder: NSCoder) { fatalError() }
 
-    /// 市松模様(16pt のマスを 2 色の灰色で)。
-    private static func checkerColor() -> CGColor {
-        let s = 16
-        let img = NSImage(size: NSSize(width: s * 2, height: s * 2), flipped: false) { _ in
-            NSColor(white: 0.17, alpha: 1).setFill()
-            NSRect(x: 0, y: 0, width: s * 2, height: s * 2).fill()
-            NSColor(white: 0.21, alpha: 1).setFill()
-            NSRect(x: 0, y: 0, width: s, height: s).fill()
-            NSRect(x: s, y: s, width: s, height: s).fill()
-            return true
-        }
-        return NSColor(patternImage: img).cgColor
+    private var rootLayer: CALayer?
+
+    /// 背景色(単色)。
+    static func cgColor(for b: PreviewBackground) -> CGColor {
+        parseHexColor(b.hex) ?? NSColor(white: 0.12, alpha: 1).cgColor
     }
+
+    /// 現在の背景色(試験用)。
+    var backgroundColorForTest: CGColor? { rootLayer?.backgroundColor }
+
+    @objc private func backgroundChanged() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        rootLayer?.backgroundColor = Self.cgColor(for: PreviewBackgroundStore.current)
+        CATransaction.commit()
+    }
+
+    deinit { NotificationCenter.default.removeObserver(self) }
 
     override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()

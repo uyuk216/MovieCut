@@ -20,25 +20,6 @@ enum AppServices {
     @MainActor static let notices = OneTimeNotices()
     /// Dock アイコンの進行バー(書き出し中)。
     @MainActor static let dock = DockProgressController(tile: NSApp?.dockTile)
-    /// 書き出しの進み具合の共有(メニューバーのアイコンが見る)。
-    @MainActor static let exportStatus = ExportStatusCenter()
-    /// メニューバー右側のアイコン。静かな検証(MC_DEBUG_*)では本物の NSStatusItem を作らず、設定も保存しない。
-    @MainActor static let statusBar: MenuBarStatusController = makeStatusBar(quiet: DebugHooks.isQuiet)
-
-    /// 静か(`quiet`)なら、本物の NSStatusItem を作らず、表示の設定も UserDefaults に書かない。
-    @MainActor static func makeStatusBar(quiet: Bool, export: ExportStatusCenter? = nil) -> MenuBarStatusController {
-        let baseURL = { ActiveDocument.shared.model?.project.voicevoxUrl ?? Project().voicevoxUrl }
-        let actions = AppStatusActions(engine: engine, baseURL: baseURL)
-        let c = MenuBarStatusController(
-            presenter: quiet ? NullStatusItemPresenter() : NSStatusItemPresenter(),
-            export: export ?? exportStatus,
-            probe: VoicevoxProbe(engine: engine, baseURL: baseURL),
-            recentURLs: { NSDocumentController.shared.recentDocumentURLs },
-            preferences: quiet ? MemoryStatusPreference() : UserDefaultsStatusPreference(),
-            handler: actions)
-        actions.afterEngineCommand = { [weak c] in await c?.engineCommandFinished() }
-        return c
-    }
     /// 起動時の依存チェックとバナー(アプリ全体で 1 つ。閉じたらこの起動中は出さない)。
     @MainActor static let deps = DependencyNoticeCenter(checker: DependencyNoticeCenter.debugChecker() ?? { p in await DependencyStatus.check(project: p) })
 }
@@ -218,7 +199,6 @@ final class ProjectModel: ObservableObject {
     /// 書き出しシートの補足(H.264 で書けない大きさのとき「HEVC で書き出します」など)。なければ空。
     private(set) var exportNotice = ""
     /// 書き出しの進み具合の共有(テストでは差し替える。nil ならアプリ全体のもの)。
-    var exportStatusOverride: ExportStatusCenter?
     /// スライダー以外の連続した編集(ステッパー・色・文字入力)を 1 回の Undo にまとめるための待ち。
     var coalesceTask: Task<Void, Never>?
     var coalesceName: String?
@@ -487,10 +467,8 @@ final class ProjectModel: ObservableObject {
         }
         exportNotice = notices.joined(separator: "\n")
         let dock = dockOverride ?? AppServices.dock
-        let status = exportStatusOverride ?? AppServices.exportStatus
         dock.update(0)
-        status.begin(owner: self, fileName: url.lastPathComponent, cancel: { [weak self] in self?.cancelExport() })
-        defer { isExporting = false; exportTask = nil; status.end(owner: self) }
+        defer { isExporting = false; exportTask = nil }
         let snapshot = project
         let task = Task { [weak self] in
             try await ExportJob.run(project: snapshot, preset: preset, to: url) { v in
@@ -499,7 +477,6 @@ final class ProjectModel: ObservableObject {
                     guard let self, self.isExporting else { return }
                     self.exportProgress = v
                     dock.update(v)
-                    status.update(owner: self, fraction: v)
                 }
             }
         }

@@ -55,7 +55,6 @@ import MovieCutCore
 ///
 /// ## 静かな起動(`MC_DEBUG_*` / `MC_SNAPSHOT_DIR` / `MC_OPEN` のどれかがあるとき)
 /// アクティベーションポリシーは `.accessory`(Dock にもメニューバーにも出ない)、前面にしない、ウィンドウは画面の遠く(x=-30000)、
-/// メニューバーの状態アイコン(NSStatusItem)は作らない(`NullStatusItemPresenter`。表示の設定も保存しない)、
 /// `MC_DEBUG_MAXSEC`(既定 20)秒で自分で終了する。終了時には再生用の一時ファイルも消す。
 ///
 /// ## 上の一覧に無かった環境変数(M7 でまとめて記載)
@@ -79,7 +78,6 @@ import MovieCutCore
 /// - `MC_DEBUG_DEPS=missing|missing-voicevox|missing-aquestalk` 依存チェックの結果を固定する。
 ///
 /// ## M7 で足したもの
-/// - `MC_DEBUG_STATUS=1`         メニューバーの状態アイコンのメニューの中身(`StatusMenuBuilder`)を標準出力へ。書き出し中(`MC_DEBUG_EXPORT` と一緒)は、その最中の分も出す。
 /// - `MC_DEBUG_SHEET=jump|rename-marker` 「時間を指定して移動」/「マーカーの名前変更」のシートを開いた状態にする(`settings` は既存)。
 /// - `MC_DEBUG_JUMP_VALUE=<text>` `MC_DEBUG_MENU_CLICK` で「時間を指定して移動…」を押したあと、シートの決定と同じ関数(`commitJump`)にこの文字を渡す。
 /// - `MC_DEBUG_MENU_CLICK` の特別な項目(`@` で始まる): `@time=<sec>` 再生ヘッドを動かす / `@select=<index>` 全クリップの index 番目を選ぶ /
@@ -94,7 +92,7 @@ final class DebugHooks {
     private var active: Bool {
         ["MC_SNAPSHOT_DIR", "MC_DEBUG_SIZE", "MC_DEBUG_SCRIPT", "MC_DEBUG_EXPORT", "MC_DEBUG_SHEET", "MC_DEBUG_ZOOM", "MC_DEBUG_WINDOW", "MC_DEBUG_SELECT_CLIP",
          "MC_DEBUG_TIME", "MC_DEBUG_PLAY", "MC_DEBUG_SEEK_TEST", "MC_DEBUG_DRAWTIME", "MC_DEBUG_EDIT", "MC_DEBUG_HOLD_DRAG", "MC_DEBUG_SELECT_CHAR", "MC_DEBUG_DELETE_CHAR", "MC_DEBUG_VOICE_EDIT", "MC_DEBUG_INSPECTOR_SCROLL",
-         "MC_DEBUG_MENU", "MC_DEBUG_MENU_CLICK", "MC_DEBUG_MENU_KEYS", "MC_DEBUG_EDITED", "MC_DEBUG_QUIT", "MC_DEBUG_FRAME", "MC_DEBUG_HANGWATCH", "MC_DEBUG_SWEEP", "MC_DEBUG_STATUS"].contains { env[$0] != nil }
+         "MC_DEBUG_MENU", "MC_DEBUG_MENU_CLICK", "MC_DEBUG_MENU_KEYS", "MC_DEBUG_EDITED", "MC_DEBUG_QUIT", "MC_DEBUG_FRAME", "MC_DEBUG_HANGWATCH", "MC_DEBUG_SWEEP"].contains { env[$0] != nil }
     }
 
     func appDidLaunch() {
@@ -277,7 +275,6 @@ final class DebugHooks {
                 dumpMainMenu(label: m + " +4s")
             }
         }
-        if env["MC_DEBUG_STATUS"] != nil { dumpStatus("idle") }
         if let spec = env["MC_DEBUG_MENU_CLICK"] { await menuClicks(spec, model) }
         if let spec = env["MC_DEBUG_MENU_KEYS"] { await menuKeys(spec, model) }
         if let f = env["MC_DEBUG_FRAME"] { await debugFrame(f, model) }
@@ -315,7 +312,6 @@ final class DebugHooks {
                     try? await Task.sleep(nanoseconds: 1_500_000_000)
                     Self.out(String(format: "menu: (書き出し中 progress=%.2f isExporting=%@)", model.exportProgress, model.isExporting ? "true" : "false"))
                     self.dumpMainMenu(label: "export")
-                    if self.env["MC_DEBUG_STATUS"] != nil { self.dumpStatus("exporting") }
                 }
             }
             switch await model.runExport(to: url) {
@@ -536,14 +532,6 @@ final class DebugHooks {
         for l in Self.menuLines(menu, depth: 0) { Self.out("menu: " + l) }
         Self.out("menu: ===== end =====")
         Self.out("menu: top-level order = \(menu.items.map { MenuOrder.title(of: $0) }) (MenuOrder.fixCount=\(MenuOrder.fixCount))")
-    }
-
-    /// メニューバーの状態アイコンのメニューの中身(本物の NSStatusItem は作らず、中身のモデルだけ出す)。
-    private func dumpStatus(_ label: String) {
-        let c = AppServices.statusBar
-        Self.out("status: ===== status item menu (\(label)) ===== presenter=\(type(of: c.presenter)) visible=\(c.presenter.isVisible) enabled(pref)=\(c.isEnabled) buttonTitle=\"\(c.presenter.buttonTitle)\" engine=\(c.state.engine)")
-        for l in StatusMenuBuilder.lines(c.entries) { Self.out("status: " + l) }
-        Self.out("status: ===== end =====")
     }
 
     /// 題の一致。キーのヒントを添えた題(「クリップを分割  (S)」)は、ヒントを除いた名前でも一致させる。

@@ -71,18 +71,25 @@ final class MenuM7Tests: XCTestCase {
         XCTAssertEqual(AppMenuSpec.markerItems(s).map(\.shortcut), [sc("m", [.control, .command]), nil, sc(.upArrow, [.option, .command]), sc(.downArrow, [.option, .command]), nil, nil])
     }
 
-    func testExportMenuAndStatusItemToggleSpec() {
+    func testExportMenuSpec() {
         let s = state()
         XCTAssertEqual(AppMenuSpec.exportCurrent(s).title, "MP4 を書き出す…")
         XCTAssertEqual(AppMenuSpec.exportCurrent(s).shortcut, sc("e", .command))
         XCTAssertEqual(AppMenuSpec.exportPresets(s).map(\.title), ["YouTube 1080p", "YouTube 4K", "ショート縦", "軽量 720p", "音声のみ"])
         XCTAssertTrue(AppMenuSpec.exportPresets(s).allSatisfy { $0.shortcut == nil && $0.enabled })
         XCTAssertEqual(AppMenuSpec.exportPresets(s).first?.displayTitle, "YouTube 1080p  (1920×1080 · H.264)")
-        XCTAssertEqual(AppMenuSpec.statusItemToggle(state { $0.statusItemShown = true }).checked, true)
-        XCTAssertEqual(AppMenuSpec.statusItemToggle(state { $0.statusItemShown = false }).checked, false)
-        // 書類が無くても・書き出し中でも切り替えられる
-        XCTAssertTrue(AppMenuSpec.statusItemToggle(MenuState()).enabled)
-        XCTAssertTrue(AppMenuSpec.statusItemToggle(state { $0.isLocked = true }).enabled)
+    }
+
+    func testPreviewBackgroundMenuSpec() {
+        let items = AppMenuSpec.previewBackgroundItems(state())
+        XCTAssertEqual(items.map(\.title), ["暗い灰色", "黒", "白", "中間グレー", "緑(クロマキー)", "青"])
+        XCTAssertEqual(items.map(\.checked), [true, false, false, false, false, false], "既定は暗い灰色")
+        XCTAssertEqual(AppMenuSpec.previewBackgroundItems(state { $0.previewBackground = .green }).map(\.checked), [false, false, false, false, true, false])
+        XCTAssertTrue(items.allSatisfy { $0.shortcut == nil })
+        // 書類が無くても・書き出し中でも切り替えられる(アプリ全体の見た目)
+        XCTAssertTrue(AppMenuSpec.previewBackgroundItems(MenuState()).allSatisfy(\.enabled))
+        XCTAssertTrue(AppMenuSpec.previewBackgroundItems(state { $0.isLocked = true }).allSatisfy(\.enabled))
+        XCTAssertEqual(items.map(\.command), PreviewBackground.allCases.map { MenuCommand.previewBackground($0) })
     }
 
     func testShortcutDisplayOfArrowsAndDelete() {
@@ -474,19 +481,15 @@ final class MenuM7Tests: XCTestCase {
         p.tracks[4].clips = [t]; p.tracks[0].clips = [v]
         let m = ProjectModel(project: p)
         m.dockOverride = DockProgressController(tile: nil)
-        m.exportStatusOverride = ExportStatusCenter()
         return m
     }
 
-    func testPresetExportThroughModelDoesNotTouchTheDocumentAndFeedsTheStatusCenter() async throws {
+    func testPresetExportThroughModelDoesNotTouchTheDocument() async throws {
         let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("m7-export-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tmp) }
         let m = try exportableModel(tmp)
-        let center = try XCTUnwrap(m.exportStatusOverride)
         let before = m.project
-        var seen: [ExportStatusCenter.Snapshot?] = []
-        center.observe { seen.append($0) }
         let out = tmp.appendingPathComponent("x-youtube1080.mp4")
         guard case .success = await m.runExport(to: out, preset: .youtube1080) else { return XCTFail("書き出せなかった: \(m.errorMessage ?? "")") }
         XCTAssertEqual(m.project, before, "ドキュメントは変わらない")
@@ -498,12 +501,6 @@ final class MenuM7Tests: XCTestCase {
         XCTAssertEqual(size, CGSize(width: 1920, height: 1080))
         let rate = try await vt.load(.nominalFrameRate)
         XCTAssertEqual(rate, 24, accuracy: 0.5, "youtube1080 は fps を変えない")
-        // 状態センター: 始まり(0%)→ 途中 → 終わりで nil
-        XCTAssertEqual(seen.first??.fileName, "x-youtube1080.mp4")
-        XCTAssertEqual(seen.first??.fraction, 0)
-        XCTAssertNil(seen.last!)
-        XCTAssertTrue(seen.compactMap { $0 }.contains { $0.fraction > 0.2 && $0.fraction < 1 } || seen.compactMap { $0 }.last?.fraction == 1)
-        XCTAssertNil(center.current)
         XCTAssertEqual(m.exportSuggestedName(preset: .short), "無題-short.mp4")
         XCTAssertEqual(m.exportSuggestedName(preset: .audio), "無題-audio.m4a")
         XCTAssertEqual(m.exportSuggestedName(preset: nil), "無題.mp4")
@@ -529,20 +526,18 @@ final class MenuM7Tests: XCTestCase {
         m.shutdown()
     }
 
-    func testCancelThroughStatusCenterCancelsTheRunningExport() async throws {
+    func testCancelExportCancelsTheRunningExport() async throws {
         let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("m7-cancel-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tmp) }
         let m = try exportableModel(tmp)
         m.edit("long") { $0.tracks[4].clips[0].duration = 20 }     // 4K で 20 秒 = 時間がかかる
-        let center = try XCTUnwrap(m.exportStatusOverride)
         let out = tmp.appendingPathComponent("c.mp4")
         let t = Task { @MainActor in await m.runExport(to: out, preset: .youtube4k) }
-        while center.current == nil { try await Task.sleep(nanoseconds: 5_000_000) }
-        center.cancelCurrent()
+        while !m.isExporting { try await Task.sleep(nanoseconds: 5_000_000) }
+        m.cancelExport()
         let r = await t.value
         guard case .cancelled = r else { return XCTFail("\(r)") }
-        XCTAssertNil(center.current)
         XCTAssertFalse(FileManager.default.fileExists(atPath: out.path))
         m.shutdown()
     }

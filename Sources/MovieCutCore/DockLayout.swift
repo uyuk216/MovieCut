@@ -335,6 +335,25 @@ public struct DockLayout: Equatable, Codable {
         return true
     }
 
+    /// ドック全体の外側の端(ウインドウの左端・右端・上端・下端)に、新しいグループとして入れる。`fraction` = 新しい側が占める割合。
+    /// 他にドッキング中のパネルが無ければ何も変わらない。
+    @discardableResult
+    public mutating func moveToRootEdge(_ panel: DockPanel, _ edge: DockEdge, fraction: Double = 0.25) -> Bool {
+        var l = self
+        l.take(panel)
+        guard let base = l.root else { return false }
+        let newLeaf = Self.leaf(panel)
+        let f = Self.clamp(fraction)
+        switch edge {
+        case .left: l.root = .split(axis: .horizontal, fraction: f, first: newLeaf, second: base)
+        case .right: l.root = .split(axis: .horizontal, fraction: Self.clamp(1 - f), first: base, second: newLeaf)
+        case .top: l.root = .split(axis: .vertical, fraction: f, first: newLeaf, second: base)
+        case .bottom: l.root = .split(axis: .vertical, fraction: Self.clamp(1 - f), first: base, second: newLeaf)
+        }
+        self = l
+        return true
+    }
+
     /// 別ウインドウに出す。
     @discardableResult
     public mutating func detach(_ panel: DockPanel) -> Bool {
@@ -440,6 +459,53 @@ public enum DockDropZone: Equatable {
         let dists: [(Double, DockEdge)] = [(cx, .left), (1 - cx, .right), (cy, .top), (1 - cy, .bottom)]
         let best = dists.min { $0.0 < $1.0 }!
         return best.0 < edgeRatio ? .edge(best.1) : .tab
+    }
+}
+
+/// ドロップ先の判定の結果。グループの中(`tab` / `edge`)か、ドック全体の外側の端(`outer`)か。
+public enum DockDropTarget: Equatable {
+    case tab
+    case edge(DockEdge)
+    case outer(DockEdge)
+
+    /// ドック全体の外側の端として反応する帯の幅(左右・下)と、上端の細い帯(上はタブバーがあるので細い)。
+    public static let outerBand = 28.0
+    public static let outerTopBand = 12.0
+    /// 外側の端に置いたパネルが占める割合。
+    public static let outerFraction = 0.25
+
+    /// 座標は左上原点。`x, y` はグループ内の位置、`groupX/groupY` はドック全体の中でのグループの左上、`hostWidth/hostHeight` はドック全体の大きさ。
+    /// ドック全体の端の帯にいれば `outer`(グループの中の判定より優先)、そうでなければグループの中の判定(`DockDropZone`)。
+    public static func resolve(x: Double, y: Double, width: Double, height: Double,
+                               groupX: Double, groupY: Double, hostWidth: Double, hostHeight: Double,
+                               tabBarHeight: Double = 26, edgeRatio: Double = 0.25) -> DockDropTarget {
+        let hx = groupX + x, hy = groupY + y
+        if hostWidth > 0, hostHeight > 0 {
+            if hy >= 0, hy < outerTopBand, hx >= 0, hx <= hostWidth { return .outer(.top) }
+            if hy <= hostHeight, hostHeight - hy < outerBand, hx >= 0, hx <= hostWidth { return .outer(.bottom) }
+            if hx >= 0, hx < outerBand, hy >= 0, hy <= hostHeight { return .outer(.left) }
+            if hx <= hostWidth, hostWidth - hx < outerBand, hy >= 0, hy <= hostHeight { return .outer(.right) }
+        }
+        switch DockDropZone.zone(x: x, y: y, width: width, height: height, tabBarHeight: tabBarHeight, edgeRatio: edgeRatio) {
+        case .tab: return .tab
+        case .edge(let e): return .edge(e)
+        }
+    }
+
+    /// ハイライトの長方形(`width × height` の中、左上原点)。`tab` = 全体、`edge` = その側の半分(タブバーの下)、`outer` = 端から `outerFraction`。
+    /// `outer` は「ドック全体」の大きさを渡して使う。
+    public func highlightRect(width w: Double, height h: Double, tabBarHeight: Double = 26) -> (x: Double, y: Double, width: Double, height: Double) {
+        switch self {
+        case .tab: return (0, 0, w, h)
+        case .edge(.left): return (0, tabBarHeight, w / 2, h - tabBarHeight)
+        case .edge(.right): return (w / 2, tabBarHeight, w / 2, h - tabBarHeight)
+        case .edge(.top): return (0, tabBarHeight, w, (h - tabBarHeight) / 2)
+        case .edge(.bottom): return (0, tabBarHeight + (h - tabBarHeight) / 2, w, (h - tabBarHeight) / 2)
+        case .outer(.left): return (0, 0, w * Self.outerFraction, h)
+        case .outer(.right): return (w * (1 - Self.outerFraction), 0, w * Self.outerFraction, h)
+        case .outer(.top): return (0, 0, w, h * Self.outerFraction)
+        case .outer(.bottom): return (0, h * (1 - Self.outerFraction), w, h * Self.outerFraction)
+        }
     }
 }
 

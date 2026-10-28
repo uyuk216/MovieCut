@@ -172,7 +172,7 @@ struct AppCommands: Commands {
                 Menu("パネル") { items(AppMenuSpec.dockPanels(s), run) }
                 Menu("レイアウト") { items(AppMenuSpec.dockLayouts(s), run) }
                 Divider()
-                MenuItemView(spec: AppMenuSpec.statusItemToggle(s), perform: run)
+                Menu("プレビューの背景") { items(AppMenuSpec.previewBackgroundItems(s), run) }
                 Divider()
             }
         }
