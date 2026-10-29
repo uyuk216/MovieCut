@@ -219,8 +219,11 @@ case "smoke":
     // smoke --out <mp4> [--size WxH] [--codec h264|hevc] [--blur]
     guard let outPath = optValue("--out") else { fail("--out が必要です") }
     do {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("moviecut-smoke-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: dir) }
+        // --save-project のときは、音声をプロジェクトの隣に残す(消すとリンク切れになる)
+        let keepAudio = optValue("--save-project")
+        let dir = keepAudio.map { URL(fileURLWithPath: $0).deletingPathExtension().appendingPathExtension("voices") }
+            ?? FileManager.default.temporaryDirectory.appendingPathComponent("moviecut-smoke-\(UUID().uuidString)")
+        defer { if keepAudio == nil { try? FileManager.default.removeItem(at: dir) } }
         let size = optValue("--size").map(parseSize)
         let codec = optValue("--codec")
         if let c = codec, !["h264", "hevc"].contains(c) { fail("--codec は h264 か hevc") }
