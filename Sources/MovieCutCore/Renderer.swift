@@ -136,7 +136,7 @@ public struct Renderer {
                     } else {
                         ctx.saveGState()
                         ctx.setAlpha(CGFloat(pose.opacity))
-                        drawClipContent(c, pose: pose, t: t, ctx: ctx, W: W, H: H)
+                        drawClipContent(c, pose: pose, t: t, ctx: ctx, W: W, H: H, fastFade: mask == nil, fadeAlpha: pose.opacity)
                         ctx.restoreGState()
                     }
                     if mask != nil { ctx.restoreGState() }
@@ -232,6 +232,8 @@ public struct Renderer {
     /// 上下反転した ctx(左上原点)に CGImage を rect へ描く。
     func drawCG(_ ctx: CGContext, _ img: CGImage, _ rect: CGRect) {
         ctx.saveGState()
+        if ProcessInfo.processInfo.environment["MCQ"] == "none" { ctx.interpolationQuality = .none }
+        if ProcessInfo.processInfo.environment["MCQ"] == "low" { ctx.interpolationQuality = .low }
         ctx.translateBy(x: rect.minX, y: rect.maxY)
         ctx.scaleBy(x: 1, y: -1)
         ctx.draw(img, in: CGRect(x: 0, y: 0, width: rect.width, height: rect.height))
@@ -240,7 +242,7 @@ public struct Renderer {
 
     /// image / video / text を現在の alpha で描く。
     /// 順序: 切り抜き → 反転 → 拡大 → (クリップの中心まわりに)回転 → (x, y) へ移動。何も変形しないクリップは従来と同じ描き方。
-    func drawClipContent(_ c: Clip, pose: ClipPose, t: Double, ctx: CGContext, W: Double, H: Double) {
+    func drawClipContent(_ c: Clip, pose: ClipPose, t: Double, ctx: CGContext, W: Double, H: Double, fastFade: Bool = false, fadeAlpha: Double = 1) {
         switch c.type {
         case .image, .video:
             var img: CGImage?
@@ -253,7 +255,12 @@ public struct Renderer {
             if let crop = c.crop, !crop.isEmpty, let cut = Renderer.cropped(im, crop) { im = cut }
             let w = Double(im.width) * fit, h = Double(im.height) * fit
             if pose.isPlain(c) {
-                drawCG(ctx, im, CGRect(x: pose.x * W - w / 2, y: pose.y * H - h / 2, width: w, height: h))
+                let r = CGRect(x: pose.x * W - w / 2, y: pose.y * H - h / 2, width: w, height: h)
+                if fadeAlpha > 0, fadeAlpha < 1, fastFade {
+                    if FastBlend.drawFaded(ctx, im, rect: r, alpha: fadeAlpha) { return }
+                    if drawFadedViaTemp(ctx, im, rect: r, alpha: fadeAlpha, W: W, H: H) { return }
+                }
+                drawCG(ctx, im, r)
             } else {
                 ctx.saveGState()
                 pose.concat(c, ctx: ctx, W: W, H: H)
@@ -286,6 +293,18 @@ public struct Renderer {
         default:
             break
         }
+    }
+
+    /// 等倍・整数位置でない画像の不透明度つき描画: 枠の範囲だけの透明なビットマップに不透明で描いてから、直接重ねる(CoreGraphics の不透明度つき汎用経路より速い)。
+    func drawFadedViaTemp(_ ctx: CGContext, _ im: CGImage, rect r: CGRect, alpha: Double, W: Double, H: Double) -> Bool {
+        let area = r.insetBy(dx: -1, dy: -1).integral.intersection(CGRect(x: 0, y: 0, width: W, height: H))
+        guard !area.isNull, area.width >= 1, area.height >= 1, let tmp = Renderer.makeContext(width: Int(area.width), height: Int(area.height)) else { return false }
+        tmp.translateBy(x: 0, y: CGFloat(tmp.height))
+        tmp.scaleBy(x: 1, y: -1)
+        tmp.translateBy(x: CGFloat(-area.minX), y: CGFloat(-area.minY))
+        drawCG(tmp, im, r)
+        guard let snap = tmp.makeImage() else { return false }
+        return FastBlend.drawFaded(ctx, snap, rect: area, alpha: alpha)
     }
 
     /// 切り抜き(画素に丸める)。範囲が空になるときは nil。
