@@ -121,6 +121,25 @@ case "export" where args.count >= 3:
         }
         try await runExport(p, to: URL(fileURLWithPath: args[2]), preset: preset)
     } catch { fail("書き出せませんでした: \(error.localizedDescription)") }
+case "subs" where args.count >= 2:
+    // subs <project> --out x.srt|x.vtt: 字幕(ボイスの字幕と「字幕」レイヤーの文字)を書き出す(画面なしの確認用)
+    guard let outPath = optValue("--out") else { fail("--out が必要です") }
+    let outURL = URL(fileURLWithPath: outPath)
+    guard let fmt = SubtitleFormat(pathExtension: outURL.pathExtension) else { fail("--out の拡張子は .srt か .vtt") }
+    do {
+        let p = try Project.load(from: URL(fileURLWithPath: args[1]))
+        let cues = SubtitleFile.cues(from: p)
+        guard !cues.isEmpty else { fail("字幕にできるクリップがありません") }
+        try SubtitleFile.format(cues, as: fmt).write(to: outURL, atomically: true, encoding: .utf8)
+        print("wrote \(outPath) cues=\(cues.count)")
+    } catch { fail("書けませんでした: \(error)") }
+case "chapters" where args.count == 2:
+    // chapters <project>: マーカーから YouTube のチャプター行を出す(注意は stderr)
+    do {
+        let r = Chapters.make(from: try Project.load(from: URL(fileURLWithPath: args[1])).markers)
+        for w in r.warnings { FileHandle.standardError.write(Data(("注意: " + w + "\n").utf8)) }
+        if r.count > 0 { print(r.text) }
+    } catch { fail("読めませんでした: \(error)") }
 case "speak":
     // speak (--voicevox <id> [--speed 1 --pitch 0 --intonation 1] | --voice <preset> [--speed 100]) --text "…" --out x.wav
     guard let text = optValue("--text"), let outPath = optValue("--out") else { fail("--text と --out が必要です") }
@@ -243,5 +262,5 @@ case "smoke":
         try await runExport(p, to: URL(fileURLWithPath: outPath))
     } catch { fail("書き出せませんでした: \(error.localizedDescription)") }
 default:
-    fail("usage:\n  moviecut-cli info <file.ymproj>\n  moviecut-cli new <out.ymproj>\n  moviecut-cli export <in.mcpjc> <out.mp4|out.m4a> [--preset youtube1080|youtube4k|short|light|audio] [--size WxH] [--fps 29.97] [--codec h264|hevc]\n  moviecut-cli smoke --out <mp4> [--size WxH] [--fps 23.976] [--codec h264|hevc] [--blur] [--tone] [--save-project p.ymproj]\n  moviecut-cli speak (--voicevox <id> [--speed --pitch --intonation] | --voice <preset> [--speed]) --text <t> --out <wav>\n  moviecut-cli speakers | deps | script <script.txt> --out <p.ymproj>\n  moviecut-cli frame <in.ymproj> --t <sec> --out <png> [--size WxH] [--bench N]\n  moviecut-cli addvideo <in.ymproj> <clip.mp4> <out.ymproj>\n  moviecut-cli genclips <N> <out.ymproj>")
+    fail("usage:\n  moviecut-cli info <file.ymproj>\n  moviecut-cli new <out.ymproj>\n  moviecut-cli export <in.mcpjc> <out.mp4|out.m4a> [--preset youtube1080|youtube4k|short|light|audio] [--size WxH] [--fps 29.97] [--codec h264|hevc]\n  moviecut-cli smoke --out <mp4> [--size WxH] [--fps 23.976] [--codec h264|hevc] [--blur] [--tone] [--save-project p.ymproj]\n  moviecut-cli speak (--voicevox <id> [--speed --pitch --intonation] | --voice <preset> [--speed]) --text <t> --out <wav>\n  moviecut-cli speakers | deps | script <script.txt> --out <p.ymproj>\n  moviecut-cli frame <in.ymproj> --t <sec> --out <png> [--size WxH] [--bench N]\n  moviecut-cli addvideo <in.ymproj> <clip.mp4> <out.ymproj>\n  moviecut-cli genclips <N> <out.ymproj>\n  moviecut-cli subs <project> --out <x.srt|x.vtt>\n  moviecut-cli chapters <project>")
 }

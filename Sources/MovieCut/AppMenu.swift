@@ -5,6 +5,8 @@ import MovieCutCore
 enum MenuCommand: Hashable {
     case about, settings, videoSettings
     case addMedia, export, exportPreset(ExportPreset)
+    // 字幕(B3)とチャプター
+    case importSubtitles, exportSubtitles, copyChapters
     // A6: クリップのコピー / 切り取り / 貼り付け / 全選択(ショートカットは持たない: ⌘C ⌘X ⌘V ⌘A は responder chain が受ける)と、レイヤー
     case copyClips, cutClips, pasteClips, selectAllClips, layerLock, layerSolo, layerHeight(LayerHeight)
     case split, delete, addText, addBlur, addCharacter, makeVoices
@@ -99,6 +101,9 @@ struct MenuState: Equatable {
     var selectionCount = 0
     var canPasteClips = false
     var hasClips = false
+    /// B3: 書き出せる字幕がある / マーカーがある
+    var canExportSubtitles = false
+    var hasMarkers = false
     /// A6: メニューの対象のレイヤー(選んだクリップのレイヤー、無ければヘッダーで選んだレイヤー)の状態
     var hasLayerTarget = false
     var layerLocked = false
@@ -179,6 +184,8 @@ struct MenuState: Equatable {
         selectionCount = m.selectedClipIDs.count
         canPasteClips = m.canPasteClips
         hasClips = !m.project.allClips.isEmpty
+        canExportSubtitles = m.canExportSubtitles
+        hasMarkers = !m.project.markers.isEmpty
         if let li = m.targetLayerIndex, m.project.tracks.indices.contains(li) {
             hasLayerTarget = true
             layerLocked = m.project.tracks[li].isLocked
@@ -291,6 +298,20 @@ enum AppMenuSpec {
 
     static func file(_ s: MenuState) -> [MenuItemSpec] {
         [MenuItemSpec(command: .addMedia, title: "素材を追加…", shortcut: cmd("i"), enabled: s.canEdit, checked: nil)]
+    }
+
+    /// ファイル ▸ 字幕を読み込む…(ショートカットは持たない)。
+    static func subtitleImport(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .importSubtitles, title: "字幕を読み込む…", shortcut: nil, enabled: s.canEdit, checked: nil)
+    }
+
+    /// 出力 ▸ 字幕を書き出す… / チャプターをコピー(ショートカットは持たない)。
+    static func subtitleExport(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .exportSubtitles, title: "字幕を書き出す…", shortcut: nil, enabled: s.canEdit && s.canExportSubtitles, checked: nil, hint: "SRT / VTT")
+    }
+
+    static func chapterCopy(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .copyChapters, title: "チャプターをコピー", shortcut: nil, enabled: s.canEdit && s.hasMarkers, checked: nil, hint: "YouTube")
     }
 
     /// 出力 ▸ MP4 を書き出す…(⌘E)と、書き出しプリセット。
@@ -569,7 +590,7 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, settings(s), videoSettings(s)] + file(s) + [exportCurrent(s)] + exportPresets(s) + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + editAdd(s) + clipboardItems(s) + layerItems(s) + layerHeightItems(s) + playback(s)
+        [about, settings(s), videoSettings(s)] + file(s) + [subtitleImport(s), subtitleExport(s), chapterCopy(s), exportCurrent(s)] + exportPresets(s) + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + editAdd(s) + clipboardItems(s) + layerItems(s) + layerHeightItems(s) + playback(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + [fullScreen(s)] + help.flatMap { $0 }
@@ -600,6 +621,9 @@ enum AppMenu {
             case .addMedia: m.chooseAndAddMedia()
             case .export: m.chooseAndExport()
             case .exportPreset(let p): m.chooseAndExport(preset: p)
+            case .importSubtitles: m.chooseAndImportSubtitles()
+            case .exportSubtitles: m.chooseAndExportSubtitles()
+            case .copyChapters: m.copyChapters()
             case .split: m.splitSelected()
             case .duplicate: m.duplicateSelected()
             case .rippleDelete: m.rippleDeleteSelected()

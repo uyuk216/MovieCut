@@ -49,6 +49,7 @@ struct AppCommands: Commands {
         CommandGroup(replacing: .printItem) {
             MenuSection { s, run in
                 items(AppMenuSpec.file(s), run)
+                MenuItemView(spec: AppMenuSpec.subtitleImport(s), perform: run)
             }
         }
 
@@ -161,6 +162,9 @@ struct AppCommands: Commands {
                 Divider()
                 MenuItemView(spec: AppMenuSpec.exportCurrent(s), perform: run)
                 Menu("書き出しプリセット") { items(AppMenuSpec.exportPresets(s), run) }
+                Divider()
+                MenuItemView(spec: AppMenuSpec.subtitleExport(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.chapterCopy(s), perform: run)
             }
         }
 

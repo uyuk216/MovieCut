@@ -1,0 +1,39 @@
+{
+  "width": 1280,
+  "height": 720,
+  "fps": 30,
+  "bg": "#000000",
+  "codec": "h264",
+  "characters": [{ "id": "c1", "name": "霊夢", "engine": "aquestalk", "color": "#e8384f" }],
+  "tracks": [
+    {
+      "id": "t1",
+      "name": "セリフ",
+      "clips": [
+        { "id": "v1", "type": "voice", "charId": "c1", "src": "/tmp/none.wav", "start": 0, "duration": 2.5, "text": "こんにちは\nゆっくりしていってね", "subtitle": true },
+        { "id": "v2", "type": "voice", "charId": "c1", "src": "/tmp/none.wav", "start": 2.6, "duration": 1.4, "text": "字幕なし", "subtitle": false },
+        { "id": "v3", "type": "voice", "charId": "c1", "src": "/tmp/none.wav", "start": 12.0345, "duration": 3, "text": "二番目" }
+      ]
+    },
+    {
+      "id": "t2",
+      "name": "字幕",
+      "clips": [
+        { "id": "x1", "type": "text", "text": "文字クリップ", "start": 5, "duration": 2 }
+      ]
+    },
+    {
+      "id": "t3",
+      "name": "レイヤー3",
+      "clips": [
+        { "id": "x2", "type": "text", "text": "ふつうの文字", "start": 1, "duration": 1 },
+        { "id": "m1", "type": "video", "src": "/tmp/none.mp4", "srcDuration": 8, "start": 20, "duration": 2, "speed": 2 }
+      ]
+    }
+  ],
+  "markers": [
+    { "id": "k1", "time": 0, "name": "はじめに" },
+    { "id": "k2", "time": 65.9, "name": "本題" },
+    { "id": "k3", "time": 3725, "name": "おわり" }
+  ]
+}
