@@ -9,6 +9,7 @@ enum MenuCommand: Hashable {
     case fanMaxToggle, fanInstall, fanUninstall
     // 字幕(B3)とチャプター
     case importSubtitles, exportSubtitles, copyChapters
+    case aiScript, aiChapters, aiRewrite, aiSettings
     // 書き出し範囲(イン / アウト / 解除)と、静止画・連番画像の書き出し
     case rangeIn, rangeOut, rangeClear, exportStill, exportSequence
     // A6: クリップのコピー / 切り取り / 貼り付け / 全選択(ショートカットは持たない: ⌘C ⌘X ⌘V ⌘A は responder chain が受ける)と、レイヤー
@@ -364,6 +365,20 @@ enum AppMenuSpec {
         MenuItemSpec(command: .copyChapters, title: "チャプターをコピー", shortcut: nil, enabled: s.canEdit && s.hasMarkers, checked: nil, hint: "YouTube")
     }
 
+    /// AI 連携(ショートカットなし。どれもメニューを選んだときだけ働く)。
+    static func aiScript(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .aiScript, title: "AIで台本を作る…", shortcut: nil, enabled: s.canEdit, checked: nil)
+    }
+    static func aiSettings(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .aiSettings, title: "AI の設定…", shortcut: nil, enabled: s.canEdit, checked: nil)
+    }
+    static func aiChapters(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .aiChapters, title: "チャプター案をAIで作る…", shortcut: nil, enabled: s.canEdit && s.canExportSubtitles, checked: nil)
+    }
+    static func aiRewrite(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .aiRewrite, title: "AIでセリフを直す…", shortcut: nil, enabled: s.canEdit && s.isVoiceSelected, checked: nil)
+    }
+
     /// 出力 ▸ MP4 を書き出す…(⌘E)と、書き出しプリセット。
     static func exportCurrent(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .export, title: "MP4 を書き出す…", shortcut: cmd("e"), enabled: s.canEdit && s.canExport, checked: nil)
@@ -418,7 +433,8 @@ enum AppMenuSpec {
 
     static func clipLayerAndVoice(_ s: MenuState) -> [MenuItemSpec] {
         [MenuItemSpec(command: .addLayer, title: "レイヤーを追加", shortcut: cmd("l", shift: true), enabled: s.canEdit, checked: nil),
-         MenuItemSpec(command: .regenerateVoice, title: "選択クリップの音声を作り直す", shortcut: MenuShortcut(key: "r", modifiers: [.command, .option]), enabled: s.canEdit && s.isVoiceSelected, checked: nil)]
+         MenuItemSpec(command: .regenerateVoice, title: "選択クリップの音声を作り直す", shortcut: MenuShortcut(key: "r", modifiers: [.command, .option]), enabled: s.canEdit && s.isVoiceSelected, checked: nil),
+         aiRewrite(s)]
     }
 
     /// クリップメニューの全項目(区切りごとのグループ)。
@@ -674,7 +690,7 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, settings(s), videoSettings(s)] + file(s) + [subtitleImport(s), subtitleExport(s), chapterCopy(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + exportPresets(s) + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textAnimItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), lutLoadItem(s)] + editAdd(s) + clipboardItems(s) + layerItems(s) + layerHeightItems(s) + playback(s)
+        [about, settings(s), videoSettings(s)] + file(s) + [subtitleImport(s), subtitleExport(s), chapterCopy(s), aiScript(s), aiSettings(s), aiChapters(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + exportPresets(s) + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textAnimItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), lutLoadItem(s)] + editAdd(s) + clipboardItems(s) + layerItems(s) + layerHeightItems(s) + playback(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + [fullScreen(s)] + help.flatMap { $0 }
@@ -711,6 +727,10 @@ enum AppMenu {
             case .importSubtitles: m.chooseAndImportSubtitles()
             case .exportSubtitles: m.chooseAndExportSubtitles()
             case .copyChapters: m.copyChapters()
+            case .aiScript: m.openAIScriptDialog()
+            case .aiChapters: m.openAIChapters()
+            case .aiRewrite: m.openAIRewrite()
+            case .aiSettings: AIDialogs.editSettings()
             case .rangeIn: m.setRangeInAtCurrent()
             case .rangeOut: m.setRangeOutAtCurrent()
             case .rangeClear: m.clearExportRange()

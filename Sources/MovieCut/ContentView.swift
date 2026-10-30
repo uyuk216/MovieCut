@@ -66,7 +66,7 @@ struct ContentView: View {
         .frame(minWidth: 1100, minHeight: 700)
         .background(Color(nsColor: .windowBackgroundColor))
         .preferredColorScheme(.dark)
-        .overlay { BusyOverlay(message: model.busyMessage) }
+        .overlay { BusyOverlay(message: model.busyMessage, onCancel: model.aiCancel) }
         .sheet(isPresented: $model.showSettings) { SettingsSheet(model: model) }
         .sheet(isPresented: $model.showResolutionSheet) { ResolutionSheet(model: model) }
         .sheet(isPresented: $model.showFpsSheet) { FrameRateSheet(model: model) }
@@ -306,6 +306,8 @@ struct TransportBar: View {
 
 struct BusyOverlay: View {
     let message: String?
+    /// 取り消せる処理(AI への問い合わせ)のときだけ。
+    var onCancel: (() -> Void)? = nil
     var body: some View {
         if let message {
             ZStack {
@@ -313,6 +315,7 @@ struct BusyOverlay: View {
                 VStack(spacing: 12) {
                     ProgressView().controlSize(.large)
                     Text(message).multilineTextAlignment(.center).font(.system(size: 14))
+                    if let onCancel { Button("キャンセル", action: onCancel).keyboardShortcut(.cancelAction) }
                 }
                 .padding(24)
                 .frame(minWidth: 280)

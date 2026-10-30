@@ -145,6 +145,27 @@ case "info" where args.count == 2:
             }
         }
     } catch { fail("読めませんでした: \(error)") }
+case "project-info" where args.count == 2:
+    // project-info <file>: プロジェクトの中身(クリップ・長さ・キャラ・セリフ)を JSON で出す。読み取り専用(外部の AI が中身を見る用)
+    do { print(try ProjectInfo.json(try Project.load(from: URL(fileURLWithPath: args[1])))) } catch { fail("読めませんでした: \(error)") }
+case "ai" where args.count >= 2 && args[1] == "script":
+    // ai script --theme T [--chars 霊夢,魔理沙] [--lines 12] (--provider-cmd "claude -p" | --provider-url http://127.0.0.1:11434 --model m) [--timeout 120] [--out file] [--show-prompt]
+    // 実行したときだけ 1 回問い合わせる。クラウドの鍵は扱わない。台本の行(「名前: セリフ」)を stdout か --out に出す。
+    guard let theme = optValue("--theme"), !theme.trimmingCharacters(in: .whitespaces).isEmpty else { fail("--theme が必要です") }
+    let names = optValue("--chars").map { $0.split(whereSeparator: { $0 == "," || $0 == "、" }).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty } } ?? Project.new().characters.map(\.name)
+    guard !names.isEmpty else { fail("--chars が空です") }
+    let timeout = optValue("--timeout").flatMap(Double.init) ?? 120
+    do {
+        let provider: AIProvider
+        if let cmd = optValue("--provider-cmd") { provider = try CommandAIProvider(commandLine: cmd, timeout: timeout) }
+        else if let url = optValue("--provider-url") { provider = try HTTPAIProvider(baseURL: url, model: optValue("--model") ?? "", timeout: timeout) }
+        else { fail("--provider-cmd \"claude -p\" か --provider-url http://127.0.0.1:11434 --model <名前> が必要です") }
+        let prompt = AIScriptPrompt.build(.init(theme: theme, characterNames: names, lineCount: optValue("--lines").flatMap(Int.init) ?? 12))
+        if args.contains("--show-prompt") { FileHandle.standardError.write(Data(("--- 送るプロンプト ---\n" + prompt + "\n--- ここまで ---\n").utf8)) }
+        let lines = try AIScriptPrompt.parse(try await provider.complete(prompt), characterNames: names)
+        let text = lines.joined(separator: "\n") + "\n"
+        if let out = optValue("--out") { try text.write(toFile: out, atomically: true, encoding: .utf8); print("wrote \(out) (\(lines.count) 行)") } else { print(text, terminator: "") }
+    } catch { fail("AI: \(error.localizedDescription)") }
 case "new" where args.count == 2:
     do { try Project.new().save(to: URL(fileURLWithPath: args[1])); print("wrote \(args[1])") }
     catch { fail("書けませんでした: \(error)") }
@@ -415,5 +436,5 @@ case "smoke":
         try await runExport(p, to: URL(fileURLWithPath: outPath))
     } catch { fail("書き出せませんでした: \(error.localizedDescription)") }
 default:
-    fail("usage:\n  moviecut-cli info <file.ymproj>\n  moviecut-cli new <out.ymproj>\n  moviecut-cli export <in.mcpjc> <out.mp4|out.m4a> [--range a:b|project] [--preset youtube1080|youtube4k|short|light|audio] [--size WxH] [--fps 29.97] [--codec h264|hevc] [--fan-max [--fan-port 1200|1201]]\n  moviecut-cli fan status | fan test [--seconds 8] [--fan-port 1200|1201]\n  moviecut-cli smoke --out <mp4> [--size WxH] [--fps 23.976] [--codec h264|hevc] [--blur] [--tone] [--save-project p.ymproj]\n  moviecut-cli speak (--voicevox <id> [--speed --pitch --intonation] | --voice <preset> [--speed]) --text <t> --out <wav>\n  moviecut-cli speakers | deps | script <script.txt> --out <p.ymproj>\n  moviecut-cli frame <in.ymproj> --t <sec> --out <png|jpg> [--size WxH] [--bench N]\n  moviecut-cli sequence <in.mcpjc> --out <dir> [--format png|jpeg] [--name base] [--range a:b|project] [--fps 30] [--size WxH]\n  moviecut-cli addvideo <in.ymproj> <clip.mp4> <out.ymproj>\n  moviecut-cli genclips <N> <out.ymproj>\n  moviecut-cli silence <project|media> [--threshold -40] [--min 0.4] [--pad 0.1]\n  moviecut-cli subs <project> --out <x.srt|x.vtt>\n  moviecut-cli chapters <project>")
+    fail("usage:\n  moviecut-cli info <file.ymproj>\n  moviecut-cli new <out.ymproj>\n  moviecut-cli export <in.mcpjc> <out.mp4|out.m4a> [--range a:b|project] [--preset youtube1080|youtube4k|short|light|audio] [--size WxH] [--fps 29.97] [--codec h264|hevc] [--fan-max [--fan-port 1200|1201]]\n  moviecut-cli fan status | fan test [--seconds 8] [--fan-port 1200|1201]\n  moviecut-cli smoke --out <mp4> [--size WxH] [--fps 23.976] [--codec h264|hevc] [--blur] [--tone] [--save-project p.ymproj]\n  moviecut-cli speak (--voicevox <id> [--speed --pitch --intonation] | --voice <preset> [--speed]) --text <t> --out <wav>\n  moviecut-cli speakers | deps | script <script.txt> --out <p.ymproj>\n  moviecut-cli frame <in.ymproj> --t <sec> --out <png|jpg> [--size WxH] [--bench N]\n  moviecut-cli sequence <in.mcpjc> --out <dir> [--format png|jpeg] [--name base] [--range a:b|project] [--fps 30] [--size WxH]\n  moviecut-cli addvideo <in.ymproj> <clip.mp4> <out.ymproj>\n  moviecut-cli genclips <N> <out.ymproj>\n  moviecut-cli silence <project|media> [--threshold -40] [--min 0.4] [--pad 0.1]\n  moviecut-cli subs <project> --out <x.srt|x.vtt>\n  moviecut-cli chapters <project>\n  moviecut-cli project-info <project>   (JSON。読み取り専用)\n  moviecut-cli ai script --theme <t> [--chars 霊夢,魔理沙] [--lines 12] (--provider-cmd \"claude -p\" | --provider-url http://127.0.0.1:11434 --model <m>) [--timeout 120] [--out x.txt] [--show-prompt]")
 }
