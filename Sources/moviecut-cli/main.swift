@@ -33,9 +33,9 @@ func parseFps(_ s: String) -> Double {
 }
 
 /// 書き出して、進み具合(約10%ごと)を stderr、最後に コマ数・秒・実時間比 を stdout に出す。
-func runExport(_ p: Project, to url: URL, preset: ExportPreset? = nil) async throws {
+func runExport(_ p: Project, to url: URL, preset: ExportPreset? = nil, range: ExportRange? = nil) async throws {
     let resolved = ExportJob.resolvedProject(p, preset: preset)
-    let frames = preset?.isAudioOnly == true ? 0 : Exporter(project: resolved, assets: RenderAssets()).totalFrames
+    let frames = preset?.isAudioOnly == true ? 0 : Exporter(project: resolved, assets: RenderAssets(), range: range).totalFrames
     if preset?.isAudioOnly != true {
         let plan = Exporter(project: resolved, assets: RenderAssets()).plan
         print("plan: \(plan.width)x\(plan.height) \(plan.codec)\(plan.usesFallbackCodec ? " (H.264 では書けないので HEVC に切り替え)" : "") fps=\(FrameRate.label(resolved.fps)) (\(resolved.frameRate.num)/\(resolved.frameRate.den))")
@@ -43,16 +43,30 @@ func runExport(_ p: Project, to url: URL, preset: ExportPreset? = nil) async thr
     }
     var nextMark = 0.1
     let t0 = Date()
-    try await ExportJob.run(project: p, preset: preset, to: url) { v in
+    try await ExportJob.run(project: p, preset: preset, range: range, to: url) { v in
         if v >= nextMark - 1e-9 {
             FileHandle.standardError.write(Data(String(format: "  %3.0f%%\n", v * 100).utf8))
             nextMark = (v * 10 + 1e-9).rounded(.down) / 10 + 0.1
         }
     }
     let wall = Date().timeIntervalSince(t0)
-    let dur = p.endTime
+    let dur = range?.duration ?? p.endTime
+    if let r = range { print(String(format: "range: %.3f - %.3f s (%.3f s)", r.start, r.end, r.duration)) }
     print(String(format: "wrote %@ frames=%d wall=%.2fs speed=%.2fx realtime (%.1f fps)", url.path, frames, wall, dur / max(wall, 1e-9), Double(frames) / max(wall, 1e-9)))
 }
+/// --range a:b(秒。`project` ならプロジェクトに保存してある範囲)。指定が無ければ nil。
+func parseRange(_ p: Project) -> ExportRange? {
+    guard let s = optValue("--range") else { return nil }
+    if s == "project" {
+        guard let r = p.exportRange else { fail("--range project: プロジェクトに書き出し範囲が設定されていません") }
+        return r
+    }
+    switch ExportRange.parse(s, endTime: p.endTime) {
+    case .success(let r): return r
+    case .failure(let e): fail("--range: " + e.message)
+    }
+}
+
 // MARK: - ファン(書き出し中の最大化)
 
 func fanLine(_ s: FanStatus) -> String {
@@ -154,13 +168,13 @@ case "frame" where args.count >= 2:
             print(String(format: "%.2f ms/frame (%d frames)", Date().timeIntervalSince(t0) * 1000 / Double(n), n))
         }
         guard let img = renderer.renderImage(t: t) else { fail("描画できませんでした") }
-        guard let dest = CGImageDestinationCreateWithURL(URL(fileURLWithPath: outPath) as CFURL, UTType.png.identifier as CFString, 1, nil) else { fail("書けませんでした: \(outPath)") }
-        CGImageDestinationAddImage(dest, img, nil)
-        guard CGImageDestinationFinalize(dest) else { fail("PNG を書けませんでした") }
+        let outURL = URL(fileURLWithPath: outPath)
+        let fmt = StillFormat(pathExtension: outURL.pathExtension) ?? .png
+        do { try StillExporter.writeImage(img, format: fmt, to: outURL) } catch { fail("\(fmt.title) を書けませんでした: \(outPath)") }
         print("wrote \(outPath) (\(p.width)x\(p.height))")
     } catch { fail("読めませんでした: \(error)") }
 case "export" where args.count >= 3:
-    // export <in.mcpjc> <out.mp4|out.m4a> [--preset youtube1080|youtube4k|short|light|audio] [--size WxH] [--fps 29.97] [--codec h264|hevc]
+    // export <in.mcpjc> <out.mp4|out.m4a> [--range a:b|project] [--preset youtube1080|youtube4k|short|light|audio] [--size WxH] [--fps 29.97] [--codec h264|hevc]
     // --preset はプロジェクトの写しに当てるだけ(入力ファイルは変えない)。--size / --codec は、プリセットの前に当てる。
     do {
         var p = try Project.load(from: URL(fileURLWithPath: args[1]))
@@ -173,7 +187,32 @@ case "export" where args.count >= 3:
             preset = pr
             if pr.isAudioOnly, !args[2].lowercased().hasSuffix(".m4a") { FileHandle.standardError.write(Data("注意: 音声のみの出力先は .m4a にしてください\n".utf8)) }
         }
-        try await withFanMax(args.contains("--fan-max")) { try await runExport(p, to: URL(fileURLWithPath: args[2]), preset: preset) }
+        let range = parseRange(p)
+        try await withFanMax(args.contains("--fan-max")) { try await runExport(p, to: URL(fileURLWithPath: args[2]), preset: preset, range: range) }
+    } catch { fail("書き出せませんでした: \(error.localizedDescription)") }
+case "sequence" where args.count >= 2:
+    // sequence <project> --out <dir> [--format png|jpeg] [--name base] [--range a:b|project] [--fps 30] [--size WxH]
+    guard let outPath = optValue("--out") else { fail("--out(出力先のフォルダ)が必要です") }
+    let fmt: StillFormat
+    if let f = optValue("--format") { guard let x = StillFormat(cliName: f) else { fail("--format は png か jpeg") }; fmt = x } else { fmt = .png }
+    do {
+        var p = try Project.load(from: URL(fileURLWithPath: args[1]))
+        if let s = optValue("--size") { let sz = parseSize(s); p = p.scaledForResolution(newWidth: sz.0, newHeight: sz.1) }
+        if let f = optValue("--fps") { p.fps = parseFps(f) }
+        let range = parseRange(p)
+        let base = optValue("--name") ?? URL(fileURLWithPath: args[1]).deletingPathExtension().lastPathComponent
+        let plan = ImageSequenceExporter.plan(project: p, range: range, base: base, format: fmt)
+        print("plan: \(p.width)x\(p.height) fps=\(FrameRate.label(p.fps)) frames=\(plan.frames) \(plan.first) ... \(plan.last)")
+        var nextMark = 0.1
+        let t0 = Date()
+        let r = try await ImageSequenceExporter.export(project: p, range: range, to: URL(fileURLWithPath: outPath), base: base, format: fmt) { v in
+            if v >= nextMark - 1e-9 {
+                FileHandle.standardError.write(Data(String(format: "  %3.0f%%\n", v * 100).utf8))
+                nextMark = (v * 10 + 1e-9).rounded(.down) / 10 + 0.1
+            }
+        }
+        let wall = Date().timeIntervalSince(t0)
+        print(String(format: "wrote %@ files=%d wall=%.2fs (%.1f fps)", outPath, r.frameCount, wall, Double(r.frameCount) / max(wall, 1e-9)))
     } catch { fail("書き出せませんでした: \(error.localizedDescription)") }
 case "subs" where args.count >= 2:
     // subs <project> --out x.srt|x.vtt: 字幕(ボイスの字幕と「字幕」レイヤーの文字)を書き出す(画面なしの確認用)
@@ -376,5 +415,5 @@ case "smoke":
         try await runExport(p, to: URL(fileURLWithPath: outPath))
     } catch { fail("書き出せませんでした: \(error.localizedDescription)") }
 default:
-    fail("usage:\n  moviecut-cli info <file.ymproj>\n  moviecut-cli new <out.ymproj>\n  moviecut-cli export <in.mcpjc> <out.mp4|out.m4a> [--preset youtube1080|youtube4k|short|light|audio] [--size WxH] [--fps 29.97] [--codec h264|hevc] [--fan-max [--fan-port 1200|1201]]\n  moviecut-cli fan status | fan test [--seconds 8] [--fan-port 1200|1201]\n  moviecut-cli smoke --out <mp4> [--size WxH] [--fps 23.976] [--codec h264|hevc] [--blur] [--tone] [--save-project p.ymproj]\n  moviecut-cli speak (--voicevox <id> [--speed --pitch --intonation] | --voice <preset> [--speed]) --text <t> --out <wav>\n  moviecut-cli speakers | deps | script <script.txt> --out <p.ymproj>\n  moviecut-cli frame <in.ymproj> --t <sec> --out <png> [--size WxH] [--bench N]\n  moviecut-cli addvideo <in.ymproj> <clip.mp4> <out.ymproj>\n  moviecut-cli genclips <N> <out.ymproj>\n  moviecut-cli silence <project|media> [--threshold -40] [--min 0.4] [--pad 0.1]\n  moviecut-cli subs <project> --out <x.srt|x.vtt>\n  moviecut-cli chapters <project>")
+    fail("usage:\n  moviecut-cli info <file.ymproj>\n  moviecut-cli new <out.ymproj>\n  moviecut-cli export <in.mcpjc> <out.mp4|out.m4a> [--range a:b|project] [--preset youtube1080|youtube4k|short|light|audio] [--size WxH] [--fps 29.97] [--codec h264|hevc] [--fan-max [--fan-port 1200|1201]]\n  moviecut-cli fan status | fan test [--seconds 8] [--fan-port 1200|1201]\n  moviecut-cli smoke --out <mp4> [--size WxH] [--fps 23.976] [--codec h264|hevc] [--blur] [--tone] [--save-project p.ymproj]\n  moviecut-cli speak (--voicevox <id> [--speed --pitch --intonation] | --voice <preset> [--speed]) --text <t> --out <wav>\n  moviecut-cli speakers | deps | script <script.txt> --out <p.ymproj>\n  moviecut-cli frame <in.ymproj> --t <sec> --out <png|jpg> [--size WxH] [--bench N]\n  moviecut-cli sequence <in.mcpjc> --out <dir> [--format png|jpeg] [--name base] [--range a:b|project] [--fps 30] [--size WxH]\n  moviecut-cli addvideo <in.ymproj> <clip.mp4> <out.ymproj>\n  moviecut-cli genclips <N> <out.ymproj>\n  moviecut-cli silence <project|media> [--threshold -40] [--min 0.4] [--pad 0.1]\n  moviecut-cli subs <project> --out <x.srt|x.vtt>\n  moviecut-cli chapters <project>")
 }

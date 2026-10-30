@@ -20,10 +20,13 @@ public struct Project: Codable, Equatable {
     public var tracks: [Track] = Track.defaultLayers()
     /// タイムライン上のマーカー(M7)。空のときはファイルに書かない。
     public var markers: [Marker] = []
+    /// 書き出し範囲のイン点 / アウト点(秒)。設定したときだけファイルに書く。
+    public var rangeIn: Double? = nil
+    public var rangeOut: Double? = nil
     /// 知らないキー(保持して書き戻す)
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["width", "height", "fps", "bg", "codec", "voicevoxUrl", "aquestalkCommand", "characters", "tracks", "markers"]
+    static let knownKeys: Set<String> = ["width", "height", "fps", "bg", "codec", "voicevoxUrl", "aquestalkCommand", "characters", "tracks", "markers", "rangeIn", "rangeOut"]
 
     public init() {}
 
@@ -43,6 +46,7 @@ public struct Project: Codable, Equatable {
         if let v: [Character] = l.value("characters"), !v.isEmpty { characters = v }
         if let v: [Track] = l.value("tracks"), !v.isEmpty { tracks = v }
         markers = l.value("markers") ?? []
+        rangeIn = l.value("rangeIn"); rangeOut = l.value("rangeOut")
         extra = l.extra()
     }
 
@@ -61,6 +65,8 @@ public struct Project: Codable, Equatable {
         try c.encode(characters, forKey: AnyKey("characters"))
         try c.encode(tracks, forKey: AnyKey("tracks"))
         if !markers.isEmpty { try c.encode(markers, forKey: AnyKey("markers")) }
+        try c.encodeIfPresent(rangeIn, forKey: AnyKey("rangeIn"))
+        try c.encodeIfPresent(rangeOut, forKey: AnyKey("rangeOut"))
     }
 
     /// fps を Int / Double / "29.97" / "30000/1001" のどれからでも読む。読めない・欠けているときは 60、範囲外は 1〜240 に収める。

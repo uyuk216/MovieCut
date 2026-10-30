@@ -9,6 +9,8 @@ enum MenuCommand: Hashable {
     case fanMaxToggle, fanInstall, fanUninstall
     // 字幕(B3)とチャプター
     case importSubtitles, exportSubtitles, copyChapters
+    // 書き出し範囲(イン / アウト / 解除)と、静止画・連番画像の書き出し
+    case rangeIn, rangeOut, rangeClear, exportStill, exportSequence
     // A6: クリップのコピー / 切り取り / 貼り付け / 全選択(ショートカットは持たない: ⌘C ⌘X ⌘V ⌘A は responder chain が受ける)と、レイヤー
     case copyClips, cutClips, pasteClips, selectAllClips, layerLock, layerSolo, layerHeight(LayerHeight)
     case split, delete, addText, addBlur, addCharacter, makeVoices
@@ -102,6 +104,9 @@ struct MenuState: Equatable {
     var hasDocument = false
     var isLocked = false
     var canExport = false
+    /// 書き出し範囲を指定できる / ルーラーに印がある
+    var canMarkRange = false
+    var hasRange = false
     var hasSelection = false
     /// A6: 選んでいるクリップの数 / 貼り付けられるものがある / クリップが 1 つでもある
     var selectionCount = 0
@@ -206,6 +211,8 @@ struct MenuState: Equatable {
         hasDocument = true
         isLocked = m.isLocked
         canExport = m.canExport
+        canMarkRange = m.canMarkRange
+        hasRange = m.hasRangeMarks
         hasSelection = m.selectedClip != nil
         selectionCount = m.selectedClipIDs.count
         canPasteClips = m.canPasteClips
@@ -360,6 +367,19 @@ enum AppMenuSpec {
     /// 出力 ▸ MP4 を書き出す…(⌘E)と、書き出しプリセット。
     static func exportCurrent(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .export, title: "MP4 を書き出す…", shortcut: cmd("e"), enabled: s.canEdit && s.canExport, checked: nil)
+    }
+
+    /// 出力 ▸ 書き出し範囲(開始 / 終了を現在位置に・解除)。ショートカットは持たない。
+    static func rangeItems(_ s: MenuState) -> [MenuItemSpec] {
+        [MenuItemSpec(command: .rangeIn, title: "書き出し開始を現在位置に", shortcut: nil, enabled: s.canEdit && s.canMarkRange, checked: nil),
+         MenuItemSpec(command: .rangeOut, title: "書き出し終了を現在位置に", shortcut: nil, enabled: s.canEdit && s.canMarkRange, checked: nil),
+         MenuItemSpec(command: .rangeClear, title: "範囲を解除", shortcut: nil, enabled: s.canEdit && s.canMarkRange && s.hasRange, checked: nil)]
+    }
+
+    /// 出力 ▸ 現在のフレームを画像で書き出す… / 連番画像を書き出す…
+    static func imageExportItems(_ s: MenuState) -> [MenuItemSpec] {
+        [MenuItemSpec(command: .exportStill, title: "現在のフレームを画像で書き出す…", shortcut: nil, enabled: s.canEdit && s.canExport, checked: nil, hint: "PNG / JPEG"),
+         MenuItemSpec(command: .exportSequence, title: "連番画像を書き出す…", shortcut: nil, enabled: s.canEdit && s.canExport, checked: nil, hint: "name_00001.png")]
     }
 
     static func exportPresets(_ s: MenuState) -> [MenuItemSpec] {
@@ -654,7 +674,7 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, settings(s), videoSettings(s)] + file(s) + [subtitleImport(s), subtitleExport(s), chapterCopy(s), exportCurrent(s)] + exportPresets(s) + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textAnimItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), lutLoadItem(s)] + editAdd(s) + clipboardItems(s) + layerItems(s) + layerHeightItems(s) + playback(s)
+        [about, settings(s), videoSettings(s)] + file(s) + [subtitleImport(s), subtitleExport(s), chapterCopy(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + exportPresets(s) + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textAnimItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), lutLoadItem(s)] + editAdd(s) + clipboardItems(s) + layerItems(s) + layerHeightItems(s) + playback(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + [fullScreen(s)] + help.flatMap { $0 }
@@ -691,6 +711,11 @@ enum AppMenu {
             case .importSubtitles: m.chooseAndImportSubtitles()
             case .exportSubtitles: m.chooseAndExportSubtitles()
             case .copyChapters: m.copyChapters()
+            case .rangeIn: m.setRangeInAtCurrent()
+            case .rangeOut: m.setRangeOutAtCurrent()
+            case .rangeClear: m.clearExportRange()
+            case .exportStill: m.chooseAndExportStill()
+            case .exportSequence: m.chooseAndExportSequence()
             case .split: m.splitSelected()
             case .duplicate: m.duplicateSelected()
             case .rippleDelete: m.rippleDeleteSelected()

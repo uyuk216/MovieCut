@@ -69,12 +69,12 @@ public enum ExportJob {
         preset?.apply(to: project) ?? project
     }
 
-    public static func run(project: Project, preset: ExportPreset?, to url: URL, assets: RenderAssets = RenderAssets(), progress: ((Double) -> Void)? = nil) async throws {
+    public static func run(project: Project, preset: ExportPreset?, range: ExportRange? = nil, to url: URL, assets: RenderAssets = RenderAssets(), progress: ((Double) -> Void)? = nil) async throws {
         let p = resolvedProject(project, preset: preset)
         if preset?.isAudioOnly == true {
-            try await AudioExporter.export(project: p, to: url, progress: progress)
+            try await AudioExporter.export(project: p, range: range, to: url, progress: progress)
         } else {
-            try await Exporter(project: p, assets: assets).export(to: url, progress: progress)
+            try await Exporter(project: p, assets: assets, range: range).export(to: url, progress: progress)
         }
     }
 }
@@ -92,21 +92,21 @@ public enum AudioExporter {
         var shouldStop: Bool { lock.withLock { _cancelled || _failure != nil } }
     }
 
-    public static func export(project: Project, to url: URL, progress: ((Double) -> Void)? = nil) async throws {
+    public static func export(project: Project, range: ExportRange? = nil, to url: URL, progress: ((Double) -> Void)? = nil) async throws {
         let control = Control()
         try await withTaskCancellationHandler {
-            try await run(project: project, to: url, progress: progress, control: control)
+            try await run(project: project, range: range, to: url, progress: progress, control: control)
         } onCancel: { control.cancel() }
     }
 
-    private static func run(project: Project, to url: URL, progress: ((Double) -> Void)?, control: Control) async throws {
+    private static func run(project: Project, range: ExportRange?, to url: URL, progress: ((Double) -> Void)?, control: Control) async throws {
         guard project.endTime > 0 else { throw ExportError.emptyProject }
         let mixURL = FileManager.default.temporaryDirectory.appendingPathComponent("moviecut-mix-\(UUID().uuidString).caf")
         defer { try? FileManager.default.removeItem(at: mixURL) }
         let proj = project
         let mix: AudioMixer.MixResult
         do {
-            mix = try await Task.detached { try AudioMixer.mixdownDetailed(project: proj, to: mixURL) }.value
+            mix = try await Task.detached { try AudioMixer.mixdownDetailed(project: proj, to: mixURL, range: range) }.value
         } catch {
             if error is CancellationError { throw error }
             throw ExportError.audioMixFailed(error)

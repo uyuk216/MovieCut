@@ -457,13 +457,8 @@ final class ProjectModel: ObservableObject {
 
     /// 書き出し(ツールバーのボタンも MC_DEBUG_EXPORT もこれを呼ぶ)。
     /// `preset` があれば、プロジェクトの「写し」にプリセットを当てて書き出す(ドキュメント自体は変えない)。
-    func runExport(to url: URL, preset: ExportPreset? = nil) async -> ExportOutcome {
+    func runExport(to url: URL, preset: ExportPreset? = nil, range: ExportRange? = nil) async -> ExportOutcome {
         guard !isExporting else { return .failure(ExportError.writerFailed(nil)) }
-        isExporting = true
-        exportProgress = 0
-        exportFileName = url.lastPathComponent
-        exportTitle = preset.map { $0.isAudioOnly ? "音声を書き出しています" : "\($0.title) で書き出しています" } ?? "MP4 を書き出しています"
-        statusText = "書き出し中…"
         let exporting = ExportJob.resolvedProject(project, preset: preset)
         let plan = OutputPlan.make(width: exporting.width, height: exporting.height, codec: exporting.codec)
         let isVideo = preset?.isAudioOnly != true
@@ -472,15 +467,40 @@ final class ProjectModel: ObservableObject {
             if plan.usesFallbackCodec { notices.append(OutputPlan.fallbackNotice) }
             if let h = OutputPlan.heavyWarning(width: plan.width, height: plan.height, fps: exporting.fps) { notices.append(h) }
         }
+        let snapshot = project
+        let title = (preset.map { $0.isAudioOnly ? "音声を書き出しています" : "\($0.title) で書き出しています" } ?? "MP4 を書き出しています")
+        return await runJob(title: title, fileName: url.lastPathComponent, notices: notices,
+                            success: "\(url.lastPathComponent) に書き出しました" + (plan.usesFallbackCodec && isVideo ? "(HEVC)" : ""), result: url) { progress in
+            try await ExportJob.run(project: snapshot, preset: preset, range: range, to: url, progress: progress)
+        }
+    }
+
+    /// 連番画像を `directory` に書き出す(進み具合とキャンセルは動画の書き出しと同じ)。
+    func runSequenceExport(to directory: URL, base: String, format: StillFormat, range: ExportRange?) async -> ExportOutcome {
+        guard !isExporting else { return .failure(ExportError.writerFailed(nil)) }
+        let snapshot = project
+        let n = ImageSequenceExporter.plan(project: snapshot, range: range, base: base, format: format).frames
+        return await runJob(title: "連番画像(\(format.title))を書き出しています", fileName: directory.lastPathComponent, notices: [],
+                            success: "\(directory.lastPathComponent) に \(n) 枚書き出しました", result: directory) { progress in
+            try await ImageSequenceExporter.export(project: snapshot, range: range, to: directory, base: base, format: format, progress: progress)
+        }
+    }
+
+    private func runJob(title: String, fileName: String, notices: [String], success: String, result: URL,
+                        _ job: @escaping (@escaping (Double) -> Void) async throws -> Void) async -> ExportOutcome {
+        isExporting = true
+        exportProgress = 0
+        exportFileName = fileName
+        exportTitle = title
+        statusText = "書き出し中…"
         exportNotice = notices.joined(separator: "\n")
         let dock = dockOverride ?? AppServices.dock
         dock.update(0)
         defer { isExporting = false; exportTask = nil }
-        let snapshot = project
         // ファン最大化(オンのときだけ)。開始・終了・キャンセル・失敗のどれでも必ず自動に戻す(下の endExport)
         await AppServices.fan.beginExport()
         let task = Task { [weak self] in
-            try await ExportJob.run(project: snapshot, preset: preset, to: url) { v in
+            try await job { v in
                 Task { @MainActor in
                     // 終わったあとに遅れて届いた進み具合では Dock を出し直さない
                     guard let self, self.isExporting else { return }
@@ -494,9 +514,9 @@ final class ProjectModel: ObservableObject {
             try await task.value
             await AppServices.fan.endExport(.finished)
             exportProgress = 1
-            statusText = "\(url.lastPathComponent) に書き出しました" + (plan.usesFallbackCodec && isVideo ? "(HEVC)" : "")
+            statusText = success
             dock.finish(notify: true)
-            return .success(url)
+            return .success(result)
         } catch is CancellationError {
             await AppServices.fan.endExport(.cancelled)
             statusText = "書き出しをキャンセルしました"

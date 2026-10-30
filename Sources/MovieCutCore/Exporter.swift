@@ -62,16 +62,20 @@ public final class Exporter {
     public let project: Project
     public let assets: RenderAssets
 
-    public init(project: Project, assets: RenderAssets) {
+    /// 書き出す区間(nil なら全体)。
+    public let range: ExportRange?
+
+    public init(project: Project, assets: RenderAssets, range: ExportRange? = nil) {
         self.project = project
         self.assets = assets
+        self.range = range
     }
 
     /// 正確な分数のフレームレート(29.97 → 30000/1001 など)。
     public var frameRate: FrameRate { project.frameRate }
 
     /// 書き出すコマ数 = ceil(長さ × fps)。浮動小数の誤差(3.7×60=222.00000000000003)で 1 コマ増えないよう少し引く。
-    public var totalFrames: Int { frameRate.frameCount(duration: project.endTime) }
+    public var totalFrames: Int { frameRate.frameCount(duration: range?.duration ?? project.endTime) }
 
     /// 偶数に切り下げた出力サイズ(H.264 / HEVC は偶数が必要)。
     public var outputSize: (width: Int, height: Int) {
@@ -94,6 +98,7 @@ public final class Exporter {
         let rate = frameRate
         let fpsValue = rate.value
         let N = totalFrames
+        let t0 = range?.start ?? 0
         guard N > 0 else { throw ExportError.emptyProject }
         let plan = self.plan
         if let msg = plan.error { throw ExportError.invalidSize(msg) }
@@ -117,7 +122,7 @@ public final class Exporter {
         let proj = project
         let mix: AudioMixer.MixResult
         do {
-            mix = try await Task.detached { try AudioMixer.mixdownDetailed(project: proj, to: mixURL) }.value
+            mix = try await Task.detached { try AudioMixer.mixdownDetailed(project: proj, to: mixURL, range: self.range) }.value
         } catch {
             if error is CancellationError { throw error }
             throw ExportError.audioMixFailed(error)
@@ -230,7 +235,7 @@ public final class Exporter {
                     CVPixelBufferLockBaseAddress(pb, [])
                     if let ctx = CGContext(data: CVPixelBufferGetBaseAddress(pb), width: ew, height: eh, bitsPerComponent: 8,
                                            bytesPerRow: CVPixelBufferGetBytesPerRow(pb), space: exportSRGB, bitmapInfo: exportBitmapInfo) {
-                        renderer.render(t: rate.time(ofFrame: i), into: ctx)
+                        renderer.render(t: t0 + rate.time(ofFrame: i), into: ctx)
                     }
                     CVPixelBufferUnlockBaseAddress(pb, [])
                     if !adaptor.append(pb, withPresentationTime: rate.cmTime(frame: i)) {

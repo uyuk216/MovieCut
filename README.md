@@ -37,6 +37,8 @@ moviecut-cli export in.mcpjc out.m4a --preset audio        # 音声のみ(AAC 25
 ```
 アプリでは「出力 ▸ 書き出しプリセット ▸ …」の同じプリセットを使えます。プリセットはプロジェクトの写しに当てるので、元のプロジェクトは変わりません。
 
+書き出し範囲・静止画・連番画像: 出力 ▸ 書き出し開始 / 終了を現在位置に(ルーラーにオレンジの印。範囲を解除で消える。プロジェクトに保存され、範囲が無い古いファイルは変わりません)。範囲があると、MP4 の書き出しの保存パネルに「範囲だけ書き出す」(初期オン)が出て、映像も音声も同じ区間だけ書きます。出力 ▸ 現在のフレームを画像で書き出す…(PNG / JPEG。拡張子で決まる)、出力 ▸ 連番画像を書き出す…(名前のフォルダに `名前_00001.png` …、進み具合とキャンセルは動画と同じ)。画面なしでは `moviecut-cli export in.mcpjc out.mp4 --range 1:3`(秒。`2:` や `:5` も可、`--range project` は保存済みの範囲)、`moviecut-cli frame in.mcpjc --t 1 --out f.png|f.jpg`、`moviecut-cli sequence in.mcpjc --out dir --format png|jpeg [--range 1:3] [--fps 30]`。
+
 字幕とチャプター: ファイル ▸ 字幕を読み込む…(SRT / VTT を「字幕」レイヤーの文字クリップに。1 回で元に戻せます)、出力 ▸ 字幕を書き出す…(ボイスの字幕と「字幕」レイヤーの文字を .srt / .vtt に)、出力 ▸ チャプターをコピー(マーカーから YouTube の `0:00 題名` を作ってコピー)。画面なしでは `moviecut-cli subs in.mcpjc --out x.srt`(`.vtt` も可)と `moviecut-cli chapters in.mcpjc`。
 
 ## 書き出し中のファン最大化

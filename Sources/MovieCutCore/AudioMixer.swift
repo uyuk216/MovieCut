@@ -226,9 +226,12 @@ public enum AudioMixer {
         var plain: Bool { volumeEnv == nil && fx == nil && pan == nil && duck == nil }
     }
 
-    static func mixdownDetailed(project: Project, to url: URL) throws -> MixResult {
+    /// `range` があれば、その区間だけを切り出して書く(出力の 0 秒 = range.start)。nil なら全体。
+    static func mixdownDetailed(project: Project, to url: URL, range: ExportRange? = nil) throws -> MixResult {
         let sr = mixSampleRate
-        let total = Int((project.endTime * sr).rounded())
+        // 範囲の頭(サンプル)。クリップの位置をこの分だけ前へずらすと、負の開始と同じ扱いで頭が切られる
+        let shift = range.map { Int(($0.start * sr).rounded()) } ?? 0
+        let total = range.map { Int((($0.end - $0.start) * sr).rounded()) } ?? Int((project.endTime * sr).rounded())
         // 対象クリップを開始フレーム順に
         var items: [Item] = []
         // ダッキング: 声(ボイスクリップ)の区間。BGM が複数あっても 1 回だけ数える
@@ -236,7 +239,7 @@ public enum AudioMixer {
         for tr in project.tracks where project.isAudible(tr) {
             for c in tr.clips where c.type == .audio || c.type == .voice || c.type == .video {
                 guard let s = c.src, !s.isEmpty, c.duration > 0, !c.isFreeze else { continue }   // フリーズフレームは無音
-                var sf = Int((c.start * sr).rounded())
+                var sf = Int((c.start * sr).rounded()) - shift
                 let fullStart = sf, fullLength = Int((c.duration * sr).rounded())
                 let ef = min(total, sf + fullLength)
                 let remap = c.hasAudioRemap
@@ -314,7 +317,7 @@ public enum AudioMixer {
                     let pl = it.pan?.l ?? 1, pr = it.pan?.r ?? 1
                     let ng = normGains[idx] ?? 1
                     // ダッキングの倍率(時刻だけで決まるので、塊の境目でも途切れない。タイムライン上の時刻 = 出力のフレーム)
-                    let dg: [Float]? = it.duck.map { Ducking.gains(startFrame: a, count: got, sr: sr, spans: voiceSpans, duck: $0) }
+                    let dg: [Float]? = it.duck.map { Ducking.gains(startFrame: a + shift, count: got, sr: sr, spans: voiceSpans, duck: $0) }
                     for k in 0..<got {
                         let pos = a + k - it.fullStart
                         var fg = it.volumeEnv.map { $0.gain(at: pos) * ng } ?? g

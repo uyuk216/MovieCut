@@ -37,10 +37,24 @@ extension ProjectModel {
         panel.nameFieldStringValue = exportSuggestedName(preset: preset)
         panel.canCreateDirectories = true
         panel.title = preset.map { "書き出し — \($0.title)" } ?? "MP4 書き出し"
+        // 範囲があるときは「範囲だけ書き出す」(最初からオン)。
+        let range = project.exportRange
+        var rangeBox: NSButton?
+        if range != nil {
+            let box = NSButton(checkboxWithTitle: String(format: "範囲だけ書き出す(%.2f〜%.2f 秒)", range!.start, range!.end), target: nil, action: nil)
+            box.state = .on
+            box.setAccessibilityIdentifier("export-range-only")
+            let wrap = NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 32))
+            box.frame = NSRect(x: 12, y: 6, width: 300, height: 20)
+            wrap.addSubview(box)
+            panel.accessoryView = wrap
+            rangeBox = box
+        }
         let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
             guard resp == .OK, let url = panel.url, let self else { return }
+            let useRange = rangeBox?.state == .on ? range : nil
             Task { @MainActor in
-                if case .success(let u) = await self.runExport(to: url, preset: preset) {
+                if case .success(let u) = await self.runExport(to: url, preset: preset, range: useRange) {
                     NSWorkspace.shared.activateFileViewerSelecting([u])
                 }
             }

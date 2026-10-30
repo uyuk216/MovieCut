@@ -19,6 +19,8 @@ enum TimelinePalette {
     static let playhead = rgb(0xff4f6a), selection = rgb(0xffd84f), accent = rgb(0x4f8cff)
     /// マーカーの旗と案内線の色。
     static let marker = rgb(0x3dd6c0)
+    /// 書き出し範囲の印の色。
+    static let rangeMark = rgb(0xffa13d)
 
     /// 種類ごとの色。ボイスはキャラの色を 42% だけ暗い下地に混ぜる。
     static func color(for type: ClipType) -> NSColor {
@@ -246,6 +248,29 @@ final class TimelineCanvas: NSView {
         let limit = (next.map { geometry.x(forTime: $0.time) - 4 } ?? bounds.width) - x
         let full = (m.name as NSString).size(withAttributes: [.font: Self.flagFont]).width + 8
         return limit >= min(full, 40) ? min(full, limit) : nil
+    }
+
+    /// 書き出し範囲: ルーラーの下端に帯を引き、イン点・アウト点に「[」「]」の印を付ける。片方だけの設定もそのまま見せる。
+    private func drawExportRange() {
+        guard project.rangeIn != nil || project.rangeOut != nil else { return }
+        let rh = TimelineLayout.rulerHeight
+        let end = project.endTime
+        let a = project.rangeIn ?? 0, b = project.rangeOut ?? end
+        let xa = geometry.x(forTime: a), xb = geometry.x(forTime: b)
+        let band = NSRect(x: min(xa, xb), y: rh - 6, width: abs(xb - xa), height: 6)
+        TimelinePalette.rangeMark.withAlphaComponent(0.55).setFill()
+        band.fill()
+        TimelinePalette.rangeMark.setFill()
+        if project.rangeIn != nil {
+            NSRect(x: xa, y: 2, width: 2, height: rh - 2).fill()
+            NSRect(x: xa, y: 2, width: 6, height: 2).fill()
+            NSRect(x: xa, y: rh - 8, width: 6, height: 2).fill()
+        }
+        if project.rangeOut != nil {
+            NSRect(x: xb - 2, y: 2, width: 2, height: rh - 2).fill()
+            NSRect(x: xb - 6, y: 2, width: 6, height: 2).fill()
+            NSRect(x: xb - 6, y: rh - 8, width: 6, height: 2).fill()
+        }
     }
 
     private func drawMarkerFlags(ctx: CGContext) {
@@ -874,6 +899,7 @@ final class TimelineCanvas: NSView {
             }
             k += 1
         }
+        drawExportRange()
         drawMarkerFlags(ctx: ctx)
         ctx.restoreGState()
         // 左上の角と下線
