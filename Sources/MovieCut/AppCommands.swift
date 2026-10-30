@@ -111,6 +111,7 @@ struct AppCommands: Commands {
                     Divider()
                     items(AppMenuSpec.effectActions(s), run)
                 }
+                MenuItemView(spec: AppMenuSpec.lutLoadItem(s), perform: run)
             }
         }
 

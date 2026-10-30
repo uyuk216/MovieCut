@@ -36,6 +36,43 @@ final class EffectAppTests: XCTestCase {
         return n
     }
 
+    // MARK: LUT・クロマキー
+
+    func testLoadLUTIsOneUndoStepAndNoOpRegistersNothing() throws {
+        let m = makeModel()
+        let u = m.effectiveUndoManager
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("lut-app-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let good = dir.appendingPathComponent("a.cube"), bad = dir.appendingPathComponent("bad.cube")
+        try "LUT_1D_SIZE 2\n0 0 0\n1 1 1\n".write(to: good, atomically: true, encoding: .utf8)
+        try "not a cube".write(to: bad, atomically: true, encoding: .utf8)
+        m.selectedClipId = "a"
+        XCTAssertTrue(m.loadLUT(from: good))
+        XCTAssertEqual(m.clip("a")?.effects.map(\.kind), ["lut"])
+        XCTAssertEqual(m.clip("a")?.effects[0].path, good.path)
+        XCTAssertEqual(undoSteps(m), 1)
+        XCTAssertTrue((u.undoActionName).hasPrefix("LUT の読み込み"))
+        XCTAssertFalse(m.loadLUT(from: good), "同じファイルは何も変えない")
+        XCTAssertFalse(m.loadLUT(from: bad), "壊れたファイルは断る")
+        XCTAssertEqual(m.clip("a")?.effects.count, 1)
+        XCTAssertEqual(undoSteps(m), 1)
+        u.undo()
+        XCTAssertEqual(m.clip("a")?.effects.count, 0)
+        // 音声クリップには付けられない
+        m.selectedClipId = "m"
+        XCTAssertFalse(m.loadLUT(from: good))
+    }
+
+    func testLUTMenuItem() {
+        var s = state { $0.canEffect = true }
+        let item = AppMenuSpec.lutLoadItem(s)
+        XCTAssertEqual(item.title, "LUT を読み込む…"); XCTAssertEqual(item.command, .lutLoad)
+        XCTAssertTrue(item.enabled); XCTAssertNil(item.shortcut)
+        XCTAssertFalse(AppMenuSpec.lutLoadItem(state()).enabled)
+        XCTAssertTrue(AppMenuSpec.all(state()).contains { $0.command == .lutLoad })
+    }
+
     // MARK: モデル
 
     func testAddRemoveMoveAreOneUndoStepEach() {
@@ -173,7 +210,7 @@ final class EffectAppTests: XCTestCase {
     func testMenuSpecTitlesCommandsAndEnabling() {
         let on = state { $0.canEffect = true; $0.hasEffects = true; $0.canPasteEffects = true }
         let kinds = AppMenuSpec.effectKindItems(on)
-        XCTAssertEqual(kinds.map(\.title), ["明るさ", "コントラスト", "彩度", "色相", "露出", "シャープ", "モノクロ", "セピア", "ビネット", "モザイク", "ガウスぼかし", "ズームぼかし", "モーションぼかし", "グロー", "ドロップシャドウ", "縁取り"])
+        XCTAssertEqual(kinds.map(\.title), ["明るさ", "コントラスト", "彩度", "色相", "露出", "シャープ", "モノクロ", "セピア", "ビネット", "モザイク", "ガウスぼかし", "ズームぼかし", "モーションぼかし", "グロー", "ドロップシャドウ", "縁取り", "クロマキー", "LUT"])
         XCTAssertEqual(kinds.map(\.command), EffectKind.allCases.map { MenuCommand.effectAdd($0) })
         XCTAssertTrue(kinds.allSatisfy { $0.enabled && $0.shortcut == nil })
         XCTAssertEqual(AppMenuSpec.effectPresetItems(on).map(\.title), ["ビンテージ", "白黒映画", "夢のような", "強調", "モザイク全体"])

@@ -7,6 +7,7 @@ public struct ResolvedEffect: Equatable, Sendable {
     public var kind: EffectKind
     public var values: [String: Double]
     public var color: String
+    public var path: String? = nil
 
     public func v(_ key: String) -> Double { values[key] ?? kind.spec(key)?.defaultValue ?? 0 }
 }
@@ -38,6 +39,8 @@ public enum EffectPipeline {
         case .glow: return v("intensity") < eps || v("radius") < eps
         case .dropShadow: return v("opacity") < eps
         case .outline: return false
+        case .chromaKey: return false
+        case .lut: return v("intensity") < eps
         }
     }
 
@@ -53,7 +56,8 @@ public enum EffectPipeline {
                 vals[s.key] = v
             }
             if isIdentity(kind, { vals[$0] ?? 0 }) { continue }
-            out.append(ResolvedEffect(kind: kind, values: vals, color: e.colorOrDefault))
+            if kind == .lut, (e.path ?? "").isEmpty { continue }
+            out.append(ResolvedEffect(kind: kind, values: vals, color: e.colorOrDefault, path: e.path))
         }
         return out
     }
@@ -174,6 +178,11 @@ public enum EffectPipeline {
             let w = max(1, e.v("width") * scale)
             let ring = silhouette(img, color: e.color, opacity: 1).applyingFilter("CIMorphologyMaximum", parameters: ["inputRadius": w])
             return img.composited(over: ring).cropped(to: rect)
+        case .chromaKey:
+            return ChromaKey.apply(img, key: e.color, similarity: e.v("similarity"), smoothness: e.v("smoothness"), spill: e.v("spill"))
+        case .lut:
+            guard let p = e.path, let c = LUTCache.shared.cube(atPath: p) else { return img }
+            return LUTApply.apply(img, lut: c.lut, dimension: c.dimension, data: c.data, intensity: e.v("intensity"))
         }
     }
 

@@ -24,6 +24,7 @@ public struct EffectParamSpec: Equatable, Sendable {
 public enum EffectKind: String, CaseIterable, Sendable {
     case brightness, contrast, saturation, hue, exposure, sharpen, mono, sepia
     case vignette, pixelate, gaussianBlur, zoomBlur, motionBlur, glow, dropShadow, outline
+    case chromaKey, lut
 
     public var label: String {
         switch self {
@@ -43,6 +44,8 @@ public enum EffectKind: String, CaseIterable, Sendable {
         case .glow: return "グロー"
         case .dropShadow: return "ドロップシャドウ"
         case .outline: return "縁取り"
+        case .chromaKey: return "クロマキー"
+        case .lut: return "LUT"
         }
     }
 
@@ -70,6 +73,9 @@ public enum EffectKind: String, CaseIterable, Sendable {
         case .dropShadow: return [Self.p("dx", "横のずれ（px）", -200, 200, 12, 1, .px), Self.p("dy", "縦のずれ（px）", -200, 200, 12, 1, .px),
                                   Self.p("blur", "ぼかし（px）", 0, 100, 10, 1, .px), Self.p("opacity", "濃さ", 0, 1, 0.6, 0.01, .percent)]
         case .outline: return [Self.p("width", "太さ（px）", 1, 30, 6, 1, .px)]
+        case .chromaKey: return [Self.p("similarity", "色の許容", 0, 1, 0.4, 0.01, .percent), Self.p("smoothness", "なめらかさ", 0, 1, 0.1, 0.01, .percent),
+                                 Self.p("spill", "色かぶりの除去", 0, 1, 0.5, 0.01, .percent)]
+        case .lut: return [Self.p("intensity", "強さ", 0, 1, 1, 0.01, .percent)]
         }
     }
 
@@ -78,6 +84,7 @@ public enum EffectKind: String, CaseIterable, Sendable {
         switch self {
         case .dropShadow: return "#000000"
         case .outline: return "#ffffff"
+        case .chromaKey: return "#00ff00"
         default: return nil
         }
     }
@@ -94,10 +101,12 @@ public struct Effect: Equatable, Codable, Sendable {
     public var enabled: Bool = true
     public var params: [String: Double] = [:]
     public var color: String?
+    /// LUT のファイルの場所(.cube)。LUT 以外では使わない。
+    public var path: String?
     /// 知らないキー(保持して書き戻す)
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["kind", "enabled", "params", "color"]
+    static let knownKeys: Set<String> = ["kind", "enabled", "params", "color", "path"]
 
     public init(kind: String, enabled: Bool = true, params: [String: Double] = [:], color: String? = nil) {
         self.kind = kind; self.enabled = enabled; self.params = params; self.color = color
@@ -128,6 +137,7 @@ public struct Effect: Equatable, Codable, Sendable {
             for (k, v) in raw { if case .number(let d) = v, d.isFinite { params[k] = d } }
         }
         color = l.string("color")
+        path = l.string("path")
         extra = l.extra()
     }
 
@@ -139,6 +149,7 @@ public struct Effect: Equatable, Codable, Sendable {
         if !enabled { try c.encode(false, forKey: AnyKey("enabled")) }
         if !params.isEmpty { try c.encode(params, forKey: AnyKey("params")) }
         try c.encodeIfPresent(color, forKey: AnyKey("color"))
+        try c.encodeIfPresent(path, forKey: AnyKey("path"))
     }
 }
 

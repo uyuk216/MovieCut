@@ -23,7 +23,7 @@ enum MenuCommand: Hashable {
     // トランジション(kind が nil = なし)
     case transitionIn(TransitionKind?), transitionOut(TransitionKind?), fadeBoth, clearTransitions, crossfade, fadeInOut
     // エフェクト
-    case effectAdd(EffectKind), effectPreset(EffectPreset), effectClear, effectCopy, effectPaste
+    case effectAdd(EffectKind), effectPreset(EffectPreset), effectClear, effectCopy, effectPaste, lutLoad
     // 文字(スタイルを適用 = id、文字アニメーション)
     case textStyleApply(String), textAnim(TextAnimKind)
     // 速度・逆再生・フリーズフレーム
@@ -572,6 +572,11 @@ enum AppMenuSpec {
     }
 
     /// クリップ ▸ 無音をカット…(シートを開く)。
+    /// クリップ ▸ LUT を読み込む…(.cube を選ぶ)。
+    static func lutLoadItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .lutLoad, title: "LUT を読み込む…", shortcut: nil, enabled: s.canEdit && s.canEffect, checked: nil)
+    }
+
     static func silenceCutItem(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .silenceCut, title: "無音をカット…", shortcut: nil, enabled: s.canEdit && s.canSilenceCut, checked: nil)
     }
@@ -649,7 +654,7 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, settings(s), videoSettings(s)] + file(s) + [subtitleImport(s), subtitleExport(s), chapterCopy(s), exportCurrent(s)] + exportPresets(s) + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textAnimItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s)] + editAdd(s) + clipboardItems(s) + layerItems(s) + layerHeightItems(s) + playback(s)
+        [about, settings(s), videoSettings(s)] + file(s) + [subtitleImport(s), subtitleExport(s), chapterCopy(s), exportCurrent(s)] + exportPresets(s) + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textAnimItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), lutLoadItem(s)] + editAdd(s) + clipboardItems(s) + layerItems(s) + layerHeightItems(s) + playback(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + [fullScreen(s)] + help.flatMap { $0 }
@@ -734,6 +739,7 @@ enum AppMenu {
             case .effectClear: m.clearEffectsSelected()
             case .effectCopy: m.copyEffectsSelected()
             case .effectPaste: m.pasteEffectsSelected()
+            case .lutLoad: m.chooseAndLoadLUT()
             case .textStyleApply(let id): m.applyTextStyleSelected(id)
             case .textAnim(let k): m.setTextAnim(k)
             case .speed(let v): m.setSpeedSelected(v)

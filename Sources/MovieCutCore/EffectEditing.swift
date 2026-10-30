@@ -82,6 +82,21 @@ public enum EffectEditing {
         return true
     }
 
+    /// LUT のファイルを決める。LUT が無ければ足し、あれば最初の LUT のファイルを差し替える(同じなら何もしない)。
+    @discardableResult
+    public static func setLUTPath(_ c: inout Clip, _ path: String) -> Bool {
+        guard supports(c.type), !path.isEmpty else { return false }
+        if let i = c.effects.firstIndex(where: { $0.kind == EffectKind.lut.rawValue }) {
+            guard c.effects[i].path != path else { return false }
+            c.effects[i].path = path
+        } else {
+            var e = Effect(.lut)
+            e.path = path
+            c.effects.append(e)
+        }
+        return true
+    }
+
     /// 初期値に戻す(引数・色。有効/無効と並びはそのまま。その引数のキーは消す)。
     @discardableResult
     public static func reset(_ c: inout Clip, at index: Int) -> Bool {
@@ -90,6 +105,7 @@ public enum EffectEditing {
         var fresh = Effect(kind)
         fresh.enabled = c.effects[index].enabled
         fresh.extra = c.effects[index].extra
+        fresh.path = c.effects[index].path
         c.effects[index] = fresh
         for s in kind.params { c.keyframes[EffectKey.make(index, s.key)] = nil }
         return c != before

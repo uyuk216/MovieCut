@@ -562,6 +562,22 @@ struct ClipInspector: View {
         .accessibilityLabel(help)
     }
 
+    /// LUT のファイル名と状態(見つからない・読めないときは赤字)。
+    @ViewBuilder private func lutFileRow(_ e: Effect) -> some View {
+        let path = e.path ?? ""
+        let status: LUTCache.Status? = path.isEmpty ? nil : LUTCache.shared.status(atPath: path)
+        HStack(spacing: 6) {
+            Text(path.isEmpty ? "ファイル未選択" : (path as NSString).lastPathComponent)
+                .font(.system(size: 11)).lineLimit(1).truncationMode(.middle)
+                .foregroundStyle(status == .ok ? Color.secondary : Color.red)
+                .help(path)
+            Spacer(minLength: 4)
+            Button("選ぶ…") { model.chooseAndLoadLUT(clipId: clipId) }.controlSize(.small).disabled(model.isLocked)
+        }
+        if status == .missing { Text("ファイルが見つかりません（何もかかりません）").font(.system(size: 10)).foregroundStyle(.red) }
+        if status == .invalid { Text(".cube として読めません（何もかかりません）").font(.system(size: 10)).foregroundStyle(.red) }
+    }
+
     @ViewBuilder private func effectCard(_ c: Clip, _ i: Int) -> some View {
         let e = c.effects[i]
         let kind = e.known
@@ -584,8 +600,9 @@ struct ClipInspector: View {
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(kind.params, id: \.key) { effectSlider(c, i, $0) }
                     if kind.defaultColor != nil {
-                        ColorField(label: "色", hex: e.colorOrDefault) { model.coalescedEffectColor($0, at: i, clipId: clipId) }
+                        ColorField(label: kind == .chromaKey ? "抜く色" : "色", hex: e.colorOrDefault) { model.coalescedEffectColor($0, at: i, clipId: clipId) }
                     }
+                    if kind == .lut { lutFileRow(e) }
                 }
                 .opacity(e.enabled ? 1 : 0.45)
             }

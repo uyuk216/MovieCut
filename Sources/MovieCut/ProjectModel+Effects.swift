@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import UniformTypeIdentifiers
 import MovieCutCore
 
 /// エフェクト(インスペクタ・メニューが呼ぶ)。計算は MovieCutCore の EffectEditing に任せ、ここは Undo・選択・状態表示だけ。
@@ -92,6 +93,39 @@ extension ProjectModel {
         guard EffectEditing.append(&probe, effectClipboard) else { return false }
         let list = effectClipboard
         setClipProperty({ _ = EffectEditing.append(&$0, list) }, name: "エフェクトの貼り付け", clipId: c.id)
+        return true
+    }
+
+    // MARK: LUT
+
+    /// クリップ ▸ LUT を読み込む…(開くパネル → LUT を足す/差し替える)。
+    func chooseAndLoadLUT(clipId: String? = nil) {
+        guard targetClip(clipId) != nil else { return }
+        let target = clipId ?? selectedClipId
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = [UTType(filenameExtension: "cube")].compactMap { $0 }
+        panel.allowsOtherFileTypes = true
+        panel.title = "LUT（.cube）を読み込む"
+        let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
+            guard resp == .OK, let url = panel.url, let self else { return }
+            Task { @MainActor in self.loadLUT(from: url, clipId: target) }
+        }
+        if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
+    }
+
+    /// .cube を読めると確かめてから、クリップの LUT のファイルにする(Undo は 1 回。同じファイルなら何もしない)。
+    @discardableResult
+    func loadLUT(from url: URL, clipId: String? = nil) -> Bool {
+        guard let c = targetClip(clipId) else { return false }
+        do { _ = try CubeLUT.load(from: url) } catch {
+            statusText = "LUT を読み込めません: \(url.lastPathComponent)（.cube の形式が正しくありません）"
+            return false
+        }
+        var probe = c
+        guard EffectEditing.setLUTPath(&probe, url.path) else { return false }
+        setClipProperty({ _ = EffectEditing.setLUTPath(&$0, url.path) }, name: "LUT の読み込み: \(url.lastPathComponent)", clipId: c.id)
         return true
     }
 
