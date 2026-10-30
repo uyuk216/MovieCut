@@ -448,6 +448,7 @@ struct ClipInspector: View {
                 }
                 if c.type == .voice { voiceSections(c) }
                 if c.type == .text { textSections(c) }
+                if TextStyleEditing.supports(c.type) { TextStyleInspector(model: model, store: model.textStyles, clipId: clipId) }
                 if [ClipType.image, .video, .text].contains(c.type) { placeSections(c) }
                 if EffectEditing.supports(c.type) { effectSections(c) }
                 if TransitionEditing.supportsVideo(c.type) { transitionSections(c) }

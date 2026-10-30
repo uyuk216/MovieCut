@@ -22,6 +22,8 @@ enum MenuCommand: Hashable {
     case transitionIn(TransitionKind?), transitionOut(TransitionKind?), fadeBoth, clearTransitions, crossfade, fadeInOut
     // エフェクト
     case effectAdd(EffectKind), effectPreset(EffectPreset), effectClear, effectCopy, effectPaste
+    // 文字(スタイルを適用 = id、文字アニメーション)
+    case textStyleApply(String), textAnim(TextAnimKind)
     // 速度・逆再生・フリーズフレーム
     case speed(Double), toggleReverse, freezeFrame
     // 音声(ノーマライズ・音量の段階・ボイス向けプリセット・エフェクトを外す)
@@ -153,6 +155,11 @@ struct MenuState: Equatable {
     var canEffect = false            // 映像のクリップ(画像・動画・文字)を選んでいる
     var hasEffects = false           // 選択クリップにエフェクトが 1 つでもある
     var canPasteEffects = false      // コピーしたエフェクトがある
+    // 文字
+    var isTextClip = false           // 文字クリップを選んでいる
+    var textAnimKind: TextAnimKind = .none
+    var textStyleChoices: [TextStyleChoice] = []
+    struct TextStyleChoice: Equatable { var id: String; var name: String; var builtin: Bool }
     // 速度
     var canSpeed = false             // 動画か音声のクリップ(フリーズ以外)を選んでいる
     var speedValue = 1.0             // 選択クリップの速度
@@ -224,6 +231,8 @@ struct MenuState: Equatable {
             transitionOutKind = c.transitionOut?.kind
             canEffect = EffectEditing.supports(c.type)
             hasEffects = !c.effects.isEmpty
+            isTextClip = c.type == .text
+            textAnimKind = c.textAnim?.known ?? .none
             canSpeed = SpeedEditing.supports(c)
             speedValue = c.effectiveSpeed
             isReversed = c.effectiveReverse
@@ -232,6 +241,7 @@ struct MenuState: Equatable {
             hasAudioFx = AudioFxEditing.hasAnyFx(c)
         }
         canPasteEffects = !m.effectClipboard.isEmpty
+        textStyleChoices = m.textStyles.all.map { TextStyleChoice(id: $0.id, name: $0.name, builtin: $0.isBuiltin) }
         hasPrevClip = ClipEditing.hasAdjacentClip(in: p, from: m.selectedClipId, forward: false, playhead: t)
         hasNextClip = ClipEditing.hasAdjacentClip(in: p, from: m.selectedClipId, forward: true, playhead: t)
         hasPrevEdit = ClipEditing.hasEditPoint(p, before: t)
@@ -487,6 +497,16 @@ enum AppMenuSpec {
         EffectPreset.allCases.map { MenuItemSpec(command: .effectPreset($0), title: $0.title, shortcut: nil, enabled: s.canEdit && s.canEffect, checked: nil) }
     }
 
+    /// クリップ ▸ テキスト ▸ スタイルを適用(組み込み → 保存したもの)。文字クリップを選んでいるときだけ使える。
+    static func textStyleItems(_ s: MenuState) -> [MenuItemSpec] {
+        s.textStyleChoices.map { MenuItemSpec(command: .textStyleApply($0.id), title: $0.name, shortcut: nil, enabled: s.canEdit && s.isTextClip, checked: nil) }
+    }
+
+    /// クリップ ▸ テキスト ▸ 文字アニメーション(ラジオ)。
+    static func textAnimItems(_ s: MenuState) -> [MenuItemSpec] {
+        TextAnimKind.allCases.map { MenuItemSpec(command: .textAnim($0), title: $0.label, shortcut: nil, enabled: s.canEdit && s.isTextClip, checked: s.isTextClip && s.textAnimKind == $0) }
+    }
+
     static func effectActions(_ s: MenuState) -> [MenuItemSpec] {
         [MenuItemSpec(command: .effectClear, title: "エフェクトをすべて外す", shortcut: nil, enabled: s.canEdit && s.hasEffects, checked: nil),
          MenuItemSpec(command: .effectCopy, title: "エフェクトのコピー", shortcut: nil, enabled: s.canEdit && s.hasEffects, checked: nil),
@@ -590,7 +610,7 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, settings(s), videoSettings(s)] + file(s) + [subtitleImport(s), subtitleExport(s), chapterCopy(s), exportCurrent(s)] + exportPresets(s) + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + editAdd(s) + clipboardItems(s) + layerItems(s) + layerHeightItems(s) + playback(s)
+        [about, settings(s), videoSettings(s)] + file(s) + [subtitleImport(s), subtitleExport(s), chapterCopy(s), exportCurrent(s)] + exportPresets(s) + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textAnimItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + editAdd(s) + clipboardItems(s) + layerItems(s) + layerHeightItems(s) + playback(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + [fullScreen(s)] + help.flatMap { $0 }
@@ -672,6 +692,8 @@ enum AppMenu {
             case .effectClear: m.clearEffectsSelected()
             case .effectCopy: m.copyEffectsSelected()
             case .effectPaste: m.pasteEffectsSelected()
+            case .textStyleApply(let id): m.applyTextStyleSelected(id)
+            case .textAnim(let k): m.setTextAnim(k)
             case .speed(let v): m.setSpeedSelected(v)
             case .toggleReverse: m.toggleReverseSelected()
             case .freezeFrame: m.freezeFrameSelected()

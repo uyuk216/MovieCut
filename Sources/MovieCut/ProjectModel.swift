@@ -126,6 +126,8 @@ final class ProjectModel: ObservableObject {
     var clipPasteboard: NSPasteboard = .general
     /// 最後に触った(◇ を押した・値を編集した)動かせる項目。メニューの「キーフレームを追加/削除」などの対象(無ければ全項目)。
     @Published var focusedAnimatableKey: String?
+    /// 文字スタイルの保存先(アプリ全体で共有。テストでは専用のものに差し替える)。
+    var textStyles: TextStyleStore = .shared
     /// 「エフェクトのコピー」で覚えたエフェクト(貼り付けで、選択クリップの後ろに足す。キーフレームは付いてこない)。
     @Published var effectClipboard: [Effect] = []
     @Published var selectedCharId: String?

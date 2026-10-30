@@ -1,0 +1,180 @@
+import SwiftUI
+import MovieCutCore
+
+/// 文字クリップ(と字幕)の装飾・保存したスタイル・文字アニメーションの欄。計算は MovieCutCore、Undo はモデルに任せる。
+/// 数値のスライダーは、ドラッグの間は Undo に積まず、離したときに 1 回だけ登録する。
+struct TextStyleInspector: View {
+    @ObservedObject var model: ProjectModel
+    @ObservedObject var store: TextStyleStore
+    let clipId: String
+    /// 撮影・試験用: 折りたたまずに全部開く。
+    static var expandAll = false
+
+    @State private var showSave = false
+    @State private var draftName = ""
+    @State private var renamingId: String?
+
+    private var clip: Clip? { model.clip(clipId) }
+    private static let pct: (Double) -> String = { "\(Int(($0 * 100).rounded()))%" }
+    private static let px: (Double) -> String = { "\(Int($0.rounded()))px" }
+
+    var body: some View {
+        if let c = clip {
+            if c.type == .text { styleSection(c) }
+            decorationSections(c)
+            if c.type == .text { animationSection(c) }
+        }
+    }
+
+    // MARK: スタイル
+
+    @ViewBuilder private func styleSection(_ c: Clip) -> some View {
+        InspectorSection(title: "スタイル")
+        HStack(spacing: 8) {
+            Menu {
+                ForEach(TextStyleLibrary.builtins) { s in Button(s.name) { model.applyTextStyle(id: s.id, clipId: clipId) } }
+                if !store.user.isEmpty {
+                    Divider()
+                    ForEach(store.user) { s in Button(s.name) { model.applyTextStyle(id: s.id, clipId: clipId) } }
+                }
+            } label: { Text("スタイルを適用") }
+                .menuStyle(.button).fixedSize().disabled(model.isLocked)
+            Button("現在の見た目を保存…") { draftName = ""; showSave = true }
+                .disabled(model.isLocked)
+            Spacer()
+        }
+        .controlSize(.small)
+        if !store.user.isEmpty {
+            HStack(spacing: 8) {
+                Menu {
+                    ForEach(store.user) { s in
+                        Menu(s.name) {
+                            Button("名前を変更…") { draftName = s.name; renamingId = s.id }
+                            Button("削除", role: .destructive) { model.deleteTextStyle(id: s.id) }
+                        }
+                    }
+                } label: { Text("保存したスタイルの管理") }
+                    .menuStyle(.button).fixedSize()
+                Spacer()
+            }
+            .controlSize(.small)
+        }
+        Color.clear.frame(height: 0)
+            .alert("スタイルの名前", isPresented: $showSave) {
+                TextField("名前", text: $draftName)
+                Button("保存") { model.saveCurrentTextStyle(named: draftName, clipId: clipId) }
+                Button("キャンセル", role: .cancel) {}
+            } message: { Text("色・縁・書体と、影や箱などの装飾を保存します。") }
+            .alert("名前を変更", isPresented: Binding(get: { renamingId != nil }, set: { if !$0 { renamingId = nil } })) {
+                TextField("名前", text: $draftName)
+                Button("変更") { if let id = renamingId { model.renameTextStyle(id: id, to: draftName) }; renamingId = nil }
+                Button("キャンセル", role: .cancel) { renamingId = nil }
+            }
+    }
+
+    // MARK: 装飾
+
+    private func edit(_ name: String, _ f: @escaping (inout TextStyle) -> Void) {
+        model.setTextStyle(f, name: name, clipId: clipId)
+    }
+
+    private func slider(_ label: String, value: Double, range: ClosedRange<Double>, step: Double, format: @escaping (Double) -> String, name: String,
+                        _ f: @escaping (inout TextStyle, Double) -> Void) -> some View {
+        LiveSlider(label: label, key: nil, value: value, range: range, step: step, format: format,
+                   begin: { model.beginGesture() },
+                   change: { v in model.liveClipProperty({ _ = TextStyleEditing.update(&$0) { s in f(&s, v) } }, name: name, clipId: clipId) },
+                   end: { model.commitGesture(name) })
+    }
+
+    private func color(_ label: String, hex: String, name: String, _ f: @escaping (inout TextStyle, String) -> Void) -> some View {
+        ColorField(label: label, hex: hex) { h in model.coalescedTextStyle({ f(&$0, h) }, name: name, clipId: clipId) }
+    }
+
+    private func toggle(_ label: String, isOn: Bool, name: String, _ f: @escaping (inout TextStyle, Bool) -> Void) -> some View {
+        Toggle(label, isOn: Binding(get: { isOn }, set: { on in edit(name) { f(&$0, on) } }))
+            .toggleStyle(.checkbox).font(.system(size: 12)).disabled(model.isLocked)
+    }
+
+    @ViewBuilder private func decorationSections(_ c: Clip) -> some View {
+        let st = c.textStyle ?? TextStyle()
+        InspectorSection(title: c.type == .voice ? "字幕の装飾" : "装飾")
+        // 影
+        toggle("影", isOn: st.shadow != nil, name: "影の変更") { $0.shadow = $1 ? TextStyle.Shadow() : nil }
+        if let sh = st.shadow {
+            VStack(alignment: .leading, spacing: 6) {
+                color("影の色", hex: sh.color, name: "影の色の変更") { $0.shadow?.color = $1 }
+                slider("横のずれ（px）", value: sh.dx, range: -100...100, step: 1, format: Self.px, name: "影の変更") { $0.shadow?.dx = $1 }
+                slider("縦のずれ（px）", value: sh.dy, range: -100...100, step: 1, format: Self.px, name: "影の変更") { $0.shadow?.dy = $1 }
+                slider("ぼかし（px）", value: sh.blur, range: 0...50, step: 1, format: Self.px, name: "影の変更") { $0.shadow?.blur = $1 }
+                slider("濃さ", value: sh.opacity, range: 0...1, step: 0.01, format: Self.pct, name: "影の変更") { $0.shadow?.opacity = $1 }
+            }
+            .padding(.leading, 10)
+        }
+        // 箱
+        toggle("文字の後ろに箱", isOn: st.box != nil, name: "箱の変更") { $0.box = $1 ? TextStyle.Box() : nil }
+        if let b = st.box {
+            VStack(alignment: .leading, spacing: 6) {
+                color("箱の色", hex: b.color, name: "箱の色の変更") { $0.box?.color = $1 }
+                slider("濃さ", value: b.opacity, range: 0...1, step: 0.01, format: Self.pct, name: "箱の変更") { $0.box?.opacity = $1 }
+                slider("左右の余白（px）", value: b.paddingX, range: 0...200, step: 1, format: Self.px, name: "箱の変更") { $0.box?.paddingX = $1 }
+                slider("上下の余白（px）", value: b.paddingY, range: 0...200, step: 1, format: Self.px, name: "箱の変更") { $0.box?.paddingY = $1 }
+                slider("角の丸み（px）", value: b.cornerRadius, range: 0...100, step: 1, format: Self.px, name: "箱の変更") { $0.box?.cornerRadius = $1 }
+            }
+            .padding(.leading, 10)
+        }
+        // グラデーション
+        toggle("グラデーションの塗り", isOn: st.gradient != nil, name: "グラデーションの変更") { $0.gradient = $1 ? TextStyle.Gradient() : nil }
+        if let g = st.gradient {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .top, spacing: 10) {
+                    color("色 1", hex: g.color1, name: "グラデーションの色の変更") { $0.gradient?.color1 = $1 }
+                    color("色 2", hex: g.color2, name: "グラデーションの色の変更") { $0.gradient?.color2 = $1 }
+                }
+                slider("角度（°）", value: g.angle, range: -180...180, step: 1, format: { "\(Int($0.rounded()))°" }, name: "グラデーションの変更") { $0.gradient?.angle = $1 }
+            }
+            .padding(.leading, 10)
+        }
+        // 字間・行間・揃え・太字・斜体
+        slider("字間（px）", value: st.letterSpacingOrDefault, range: -20...60, step: 1, format: Self.px, name: "字間の変更") { $0.letterSpacing = $1 == 0 ? nil : $1 }
+        slider("行間（倍）", value: st.lineHeightOrDefault, range: 0.8...2.5, step: 0.05, format: { String(format: "%.2f", $0) }, name: "行間の変更") {
+            $0.lineHeight = abs($1 - TextStyle.defaultLineHeight) < 0.001 ? nil : $1
+        }
+        InspectorField(label: "揃え") {
+            Picker("", selection: Binding(get: { st.alignOrDefault }, set: { a in edit("文字の揃えの変更") { $0.align = a == .center ? nil : a.rawValue } })) {
+                ForEach(TextStyle.Align.allCases, id: \.rawValue) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.segmented).labelsHidden()
+        }
+        HStack(spacing: 14) {
+            toggle("太字", isOn: st.boldOrDefault, name: "太字の変更") { $0.bold = $1 ? nil : false }
+            toggle("斜体", isOn: st.italicOrDefault, name: "斜体の変更") { $0.italic = $1 ? true : nil }
+            Spacer()
+        }
+        Button { model.setTextStyle({ $0 = TextStyle() }, name: "装飾をリセット", clipId: clipId) } label: { Text("装飾をリセット").frame(maxWidth: .infinity) }
+            .controlSize(.small)
+            .disabled(model.isLocked || c.textStyle == nil)
+    }
+
+    // MARK: アニメーション
+
+    @ViewBuilder private func animationSection(_ c: Clip) -> some View {
+        let kind = c.textAnim?.known ?? .none
+        InspectorSection(title: "文字アニメーション")
+        InspectorField(label: "種類") {
+            Picker("", selection: Binding(get: { c.textAnim == nil ? TextAnimKind.none.rawValue : c.textAnim!.kind },
+                                          set: { v in model.setTextAnim(TextAnimKind(rawValue: v) ?? .none, clipId: clipId) })) {
+                ForEach(TextAnimKind.allCases, id: \.rawValue) { Text($0.label).tag($0.rawValue) }
+                if let a = c.textAnim, a.known == nil { Text("（未対応: \(a.kind)）").tag(a.kind) }
+            }
+            .labelsHidden()
+        }
+        if kind != .none {
+            InspectorField(label: "長さ（秒）") {
+                NumField(value: c.textAnim?.durationOrDefault ?? 1, step: 0.1, decimals: 2, clamp: { TextAnim.clampDuration($0) },
+                         onCommit: { model.setTextAnim(kind, duration: $0, clipId: clipId) },
+                         onStep: { model.coalescedTextAnimDuration($0, clipId: clipId) })
+            }
+            Text("クリップの頭からこの長さだけ動きます。").font(.system(size: 11)).foregroundStyle(.secondary)
+        }
+    }
+}

@@ -303,9 +303,13 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var audioFx: AudioFx? = nil
     /// 左右の振り分け(−1〜1、等パワー)。未設定 = 中央。
     public var pan: Double? = nil
+    /// 文字(と字幕)の装飾: 影・箱・グラデーション・字間・行間・揃え・太字・斜体。無いときはファイルに書かない。
+    public var textStyle: TextStyle? = nil
+    /// 文字のアニメーション(タイプライター・ポップ・シェイク)。無いときはファイルに書かない。
+    public var textAnim: TextAnim? = nil
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["id", "type", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "audioFx", "pan"]
+    static let knownKeys: Set<String> = ["id", "type", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "audioFx", "pan", "textStyle", "textAnim"]
 
     public init() {}
 
@@ -416,6 +420,13 @@ public struct Clip: Codable, Equatable, Identifiable {
             }
             if !typedOK { extra[key] = raw }
         }
+        // 読めなかった文字の装飾・アニメーションも、そのまま書き戻す
+        if let raw: JSONValue = l.value("textStyle") {
+            if let v: TextStyle = l.value("textStyle") { textStyle = v } else { extra["textStyle"] = raw }
+        }
+        if let raw: JSONValue = l.value("textAnim") {
+            if let v: TextAnim = l.value("textAnim") { textAnim = v } else { extra["textAnim"] = raw }
+        }
         // 読めなかったトランジションも捨てずに、そのまま書き戻す
         for (key, set) in [("transitionIn", \Clip.transitionIn), ("transitionOut", \Clip.transitionOut)] as [(String, WritableKeyPath<Clip, Transition?>)] {
             if let raw: JSONValue = l.value(key) {
@@ -481,6 +492,8 @@ public struct Clip: Codable, Equatable, Identifiable {
         try c.encodeIfPresent(freeze, forKey: AnyKey("freeze"))
         if let fx = audioFx, !fx.isEmpty { try c.encode(fx, forKey: AnyKey("audioFx")) }
         try c.encodeIfPresent(pan, forKey: AnyKey("pan"))
+        try c.encodeIfPresent(textStyle, forKey: AnyKey("textStyle"))
+        try c.encodeIfPresent(textAnim, forKey: AnyKey("textAnim"))
     }
 }
 

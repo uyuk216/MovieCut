@@ -98,6 +98,11 @@ struct AppCommands: Commands {
                 Divider()
                 Menu("音声") { items(AppMenuSpec.audioItems(s), run) }
                 Divider()
+                Menu("テキスト") {
+                    Menu("スタイルを適用") { items(AppMenuSpec.textStyleItems(s), run) }
+                    Menu("文字アニメーション") { items(AppMenuSpec.textAnimItems(s), run) }
+                }
+                Divider()
                 Menu("エフェクト") {
                     items(AppMenuSpec.effectKindItems(s), run)
                     Divider()
