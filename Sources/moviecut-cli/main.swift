@@ -53,6 +53,60 @@ func runExport(_ p: Project, to url: URL, preset: ExportPreset? = nil) async thr
     let dur = p.endTime
     print(String(format: "wrote %@ frames=%d wall=%.2fs speed=%.2fx realtime (%.1f fps)", url.path, frames, wall, dur / max(wall, 1e-9), Double(frames) / max(wall, 1e-9)))
 }
+// MARK: - ファン(書き出し中の最大化)
+
+func fanLine(_ s: FanStatus) -> String {
+    func n(_ v: Double?) -> String { v.map { String(Int($0)) } ?? "?" }
+    let fans = s.fans.map { f in
+        "fan\(f.index) mode=\(f.mode) target=\(n(f.targetRPM)) actual=\(n(f.actualRPM)) (min \(n(f.minimumRPM)) / max \(n(f.maximumRPM)))"
+    }.joined(separator: "; ")
+    return fans + (s.hottestCoreCelsius.map { String(format: " hottest-core=%.1fC", $0) } ?? "")
+}
+
+let fanPort: Int? = optValue("--fan-port").flatMap(Int.init)
+nonisolated(unsafe) let fanSignals = FanSignalHandlers()
+
+func fanCandidates() -> [FanBackend]? {
+    fanPort.map { [HTTPFanBackend(kind: $0 == HTTPFanBackend.userPort ? .userFanctl : .bundledHelper, port: $0)] }
+}
+
+/// バックエンドの状態を 1 行で(fan status / fan test / 書き出しの前後で共用)。
+func fanSnapshot(_ backend: FanBackend?) -> String {
+    guard let b = backend else { return "(ファン制御サービスなし)" }
+    do { return fanLine(try b.status()) } catch { return "(状態を読めません: \(error.localizedDescription))" }
+}
+
+/// `body` の間だけファンを最大にする(オンのとき)。終わり・失敗・SIGTERM/SIGINT のどれでも自動に戻し、戻ったことを確認して表示する。
+func withFanMax(_ on: Bool, label: String = "fan", _ body: () async throws -> Void) async throws {
+    guard on else { try await body(); return }
+    let (availability, g) = FanControlCenter.prepare(enabled: true, port: fanPort) { ev in
+        if case .notice(let m) = ev { print("\(label): 注意 \(m)") }
+        if case .released(let r) = ev { print("\(label): 解放 \(r)") }
+    }
+    guard let g else {
+        print("\(label): 最大にしません — \(availability.reason ?? "使えません")")
+        try await body(); return
+    }
+    fanSignals.install { print("\(label): シグナルを受信 → 自動に戻します"); fflush(stdout); FanGuardRegistry.shared.releaseAll(.signal) }
+    let monitorBackend = FanBackendResolver.resolve(candidates: fanCandidates())?.backend
+    print("\(label): 前    \(fanSnapshot(monitorBackend))")
+    let result = g.engage()
+    print("\(label): engage → \(result)")
+    let monitor = Task {
+        while !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            if Task.isCancelled { break }
+            print("\(label): 書き出し中 \(fanSnapshot(monitorBackend))")
+        }
+    }
+    defer {
+        monitor.cancel()
+        let ok = g.release(.finished)
+        print("\(label): 後    \(fanSnapshot(monitorBackend))  (自動に戻した=\(ok))")
+    }
+    try await body()
+}
+
 switch args.first {
 case "info" where args.count == 2:
     do {
@@ -119,7 +173,7 @@ case "export" where args.count >= 3:
             preset = pr
             if pr.isAudioOnly, !args[2].lowercased().hasSuffix(".m4a") { FileHandle.standardError.write(Data("注意: 音声のみの出力先は .m4a にしてください\n".utf8)) }
         }
-        try await runExport(p, to: URL(fileURLWithPath: args[2]), preset: preset)
+        try await withFanMax(args.contains("--fan-max")) { try await runExport(p, to: URL(fileURLWithPath: args[2]), preset: preset) }
     } catch { fail("書き出せませんでした: \(error.localizedDescription)") }
 case "subs" where args.count >= 2:
     // subs <project> --out x.srt|x.vtt: 字幕(ボイスの字幕と「字幕」レイヤーの文字)を書き出す(画面なしの確認用)
@@ -234,6 +288,26 @@ case "genclips" where args.count == 3:
     }
     do { try p.save(to: URL(fileURLWithPath: args[2])); print("wrote \(args[2]) clips=\(p.allClips.count) end=\(String(format: "%.1f", p.endTime))s") }
     catch { fail("書けませんでした: \(error)") }
+case "fan":
+    // fan status [--fan-port N] / fan test [--seconds 8] [--fan-port N]
+    switch args.count > 1 ? args[1] : "" {
+    case "status":
+        let info = FanMachine.detect()
+        let support = FanModelPolicy.classify(hwModel: info.hwModel, marketingName: info.marketingName)
+        print("machine: \(info.hwModel ?? "?") / \(info.marketingName ?? "?") → \(support.isSupported ? "対象" : "対象外")")
+        let (availability, _) = FanControlCenter.prepare(enabled: false, port: fanPort)
+        print("availability: \(availability)\(availability.reason.map { " — \($0)" } ?? "")")
+        let resolved = FanBackendResolver.resolve(candidates: fanCandidates())
+        print("backend: \(resolved?.backend.label ?? "なし")")
+        print("status: \(fanSnapshot(resolved?.backend))")
+    case "test":
+        let seconds = optValue("--seconds").flatMap(Double.init).map { min($0, 8) } ?? 6
+        try await withFanMax(true, label: "fan-test") {
+            try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+        }
+    default:
+        fail("usage: moviecut-cli fan status | fan test [--seconds 8]  (--fan-port 1200|1201)")
+    }
 case "smoke":
     // smoke --out <mp4> [--size WxH] [--codec h264|hevc] [--blur]
     guard let outPath = optValue("--out") else { fail("--out が必要です") }
@@ -262,5 +336,5 @@ case "smoke":
         try await runExport(p, to: URL(fileURLWithPath: outPath))
     } catch { fail("書き出せませんでした: \(error.localizedDescription)") }
 default:
-    fail("usage:\n  moviecut-cli info <file.ymproj>\n  moviecut-cli new <out.ymproj>\n  moviecut-cli export <in.mcpjc> <out.mp4|out.m4a> [--preset youtube1080|youtube4k|short|light|audio] [--size WxH] [--fps 29.97] [--codec h264|hevc]\n  moviecut-cli smoke --out <mp4> [--size WxH] [--fps 23.976] [--codec h264|hevc] [--blur] [--tone] [--save-project p.ymproj]\n  moviecut-cli speak (--voicevox <id> [--speed --pitch --intonation] | --voice <preset> [--speed]) --text <t> --out <wav>\n  moviecut-cli speakers | deps | script <script.txt> --out <p.ymproj>\n  moviecut-cli frame <in.ymproj> --t <sec> --out <png> [--size WxH] [--bench N]\n  moviecut-cli addvideo <in.ymproj> <clip.mp4> <out.ymproj>\n  moviecut-cli genclips <N> <out.ymproj>\n  moviecut-cli subs <project> --out <x.srt|x.vtt>\n  moviecut-cli chapters <project>")
+    fail("usage:\n  moviecut-cli info <file.ymproj>\n  moviecut-cli new <out.ymproj>\n  moviecut-cli export <in.mcpjc> <out.mp4|out.m4a> [--preset youtube1080|youtube4k|short|light|audio] [--size WxH] [--fps 29.97] [--codec h264|hevc] [--fan-max [--fan-port 1200|1201]]\n  moviecut-cli fan status | fan test [--seconds 8] [--fan-port 1200|1201]\n  moviecut-cli smoke --out <mp4> [--size WxH] [--fps 23.976] [--codec h264|hevc] [--blur] [--tone] [--save-project p.ymproj]\n  moviecut-cli speak (--voicevox <id> [--speed --pitch --intonation] | --voice <preset> [--speed]) --text <t> --out <wav>\n  moviecut-cli speakers | deps | script <script.txt> --out <p.ymproj>\n  moviecut-cli frame <in.ymproj> --t <sec> --out <png> [--size WxH] [--bench N]\n  moviecut-cli addvideo <in.ymproj> <clip.mp4> <out.ymproj>\n  moviecut-cli genclips <N> <out.ymproj>\n  moviecut-cli subs <project> --out <x.srt|x.vtt>\n  moviecut-cli chapters <project>")
 }

@@ -126,6 +126,18 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
   - チャプター: マーカーを時刻順に `m:ss 題名`(1 時間以上は `h:mm:ss`、秒は切り捨て)。最初が 0:00 でなければ「イントロ」を先頭に足して注意を出す。注意: 3 つ未満 / 10 秒より近いところがある。注意はコピー後の状態欄に出す。コマンドライン: `moviecut-cli subs <プロジェクト> --out x.srt|x.vtt`、`moviecut-cli chapters <プロジェクト>`。
 - **再生用の一時ファイル**: `$TMPDIR/MovieCut-playback/` にまとめ、起動時に 1 日より古いものを消し、書類を閉じるとき・終了するときに自分の分を消す(`PlaybackTempFiles`)。
 
+## 書き出し中のファン最大化
+- **構成**: Core `FanControl.swift`(純粋なロジックとテスト)/ アプリ `FanService.swift`(設定・検出・書き出しの前後・インストール)/ `Sources/moviecut-fanhelper`(root の LaunchDaemon)/ `Resources/Helper/com.moviecut.fanhelper.plist`(launchd のひな形)。`Scripts/make-app.sh` がヘルパーを `Contents/Helpers/`、plist を `Contents/Resources/` に入れる。
+- **機種**: `FanModelPolicy.classify(hwModel:marketingName:)`。許可リスト = MacBook Pro / Mac mini / Mac Studio。MacBook Air・iMac・Mac Pro・不明・名前が読めない Apple Silicon・hw.model とモデル名の食い違いはすべて対象外(fail closed)。ファンの有無は状態の `fans.count > 0`。`FanAvailability` が「使える / 対象外 / サービスなし / ファンなし」と日本語の理由を返し、UI は理由を 1 行出してチェックを無効にする。
+- **バックエンド**: `FanBackend` プロトコル + `HTTPFanBackend`(URLSession・タイムアウト 2 秒・プロキシなし・Origin ヘッダなし)。`FanBackendResolver` は 1200(ユーザーの fanctl)が応答すればそれ、なければ 1201(同梱ヘルパー)。要求: `GET /api/status`、`POST /api/all` に `{"mode":"fixedPercent","percent":100}`(最大)/ `{"mode":"auto"}`、1201 だけ `POST /api/heartbeat`。
+- **FanGuard(状態機械)**: `engage()` は「オン + 対象機種 + サービス応答 + ファンあり + 温度が上限未満」のときだけ最大にする(何度呼んでも 1 回分)。`release(reason)` は自動に戻して、状態を読み戻して確認する(3 回まで再試行。戻せなければ heartbeat のたびに再試行)。5 秒ごとの heartbeat で温度を見て 95 ℃ 以上なら自動に戻し、その書き出しでは再度最大にしない。`deinit` でも戻す。`FanGuardRegistry` がアプリ終了(`applicationWillTerminate`)と SIGTERM / SIGINT(`FanSignalHandlers`、DispatchSource)で全部を戻す。
+- **見張り**: 同梱ヘルパーは 15 秒 heartbeat が途切れたら自動に戻す。見張りの無い fanctl には、`ShellFanSidecar` が別セッション(POSIX_SPAWN_SETSID)で小さなシェルを起動し、親プロセス(Movie Cut / CLI)が消えたら(kill -9 を含む)`POST /api/all {"mode":"auto"}` を送る。最大にする前に起動し、正常に戻したら止める。
+- **ヘルパー(`moviecut-fanhelper`)**: SMC の読み書きはユーザーの fanctl の実装をそのまま使う。設定ファイル・履歴・カーブ・Web 画面は持たない。127.0.0.1:1201 のみ。Origin ヘッダのある要求と、Host が 127.0.0.1 / localhost 以外の要求は 403。起動時・終了時・SIGTERM/SIGINT で全ファンを自動に戻す。`--simulate` は SMC に触れないメモリ上の疑似ファンで動く(見張りと HTTP の確認用。root 不要)。
+- **書き出しへの接続**: `ProjectModel.runExport` が書き出しの前に `AppServices.fan.beginExport()`、成功 / キャンセル / 失敗のそれぞれで `endExport(...)`(Core の Renderer / Exporter には触れない)。状態欄の文言は「ファン: 最大(6550 rpm)」「ファン: 自動」。
+- **メニュー**: 出力 ▸ 書き出し中はファンを最大にする(チェック。使えないときは無効 + 理由をヒントに)/ ファン制御を有効にする… / ファン制御を無効にする…。`AppMenuSpec.fanMaxToggle` / `fanInstall` / `fanUninstall` → `AppMenu.perform` → `AppServices.fan`。ショートカットは付けない。
+- **インストーラ**: `FanHelperInstaller.installScript` / `uninstallScript`(シェルの引用符つき。空白・日本語・`'` を含むパスに耐える純粋関数)を `appleScript(shell:)` で `do shell script "…" with administrator privileges` に包み、`NSAppleScript` で実行する。確認ダイアログで「バックグラウンドのサービスを管理者権限で入れる」ことを説明する。署名・ノータライズした配布では `SMAppService.daemon` に切り替える(いまは暫定)。
+- **ファイル形式**: 変わらない(設定は UserDefaults だけ。`.mcpjc` / `.ymproj` には入れない)。
+
 ## 画面のドッキング(パネルの配置)
 - **パネル**: `DockPanel` = キャラクター(`characters`。左のキャラ一覧 + 台本)/ プレビュー(`preview`。プレビュー + 再生バー)/ プロパティ(`inspector`)/ タイムライン(`timeline`)。どのパネルも、ドッキング(木のどこか)・別ウインドウ(`floating`)・閉じている(`closed`)のちょうど 1 か所にある。
 - **モデル**(`MovieCutCore/DockLayout.swift`、UI なしの純粋なモデル): `DockLayout { root: DockNode?, floating, closed }`。`DockNode` は `group(DockGroup{panels, active})`(= タブのグループ)か `split(axis: horizontal|vertical, fraction, first, second)`(fraction = first の割合、0.1〜0.9 に丸める)。操作は `moveToTab(…ofGroupContaining:at:)`(タブとして合流・同じグループなら並べ替え)/ `moveToEdge(…)`(グループの端に分割を作る)/ `detach`(別ウインドウへ)/ `attach`(初期配置での隣の横へ戻す)/ `close` / `toggle` / `setActive` / `setFraction(at:)` / `apply(DockPreset)`。不変条件: 全パネルがちょうど 1 か所、空のグループなし、`active` は所属内、比率は範囲内、木の深さは 16 まで(`isValid`)。操作はこれを保つ(乱数で 4000 回操作する試験あり)。

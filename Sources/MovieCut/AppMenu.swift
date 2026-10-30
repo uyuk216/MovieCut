@@ -5,6 +5,8 @@ import MovieCutCore
 enum MenuCommand: Hashable {
     case about, settings, videoSettings
     case addMedia, export, exportPreset(ExportPreset)
+    // 出力 ▸ 書き出し中のファン最大化(設定と、ヘルパーのインストール / 削除)
+    case fanMaxToggle, fanInstall, fanUninstall
     // 字幕(B3)とチャプター
     case importSubtitles, exportSubtitles, copyChapters
     // A6: クリップのコピー / 切り取り / 貼り付け / 全選択(ショートカットは持たない: ⌘C ⌘X ⌘V ⌘A は responder chain が受ける)と、レイヤー
@@ -170,6 +172,12 @@ struct MenuState: Equatable {
     var hasAudioFx = false           // 選択クリップに音声エフェクトかパンがある
     /// 表示 ▸ プレビューの背景(アプリ全体の設定)。
     var previewBackground = PreviewBackground.default
+    /// 出力 ▸ ファン(アプリ全体の設定)。使える / オン / 使えない理由 / 対象機種でヘルパー未導入 / ヘルパー導入済み。
+    var fanAvailable = false
+    var fanEnabled = false
+    var fanReason: String?
+    var fanCanInstall = false
+    var fanInstalled = false
 
     struct MarkerItem: Equatable {
         var id: String
@@ -182,6 +190,12 @@ struct MenuState: Equatable {
     @MainActor
     init(model: ProjectModel?) {
         previewBackground = PreviewBackgroundStore.current
+        let fan = AppServices.fan
+        fanAvailable = fan.isAvailable
+        fanEnabled = fan.enabled
+        fanReason = fan.reason
+        fanCanInstall = fan.machineSupported && fan.availability != nil && !fan.helperInstalled && !fan.busy
+        fanInstalled = fan.helperInstalled && !fan.busy
         dockVisible = Set(DockPanel.allCases.filter { AppServices.panelDock.layout.isVisible($0) })
         guard let m = model else { return }
         hasDocument = true
@@ -276,6 +290,17 @@ enum AppMenuSpec {
     }
 
     /// 出力 ▸ 動画の設定…(設定シート。⌘, の「設定…」と同じ操作でショートカットは持たない)。
+    // 出力 ▸ ファン(書き出し中はファンを最大にする)。アプリ全体の設定なので書類がなくても押せる。
+    static func fanMaxToggle(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .fanMaxToggle, title: "書き出し中はファンを最大にする", shortcut: nil, enabled: s.fanAvailable || s.fanEnabled, checked: s.fanEnabled, hint: s.fanAvailable ? nil : s.fanReason)
+    }
+    static func fanInstall(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .fanInstall, title: "ファン制御を有効にする…", shortcut: nil, enabled: s.fanCanInstall, checked: nil)
+    }
+    static func fanUninstall(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .fanUninstall, title: "ファン制御を無効にする…", shortcut: nil, enabled: s.fanInstalled, checked: nil)
+    }
+
     static func videoSettings(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .videoSettings, title: "動画の設定…", shortcut: nil, enabled: s.canEdit, checked: nil)
     }
@@ -610,7 +635,7 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, settings(s), videoSettings(s)] + file(s) + [subtitleImport(s), subtitleExport(s), chapterCopy(s), exportCurrent(s)] + exportPresets(s) + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textAnimItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + editAdd(s) + clipboardItems(s) + layerItems(s) + layerHeightItems(s) + playback(s)
+        [about, settings(s), videoSettings(s)] + file(s) + [subtitleImport(s), subtitleExport(s), chapterCopy(s), exportCurrent(s)] + exportPresets(s) + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textAnimItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + editAdd(s) + clipboardItems(s) + layerItems(s) + layerHeightItems(s) + playback(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + [fullScreen(s)] + help.flatMap { $0 }
@@ -625,6 +650,9 @@ enum AppMenu {
     static func perform(_ c: MenuCommand, model: ProjectModel?) {
         switch c {
         case .about: AppInfo.showAboutPanel()
+        case .fanMaxToggle: AppServices.fan.setEnabled(!AppServices.fan.enabled)
+        case .fanInstall: AppServices.fan.install()
+        case .fanUninstall: AppServices.fan.uninstall()
         case .helpVoicevox: openURL(DependencyStatus.voicevoxURL)
         case .helpAquestalk: openURL(DependencyStatus.aquestalkURL)
         case .helpLicense: HelpDocs.open(.license)

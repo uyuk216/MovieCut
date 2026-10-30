@@ -168,6 +168,10 @@ struct AppCommands: Commands {
                 MenuItemView(spec: AppMenuSpec.exportCurrent(s), perform: run)
                 Menu("書き出しプリセット") { items(AppMenuSpec.exportPresets(s), run) }
                 Divider()
+                MenuItemView(spec: AppMenuSpec.fanMaxToggle(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.fanInstall(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.fanUninstall(s), perform: run)
+                Divider()
                 MenuItemView(spec: AppMenuSpec.subtitleExport(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.chapterCopy(s), perform: run)
             }
