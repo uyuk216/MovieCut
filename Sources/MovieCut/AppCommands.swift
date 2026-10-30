@@ -97,6 +97,7 @@ struct AppCommands: Commands {
                 MenuItemView(spec: AppMenuSpec.freezeFrameItem(s), perform: run)
                 Divider()
                 Menu("音声") { items(AppMenuSpec.audioItems(s), run) }
+                MenuItemView(spec: AppMenuSpec.silenceCutItem(s), perform: run)
                 Divider()
                 Menu("テキスト") {
                     Menu("スタイルを適用") { items(AppMenuSpec.textStyleItems(s), run) }

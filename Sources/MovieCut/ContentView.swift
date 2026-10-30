@@ -71,6 +71,7 @@ struct ContentView: View {
         .sheet(isPresented: $model.showResolutionSheet) { ResolutionSheet(model: model) }
         .sheet(isPresented: $model.showFpsSheet) { FrameRateSheet(model: model) }
         .sheet(isPresented: $model.showJumpSheet) { JumpToTimeSheet(model: model) }
+        .sheet(isPresented: $model.showSilenceSheet) { SilenceCutSheet(model: model) }
         .sheet(isPresented: Binding(get: { model.renamingMarkerId != nil }, set: { if !$0 { model.renamingMarkerId = nil } })) { RenameMarkerSheet(model: model) }
         .sheet(isPresented: Binding(get: { model.isExporting }, set: { _ in })) { ExportSheet(model: model) }
         .alert(model.errorTitle, isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {

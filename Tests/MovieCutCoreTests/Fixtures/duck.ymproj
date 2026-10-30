@@ -1,0 +1,54 @@
+{
+  "width": 1280,
+  "height": 720,
+  "fps": 30,
+  "bg": "#101010",
+  "codec": "h264",
+  "characters": [],
+  "tracks": [
+    {
+      "id": "dt1",
+      "name": "BGM",
+      "clips": [
+        {
+          "id": "bgm",
+          "type": "audio",
+          "src": "/tmp/none.wav",
+          "srcDuration": 20,
+          "start": 0,
+          "duration": 20,
+          "offset": 0,
+          "volume": 0.8,
+          "duck": { "amount": -15, "attack": 0.2, "release": 0.8, "futureDuckKey": "keep" }
+        },
+        {
+          "id": "bgmOff",
+          "type": "audio",
+          "src": "/tmp/none.wav",
+          "start": 20,
+          "duration": 5,
+          "offset": 0,
+          "duck": { "enabled": false, "amount": -9 }
+        },
+        {
+          "id": "bgmDefault",
+          "type": "audio",
+          "src": "/tmp/none.wav",
+          "start": 25,
+          "duration": 5,
+          "offset": 0,
+          "duck": {}
+        },
+        {
+          "id": "bgmBad",
+          "type": "audio",
+          "src": "/tmp/none.wav",
+          "start": 30,
+          "duration": 5,
+          "offset": 0,
+          "duck": "not an object"
+        }
+      ]
+    }
+  ]
+}

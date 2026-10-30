@@ -13,8 +13,9 @@ struct AudioFxPanel: View {
     @State private var openComp: Bool?
     @State private var openReverb: Bool?
     @State private var openNorm: Bool?
+    @State private var openDuck: Bool?
 
-    private var clip: Clip? { model.clip(clipId) }
+    fileprivate var clip: Clip? { model.clip(clipId) }
 
     private static func db(_ v: Double) -> String { (v > 0 ? "+" : v < 0 ? "−" : "") + String(format: "%.1f dB", abs(v)) }
     private static func panText(_ v: Double) -> String {
@@ -22,7 +23,7 @@ struct AudioFxPanel: View {
         return p == 0 ? "中央" : (v < 0 ? "左 \(p)%" : "右 \(p)%")
     }
 
-    private func expanded(_ s: Binding<Bool?>, active: Bool) -> Binding<Bool> {
+    fileprivate func expanded(_ s: Binding<Bool?>, active: Bool) -> Binding<Bool> {
         Binding(get: { s.wrappedValue ?? (forceExpanded || active) }, set: { s.wrappedValue = $0 })
     }
 
@@ -45,6 +46,7 @@ struct AudioFxPanel: View {
                 compressorGroup(c)
                 reverbGroup(c)
                 normalizeGroup(c)
+                duckGroup(c)
             }
             .controlSize(.small)
             .disabled(model.isLocked)
@@ -169,5 +171,43 @@ struct AudioFxPanel: View {
         } label: {
             Text("ノーマライズ").font(.system(size: 12, weight: .semibold)).foregroundStyle(on ? Color.primary : Color.secondary)
         }
+    }
+}
+
+extension AudioFxPanel {
+    // MARK: 自動ダッキング(BGM の音声クリップだけ)
+
+    @ViewBuilder fileprivate func duckGroup(_ c: Clip) -> some View {
+        if DuckEditing.supports(c) {
+            let on = c.hasDuck
+            let d = c.duck ?? Duck()
+            DisclosureGroup(isExpanded: expanded($openDuck, active: on)) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Toggle("声があるときに BGM を下げる", isOn: Binding(get: { on }, set: { v in
+                        model.setDuck({ _ = DuckEditing.setEnabled(&$0, v) }, name: v ? "自動ダッキングをオン" : "自動ダッキングをオフ", clipId: clipId)
+                    }))
+                    .toggleStyle(.checkbox)
+                    VStack(alignment: .leading, spacing: 6) {
+                        duckSlider("下げる量", value: d.amountDb, range: Duck.amountRange, step: 0.5, format: { String(format: "%.1f dB", $0) }) { _ = DuckEditing.setAmount(&$0, $1) }
+                        duckSlider("下がる速さ（アタック）", value: d.attackSeconds, range: Duck.attackRange, step: 0.01, format: { String(format: "%.2f 秒", $0) }) { _ = DuckEditing.setAttack(&$0, $1) }
+                        duckSlider("戻る速さ（リリース）", value: d.releaseSeconds, range: Duck.releaseRange, step: 0.05, format: { String(format: "%.2f 秒", $0) }) { _ = DuckEditing.setRelease(&$0, $1) }
+                        Text("ボイスのクリップがある間、この音を下げます。声の少し前から下げ始め、終わると元に戻ります。プレビューも書き出しも同じです。")
+                            .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    }
+                    .opacity(on ? 1 : 0.45)
+                }
+                .padding(.top, 4)
+            } label: {
+                Text("自動ダッキング").font(.system(size: 12, weight: .semibold)).foregroundStyle(on ? Color.primary : Color.secondary)
+            }
+        }
+    }
+
+    private func duckSlider(_ label: String, value: Double, range: ClosedRange<Double>, step: Double, format: @escaping (Double) -> String,
+                            apply: @escaping (inout Clip, Double) -> Void) -> some View {
+        LiveSlider(label: label, value: value, range: range, step: step, format: format,
+                   begin: { model.beginGesture() },
+                   change: { v in model.liveDuck({ apply(&$0, v) }, clipId: clipId) },
+                   end: { model.commitGesture("自動ダッキングの変更") })
     }
 }

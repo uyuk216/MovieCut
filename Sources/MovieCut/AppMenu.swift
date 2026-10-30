@@ -30,6 +30,8 @@ enum MenuCommand: Hashable {
     case speed(Double), toggleReverse, freezeFrame
     // 音声(ノーマライズ・音量の段階・ボイス向けプリセット・エフェクトを外す)
     case audioNormalize, audioVolumeUp, audioVolumeDown, audioVoicePreset, audioClear
+    // 無音カット(シートを開く)と、BGM の自動ダッキングの切り替え
+    case silenceCut, audioDuckToggle
     case zoomIn, zoomOut, zoomFit
     case resolution(String), swapResolution, fps(Double), fpsCustom, codec(String), background(String)
     case fullScreen
@@ -170,6 +172,9 @@ struct MenuState: Equatable {
     // 音声
     var canAudioFx = false           // 音声・ボイス・動画(フリーズ以外)のクリップを選んでいる
     var hasAudioFx = false           // 選択クリップに音声エフェクトかパンがある
+    var canSilenceCut = false        // 無音カットできるクリップ(音のある素材。速度・逆再生なし)を選んでいる
+    var canDuck = false              // BGM(音声クリップ)を選んでいる
+    var isDucking = false            // 選択クリップの自動ダッキングがオン
     /// 表示 ▸ プレビューの背景(アプリ全体の設定)。
     var previewBackground = PreviewBackground.default
     /// 出力 ▸ ファン(アプリ全体の設定)。使える / オン / 使えない理由 / 対象機種でヘルパー未導入 / ヘルパー導入済み。
@@ -253,6 +258,9 @@ struct MenuState: Equatable {
             canFreezeFrame = SpeedEditing.canFreeze(c, at: t)
             canAudioFx = AudioFxEditing.supports(c)
             hasAudioFx = AudioFxEditing.hasAnyFx(c)
+            canSilenceCut = SilenceDetector.supports(c)
+            canDuck = DuckEditing.supports(c)
+            isDucking = c.hasDuck
         }
         canPasteEffects = !m.effectClipboard.isEmpty
         textStyleChoices = m.textStyles.all.map { TextStyleChoice(id: $0.id, name: $0.name, builtin: $0.isBuiltin) }
@@ -559,7 +567,13 @@ enum AppMenuSpec {
                 MenuItemSpec(command: .audioVolumeUp, title: "音量を上げる（+3 dB）", shortcut: nil, enabled: on, checked: nil),
                 MenuItemSpec(command: .audioVolumeDown, title: "音量を下げる（−3 dB）", shortcut: nil, enabled: on, checked: nil),
                 MenuItemSpec(command: .audioVoicePreset, title: "ボイス向けプリセット（EQ + コンプレッサー）", shortcut: nil, enabled: on, checked: nil),
+                MenuItemSpec(command: .audioDuckToggle, title: "自動ダッキングを切り替え（声があるとき BGM を下げる）", shortcut: nil, enabled: s.canEdit && s.canDuck, checked: s.canDuck ? s.isDucking : nil),
                 MenuItemSpec(command: .audioClear, title: "音声エフェクトをすべて外す", shortcut: nil, enabled: s.canEdit && s.hasAudioFx, checked: nil)]
+    }
+
+    /// クリップ ▸ 無音をカット…(シートを開く)。
+    static func silenceCutItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .silenceCut, title: "無音をカット…", shortcut: nil, enabled: s.canEdit && s.canSilenceCut, checked: nil)
     }
 
     static func zoom(_ s: MenuState) -> [MenuItemSpec] {
@@ -635,7 +649,7 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, settings(s), videoSettings(s)] + file(s) + [subtitleImport(s), subtitleExport(s), chapterCopy(s), exportCurrent(s)] + exportPresets(s) + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textAnimItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + editAdd(s) + clipboardItems(s) + layerItems(s) + layerHeightItems(s) + playback(s)
+        [about, settings(s), videoSettings(s)] + file(s) + [subtitleImport(s), subtitleExport(s), chapterCopy(s), exportCurrent(s)] + exportPresets(s) + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textAnimItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s)] + editAdd(s) + clipboardItems(s) + layerItems(s) + layerHeightItems(s) + playback(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + [fullScreen(s)] + help.flatMap { $0 }
@@ -730,6 +744,8 @@ enum AppMenu {
             case .audioVolumeDown: m.stepVolumeSelected(db: -3)
             case .audioVoicePreset: m.applyVoicePresetSelected()
             case .audioClear: m.clearAudioFxSelected()
+            case .audioDuckToggle: m.toggleDuckSelected()
+            case .silenceCut: m.openSilenceSheet()
             case .delete: m.deleteSelected()
             case .addText: m.addTextClip()
             case .addBlur: m.addBlurClip()

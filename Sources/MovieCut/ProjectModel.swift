@@ -151,6 +151,9 @@ final class ProjectModel: ObservableObject {
     @Published var showFpsSheet = false
     /// 「時間を指定して移動…」のシート。
     @Published var showJumpSheet = false
+    /// 「無音をカット…」のシートと、その対象のクリップ。
+    @Published var showSilenceSheet = false
+    var silenceClipId: String?
     /// 名前を変えているマーカー(シートを出す)。
     @Published var renamingMarkerId: String?
     /// 左の台本欄の文字(ツールバー・メニューの「台本から音声を作る」が読む)。

@@ -32,6 +32,7 @@ struct AudioCacheKey: Hashable {
                 var extras = ""
                 if let fx = c.audioFx, fx.isActive { extras += "|fx=\(fx.cacheToken)" }
                 if c.hasPan { extras += "|pan=\(c.panOrDefault)" }
+                if c.hasDuck, Clip.supportsDuck(c) { extras += "|duck=\(c.duck!.cacheToken)" }
                 if c.hasVolumeKeys { extras += "|vk=" + (c.keyframes["volume"] ?? []).map { "\($0.t):\($0.v):\($0.ease.token)" }.joined(separator: ",") }
                 items.append("\(c.type.rawValue)|\(src)|\(c.start)|\(c.duration)|\(c.offset)|\(c.volumeOrDefault)|\(date)\(fade)\(remap)\(extras)")
             }

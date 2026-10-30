@@ -220,8 +220,10 @@ public enum AudioMixer {
         var fx: AudioFx?
         /// パン(中央以外のときだけ)
         var pan: (l: Float, r: Float)?
-        /// 速い道(エフェクト・音量キー・パンが無い)で足りるか
-        var plain: Bool { volumeEnv == nil && fx == nil && pan == nil }
+        /// 自動ダッキング(声があるときに下げる。BGM の audio クリップで、声の区間があるときだけ)
+        var duck: Duck?
+        /// 速い道(エフェクト・音量キー・パン・ダッキングが無い)で足りるか
+        var plain: Bool { volumeEnv == nil && fx == nil && pan == nil && duck == nil }
     }
 
     static func mixdownDetailed(project: Project, to url: URL) throws -> MixResult {
@@ -229,6 +231,8 @@ public enum AudioMixer {
         let total = Int((project.endTime * sr).rounded())
         // 対象クリップを開始フレーム順に
         var items: [Item] = []
+        // ダッキング: 声(ボイスクリップ)の区間。BGM が複数あっても 1 回だけ数える
+        let voiceSpans = project.allClips.contains(where: { $0.hasDuck }) ? Ducking.voiceSpans(in: project) : []
         for tr in project.tracks where project.isAudible(tr) {
             for c in tr.clips where c.type == .audio || c.type == .voice || c.type == .video {
                 guard let s = c.src, !s.isEmpty, c.duration > 0, !c.isFreeze else { continue }   // フリーズフレームは無音
@@ -251,6 +255,7 @@ public enum AudioMixer {
                 if c.hasVolumeKeys { item.volumeEnv = VolumeEnvelope(c.keyframes["volume"], sr: sr) }
                 if let fx = c.audioFx, fx.isActive { item.fx = fx }
                 if c.hasPan { item.pan = AudioPan.gains(c.panOrDefault) }
+                if c.hasDuck, Clip.supportsDuck(c), !voiceSpans.isEmpty { item.duck = c.duck }
                 items.append(item)
             }
         }
@@ -308,9 +313,12 @@ public enum AudioMixer {
                     // エフェクト後の音に、音量(キーがあればサンプルごと)・フェード・パンをかける
                     let pl = it.pan?.l ?? 1, pr = it.pan?.r ?? 1
                     let ng = normGains[idx] ?? 1
+                    // ダッキングの倍率(時刻だけで決まるので、塊の境目でも途切れない。タイムライン上の時刻 = 出力のフレーム)
+                    let dg: [Float]? = it.duck.map { Ducking.gains(startFrame: a, count: got, sr: sr, spans: voiceSpans, duck: $0) }
                     for k in 0..<got {
                         let pos = a + k - it.fullStart
                         var fg = it.volumeEnv.map { $0.gain(at: pos) * ng } ?? g
+                        if let dg { fg *= dg[k] }
                         if it.hasFade { fg *= AudioFade.gain(pos: pos, length: it.length, fadeIn: it.fadeInFrames, fadeOut: it.fadeOutFrames, equalPower: it.equalPower) }
                         mL[base + k] += tL[k] * fg * pl
                         mR[base + k] += tR[k] * fg * pr
@@ -384,7 +392,7 @@ public enum AudioMixer {
 
     /// クリップの音声を開く。video に音声が無い・読めないときは nil(無音扱い)、audio / voice が読めないときは例外。
     /// `span` は読む長さ(秒。動画の音声トラックを範囲で読むのに使う)。
-    private static func openSource(_ c: Clip, offset: Double, span: Double) throws -> PCMSource? {
+    static func openSource(_ c: Clip, offset: Double, span: Double) throws -> PCMSource? {
         let url = URL(fileURLWithPath: c.src ?? "")
         if c.type == .video {
             guard FileManager.default.fileExists(atPath: url.path) else { return nil }

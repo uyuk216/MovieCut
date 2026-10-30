@@ -308,6 +308,46 @@ case "fan":
     default:
         fail("usage: moviecut-cli fan status | fan test [--seconds 8]  (--fan-port 1200|1201)")
     }
+case "silence" where args.count >= 2:
+    // silence <project|media> [--threshold -40] [--min 0.4] [--pad 0.1]: 無音の範囲を表示する(画面なしの確認用。ファイルは変えない)
+    var params = SilenceParams()
+    if let v = optValue("--threshold") { guard let d = Double(v) else { fail("--threshold は dB の数字(例: -40)") }; params.thresholdDb = d }
+    if let v = optValue("--min") { guard let d = Double(v), d > 0 else { fail("--min は秒の数字(例: 0.4)") }; params.minSilence = d }
+    if let v = optValue("--pad") { guard let d = Double(v), d >= 0 else { fail("--pad は秒の数字(例: 0.1)") }; params.pad = d }
+    params = params.clamped
+    print(String(format: "threshold=%.1f dB  min=%.2f s  pad=%.2f s", params.thresholdDb, params.minSilence, params.pad))
+    func fmt(_ t: Double) -> String { String(format: "%.3f", t) }
+    func report(_ c: Clip, label: String) {
+        guard let prof = SilenceDetector.analyze(clip: c) else { print("\(label): 音を読めない、または対象外(速度・逆再生あり)"); return }
+        let cuts = prof.silentRanges(params)
+        let keeps = prof.keepRanges(params)
+        let removed = cuts.reduce(0) { $0 + $1.length }
+        print(String(format: "%@: duration=%.3f s  無音 %d 箇所  合計 %.3f s", label, c.duration, cuts.count, removed))
+        for r in cuts { print("  silent  \(fmt(r.start)) - \(fmt(r.end))  (len \(fmt(r.length)))   timeline \(fmt(c.start + r.start)) - \(fmt(c.start + r.end))") }
+        for r in keeps { print("  keep    \(fmt(r.start)) - \(fmt(r.end))") }
+    }
+    let path = args[1]
+    let ext = (path as NSString).pathExtension.lowercased()
+    do {
+        if ext == "mcpjc" || ext == "ymproj" {
+            let p = try Project.load(from: URL(fileURLWithPath: path))
+            var n = 0
+            for (ti, t) in p.tracks.enumerated() {
+                for c in t.clips where Clip.supportsAudioFx(c) && c.src?.isEmpty == false {
+                    n += 1
+                    report(c, label: "[layer \(ti + 1)] \(c.type.rawValue) \(((c.src ?? "") as NSString).lastPathComponent) @\(fmt(c.start))")
+                }
+            }
+            if n == 0 { fail("音のあるクリップがありません") }
+        } else {
+            let url = URL(fileURLWithPath: path)
+            guard FileManager.default.fileExists(atPath: path) else { fail("見つかりません: \(path)") }
+            let kind = ClipEditing.kindOf(path: path)
+            guard kind != .image else { fail("音声か動画のファイルを指定してください") }
+            let dur = await ClipEditing.probeDuration(url: url, kind: kind)
+            report(ClipEditing.makeMediaClip(path: path, kind: kind, duration: dur, start: 0), label: url.lastPathComponent)
+        }
+    } catch { fail("読めませんでした: \(error)") }
 case "smoke":
     // smoke --out <mp4> [--size WxH] [--codec h264|hevc] [--blur]
     guard let outPath = optValue("--out") else { fail("--out が必要です") }
@@ -336,5 +376,5 @@ case "smoke":
         try await runExport(p, to: URL(fileURLWithPath: outPath))
     } catch { fail("書き出せませんでした: \(error.localizedDescription)") }
 default:
-    fail("usage:\n  moviecut-cli info <file.ymproj>\n  moviecut-cli new <out.ymproj>\n  moviecut-cli export <in.mcpjc> <out.mp4|out.m4a> [--preset youtube1080|youtube4k|short|light|audio] [--size WxH] [--fps 29.97] [--codec h264|hevc] [--fan-max [--fan-port 1200|1201]]\n  moviecut-cli fan status | fan test [--seconds 8] [--fan-port 1200|1201]\n  moviecut-cli smoke --out <mp4> [--size WxH] [--fps 23.976] [--codec h264|hevc] [--blur] [--tone] [--save-project p.ymproj]\n  moviecut-cli speak (--voicevox <id> [--speed --pitch --intonation] | --voice <preset> [--speed]) --text <t> --out <wav>\n  moviecut-cli speakers | deps | script <script.txt> --out <p.ymproj>\n  moviecut-cli frame <in.ymproj> --t <sec> --out <png> [--size WxH] [--bench N]\n  moviecut-cli addvideo <in.ymproj> <clip.mp4> <out.ymproj>\n  moviecut-cli genclips <N> <out.ymproj>\n  moviecut-cli subs <project> --out <x.srt|x.vtt>\n  moviecut-cli chapters <project>")
+    fail("usage:\n  moviecut-cli info <file.ymproj>\n  moviecut-cli new <out.ymproj>\n  moviecut-cli export <in.mcpjc> <out.mp4|out.m4a> [--preset youtube1080|youtube4k|short|light|audio] [--size WxH] [--fps 29.97] [--codec h264|hevc] [--fan-max [--fan-port 1200|1201]]\n  moviecut-cli fan status | fan test [--seconds 8] [--fan-port 1200|1201]\n  moviecut-cli smoke --out <mp4> [--size WxH] [--fps 23.976] [--codec h264|hevc] [--blur] [--tone] [--save-project p.ymproj]\n  moviecut-cli speak (--voicevox <id> [--speed --pitch --intonation] | --voice <preset> [--speed]) --text <t> --out <wav>\n  moviecut-cli speakers | deps | script <script.txt> --out <p.ymproj>\n  moviecut-cli frame <in.ymproj> --t <sec> --out <png> [--size WxH] [--bench N]\n  moviecut-cli addvideo <in.ymproj> <clip.mp4> <out.ymproj>\n  moviecut-cli genclips <N> <out.ymproj>\n  moviecut-cli silence <project|media> [--threshold -40] [--min 0.4] [--pad 0.1]\n  moviecut-cli subs <project> --out <x.srt|x.vtt>\n  moviecut-cli chapters <project>")
 }

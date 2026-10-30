@@ -146,3 +146,84 @@ struct FrameRateSheet: View {
         model.showFpsSheet = false
     }
 }
+
+// MARK: - 無音をカット…
+
+/// 「クリップ ▸ 無音をカット…」。選んだクリップの音を一度測り、しきい値などを動かすと「N 箇所をカットします」がすぐ変わる。
+/// 「カット」で全体が 1 回の Undo。Esc で取り消し。
+struct SilenceCutSheet: View {
+    @ObservedObject var model: ProjectModel
+    @State private var profile: LevelProfile?
+    @State private var loading = true
+    @State private var failed = false
+    @State private var threshold = SilenceParams.default.thresholdDb
+    @State private var minSilence = SilenceParams.default.minSilence
+    @State private var pad = SilenceParams.default.pad
+    @State private var ripple = true
+
+    private var params: SilenceParams { SilenceParams(thresholdDb: threshold, minSilence: minSilence, pad: pad).clamped }
+    private var clipId: String? { model.silenceClipId }
+
+    private var cuts: [SilenceRange] { profile?.silentRanges(params) ?? [] }
+    private var removed: Double { cuts.reduce(0) { $0 + $1.length } }
+    /// 全部が無音になるときは切れない。
+    private var allSilent: Bool {
+        guard let p = profile, !cuts.isEmpty else { return false }
+        return SilenceDetector.keepRanges(silent: cuts, duration: p.duration).allSatisfy { $0.length < ClipEditing.minDuration }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("無音をカット").font(.headline)
+            slider("しきい値", value: $threshold, range: SilenceParams.thresholdRange, step: 1, format: { String(format: "%.0f dB", $0) })
+            slider("最短の無音", value: $minSilence, range: SilenceParams.minSilenceRange, step: 0.05, format: { String(format: "%.2f 秒", $0) })
+            slider("余白", value: $pad, range: SilenceParams.padRange, step: 0.01, format: { String(format: "%.2f 秒", $0) })
+            Toggle("後ろを詰める", isOn: $ripple).toggleStyle(.checkbox)
+            Group {
+                if loading {
+                    HStack(spacing: 6) { ProgressView().controlSize(.small); Text("音を調べています…") }
+                } else if failed {
+                    Text("このクリップの音を読めませんでした。").foregroundStyle(.red)
+                } else if allSilent {
+                    Text("全体が無音になるので、カットできません。しきい値を下げてください。").foregroundStyle(.orange)
+                } else {
+                    Text("\(cuts.count) 箇所をカットします" + (cuts.isEmpty ? "" : String(format: "（合計 %.2f 秒）", removed)))
+                }
+            }
+            .font(.callout)
+            HStack {
+                Spacer()
+                Button("キャンセル") { model.showSilenceSheet = false }
+                    .keyboardShortcut(.cancelAction)
+                Button("カット") { commit() }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(loading || failed || cuts.isEmpty || allSilent)
+            }
+        }
+        .padding(20)
+        .frame(width: 400)
+        .task { await analyze() }
+    }
+
+    private func slider(_ label: String, value: Binding<Double>, range: ClosedRange<Double>, step: Double, format: (Double) -> String) -> some View {
+        HStack {
+            Text(label).frame(width: 84, alignment: .leading)
+            Slider(value: value, in: range, step: step)
+            Text(format(value.wrappedValue)).monospacedDigit().frame(width: 64, alignment: .trailing)
+        }
+    }
+
+    private func analyze() async {
+        guard let id = clipId, let c = model.clip(id) else { loading = false; failed = true; return }
+        let result = await Task.detached(priority: .userInitiated) { SilenceDetector.analyze(clip: c) }.value
+        profile = result
+        failed = result == nil
+        loading = false
+    }
+
+    private func commit() {
+        guard let id = clipId, let p = profile else { return }
+        if model.cutSilence(clipId: id, profile: p, params: params, ripple: ripple) { model.showSilenceSheet = false }
+    }
+}
