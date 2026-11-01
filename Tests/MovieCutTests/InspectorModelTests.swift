@@ -149,6 +149,70 @@ final class InspectorModelTests: XCTestCase {
         XCTAssertEqual(undoAll(m), 3)
     }
 
+    // MARK: B-7 演出(まばたき・バウンス・表情)
+
+    func testBlinkAndBounceEditsAreOneUndoStepEach() {
+        let m = makeModel()
+        let id = m.project.characters[0].id
+        m.setBlinkImage(charId: id, url: URL(fileURLWithPath: "/tmp/blink.png"))
+        XCTAssertEqual(m.character(id)?.imgBlink, "/tmp/blink.png")
+        m.setBounce(charId: id, true)
+        XCTAssertEqual(m.character(id)?.bounce, true)
+        m.setBounce(charId: id, false)
+        XCTAssertNil(m.character(id)?.bounce, "オフは項目を消す(既定と同じ形)")
+        XCTAssertEqual(undoAll(m), 3)
+        XCTAssertNil(m.character(id)?.imgBlink)
+    }
+
+    func testExpressionAddRenameReplaceRemoveWithUndo() {
+        let m = makeModel()
+        let id = m.project.characters[0].id
+        m.addExpression(charId: id, url: URL(fileURLWithPath: "/tmp/笑顔.png"))
+        XCTAssertEqual(m.character(id)?.expressions, ["笑顔": "/tmp/笑顔.png"])
+        // 同じ名前の画像は「表示2」ではなく重複時の番号付き名になる
+        m.addExpression(charId: id, url: URL(fileURLWithPath: "/tmp/笑顔.png"))
+        XCTAssertEqual(m.character(id)?.expressions?["笑顔2"], "/tmp/笑顔.png")
+        m.renameExpression(charId: id, from: "笑顔2", to: "怒り")
+        XCTAssertEqual(m.character(id)?.expressions?["怒り"], "/tmp/笑顔.png")
+        XCTAssertNil(m.character(id)?.expressions?["笑顔2"])
+        m.setExpressionImage(charId: id, name: "笑顔", url: URL(fileURLWithPath: "/tmp/smile2.png"))
+        XCTAssertEqual(m.character(id)?.expressions?["笑顔"], "/tmp/smile2.png")
+        m.setExpressionImage(charId: id, name: "怒り", url: nil)
+        XCTAssertEqual(m.character(id)?.expressions, ["笑顔": "/tmp/smile2.png"])
+        m.setExpressionImage(charId: id, name: "笑顔", url: nil)
+        XCTAssertNil(m.character(id)?.expressions, "空になったら項目ごと消す")
+        // 1 つずつ Undo できる(追加 2・名前変更・差し替え・削除 2 = 6)
+        XCTAssertEqual(undoAll(m), 6)
+        XCTAssertEqual(m.character(id)?.expressions, nil)
+    }
+
+    func testExpressionNoOpsRegisterNothing() {
+        let m = makeModel()
+        let id = m.project.characters[0].id
+        let a = URL(fileURLWithPath: "/tmp/a.png")
+        // 使えない名前(空・角かっこ)、無い表情の削除、無い表情のリネーム、既定のバウンス・まばたきの消去は履歴に載らない
+        m.setExpressionImage(charId: id, name: "  ", url: a)
+        m.setExpressionImage(charId: id, name: "[x]", url: a)
+        m.setExpressionImage(charId: id, name: "笑顔", url: nil)
+        m.renameExpression(charId: id, from: "笑顔", to: "怒り")
+        m.setBounce(charId: id, false)
+        m.setBlinkImage(charId: id, url: nil)
+        XCTAssertFalse(m.effectiveUndoManager.canUndo)
+        XCTAssertNil(m.character(id)?.expressions)
+        // 実際の追加は 1 回分。同じ画像・同じ名前への設定は増えない
+        m.setExpressionImage(charId: id, name: "笑顔", url: a)
+        m.setExpressionImage(charId: id, name: "笑顔", url: a)
+        m.renameExpression(charId: id, from: "笑顔", to: "笑顔")
+        XCTAssertEqual(undoAll(m), 1)
+        XCTAssertNil(m.character(id)?.expressions)
+        // 既にある名前へのリネームは無視される(追加 2 回で 2 回分)
+        m.setExpressionImage(charId: id, name: "笑顔", url: a)
+        m.addExpression(charId: id, url: URL(fileURLWithPath: "/tmp/b.png"))
+        m.renameExpression(charId: id, from: "b", to: "笑顔")
+        XCTAssertEqual(m.character(id)?.expressions?["b"], "/tmp/b.png")
+        XCTAssertEqual(undoAll(m), 2)
+    }
+
     // MARK: 選択
 
     func testSelectionModeSwitching() {

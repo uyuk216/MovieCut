@@ -183,6 +183,15 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
 - **素材チェック** (`Core/MissingMedia.swift`、`ProjectModel+Media`): `src` を持つクリップ(画像・動画・音声・ボイス)でファイルが無いものを列挙。書き出しは保存パネルの前と `runExport` の両方で止め、先頭 5 件の名前を出す。ファイル ▸ 素材の場所を再指定…: フォルダ(中のフォルダも)から同じファイル名を探して差し替える。1 回の Undo。ロックされたレイヤーのクリップは `edit` の規則で変えられない。
 - **範囲のドラッグと範囲ループ** (`TimelineView` の `RangeDrag`、`Core/ExportRange.swift` の `ExportRangeLoop`): ルーラー上で書き出し範囲の印(5pt 以内)を掴んで動かす。離したときに「書き出し範囲の移動」(1 回の Undo)。再生 ▸ 範囲をループ再生は `ProjectModel.rangeLoop`(保存しない・Undo に載せない)。ループ中は範囲の終わりで頭に戻して音を鳴らし直す(`PlaybackController.tick`)。
 
+## 吹き出し(B-2)
+- **項目**: 文字クリップの任意項目 `bubble`(`Bubble`、`Sources/MovieCutCore/Bubble.swift`)。無いクリップはファイルに書かない(古いファイルは読んで書き戻しても変わらない。`CharacterAnimTests` / `BubbleTests` で確認)。中身は `shape`(`rounded` / `cloud` / `rect`。知らない値は rounded)・`fill`・`stroke`・`strokeWidth`(0〜60)・`tail`(尾の on/off)・`tailX`・`tailY`(尾の先の正規化点)・`tailChar`(キャラ id。あれば、そのキャラの位置に `tailDX`・`tailDY` を足した点を指す)。壊れた色・範囲外の値は読むときに既定へ直す。
+- **描画**: `Renderer.drawBubble`。文字の枠に余白(横 0.7 × 文字の大きさ、縦 0.45 ×)を足した大きさで、文字より先(後ろ)に描く。形の幾何は `BubbleGeometry`(雲は内側の矩形と周囲の円の集まり、尾は本体の中心から見て目標が向いている辺に三角を付ける)。縁は「縁の色で 2 倍の太さに塗ってから塗りで上書き」して外側の半分だけを出し、重なった内側の線を消す。吹き出しはキャンバス基準で描き、文字の回転・斜めの変形には従わない(文字の位置・拡大を追う。フェードは吹き出しに掛からない)。
+- **プリセット**: 「吹き出し風」は `bubble`(白い丸角・縁 #222222・尾あり)を使い、箱は使わない。`TextLook` に `bubble` を足し、当てると吹き出しは丸ごと入れ替え(標準は外す)、「現在の見た目を保存」にも入る。
+- **インスペクタ**: 文字クリップの「吹き出し」欄。付ける・外す・形・塗り・縁の色・縁の太さ(スライダーは離したとき 1 回)・尾・尾の先(点かキャラ)。モデルは `ProjectModel+TextStyle.swift` の `setBubble` / `editBubble` / `coalescedBubble`。
+- **テスト**: `BubbleTests`(項目の往復・壊れた値・古いファイル、形が中心を含み箱に収まる、丸角は角を欠く、尾の向き、キャラ基準の先、尾の先の画素が塗られ遠くは背景、尾なし、縁は外側に出る、吹き出しは文字の後ろ、無いときは従来どおり)、`BubbleAppTests`(付ける・編集・外すが各 1 回の Undo、変化なしは履歴に載らない、プリセット・保存スタイル、保存と読み直し)。
+- **計測(1920×1080・1 コマ・文字 64px・雲・単一測定の平均 20 回)**: 吹き出しなし 0.52〜0.56 ms、吹き出しあり 1.81〜1.85 ms。環境差があるので目安。
+- **未対応**: 吹き出しの縁の角の丸み(形ごとの固定)、吹き出しの不透明度・フェード、文字の回転に合わせた吹き出しの回転、縦書き、尾の根元を形に合わせた細かい調整、GIF・矢印・図形(B-2 の残り)。
+
 ## キャラクター演出(B-7)
 - **任意項目**(既定のときは書かない。古いファイルは変わらない): キャラ(`characters[]`)に `imgBlink`(まばたき = 目を閉じた画像)、`expressions`(表情名 → 画像。空は書かない)、`bounce: true`(話し中の上下の揺れ。オフは書かない)。`imgClosed` / `imgOpen` は従来どおり(null で書く)。
 - **口パク**: 音量エンベロープ(1/60 秒の RMS)を `MouthGate.states` でヒステリシス付きに開閉する(開く > 0.03、閉じる < 0.02)。先頭から順に決まるので決定的で、`RenderAssets.mouthStates` が素材ごとにキャッシュする。プレビューと書き出しは同じ `Renderer` を通る。
@@ -191,5 +200,7 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
 - **優先順位**: 口が開いている → `imgOpen` / まばたき中 → `imgBlink` / それ以外 → 表情(タグの行のみ)か `imgClosed`。
 - **バウンス**: `Bounce.lift(level:)` は音量に比例し、画面の高さの 1.2% まで上へ。バウンスがオンのときは 1 ピクセル単位に丸める(小数位置の描画は遅い経路になり、1080p で約 2 倍遅くなったため)。
 - **計測(1920×1080・`moviecut-cli frame --bench 60`・単一の 400px 画像)**: 変更前 0.91〜1.14 ms、変更後(無音・バウンスなし)0.91 ms、(しゃべり中・バウンスあり)0.91〜1.11 ms。`swift test` 623 件、失敗 0。
-- **未対応**: インスペクタで画像を割り当てる UI(今回は未着手)、口の形(あいうえお)によるリップシンク、表情の画像を口の開閉で切り替える組み合わせ(開いた口は共通の `imgOpen`)。
+- **インスペクタ(2026-11-02)**: 立ち絵(口閉じ・口開き)・まばたき画像(`imgBlink`)・バウンス・表情の一覧を、キャラのインスペクタで編集する。`ProjectModel+Inspector.swift` の `setBlinkImage` / `setBounce` / `addExpression` / `renameExpression` / `setExpressionImage` / `chooseImage`。1 回の編集が 1 回の Undo(`edit` が変化なしを履歴に載せない)。表情の名前は前後の空白を除き、空・`[` `]` を含むものは使わない(タグ `[名前]` と一致しないため)。表情を追加するとき名前は画像のファイル名から作り、重複は `名前2` のように番号を足す。
+- **テスト**: `InspectorModelTests`(追加・名前変更・差し替え・削除の Undo、変化なしの編集は履歴に載らない)、`CharacterAnimTests.testBlinkScheduleTable`(6 つの種で、間隔 3〜5 秒・閉じる 0.15 秒の境界・決定性)、`RendererTests.testBounceOffsetFollowsVoiceLevel`(無音では動かず、大音量で上へ最大 1.2% = 1080p で約 5 px。バウンスなしは音量に関係なく同じ位置)。
+- **未対応**: 口の形(あいうえお)によるリップシンク、表情の画像を口の開閉で切り替える組み合わせ(開いた口は共通の `imgOpen`)。インスペクタの画像欄のスナップショット(撮影)は未追加。
 

@@ -70,4 +70,30 @@ extension ProjectModel {
 
     @discardableResult
     func deleteTextStyle(id: String) -> Bool { textStyles.delete(id: id) }
+
+    // MARK: 吹き出し(B-2)
+
+    /// 吹き出しを付ける・外す(b が nil で外す)。変わらないときは何もしない。1 回の Undo。
+    func setBubble(_ b: Bubble?, name: String, clipId: String? = nil) {
+        guard let c = styleTarget(clipId), c.type == .text else { return }
+        let new = b?.normalized
+        guard new != c.bubble else { return }
+        setClipProperty({ $0.bubble = new }, name: name, clipId: c.id)
+    }
+
+    /// 吹き出しの項目を 1 つ書き換える(ボタン・メニュー・トグル)。吹き出しが無いときは何もしない。
+    func editBubble(_ change: (inout Bubble) -> Void, name: String, clipId: String? = nil) {
+        guard let c = styleTarget(clipId), c.type == .text, let cur = c.bubble else { return }
+        var nb = cur
+        change(&nb)
+        setBubble(nb, name: name, clipId: c.id)
+    }
+
+    /// 色ピッカー・スライダーなど連続する編集(まとめて 1 回の Undo)。
+    func coalescedBubble(_ change: @escaping (inout Bubble) -> Void, name: String, clipId: String? = nil) {
+        guard let c = styleTarget(clipId), c.bubble != nil else { return }
+        coalescedClipProperty({ clip in
+            if var b = clip.bubble { change(&b); clip.bubble = b.normalized }
+        }, name: name, clipId: c.id)
+    }
 }

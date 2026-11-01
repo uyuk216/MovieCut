@@ -303,6 +303,8 @@ public struct Renderer {
                     if st.dx != 0 || st.dy != 0 { pose.x += st.dx / W; pose.y += st.dy / H }
                 }
             }
+            // 吹き出し(任意): 文字の後ろに、キャンバス基準で描く(文字の回転には従わない)
+            if c.bubble != nil { drawBubble(c, x: pose.x * W, y: pose.y * H, scale: pose.scale, W: W, H: H, ctx: ctx) }
             // 位置・拡大・回転が動く文字は、位置ごとにキャッシュしても使い回せないので直接描く
             let geometryAnimated = c.hasKeyframes && ["x", "y", "scale", "rotation"].contains { Animation.isAnimated($0, in: c) }
             if pose.isPlain(c) {
@@ -472,6 +474,30 @@ public struct Renderer {
     /// ビットマップには小数部の位置も含めて描くので、直接描いたときと同じ見た目になる。
     /// `style`(影・箱・グラデーション・字間・行間・揃え・太字・斜体)が無ければ従来と同じ描き方。
     /// `visible` は見せる文字数(改行を除く。タイプライター)。位置は全文字ぶんで決めるので、文字が増えても動かない。
+    /// 吹き出し(B-2): 文字の枠に余白を足した大きさで、形・塗り・縁・尾を描く(文字の後ろ)。縁は外側の半分が見えるように、2 倍の太さで塗ってから塗りで上書きする。
+    func drawBubble(_ c: Clip, x: Double, y: Double, scale: Double, W: Double, H: Double, ctx: CGContext) {
+        guard let b = c.bubble?.normalized, let fill = parseHexColor(b.fill), let stroke = parseHexColor(b.stroke) else { return }
+        let size = c.fontSize ?? 80
+        let block = textBlockSize(ExpressionTag.body(c.text ?? ""), size: size, font: c.fontOrDefault, style: c.textStyle)
+        let s = max(0, scale)
+        let w = block.width + size * 1.4 * s, h = block.height + size * 0.9 * s
+        guard w > 0, h > 0 else { return }
+        let target = b.tail ? BubbleTarget.point(b, characters: project.characters, width: W, height: H) : nil
+        let path = BubbleGeometry.path(shape: b.shape, center: CGPoint(x: x, y: y), size: CGSize(width: w, height: h), tail: target)
+        ctx.saveGState()
+        if b.strokeWidth > 0 {
+            ctx.addPath(path)
+            ctx.setStrokeColor(stroke)
+            ctx.setLineWidth(CGFloat(b.strokeWidth * 2))
+            ctx.setLineJoin(.round)
+            ctx.strokePath()
+        }
+        ctx.addPath(path)
+        ctx.setFillColor(fill)
+        ctx.fillPath()
+        ctx.restoreGState()
+    }
+
     func drawText(_ text: String, x: Double, y: Double, size: Double, color: String, font: String, outline: String, ctx: CGContext, cacheable: Bool = true,
                   style: TextStyle? = nil, visible: Int? = nil) {
         guard size > 0 else { return }

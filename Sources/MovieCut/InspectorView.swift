@@ -831,6 +831,52 @@ struct CharacterInspector: View {
         }
     }
 
+    private func blinkRow(_ c: Character) -> some View {
+        HStack(alignment: .center, spacing: 10) {
+            PortraitThumb(path: c.imgBlink)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("まばたき（目を閉じた画像）").font(.system(size: 12)).foregroundStyle(.secondary)
+                Text(fileName(c.imgBlink)).font(.system(size: 12)).lineLimit(1).truncationMode(.middle)
+                HStack(spacing: 6) {
+                    Button("選択…") { model.chooseImage(title: "まばたき画像を選ぶ") { model.setBlinkImage(charId: charId, url: $0) } }
+                    Button { model.setBlinkImage(charId: charId, url: nil) } label: { Image(systemName: "xmark") }
+                        .disabled(c.imgBlink == nil)
+                        .help("画像を外す")
+                }
+                .controlSize(.small)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    /// 表情: 名前(セリフの先頭 [名前] に使う)と画像の一覧。名前の変更は確定したときに 1 回の Undo。
+    @ViewBuilder private func expressionSection(_ c: Character) -> some View {
+        let items = (c.expressions ?? [:]).sorted { $0.key < $1.key }
+        Text("表情（セリフの先頭に [名前] と書くと、その行の間この画像になります）")
+            .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        ForEach(items, id: \.key) { key, path in
+            HStack(alignment: .center, spacing: 8) {
+                PortraitThumb(path: path)
+                VStack(alignment: .leading, spacing: 4) {
+                    NameField(value: key) { model.renameExpression(charId: charId, from: key, to: $0) }
+                    Text(fileName(path)).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                    HStack(spacing: 6) {
+                        Button("差し替え…") { model.chooseImage(title: "表情「\(key)」の画像を選ぶ") { model.setExpressionImage(charId: charId, name: key, url: $0) } }
+                        Button { model.setExpressionImage(charId: charId, name: key, url: nil) } label: { Image(systemName: "minus.circle") }
+                            .help("この表情を消す")
+                    }
+                    .controlSize(.small)
+                }
+                Spacer(minLength: 0)
+            }
+        }
+        Button { model.chooseImage(title: "表情の画像を選ぶ") { model.addExpression(charId: charId, url: $0) } } label: {
+            Label("表情を追加…", systemImage: "plus.circle").frame(maxWidth: .infinity)
+        }
+        .controlSize(.small)
+        .disabled(model.isLocked)
+    }
+
     var body: some View {
         if let c = ch {
             VStack(alignment: .leading, spacing: 8) {
@@ -853,6 +899,10 @@ struct CharacterInspector: View {
                 InspectorSection(title: "立ち絵")
                 portraitRow(c, closed: true)
                 portraitRow(c, closed: false)
+                InspectorSection(title: "演出")
+                blinkRow(c)
+                check("バウンス（話し中に上下に揺れる）", c, name: "バウンスの切り替え", get: { $0.bounce == true }, set: { $0.bounce = $1 ? true : nil })
+                expressionSection(c)
                 HStack(alignment: .top, spacing: 10) {
                     num("横位置", .x, step: 0.01, decimals: 2)
                     num("縦位置", .y, step: 0.01, decimals: 2)

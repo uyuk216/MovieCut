@@ -387,7 +387,7 @@ final class TextStyleTests: XCTestCase {
         XCTAssertTrue(b.allSatisfy(\.isBuiltin))
         XCTAssertNil(b[0].look.style)
         XCTAssertNotNil(b[1].look.style?.shadow); XCTAssertNotNil(b[2].look.style?.box); XCTAssertNotNil(b[3].look.style?.gradient)
-        XCTAssertNotNil(b[4].look.style?.box); XCTAssertEqual(b[5].look.style?.bold, true)
+        XCTAssertNotNil(b[4].look.bubble, "吹き出し風は吹き出しを使う(B-2)"); XCTAssertEqual(b[5].look.style?.bold, true)
         for s in b { XCTAssertEqual(s.look.style?.normalized, s.look.style) }
     }
 

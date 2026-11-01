@@ -325,11 +325,13 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var textStyle: TextStyle? = nil
     /// 文字のアニメーション(タイプライター・ポップ・シェイク)。無いときはファイルに書かない。
     public var textAnim: TextAnim? = nil
+    /// 吹き出し(文字クリップ)。無いときはファイルに書かない(B-2)。
+    public var bubble: Bubble? = nil
     /// BGM の自動ダッキング(音声クリップ。声があるときに下げる)。無いときはファイルに書かない。
     public var duck: Duck? = nil
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["id", "type", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "audioFx", "pan", "textStyle", "textAnim", "duck"]
+    static let knownKeys: Set<String> = ["id", "type", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "audioFx", "pan", "textStyle", "textAnim", "bubble", "duck"]
 
     public init() {}
 
@@ -447,6 +449,9 @@ public struct Clip: Codable, Equatable, Identifiable {
         if let raw: JSONValue = l.value("textAnim") {
             if let v: TextAnim = l.value("textAnim") { textAnim = v } else { extra["textAnim"] = raw }
         }
+        if let raw: JSONValue = l.value("bubble") {
+            if let v: Bubble = l.value("bubble") { bubble = v } else { extra["bubble"] = raw }
+        }
         if let raw: JSONValue = l.value("duck") {
             if let v: Duck = l.value("duck") { duck = v } else { extra["duck"] = raw }
         }
@@ -517,6 +522,7 @@ public struct Clip: Codable, Equatable, Identifiable {
         try c.encodeIfPresent(pan, forKey: AnyKey("pan"))
         try c.encodeIfPresent(textStyle, forKey: AnyKey("textStyle"))
         try c.encodeIfPresent(textAnim, forKey: AnyKey("textAnim"))
+        try c.encodeIfPresent(bubble, forKey: AnyKey("bubble"))
         try c.encodeIfPresent(duck, forKey: AnyKey("duck"))
     }
 }

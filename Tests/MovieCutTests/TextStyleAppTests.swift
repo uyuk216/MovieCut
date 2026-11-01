@@ -95,7 +95,7 @@ final class TextStyleAppTests: XCTestCase {
         XCTAssertTrue(m.applyTextStyle(id: "builtin.bubble"))
         XCTAssertEqual(u.undoActionName, "スタイルを適用: 吹き出し風")
         let c = m.clip("t")!
-        XCTAssertEqual(c.color, "#222222"); XCTAssertNotNil(c.textStyle?.box); XCTAssertEqual(c.fontSize, 80); XCTAssertEqual(c.text, "テキスト")
+        XCTAssertEqual(c.color, "#222222"); XCTAssertNotNil(c.bubble); XCTAssertNil(c.textStyle?.box); XCTAssertEqual(c.fontSize, 80); XCTAssertEqual(c.text, "テキスト")
         XCTAssertFalse(m.applyTextStyle(id: "builtin.bubble"), "同じスタイルをもう一度は変更なし")
         XCTAssertFalse(m.applyTextStyle(id: "nope"))
         XCTAssertEqual(undoSteps(m), 1)

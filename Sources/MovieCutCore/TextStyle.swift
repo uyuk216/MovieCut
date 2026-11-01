@@ -367,13 +367,15 @@ public struct TextLook: Codable, Equatable, Sendable {
     public var outline: String?
     public var font: String?
     public var style: TextStyle?
-    public init(color: String? = nil, outline: String? = nil, font: String? = nil, style: TextStyle? = nil) {
-        self.color = color; self.outline = outline; self.font = font; self.style = style
+    /// 吹き出し(B-2)。無いときは吹き出しを外す(装飾と同じく丸ごと入れ替え)。
+    public var bubble: Bubble?
+    public init(color: String? = nil, outline: String? = nil, font: String? = nil, style: TextStyle? = nil, bubble: Bubble? = nil) {
+        self.color = color; self.outline = outline; self.font = font; self.style = style; self.bubble = bubble
     }
 
     /// クリップの、いまの見た目。
     public init(of c: Clip) {
-        self.init(color: c.color, outline: c.outline, font: c.font, style: c.textStyle)
+        self.init(color: c.color, outline: c.outline, font: c.font, style: c.textStyle, bubble: c.bubble)
     }
 
     /// クリップへ当てる(色・縁は上書き、書体は指定があるときだけ、装飾は丸ごと入れ替え)。変えたときだけ true。
@@ -385,6 +387,7 @@ public struct TextLook: Codable, Equatable, Sendable {
         if let f = font { c.font = f }
         let s = style?.normalized
         c.textStyle = (s?.isEmpty ?? true) ? nil : s
+        c.bubble = bubble?.normalized
         return c != before
     }
 }
@@ -415,7 +418,8 @@ public enum TextStyleLibrary {
                 $0.shadow = .init(color: "#000000", dx: 3, dy: 5, blur: 6, opacity: 0.6)
             })),
         SavedTextStyle(id: "builtin.bubble", name: "吹き出し風", look: TextLook(
-            color: "#222222", outline: "#ffffff", style: style { $0.box = .init(color: "#ffffff", opacity: 1, paddingX: 36, paddingY: 22, cornerRadius: 34) })),
+            color: "#222222", outline: "#ffffff", style: nil,
+            bubble: Bubble(shape: "rounded", fill: "#ffffff", stroke: "#222222", strokeWidth: 4, tail: true, tailX: 0.5, tailY: 0.92))),
         SavedTextStyle(id: "builtin.warning", name: "注意", look: TextLook(
             color: "#e53935", outline: "#ffffff", style: style {
                 $0.bold = true

@@ -263,6 +263,74 @@ extension ProjectModel {
         if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
     }
 
+    /// まばたき(目を閉じた画像)を設定する(url が nil なら外す)。
+    func setBlinkImage(charId: String, url: URL?) {
+        setCharacterProperty({ $0.imgBlink = url?.path }, name: url == nil ? "まばたき画像を外す" : "まばたき画像の変更", charId: charId)
+    }
+
+    /// バウンス(話し中の上下の揺れ)の切り替え。オフは項目を消す(既定と同じ形で保存する)。
+    func setBounce(charId: String, _ on: Bool) {
+        setCharacterProperty({ $0.bounce = on ? true : nil }, name: "バウンスの切り替え", charId: charId)
+    }
+
+    /// 表情の名前として使えるか。前後の空白を除いた名前で判定する(タグ `[名前]` の中に `[` `]` は入れられない)。
+    static func expressionKey(_ name: String) -> String? {
+        let key = name.trimmingCharacters(in: .whitespaces)
+        guard !key.isEmpty, !key.contains("["), !key.contains("]") else { return nil }
+        return key
+    }
+
+    /// 表情の画像を設定する(同名があれば差し替え)。url が nil なら表情を消す。名前が使えないときは何もしない。
+    func setExpressionImage(charId: String, name: String, url: URL?) {
+        guard let key = Self.expressionKey(name) else { return }
+        setCharacterProperty({ c in
+            var d = c.expressions ?? [:]
+            if let u = url { d[key] = u.path } else { d.removeValue(forKey: key) }
+            c.expressions = d.isEmpty ? nil : d
+        }, name: url == nil ? "表情の削除" : "表情の画像の変更", charId: charId)
+    }
+
+    /// 表情を新しく追加する。名前は画像のファイル名(拡張子を除く)から作り、重複するときは数字を足す。
+    func addExpression(charId: String, url: URL) {
+        guard let ch = character(charId) else { return }
+        let base = Self.expressionKey(url.deletingPathExtension().lastPathComponent) ?? "表情"
+        var name = base, n = 2
+        let taken = Set((ch.expressions ?? [:]).keys)
+        while taken.contains(name) { name = "\(base)\(n)"; n += 1 }
+        setCharacterProperty({ c in
+            var d = c.expressions ?? [:]
+            d[name] = url.path
+            c.expressions = d.isEmpty ? nil : d
+        }, name: "表情の追加", charId: charId)
+    }
+
+    /// 表情の名前を変える。空・使えない名前・既にある名前・同じ名前のときは何もしない。
+    func renameExpression(charId: String, from old: String, to new: String) {
+        guard let key = Self.expressionKey(new), key != old,
+              let ch = character(charId), let img = ch.expressions?[old], ch.expressions?[key] == nil else { return }
+        setCharacterProperty({ c in
+            var d = c.expressions ?? [:]
+            d.removeValue(forKey: old)
+            d[key] = img
+            c.expressions = d.isEmpty ? nil : d
+        }, name: "表情の名前の変更", charId: charId)
+    }
+
+    /// 画像を 1 つ選んで渡す(キャラの立ち絵と同じ種類のパネル)。
+    func chooseImage(title: String, _ apply: @escaping (URL) -> Void) {
+        guard !isLocked else { return }
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = ["png", "jpg", "jpeg", "gif", "webp"].compactMap { UTType(filenameExtension: $0) }
+        panel.title = title
+        let run: (NSApplication.ModalResponse) -> Void = { resp in
+            guard resp == .OK, let url = panel.url else { return }
+            Task { @MainActor in apply(url) }
+        }
+        if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
+    }
+
     /// 「このキャラを消す」の確認を出す。最後の 1 人なら理由を出して何もしない。
     func requestDeleteCharacter(_ id: String) {
         guard !isLocked, character(id) != nil else { return }

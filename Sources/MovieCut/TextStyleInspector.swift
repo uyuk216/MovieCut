@@ -22,7 +22,74 @@ struct TextStyleInspector: View {
         if let c = clip {
             if c.type == .text { styleSection(c) }
             decorationSections(c)
-            if c.type == .text { animationSection(c) }
+            if c.type == .text { bubbleSection(c); animationSection(c) }
+        }
+    }
+
+    // MARK: 吹き出し(B-2)
+
+    @ViewBuilder private func bubbleSection(_ c: Clip) -> some View {
+        InspectorSection(title: "吹き出し")
+        Toggle("吹き出しを付ける", isOn: Binding(get: { c.bubble != nil }, set: { on in
+            model.setBubble(on ? Bubble() : nil, name: on ? "吹き出しを付ける" : "吹き出しを外す", clipId: clipId)
+        }))
+        .toggleStyle(.checkbox).font(.system(size: 12)).disabled(model.isLocked)
+        if let b = c.bubble {
+            VStack(alignment: .leading, spacing: 6) {
+                InspectorField(label: "形") {
+                    Picker("", selection: Binding(get: { b.shape }, set: { v in model.editBubble({ $0.shape = v }, name: "吹き出しの形の変更", clipId: clipId) })) {
+                        Text("丸角").tag("rounded"); Text("雲").tag("cloud"); Text("四角").tag("rect")
+                    }
+                    .pickerStyle(.segmented).labelsHidden()
+                }
+                ColorField(label: "塗り", hex: b.fill) { h in model.coalescedBubble({ $0.fill = h }, name: "吹き出しの塗りの変更", clipId: clipId) }
+                ColorField(label: "縁の色", hex: b.stroke) { h in model.coalescedBubble({ $0.stroke = h }, name: "吹き出しの縁の色の変更", clipId: clipId) }
+                LiveSlider(label: "縁の太さ（px）", key: nil, value: b.strokeWidth, range: 0...40, step: 1,
+                           format: Self.px,
+                           begin: { model.beginGesture() },
+                           change: { v in model.liveClipProperty({ if $0.bubble != nil { $0.bubble?.strokeWidth = v } }, name: "吹き出しの縁の変更", clipId: clipId) },
+                           end: { model.commitGesture("吹き出しの縁の変更") })
+                Toggle("尾を付ける", isOn: Binding(get: { b.tail }, set: { on in model.editBubble({ $0.tail = on }, name: "尾の切り替え", clipId: clipId) }))
+                    .toggleStyle(.checkbox).font(.system(size: 12))
+                if b.tail { bubbleTailControls(b) }
+            }
+            .padding(.leading, 10)
+            .disabled(model.isLocked)
+        }
+    }
+
+    /// 尾の先: 画面上の点(正規化した x・y)か、キャラの位置(＋ずれ)。
+    @ViewBuilder private func bubbleTailControls(_ b: Bubble) -> some View {
+        InspectorField(label: "尾の先") {
+            Picker("", selection: Binding(get: { b.tailChar == nil ? "point" : "char" }, set: { v in
+                model.editBubble({ $0.tailChar = v == "char" ? model.project.characters.first?.id : nil }, name: "尾の先の変更", clipId: clipId)
+            })) {
+                Text("画面上の点").tag("point"); Text("キャラ").tag("char")
+            }
+            .pickerStyle(.segmented).labelsHidden()
+        }
+        if let cid = b.tailChar {
+            InspectorField(label: "キャラ") {
+                Picker("", selection: Binding(get: { cid }, set: { v in model.editBubble({ $0.tailChar = v }, name: "尾の先の変更", clipId: clipId) })) {
+                    ForEach(model.project.characters, id: \.id) { Text($0.name).tag($0.id) }
+                }
+                .labelsHidden()
+            }
+            HStack(spacing: 10) {
+                bubbleNum("ずれ・横", b.tailDX) { v in model.coalescedBubble({ $0.tailDX = v }, name: "尾の先のずれの変更", clipId: clipId) }
+                bubbleNum("ずれ・縦", b.tailDY) { v in model.coalescedBubble({ $0.tailDY = v }, name: "尾の先のずれの変更", clipId: clipId) }
+            }
+        } else {
+            HStack(spacing: 10) {
+                bubbleNum("点・横", b.tailX) { v in model.coalescedBubble({ $0.tailX = v }, name: "尾の先の変更", clipId: clipId) }
+                bubbleNum("点・縦", b.tailY) { v in model.coalescedBubble({ $0.tailY = v }, name: "尾の先の変更", clipId: clipId) }
+            }
+        }
+    }
+
+    private func bubbleNum(_ label: String, _ value: Double, _ set: @escaping (Double) -> Void) -> some View {
+        InspectorField(label: label) {
+            NumField(value: value, step: 0.01, decimals: 2, clamp: { min(2, max(-1, $0)) }, onCommit: set, onStep: set)
         }
     }
 

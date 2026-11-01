@@ -48,6 +48,29 @@ final class CharacterAnimTests: XCTestCase {
         XCTAssertFalse(Blink.isClosed(seed: "c1", t: -1))
     }
 
+    /// まばたきの表(種ごとに、瞬きの時刻・間隔・閉じる区間が仕様どおりか)。
+    func testBlinkScheduleTable() {
+        let seeds = ["c1", "clip-A", "clip-B", "キャラ", "0", "voice-0123456789"]
+        for seed in seeds {
+            let starts = Blink.starts(seed: seed, until: 3600)
+            XCTAssertGreaterThan(starts.count, 700, seed)          // 3〜5 秒間隔なので 1 時間に 720〜1200 回(平均 4 秒で約 900 回)
+            XCTAssertLessThanOrEqual(starts.count, 1200, seed)
+            XCTAssertTrue((3.0...5.0).contains(starts[0]), "\(seed): 最初の瞬きは 3〜5 秒後")
+            for (a, b) in zip(starts, starts.dropFirst()) {
+                XCTAssertTrue((3.0...5.0).contains(b - a), "\(seed): 間隔 \(b - a)")
+            }
+            // 境界: 開始の瞬間は閉じ、閉じ区間の終わりの直前も閉じ、終わりちょうどは開く
+            for s in starts.prefix(5) {
+                XCTAssertTrue(Blink.isClosed(seed: seed, t: s), seed)
+                XCTAssertTrue(Blink.isClosed(seed: seed, t: s + Blink.duration - 1e-6), seed)
+                XCTAssertFalse(Blink.isClosed(seed: seed, t: s + Blink.duration), seed)
+                XCTAssertFalse(Blink.isClosed(seed: seed, t: s - 1e-6), seed)
+            }
+        }
+        // 表の値は、同じ種なら何度呼んでも同じ(決定的)
+        XCTAssertEqual(Blink.starts(seed: "clip-A", until: 60), Blink.starts(seed: "clip-A", until: 60))
+    }
+
     // MARK: 表情タグ
 
     func testExpressionTagIsStrippedFromBody() {

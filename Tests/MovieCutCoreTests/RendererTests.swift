@@ -209,6 +209,31 @@ final class RendererTests: XCTestCase {
         XCTAssertEqual(try render(p, t: 1.5, assets: assets).rgb(200, 100).0, 0)
     }
 
+    func testBounceOffsetFollowsVoiceLevel() throws {
+        // バウンス: 無音の間は動かず、音が大きい間は画面の高さの 1.2% まで上へ揺れる。バウンスなしは音量に関係なく同じ位置
+        let closed = try solidPNG("bounce.png", r: 255, g: 0, b: 0)
+        let wav = try writeToneWAV("bouncetone.wav")
+        func make(bounce: Bool?) -> Project {
+            var ch = Character(); ch.id = "cb"; ch.name = "B"; ch.imgClosed = closed
+            ch.x = 0.5; ch.y = 0.5; ch.scale = 1; ch.flip = false; ch.alwaysShow = false; ch.bounce = bounce
+            var v = Clip(); v.type = .voice; v.start = 0; v.duration = 1; v.charId = "cb"; v.src = wav; v.text = "あ"; v.subtitle = false
+            return project(w: 400, h: 400, clips: [v], characters: [ch])
+        }
+        // 立ち絵の上端(赤いピクセルが最初に現れる行)
+        func topRow(_ px: Pixels) -> Int? { (0..<px.h).first { y in (0..<px.w).contains { x in px.rgb(x, y).0 > 200 } } }
+        let assets = RenderAssets()
+        let quiet = try XCTUnwrap(topRow(try render(make(bounce: true), t: 0.25, assets: assets)))
+        let loud = try XCTUnwrap(topRow(try render(make(bounce: true), t: 0.75, assets: assets)))
+        let lift = quiet - loud
+        XCTAssertGreaterThanOrEqual(lift, 4, "音が大きい間は上へ揺れる")
+        XCTAssertLessThanOrEqual(Double(lift), Bounce.maxOffset * 400 + 1, "上限は画面高さの 1.2%")
+        // バウンスなしは無音・大音量で同じ位置
+        let plainQuiet = try XCTUnwrap(topRow(try render(make(bounce: nil), t: 0.25, assets: assets)))
+        let plainLoud = try XCTUnwrap(topRow(try render(make(bounce: nil), t: 0.75, assets: assets)))
+        XCTAssertEqual(plainQuiet, plainLoud)
+        XCTAssertEqual(plainQuiet, quiet, "無音のときはバウンスの有無で位置が変わらない")
+    }
+
     func testExpressionTagAndBlinkChangeStandingImage() throws {
         // 表情タグ [笑顔] はその行の間だけ表情画像に切り替わり、字幕からはタグが消える
         let closed = try solidPNG("eclosed.png", r: 255, g: 0, b: 0)
