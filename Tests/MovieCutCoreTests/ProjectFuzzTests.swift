@@ -34,7 +34,8 @@ final class ProjectFuzzTests: XCTestCase {
         var out = [prefix]
         switch v {
         case .object(let d):
-            for (k, child) in d { out += allPaths(child, prefix + [.key(k)]) }
+            // 辞書の順は実行ごとに変わるので、キーの順にそろえて、同じシードなら同じ壊し方になるようにする
+            for (k, child) in d.sorted(by: { $0.key < $1.key }) { out += allPaths(child, prefix + [.key(k)]) }
         case .array(let a):
             for (i, child) in a.enumerated() { out += allPaths(child, prefix + [.index(i)]) }
         default: break

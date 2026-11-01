@@ -251,6 +251,16 @@ public struct Renderer {
     /// 動画クリップの、時刻 t(プロジェクトの時刻)に出すコマ。速度・逆再生・フリーズは `ClipTiming` で素材の時刻に直す
     /// (速度 1・順再生は従来と同じ `t − start + offset`)。
     func videoFrame(_ c: Clip, src: String, at t: Double) -> CGImage? {
+        // フレームブレンド(速度 1 未満のとき): 素材の時刻を、コマの間隔(プロジェクトの fps の格子)で隣り合う 2 コマに分けて混ぜる
+        if ClipTiming.blendsFrames(c, atClipTime: t - c.start) {
+            let grid = project.fps
+            let idx = ClipTiming.sourceTime(of: c, atClipTime: t - c.start) * grid
+            let i0 = floor(idx), w = idx - i0
+            guard let a = assets.videoFrame(path: src, time: i0 / grid, reverse: false, exact: true) else { return nil }
+            if w < 1e-6 { return a }
+            guard let b = assets.videoFrame(path: src, time: (i0 + 1) / grid, reverse: false, exact: true) else { return a }
+            return FrameBlend.mix(a, b, weight: w) ?? a
+        }
         let remap = c.hasTimeRemap
         let st = remap ? ClipTiming.frameSourceTime(of: c, atClipTime: t - c.start, fps: project.fps) : t - c.start + c.offset
         return assets.videoFrame(path: src, time: st, reverse: c.effectiveReverse, exact: remap)

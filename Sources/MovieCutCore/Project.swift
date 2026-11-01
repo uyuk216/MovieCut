@@ -325,6 +325,10 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var keepPitch: Bool? = nil
     /// フリーズフレーム(動画だけ)。素材の `offset` の1コマを止めて出す静止画のクリップ。音は無音。未設定 = しない。
     public var freeze: Bool? = nil
+    /// 速度ランプ(動画・音声)。時刻と速度の点の列(`SpeedRamp`)。無いときはファイルに書かない。あるときは `speed` と `reverse` は使わない。
+    public var speedRamp: [SpeedKey]? = nil
+    /// フレームブレンド(動画だけ。速度が 1 未満のとき、隣り合う 2 コマを時間で混ぜる)。true のときだけ書く。
+    public var frameBlend: Bool? = nil
     /// 音声エフェクト(EQ・コンプレッサー・リバーブ・ノーマライズ。音声・ボイス・動画)。無いときはファイルに書かない。
     public var audioFx: AudioFx? = nil
     /// 左右の振り分け(−1〜1、等パワー)。未設定 = 中央。
@@ -343,7 +347,7 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var visualizer: Visualizer? = nil
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["id", "type", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "duck", "visualizer"]
+    static let knownKeys: Set<String> = ["id", "type", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "duck", "visualizer"]
 
     public init() {}
 
@@ -438,10 +442,11 @@ public struct Clip: Codable, Equatable, Identifiable {
         crop = l.value("crop")
         fadeIn = l.double("fadeIn"); fadeOut = l.double("fadeOut"); fadeCurve = l.string("fadeCurve")
         speed = l.double("speed"); reverse = l.bool("reverse"); keepPitch = l.bool("keepPitch"); freeze = l.bool("freeze")
+        speedRamp = l.value("speedRamp"); frameBlend = l.bool("frameBlend") == true ? true : nil
         pan = l.double("pan"); audioFx = l.value("audioFx")
         extra = l.extra()
         // 速度まわりの項目が読めない型だったら、捨てずにそのまま書き戻す
-        for key in ["speed", "reverse", "keepPitch", "freeze", "pan", "audioFx"] {
+        for key in ["speed", "reverse", "keepPitch", "freeze", "speedRamp", "pan", "audioFx"] {
             guard let raw: JSONValue = l.value(key) else { continue }
             let typedOK: Bool
             switch key {
@@ -449,6 +454,7 @@ public struct Clip: Codable, Equatable, Identifiable {
             case "reverse": typedOK = reverse != nil
             case "keepPitch": typedOK = keepPitch != nil
             case "freeze": typedOK = freeze != nil
+            case "speedRamp": typedOK = speedRamp != nil
             case "pan": typedOK = pan != nil
             default: typedOK = audioFx != nil
             }
@@ -536,6 +542,8 @@ public struct Clip: Codable, Equatable, Identifiable {
         try c.encodeIfPresent(reverse, forKey: AnyKey("reverse"))
         try c.encodeIfPresent(keepPitch, forKey: AnyKey("keepPitch"))
         try c.encodeIfPresent(freeze, forKey: AnyKey("freeze"))
+        try c.encodeIfPresent(speedRamp, forKey: AnyKey("speedRamp"))
+        try c.encodeIfPresent(frameBlend == true ? true : nil, forKey: AnyKey("frameBlend"))
         if let fx = audioFx, !fx.isEmpty { try c.encode(fx, forKey: AnyKey("audioFx")) }
         try c.encodeIfPresent(pan, forKey: AnyKey("pan"))
         try c.encodeIfPresent(textStyle, forKey: AnyKey("textStyle"))

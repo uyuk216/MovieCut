@@ -52,10 +52,14 @@ extension ClipEditing {
         var p = project
         var c = p.tracks[loc.track].clips[loc.index]
         let cut = t - c.start
+        let ramp = c.rampPoints
         c.duration -= cut
         c.start = t
         // 順再生は offset が進む。逆再生は頭が素材の終わりなので offset はそのまま(長さだけ縮む)
-        if movesSource(c) && !c.effectiveReverse { c.offset += cut * c.effectiveSpeed }
+        if let ramp, movesSource(c) {
+            c.offset += SpeedRamp.integral(ramp, upTo: cut)
+            c.speedRamp = SpeedRamp.split(ramp, at: cut).right
+        } else if movesSource(c) && !c.effectiveReverse { c.offset += cut * c.effectiveSpeed }
         if c.hasKeyframes { c.keyframes = Animation.shifted(c.keyframes, by: -cut) }
         p.tracks[loc.track].clips[loc.index] = c
         return p
@@ -67,9 +71,11 @@ extension ClipEditing {
         var p = project
         var c = p.tracks[loc.track].clips[loc.index]
         let oldDuration = c.duration
+        let ramp = c.rampPoints
         c.duration = t - c.start
+        if let ramp { c.speedRamp = SpeedRamp.fit(ramp, to: c.duration) }
         // 逆再生は終わりが素材の頭側(offset)なので、切った分だけ offset が進む
-        if movesSource(c) && c.effectiveReverse { c.offset += (oldDuration - c.duration) * c.effectiveSpeed }
+        else if movesSource(c) && c.effectiveReverse { c.offset += (oldDuration - c.duration) * c.effectiveSpeed }
         p.tracks[loc.track].clips[loc.index] = c
         return p
     }

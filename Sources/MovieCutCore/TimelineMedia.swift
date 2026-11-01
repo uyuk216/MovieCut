@@ -86,7 +86,7 @@ public struct WaveformPeaks: Equatable, Sendable {
 
     /// クリップが見せる素材の範囲(左端 → 右端の素材の秒)。逆再生は左端が素材の終わり側。速度は範囲の広さに効く。
     public static func sourceRange(for c: Clip) -> (from: Double, to: Double) {
-        let span = c.duration * c.effectiveSpeed
+        let span = ClipTiming.sourceSpan(c)
         return c.effectiveReverse ? (c.offset + span, c.offset) : (c.offset, c.offset + span)
     }
 

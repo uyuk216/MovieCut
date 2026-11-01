@@ -523,15 +523,54 @@ struct ClipInspector: View {
                        end: { model.commitGesture(ProjectModel.speedUndoName) })
             Toggle("逆再生", isOn: Binding(get: { c.effectiveReverse }, set: { model.setReverse($0, clipId: clipId) }))
                 .toggleStyle(.checkbox)
+                .disabled(c.rampPoints != nil)
+                .help("速度ランプがあるあいだは使えません")
             Toggle("音程を保つ", isOn: Binding(get: { c.keepPitchOrDefault }, set: { model.setKeepPitch($0, clipId: clipId) }))
                 .toggleStyle(.checkbox)
-                .disabled(sp == 1)
-                .help("オフにすると、速くしたぶん音が高く、遅くしたぶん低くなります")
+                .disabled(sp == 1 || c.rampPoints != nil)
+                .help("オフにすると、速くしたぶん音が高く、遅くしたぶん低くなります（速度ランプの音は音程が速度に従います）")
             HStack(spacing: 6) {
                 Text("元の長さ → 新しい長さ").font(.system(size: 12)).foregroundStyle(.secondary)
                 Spacer(minLength: 4)
                 Text(ClipTiming.lengthReadout(for: c)).font(.system(size: 12).monospacedDigit())
             }
+            rampSection(c)
+            if c.type == .video {
+                Toggle("フレームブレンド（速度が 1 未満のとき、隣り合うコマを混ぜる）", isOn: Binding(get: { c.frameBlend == true }, set: { model.setFrameBlend($0, clipId: clipId) }))
+                    .toggleStyle(.checkbox)
+                    .disabled(c.effectiveReverse)
+                    .help("スローモーションのコマ落ちを、前後のコマの重ね合わせで滑らかにします")
+            }
+        }
+    }
+
+    /// 速度ランプ(時間で速さが変わる)の点の一覧。点ごとに時刻(クリップの頭から)と速度を直せる。どの操作も Undo は 1 回。
+    @ViewBuilder private func rampSection(_ c: Clip) -> some View {
+        if let pts = c.rampPoints {
+            Text("速度ランプ（点のあいだは速度を直線でつなぎます。音は音程が速度に従います）")
+                .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            ForEach(Array(pts.enumerated()), id: \.offset) { i, p in
+                HStack(spacing: 6) {
+                    Text("\(i + 1)").font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary).frame(width: 14)
+                    NumField(value: p.t, step: 0.05, decimals: 2,
+                             clamp: { min(max($0, 0), c.duration) },
+                             onCommit: { v in model.setSpeedRampPoint(clipId: clipId, index: i, t: v) },
+                             onStep: { v in model.setSpeedRampPoint(clipId: clipId, index: i, t: v) })
+                    Text("秒 ×").font(.system(size: 11)).foregroundStyle(.secondary)
+                    NumField(value: p.v, step: 0.05, decimals: 2,
+                             clamp: { ClipTiming.clampSpeed($0) },
+                             onCommit: { v in model.setSpeedRampPoint(clipId: clipId, index: i, v: v) },
+                             onStep: { v in model.setSpeedRampPoint(clipId: clipId, index: i, v: v) })
+                    Button("削除") { model.removeSpeedRampPoint(clipId: clipId, index: i) }
+                        .disabled(pts.count <= 2)
+                }
+            }
+            HStack(spacing: 6) {
+                Button("点を追加") { model.addSpeedRampPoint(clipId: clipId, at: c.duration / 2) }
+                Button("ランプをやめる") { model.clearSpeedRamp(clipId: clipId) }
+            }
+        } else if c.isFreeze == false, SpeedEditing.supports(c) {
+            Button("速度ランプを作る（いまの速度のまま点を 2 つ置く）") { model.makeSpeedRamp(clipId: clipId) }
         }
     }
 

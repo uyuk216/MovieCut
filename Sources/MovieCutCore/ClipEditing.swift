@@ -108,7 +108,13 @@ public enum ClipEditing {
         var d = max(minDuration, ne - clip.start)
         if movesSource(clip) {
             let rate = clip.effectiveSpeed
-            if clip.effectiveReverse {
+            if let ramp = clip.rampPoints {
+                // 速度ランプ: 右端の素材の時刻は積分で決まる。素材の終わりを越えない
+                if let src = clip.srcDuration {
+                    d = max(minDuration, min(d, SpeedRamp.time(ramp, forIntegral: src - clip.offset)))
+                }
+                clip.speedRamp = SpeedRamp.fit(ramp, to: d)
+            } else if clip.effectiveReverse {
                 // 逆再生は右端が素材の頭側(offset)。素材の頭より前へは延ばせない。縮めた分は offset が進む(見えているコマは動かない)
                 let dur0 = clip.duration
                 d = max(minDuration, min(d, dur0 + clip.offset / rate))
@@ -140,7 +146,9 @@ public enum ClipEditing {
         let ns = min(max(0, sp ?? raw), maxStart)
         var d = ns - start0
         let moves = movesSource(clip)
-        let rate = clip.effectiveSpeed
+        let ramp = clip.rampPoints
+        // 速度ランプの頭の側は、頭の最初の速度で決まる(頭を前へ延ばすときも同じ速さで足す)
+        let rate = ramp?.first?.v ?? clip.effectiveSpeed
         let rev = clip.effectiveReverse
         if moves && !rev { d = max(d, -clip.offset / rate) }
         else if moves && rev, let src = clip.srcDuration {
@@ -152,7 +160,15 @@ public enum ClipEditing {
         clip.start = start0 + d
         clip.duration = dur0 - d
         // 順再生は頭の側(offset)が進む。逆再生の頭は素材の終わりなので、offset は動かない
-        if moves && !rev { clip.offset = clip.offset + d * rate }
+        if moves && !rev {
+            if let ramp {
+                // 頭を d 進めた分の素材の長さは積分(前へ延ばすときは最初の速度のまま)。ランプの点も同じだけ詰める/足す
+                clip.offset += d > 0 ? SpeedRamp.integral(ramp, upTo: d) : d * rate
+                clip.speedRamp = d > 0 ? SpeedRamp.split(ramp, at: d).right : SpeedRamp.extendedHead(ramp, by: -d)
+            } else {
+                clip.offset = clip.offset + d * rate
+            }
+        }
         // キーフレームは絵に付いたまま(頭が d 進んだら、頭からの時刻は −d)
         if clip.hasKeyframes { clip.keyframes = Animation.shifted(clip.keyframes, by: -d) }
         p.tracks[loc.track].clips[loc.index] = clip
@@ -182,7 +198,13 @@ public enum ClipEditing {
         right.duration = end - t
         if movesSource(clip) {
             let sp = clip.effectiveSpeed
-            if clip.effectiveReverse {
+            if let ramp = clip.rampPoints {
+                // 速度ランプ: 左は [0, cut]、右は [cut, 終わり] の点。右の素材の頭は積分で決まる
+                let parts = SpeedRamp.split(ramp, at: cut)
+                left.speedRamp = parts.left
+                right.speedRamp = parts.right
+                right.offset = clip.offset + SpeedRamp.integral(ramp, upTo: cut)
+            } else if clip.effectiveReverse {
                 // 逆再生は、左の断片が素材の終わり側。右の断片の offset は元のまま
                 left.offset = clip.offset + (clip.duration - cut) * sp
             } else {

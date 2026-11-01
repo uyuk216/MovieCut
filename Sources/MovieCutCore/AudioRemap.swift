@@ -21,7 +21,7 @@ enum AudioRemap {
     static func render(clip c: Clip, open: OpenSource, in dir: URL) throws -> URL {
         let sr = sampleRate
         let speed = c.effectiveSpeed
-        let span = c.duration * speed
+        let span = ClipTiming.sourceSpan(c)   // 速度ランプは積分(素材の長さ)
         let spanFrames = max(1, Int((span * sr).rounded()))
         let outFrames = max(1, Int((c.duration * sr).rounded()))
         guard let src = try open(c, c.offset, span) else { throw Failure.noSource }
@@ -80,13 +80,59 @@ enum AudioRemap {
         }
 
         // 3. 速度
-        if abs(speed - 1) > 1e-9 {
+        if let ramp = c.rampPoints {
+            // 速度ランプ: 出力のコマごとに、積分で決まる素材の位置を直線補間で読む(音程は速度に従って変わる)
+            let cURL = dir.appendingPathComponent("\(id)-c.caf")
+            try resampleRamp(from: cur, to: cURL, points: ramp, outFrames: outFrames, settings: settings)
+            try? FileManager.default.removeItem(at: cur)
+            cur = cURL
+        } else if abs(speed - 1) > 1e-9 {
             let cURL = dir.appendingPathComponent("\(id)-c.caf")
             try stretch(from: cur, to: cURL, rate: speed, keepPitch: c.keepPitchOrDefault, outFrames: outFrames, settings: settings)
             try? FileManager.default.removeItem(at: cur)
             cur = cURL
         }
         return cur
+    }
+
+    /// 速度ランプ: 出力の各コマ(時刻 k/sr)に対応する素材の位置 = 積分 × sr を、直線補間で読んで書く。
+    /// 入力は塊ごとに読む(位置は単調増加なので、読む範囲は前へ進むだけ)。速度は 0.25〜4 なので、一塊の入力は高々 4 倍の長さ。
+    private static func resampleRamp(from inURL: URL, to outURL: URL, points: [SpeedKey], outFrames: Int, settings: [String: Any]) throws {
+        let inFile = try AVAudioFile(forReading: inURL)
+        let total = Int(inFile.length)
+        let out = try AVAudioFile(forWriting: outURL, settings: settings, commonFormat: .pcmFormatFloat32, interleaved: false)
+        let block = 4096
+        guard let inBuf = AVAudioPCMBuffer(pcmFormat: inFile.processingFormat, frameCapacity: AVAudioFrameCount(block * 4 + 16)),
+              let ob = AVAudioPCMBuffer(pcmFormat: out.processingFormat, frameCapacity: AVAudioFrameCount(block)),
+              let och = ob.floatChannelData else { throw Failure.engine("buffer") }
+        var o = 0
+        while o < outFrames {
+            let n = min(block, outFrames - o)
+            var pos = [Double](repeating: 0, count: n)
+            for j in 0..<n { pos[j] = SpeedRamp.integral(points, upTo: Double(o + j) / sampleRate) * sampleRate }
+            let kLo = max(0, Int(floor(pos[0])))
+            let kHi = min(total - 1, Int(floor(pos[n - 1])) + 1)
+            var lOut = [Float](repeating: 0, count: n), rOut = [Float](repeating: 0, count: n)
+            if kLo <= kHi {
+                let cnt = min(kHi - kLo + 1, Int(inBuf.frameCapacity))
+                inFile.framePosition = AVAudioFramePosition(kLo)
+                try inFile.read(into: inBuf, frameCount: AVAudioFrameCount(cnt))
+                let got = Int(inBuf.frameLength)
+                guard let ich = inBuf.floatChannelData else { throw Failure.engine("channels") }
+                for j in 0..<n {
+                    let p = pos[j], k = Int(floor(p)), f = Float(p - Double(k))
+                    for c in 0..<2 {
+                        func s(_ idx: Int) -> Float { let q = min(idx, total - 1) - kLo; return (q >= 0 && q < got) ? ich[c][q] : 0 }   // 終わりの先は最後のコマを保つ
+                        let v = s(k) * (1 - f) + s(k + 1) * f
+                        if c == 0 { lOut[j] = v } else { rOut[j] = v }
+                    }
+                }
+            }
+            for j in 0..<n { och[0][j] = lOut[j]; och[1][j] = rOut[j] }
+            ob.frameLength = AVAudioFrameCount(n)
+            try out.write(from: ob)
+            o += n
+        }
     }
 
     private static func write(_ f: AVAudioFile, _ l: UnsafePointer<Float>, _ r: UnsafePointer<Float>, _ n: Int) throws {

@@ -12,14 +12,24 @@ public extension Clip {
     var speedOrDefault: Double { ClipTiming.clampSpeed(speed ?? 1) }
     var reverseOrDefault: Bool { reverse ?? false }
     var keepPitchOrDefault: Bool { keepPitch ?? true }
-    /// 描画・音声が実際に使う速度(対応しない種類・フリーズは 1)。
-    var effectiveSpeed: Double { Clip.supportsSpeed(type) && !isFreeze ? speedOrDefault : 1 }
-    /// 描画・音声が実際に使う逆再生。
-    var effectiveReverse: Bool { Clip.supportsSpeed(type) && !isFreeze && reverseOrDefault }
-    /// 時間の流れが「そのまま」でない(速度が 1 でない・逆再生・フリーズ)。
-    var hasTimeRemap: Bool { effectiveSpeed != 1 || effectiveReverse || isFreeze }
-    /// 音声の処理(伸び縮み・逆順)が必要か。フリーズは無音なので含めない。
-    var hasAudioRemap: Bool { !isFreeze && (effectiveSpeed != 1 || effectiveReverse) }
+    /// 速度ランプの点(整えた後。ランプが無い・対応しない種類・フリーズは nil)。
+    var rampPoints: [SpeedKey]? {
+        guard Clip.supportsSpeed(type), !isFreeze, let r = speedRamp else { return nil }
+        return SpeedRamp.sanitized(r, duration: duration)
+    }
+    /// 描画・音声が実際に使う速度(対応しない種類・フリーズは 1)。速度ランプは、長さ全体の平均の速さ。
+    var effectiveSpeed: Double {
+        if let r = rampPoints { return duration > 0 ? SpeedRamp.integral(r, upTo: duration) / duration : 1 }
+        return Clip.supportsSpeed(type) && !isFreeze ? speedOrDefault : 1
+    }
+    /// 描画・音声が実際に使う逆再生(速度ランプと同時には使わない)。
+    var effectiveReverse: Bool { Clip.supportsSpeed(type) && !isFreeze && reverseOrDefault && rampPoints == nil }
+    /// 時間の流れが「そのまま」でない(速度が 1 でない・逆再生・フリーズ・速度ランプ)。
+    var hasTimeRemap: Bool { effectiveSpeed != 1 || effectiveReverse || isFreeze || rampPoints != nil }
+    /// 音声の処理(伸び縮み・逆順・速度ランプ)が必要か。フリーズは無音なので含めない。
+    var hasAudioRemap: Bool { !isFreeze && (effectiveSpeed != 1 || effectiveReverse || rampPoints != nil) }
+    /// フレームブレンドが設定されているか(動画・順再生・フリーズでない)。実際に効くのは速度が 1 未満のときだけ(`ClipTiming.blendsFrames`)。
+    var frameBlendOn: Bool { frameBlend == true && type == .video && !isFreeze && !effectiveReverse }
 }
 
 // MARK: - 時間の対応(タイムライン ⇄ 素材)
@@ -46,11 +56,16 @@ public enum ClipTiming {
     }
 
     /// 使う素材の長さ(秒)。フリーズは 0。
-    public static func sourceSpan(_ c: Clip) -> Double { c.isFreeze ? 0 : c.duration * c.effectiveSpeed }
+    public static func sourceSpan(_ c: Clip) -> Double {
+        if c.isFreeze { return 0 }
+        if let r = c.rampPoints { return SpeedRamp.integral(r, upTo: c.duration) }
+        return c.duration * c.effectiveSpeed
+    }
 
     /// クリップの頭からの時刻 `t`(秒)に出す、素材の時刻。範囲の外もそのまま延長して計算する(切り詰めは呼び出し側)。
     public static func sourceTime(of c: Clip, atClipTime t: Double) -> Double {
         if c.isFreeze { return c.offset }
+        if let r = c.rampPoints { return c.offset + SpeedRamp.integral(r, upTo: t) }
         let s = c.effectiveSpeed
         if c.effectiveReverse { return c.offset + c.duration * s - t * s }
         return c.offset + t * s
@@ -59,6 +74,7 @@ public enum ClipTiming {
     /// `sourceTime` の逆: 素材の時刻 `source` が出るクリップの頭からの時刻。フリーズは決まらないので nil。
     public static func clipTime(of c: Clip, forSourceTime source: Double) -> Double? {
         if c.isFreeze { return nil }
+        if let r = c.rampPoints { return SpeedRamp.time(r, forIntegral: source - c.offset) }
         let s = c.effectiveSpeed
         if c.effectiveReverse { return (c.offset + c.duration * s - source) / s }
         return (source - c.offset) / s
@@ -73,9 +89,21 @@ public enum ClipTiming {
         return s
     }
 
+    /// 時刻 `t`(頭から)の速度。速度ランプは、その時刻の値(直線補間)。
+    public static func speed(of c: Clip, atClipTime t: Double) -> Double {
+        if let r = c.rampPoints { return SpeedRamp.speed(r, at: t) }
+        return c.effectiveSpeed
+    }
+
+    /// 隣り合う 2 コマを混ぜるか(フレームブレンドが on で、その時刻の速度が 1 未満)。
+    public static func blendsFrames(_ c: Clip, atClipTime t: Double) -> Bool {
+        c.frameBlendOn && speed(of: c, atClipTime: t) < 1
+    }
+
     /// タイムラインの小さな印("×2" "◀" "◀×0.5" "静止")。通常のクリップは nil。
     public static func badge(for c: Clip) -> String? {
         if c.isFreeze { return "静止" }
+        if c.rampPoints != nil { return "ランプ" }
         guard Clip.supportsSpeed(c.type) else { return nil }
         let s = c.effectiveSpeed
         var out = ""
@@ -114,9 +142,10 @@ public enum SpeedEditing {
     public static func setSpeed(_ c: inout Clip, _ v: Double) -> Bool {
         guard supports(c) else { return false }
         let new = ClipTiming.clampSpeed(v)
-        if new == c.effectiveSpeed && (new != 1 || c.speed == nil) && c.extra["speed"] == nil { return false }
-        let span = c.duration * c.effectiveSpeed
+        if c.rampPoints == nil, new == c.effectiveSpeed, (new != 1 || c.speed == nil), c.extra["speed"] == nil { return false }
+        let span = ClipTiming.sourceSpan(c)
         c.extra["speed"] = nil
+        c.speedRamp = nil
         c.speed = new == 1 ? nil : new
         c.duration = max(ClipEditing.minDuration, rounded(span / new))
         return true
@@ -131,7 +160,7 @@ public enum SpeedEditing {
         var c = p.tracks[loc.track].clips[loc.index]
         let oldDuration = c.duration
         let oldEnd = c.start + oldDuration
-        let span = c.duration * c.effectiveSpeed
+        let span = ClipTiming.sourceSpan(c)
         guard setSpeed(&c, v) else { return nil }
         if c.duration > oldDuration + 1e-9 {
             let next = p.tracks[loc.track].clips.enumerated()
@@ -157,6 +186,7 @@ public enum SpeedEditing {
     @discardableResult
     public static func setReverse(_ c: inout Clip, _ on: Bool) -> Bool {
         guard supports(c), c.reverseOrDefault != on || c.extra["reverse"] != nil else { return false }
+        if on, c.rampPoints != nil { return false }   // 速度ランプと逆再生は一緒に使わない
         c.extra["reverse"] = nil
         c.reverse = on ? true : nil
         return true
@@ -230,5 +260,30 @@ public enum SpeedEditing {
         p.tracks[loc.track].clips.remove(at: loc.index)
         p.tracks[loc.track].clips.insert(contentsOf: pieces, at: loc.index)
         return (p, freeze.id)
+    }
+}
+
+// MARK: - 速度ランプの編集
+
+extension SpeedEditing {
+    /// 速度ランプを決める(nil で外す)。作るとき、逆再生は外れ、速度は点の列が決める。外すと、いまの平均の速さの一定速度になる
+    /// (長さも使う素材の長さも変わらない)。点は `SpeedRamp.sanitized` で整えてから入れる。変えたときだけ true を返す。
+    @discardableResult
+    public static func setRamp(_ c: inout Clip, _ pts: [SpeedKey]?) -> Bool {
+        guard supports(c) else { return false }
+        let current = c.rampPoints
+        let new: [SpeedKey]? = pts.flatMap { SpeedRamp.sanitized($0, duration: c.duration) }
+        if pts != nil && new == nil { return false }
+        if new == current { return false }
+        if let n = new {
+            c.speedRamp = n
+            c.speed = nil
+            c.reverse = nil
+        } else {
+            let avg = c.effectiveSpeed
+            c.speedRamp = nil
+            c.speed = avg == 1 ? nil : ClipTiming.clampSpeed(avg)
+        }
+        return true
     }
 }
