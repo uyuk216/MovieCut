@@ -286,6 +286,10 @@ public struct Renderer {
             if let src = c.src {
                 img = c.type == .image ? assets.image(at: src) : videoFrame(c, src: src, at: t)
             }
+            // 手ぶれ補正(映像のみ): 解析は素材ごとに 1 回だけ(キャッシュ)。切り抜き・拡大より前に、コマそのものを補正する
+            if c.type == .video, c.stabilizeStrength > 0, let src = c.src, let raw = img {
+                img = stabilized(c, src: src, frame: raw, t: t)
+            }
             guard var im = img, im.width > 0, im.height > 0 else { return }
             let w0 = Double(im.width), h0 = Double(im.height)
             let fit = min(W / w0, H / h0) * pose.scale
@@ -448,6 +452,19 @@ public struct Renderer {
         ctx.setAlpha(CGFloat(pose.opacity))
         drawCG(ctx, out, work)
         ctx.restoreGState()
+    }
+
+    /// 手ぶれ補正: 解析結果(キャッシュ)の時刻の補正量で、コマを動かして拡大する。解析できなければ元のコマ。
+    /// 解析は素材の全体を一度に読む(初回だけ時間がかかる。以後はキャッシュ)。
+    func stabilized(_ c: Clip, src: String, frame: CGImage, t: Double) -> CGImage {
+        let st = StabilizationCache.shared.value(key: c.stabilizeCacheKey(src: src)) {
+            Stabilizer.analyze(duration: c.duration, strength: c.stabilizeStrength,
+                               frame: { r in self.videoFrame(c, src: src, at: c.start + r) },
+                               estimator: VisionMotionEstimator())
+        }
+        guard let s = st else { return frame }
+        let (dx, dy) = s.correction(atClipTime: t - c.start)
+        return Stabilizer.warp(frame, dx: dx, dy: dy, zoom: s.zoom) ?? frame
     }
 
     /// 顔の検出枠(0〜1・左上原点)。鍵は クリップ・時刻(ms)・配置・素材・画像の大きさ。配置や素材が変われば別の鍵になる。

@@ -51,6 +51,8 @@ enum MenuCommand: Hashable {
     case audioNormalize, audioVolumeUp, audioVolumeDown, audioVoicePreset, audioClear
     // 無音カット(シートを開く)と、BGM の自動ダッキングの切り替え
     case silenceCut, fillerCut, transcriptEdit, audioDuckToggle
+    // 手ぶれ補正の切り替え(映像クリップ。ショートカットは持たない)
+    case stabilizeToggle
     // 編集 ▸ 検索と置換(テロップとセリフの一括置換。ショートカットは持たない)
     case findReplace
     case zoomIn, zoomOut, zoomFit
@@ -214,6 +216,8 @@ struct MenuState: Equatable {
     var canSilenceCut = false        // 無音カットできるクリップ(音のある素材。速度・逆再生なし)を選んでいる
     var canDuck = false              // BGM(音声クリップ)を選んでいる
     var isDucking = false            // 選択クリップの自動ダッキングがオン
+    var canStabilize = false         // 映像クリップを選んでいる(手ぶれ補正ができる)
+    var isStabilized = false         // 選択クリップの手ぶれ補正がオン
     /// 表示 ▸ プレビューの背景(アプリ全体の設定)。
     var previewBackground = PreviewBackground.default
     /// 出力 ▸ ファン(アプリ全体の設定)。使える / オン / 使えない理由 / 対象機種でヘルパー未導入 / ヘルパー導入済み。
@@ -311,6 +315,8 @@ struct MenuState: Equatable {
             canTranscribe = TranscriptionSupport.supports(c)
             canDuck = DuckEditing.supports(c)
             isDucking = c.hasDuck
+            canStabilize = StabilizeEditing.supports(c)
+            isStabilized = c.stabilizeStrength > 0
         }
         canPasteEffects = !m.effectClipboard.isEmpty
         textStyleChoices = m.textStyles.all.map { TextStyleChoice(id: $0.id, name: $0.name, builtin: $0.isBuiltin) }
@@ -505,7 +511,8 @@ enum AppMenuSpec {
         [MenuItemSpec(command: .split, title: "クリップを分割", shortcut: nil, enabled: s.canEdit && s.canSplit, checked: nil, hint: "S"),
          MenuItemSpec(command: .duplicate, title: "クリップを複製", shortcut: cmd("d"), enabled: s.canEdit && s.hasSelection, checked: nil),
          MenuItemSpec(command: .delete, title: "クリップを削除", shortcut: nil, enabled: s.canEdit && s.hasSelection, checked: nil, hint: "⌫"),
-         MenuItemSpec(command: .rippleDelete, title: "すき間を詰めて削除", shortcut: MenuShortcut(key: .delete, modifiers: [.option, .command]), enabled: s.canEdit && s.hasSelection, checked: nil)]
+         MenuItemSpec(command: .rippleDelete, title: "すき間を詰めて削除", shortcut: MenuShortcut(key: .delete, modifiers: [.option, .command]), enabled: s.canEdit && s.hasSelection, checked: nil),
+         MenuItemSpec(command: .stabilizeToggle, title: "手ぶれ補正（映像を滑らかにする）", shortcut: nil, enabled: s.canEdit && s.canStabilize, checked: s.canStabilize ? s.isStabilized : nil)]
     }
 
     static func clipTrim(_ s: MenuState) -> [MenuItemSpec] {
@@ -940,6 +947,7 @@ enum AppMenu {
             case .audioVoicePreset: m.applyVoicePresetSelected()
             case .audioClear: m.clearAudioFxSelected()
             case .audioDuckToggle: m.toggleDuckSelected()
+            case .stabilizeToggle: m.toggleStabilizeSelected()
             case .silenceCut: m.openSilenceSheet()
             case .fillerCut: m.openFillerSheet()
             case .transcriptEdit: m.openTranscriptEditSheet()

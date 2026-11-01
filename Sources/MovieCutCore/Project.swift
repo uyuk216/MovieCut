@@ -345,9 +345,11 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var duck: Duck? = nil
     /// 音声ビジュアライザの見た目(visualizer クリップ)。無いときは既定。ファイルには設定した項目だけ書く。
     public var visualizer: Visualizer? = nil
+    /// 手ぶれ補正の強さ(映像クリップ。0〜1)。無い・0 のときはファイルに書かない(オフ)。
+    public var stabilize: Double? = nil
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["id", "type", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "duck", "visualizer"]
+    static let knownKeys: Set<String> = ["id", "type", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "duck", "visualizer", "stabilize"]
 
     public init() {}
 
@@ -476,6 +478,9 @@ public struct Clip: Codable, Equatable, Identifiable {
         if let raw: JSONValue = l.value("duck") {
             if let v: Duck = l.value("duck") { duck = v } else { extra["duck"] = raw }
         }
+        if let raw: JSONValue = l.value("stabilize") {
+            if let v: Double = l.value("stabilize"), v.isFinite { stabilize = v > 0 ? min(v, 1) : nil } else { extra["stabilize"] = raw }
+        }
         if let raw: JSONValue = l.value("visualizer") {
             if let v: Visualizer = l.value("visualizer") { visualizer = v } else { extra["visualizer"] = raw }
         }
@@ -552,6 +557,7 @@ public struct Clip: Codable, Equatable, Identifiable {
         try c.encodeIfPresent(counter, forKey: AnyKey("counter"))
         try c.encodeIfPresent(duck, forKey: AnyKey("duck"))
         try c.encodeIfPresent(visualizer, forKey: AnyKey("visualizer"))
+        if let s = stabilize, s > 0 { try c.encode(min(s, 1), forKey: AnyKey("stabilize")) }
     }
 }
 
