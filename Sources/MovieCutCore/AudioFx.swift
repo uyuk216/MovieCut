@@ -10,24 +10,33 @@ public struct AudioFx: Codable, Equatable, Sendable {
     public var compressor: Compressor?
     public var reverb: Reverb?
     public var normalize: Normalize?
+    /// ノイズ除去の強さ(0〜1)。0 と未設定は同じ(書かない)。
+    public var denoise: Double?
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["eq", "compressor", "reverb", "normalize"]
+    static let knownKeys: Set<String> = ["eq", "compressor", "reverb", "normalize", "denoise"]
 
-    public init(eq: EQ? = nil, compressor: Compressor? = nil, reverb: Reverb? = nil, normalize: Normalize? = nil) {
-        self.eq = eq; self.compressor = compressor; self.reverb = reverb; self.normalize = normalize
+    public init(eq: EQ? = nil, compressor: Compressor? = nil, reverb: Reverb? = nil, normalize: Normalize? = nil, denoise: Double? = nil) {
+        self.eq = eq; self.compressor = compressor; self.reverb = reverb; self.normalize = normalize; self.denoise = denoise
     }
 
     /// 何も入っていない(ファイルに書かない)。
-    public var isEmpty: Bool { eq == nil && compressor == nil && reverb == nil && normalize == nil && extra.isEmpty }
+    public var isEmpty: Bool { eq == nil && compressor == nil && reverb == nil && normalize == nil && denoiseStrength == 0 && extra.isEmpty }
+
+    /// ノイズ除去の強さ(0〜1に収めた値)。効くのは 0 より大きいとき。
+    public var denoiseStrength: Double { Self.clampDenoise(denoise) }
+    public static func clampDenoise(_ v: Double?) -> Double {
+        guard let v, v.isFinite else { return 0 }
+        return min(max(v, 0), 1)
+    }
 
     /// 実際に音を変えるものが 1 つでもある。
     public var isActive: Bool {
-        (eq?.isActive ?? false) || (compressor?.isActive ?? false) || (reverb?.isActive ?? false) || (normalize?.isActive ?? false)
+        (eq?.isActive ?? false) || (compressor?.isActive ?? false) || (reverb?.isActive ?? false) || (normalize?.isActive ?? false) || denoiseStrength > 0
     }
 
-    /// EQ・コンプレッサー・リバーブのどれかが効く(ノーマライズだけのときは false)。
-    public var hasChain: Bool { (eq?.isActive ?? false) || (compressor?.isActive ?? false) || (reverb?.isActive ?? false) }
+    /// EQ・コンプレッサー・リバーブ・ノイズ除去のどれかが効く(ノーマライズだけのときは false)。
+    public var hasChain: Bool { (eq?.isActive ?? false) || (compressor?.isActive ?? false) || (reverb?.isActive ?? false) || denoiseStrength > 0 }
 
     /// 音に効く項目だけから作る文字列(再生用ミックスの鍵に足す)。効かない項目や `enabled` が false のものは入れない。
     public var cacheToken: String {
@@ -36,6 +45,7 @@ public struct AudioFx: Codable, Equatable, Sendable {
         if let c = compressor, c.isActive { parts.append("comp=\(c.thresholdDb),\(c.ratioValue),\(c.attackMs),\(c.releaseMs),\(String(describing: c.makeupDb))") }
         if let r = reverb, r.isActive { parts.append("rev=\(r.mix),\(r.sizeOrDefault.rawValue)") }
         if let n = normalize, n.isActive { parts.append("norm=\(n.targetDb),\(n.modeOrDefault.rawValue)") }
+        if denoiseStrength > 0 { parts.append("dn=\(denoiseStrength)") }
         return parts.joined(separator: ";")
     }
 
@@ -231,6 +241,7 @@ public struct AudioFx: Codable, Equatable, Sendable {
     public init(from decoder: Decoder) throws {
         let l = Lenient(c: try decoder.container(keyedBy: AnyKey.self), known: Self.knownKeys)
         eq = l.value("eq"); compressor = l.value("compressor"); reverb = l.value("reverb"); normalize = l.value("normalize")
+        denoise = l.double("denoise")
         extra = l.extra()
         // 読めなかった項目は捨てずに、そのまま書き戻す
         for key in Self.knownKeys {
@@ -240,6 +251,7 @@ public struct AudioFx: Codable, Equatable, Sendable {
             case "eq": ok = eq != nil
             case "compressor": ok = compressor != nil
             case "reverb": ok = reverb != nil
+            case "denoise": ok = denoise != nil
             default: ok = normalize != nil
             }
             if !ok { extra[key] = raw }
@@ -253,6 +265,7 @@ public struct AudioFx: Codable, Equatable, Sendable {
         try c.encodeIfPresent(compressor, forKey: AnyKey("compressor"))
         try c.encodeIfPresent(reverb, forKey: AnyKey("reverb"))
         try c.encodeIfPresent(normalize, forKey: AnyKey("normalize"))
+        if denoiseStrength > 0 { try c.encode(denoiseStrength, forKey: AnyKey("denoise")) }
     }
 }
 

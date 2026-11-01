@@ -41,6 +41,7 @@ public enum EffectPipeline {
         case .outline: return false
         case .chromaKey: return false
         case .lut: return v("intensity") < eps
+        case .faceBlur: return v("strength") < eps
         }
     }
 
@@ -101,16 +102,17 @@ public enum EffectPipeline {
     }
 
     /// `bounds` はクリップの枠(画像の座標・左下原点)。ビネットの中心や、ズームぼかしの中心、モザイクの格子の基準に使う。
-    public static func apply(_ image: CIImage, effects: [ResolvedEffect], bounds: CGRect, scale: Double) -> CIImage {
+    /// `faces` は顔の検出枠(0〜1・左上原点)。顔ぼかしのエフェクトが使う。無ければ顔ぼかしは何もしない。
+    public static func apply(_ image: CIImage, effects: [ResolvedEffect], bounds: CGRect, scale: Double, faces: [CGRect] = []) -> CIImage {
         let rect = image.extent
         var img = image
         for e in effects {
-            img = applyOne(e, img, rect: rect, bounds: bounds, scale: scale)
+            img = applyOne(e, img, rect: rect, bounds: bounds, scale: scale, faces: faces)
         }
         return img
     }
 
-    static func applyOne(_ e: ResolvedEffect, _ img: CIImage, rect: CGRect, bounds: CGRect, scale: Double) -> CIImage {
+    static func applyOne(_ e: ResolvedEffect, _ img: CIImage, rect: CGRect, bounds: CGRect, scale: Double, faces: [CGRect] = []) -> CIImage {
         let center = CIVector(x: bounds.midX, y: bounds.midY)
         switch e.kind {
         case .brightness:
@@ -180,6 +182,8 @@ public enum EffectPipeline {
             return img.composited(over: ring).cropped(to: rect)
         case .chromaKey:
             return ChromaKey.apply(img, key: e.color, similarity: e.v("similarity"), smoothness: e.v("smoothness"), spill: e.v("spill"))
+        case .faceBlur:
+            return FaceBlur.apply(img, faces: faces, mode: FaceBlur.Mode(e.v("mode")), strength: e.v("strength"), scale: scale)
         case .lut:
             guard let p = e.path, let c = LUTCache.shared.cube(atPath: p) else { return img }
             return LUTApply.apply(img, lut: c.lut, dimension: c.dimension, data: c.data, intensity: e.v("intensity"))

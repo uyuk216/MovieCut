@@ -329,7 +329,9 @@ final class TextStyleTests: XCTestCase {
         // 古い形(速さの無い文字アニメーション)は、そのまま読めて同じ形で書き戻る
         let old = try JSONDecoder().decode(TextAnim.self, from: Data(#"{"kind":"typewriter","duration":2}"#.utf8))
         XCTAssertNil(old.speed)
-        XCTAssertEqual(String(decoding: try JSONEncoder().encode(old), as: UTF8.self), String(decoding: try JSONEncoder().encode(TextAnim(kind: "typewriter", duration: 2)), as: UTF8.self))
+        // 鍵の順は辞書の順で毎回変わるので、並べ替えて比べる
+        let sorted = JSONEncoder(); sorted.outputFormatting = [.sortedKeys]
+        XCTAssertEqual(String(decoding: try sorted.encode(old), as: UTF8.self), String(decoding: try sorted.encode(TextAnim(kind: "typewriter", duration: 2)), as: UTF8.self))
     }
 
     func testScrollRendersMovingTextUntilTheEnd() throws {

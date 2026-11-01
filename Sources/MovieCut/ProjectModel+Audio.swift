@@ -28,6 +28,7 @@ extension ProjectModel {
     static let reverbUndoName = "リバーブの変更"
     static let normalizeUndoName = "ノーマライズの変更"
     static let panUndoName = "パンの変更"
+    static let denoiseUndoName = "ノイズ除去の変更"
 
     // MARK: メニュー「クリップ ▸ 音声」
 

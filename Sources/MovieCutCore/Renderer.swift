@@ -423,13 +423,21 @@ public struct Renderer {
         // 枠を作業範囲の座標(左下原点)へ
         let localBounds = CGRect(x: bounds.minX - work.minX, y: Double(wh) - (bounds.minY - work.minY) - bounds.height, width: bounds.width, height: bounds.height)
         let rect = CGRect(x: 0, y: 0, width: ww, height: wh)
-        var ci = EffectPipeline.apply(CIImage(cgImage: snap), effects: fx, bounds: localBounds, scale: resScale)
+        // 顔ぼかし: 作業範囲の画像から顔の枠を求める(同じ時刻・配置は検出を再利用)。調整レイヤーには効かない
+        let faces = fx.contains { $0.kind == .faceBlur } ? faceRects(for: c, t: t, pose: pose, image: snap) : []
+        var ci = EffectPipeline.apply(CIImage(cgImage: snap), effects: fx, bounds: localBounds, scale: resScale, faces: faces)
         if blurSigma > 0 { ci = ci.applyingGaussianBlur(sigma: blurSigma) }
         guard let out = EffectPipeline.makeImage(ci, from: rect) else { return }
         ctx.saveGState()
         ctx.setAlpha(CGFloat(pose.opacity))
         drawCG(ctx, out, work)
         ctx.restoreGState()
+    }
+
+    /// 顔の検出枠(0〜1・左上原点)。鍵は クリップ・時刻(ms)・配置・素材・画像の大きさ。配置や素材が変われば別の鍵になる。
+    func faceRects(for c: Clip, t: Double, pose: ClipPose, image: CGImage) -> [CGRect] {
+        let key = "\(c.id)|\(c.src ?? "")|\(Int((t * 1000).rounded()))|\(pose)|\(image.width)x\(image.height)"
+        return FaceDetectionCache.shared.rects(key: key, image: image)
     }
 
     /// 調整レイヤー: いまキャンバスに描いてある全部(背景と、それより前のレイヤー・クリップ)の合成結果に、

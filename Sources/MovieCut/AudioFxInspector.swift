@@ -42,6 +42,10 @@ struct AudioFxPanel: View {
                 fxSlider("パン", value: c.panOrDefault, range: -1...1, step: 0.01, format: Self.panText, undo: ProjectModel.panUndoName) {
                     _ = AudioFxEditing.setPan(&$0, $1)
                 }
+                fxSlider("ノイズ除去", value: c.audioFx?.denoiseStrength ?? 0, range: 0...1, step: 0.01,
+                         format: { "\(Int(($0 * 100).rounded()))%" }, undo: ProjectModel.denoiseUndoName) {
+                    _ = AudioFxEditing.setDenoise(&$0, $1)
+                }
                 eqGroup(c)
                 compressorGroup(c)
                 reverbGroup(c)

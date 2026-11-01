@@ -4,7 +4,7 @@ import Foundation
 
 /// エフェクトの引数 1 つ分の仕様(範囲・既定値・インスペクタの刻み)。
 public struct EffectParamSpec: Equatable, Sendable {
-    public enum Unit: Sendable { case plain, percent, px, degrees }
+    public enum Unit: Sendable { case plain, percent, px, degrees, mode }
     public let key: String
     public let label: String
     public let range: ClosedRange<Double>
@@ -24,7 +24,7 @@ public struct EffectParamSpec: Equatable, Sendable {
 public enum EffectKind: String, CaseIterable, Sendable {
     case brightness, contrast, saturation, hue, exposure, sharpen, mono, sepia
     case vignette, pixelate, gaussianBlur, zoomBlur, motionBlur, glow, dropShadow, outline
-    case chromaKey, lut
+    case chromaKey, lut, faceBlur
 
     public var label: String {
         switch self {
@@ -46,6 +46,7 @@ public enum EffectKind: String, CaseIterable, Sendable {
         case .outline: return "縁取り"
         case .chromaKey: return "クロマキー"
         case .lut: return "LUT"
+        case .faceBlur: return "顔ぼかし"
         }
     }
 
@@ -76,6 +77,7 @@ public enum EffectKind: String, CaseIterable, Sendable {
         case .chromaKey: return [Self.p("similarity", "色の許容", 0, 1, 0.4, 0.01, .percent), Self.p("smoothness", "なめらかさ", 0, 1, 0.1, 0.01, .percent),
                                  Self.p("spill", "色かぶりの除去", 0, 1, 0.5, 0.01, .percent)]
         case .lut: return [Self.p("intensity", "強さ", 0, 1, 1, 0.01, .percent)]
+        case .faceBlur: return [Self.p("strength", "強さ", 0, 1, 0.6, 0.01, .percent), Self.p("mode", "方式", 0, 1, 0, 1, .mode)]
         }
     }
 

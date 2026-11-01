@@ -540,6 +540,7 @@ struct ClipInspector: View {
         case .percent: return { "\(Int(($0 * 100).rounded()))%" }
         case .px: return { "\(Int($0.rounded()))px" }
         case .degrees: return { "\(Int($0.rounded()))°" }
+        case .mode: return { $0 >= 0.5 ? "ぼかし" : "モザイク" }
         case .plain: return { s.step >= 1 ? "\(Int($0.rounded()))" : String(format: "%.2f", $0) }
         }
     }

@@ -38,6 +38,12 @@ struct Biquad: Equatable {
         return Biquad(b0: 1 + alpha * A, b1: -2 * cw, b2: 1 - alpha * A, a0: 1 + alpha / A, a1: -2 * cw, a2: 1 - alpha / A)
     }
 
+    /// ハイパス(RBJ Cookbook、Q 指定)。
+    static func highPass(f0: Double, q: Double, sr: Double) -> Biquad {
+        let w = 2 * Double.pi * f0 / sr, cw = cos(w), alpha = sin(w) / (2 * q)
+        return Biquad(b0: (1 + cw) / 2, b1: -(1 + cw), b2: (1 + cw) / 2, a0: 1 + alpha, a1: -2 * cw, a2: 1 - alpha)
+    }
+
     /// 周波数 f での振幅(倍率)。試験・確認用。
     func magnitude(at f: Double, sr: Double) -> Double {
         let w = 2 * Double.pi * f / sr
@@ -219,21 +225,64 @@ final class ReverbProcessor {
     }
 }
 
-// MARK: - 処理の連なり(EQ → コンプレッサー → リバーブ)
+// MARK: - ノイズ除去(簡易: 80 Hz ハイパス + 静かな所を下げるエクスパンダー)
 
-/// 1 つのクリップにかける EQ → コンプレッサー → リバーブ。ブロックごとに `process` を呼ぶと、状態が続く。
+/// 静かな所(RMS 10 ms の包絡が −30 dBFS より下)を下げる。下げ方は強さ s(0〜1)で決まる:
+/// しきい値より 1 dB 下がるごとに (1 + 2s) dB 下げ、下げ幅は最大 30s dB。ステレオは左右連動。
+/// 開くのは 80 ms・閉じるのは 5 ms で滑らかにする(ぶつぶつ切れないように)。信号が大きいところは素通し。
+/// 乱数を使わないので、同じ入力なら必ず同じ出力になる。
+final class DenoiseProcessor {
+    static let thresholdDb = -30.0
+    private let slope: Double
+    private let maxReductionDb: Double
+    private let hp: Biquad
+    private var stateL = BiquadState(), stateR = BiquadState()
+    private var ms = 0.0
+    private var gain = 1.0
+    private let msCoef: Double, closeCoef: Double, openCoef: Double
+
+    init(strength: Double, sr: Double) {
+        let s = AudioFx.clampDenoise(strength)
+        slope = 1 + 2 * s
+        maxReductionDb = 30 * s
+        hp = Biquad.highPass(f0: 80, q: 0.707, sr: sr)
+        msCoef = 1 - exp(-1 / (0.010 * sr))
+        closeCoef = 1 - exp(-1 / (0.005 * sr))
+        openCoef = 1 - exp(-1 / (0.080 * sr))
+    }
+
+    func process(_ l: UnsafeMutablePointer<Float>, _ r: UnsafeMutablePointer<Float>, _ n: Int) {
+        for i in 0..<n {
+            let x = stateL.run(hp, Double(l[i])), y = stateR.run(hp, Double(r[i]))
+            ms += ((x * x + y * y) * 0.5 - ms) * msCoef
+            let levelDb = 10 * log10(max(ms, 1e-12))
+            var targetDb = 0.0
+            if levelDb < Self.thresholdDb { targetDb = max(-maxReductionDb, (levelDb - Self.thresholdDb) * slope) }
+            let target = pow(10, targetDb / 20)
+            gain += (target - gain) * (target < gain ? closeCoef : openCoef)
+            l[i] = Float(x * gain); r[i] = Float(y * gain)
+        }
+    }
+}
+
+// MARK: - 処理の連なり(ノイズ除去 → EQ → コンプレッサー → リバーブ)
+
+/// 1 つのクリップにかける ノイズ除去 → EQ → コンプレッサー → リバーブ。ブロックごとに `process` を呼ぶと、状態が続く。
 final class AudioFxChain {
+    private let denoise: DenoiseProcessor?
     private let eq: EQProcessor?
     private let comp: CompressorProcessor?
     private let reverb: ReverbProcessor?
 
     init(_ fx: AudioFx, sr: Double) {
+        denoise = fx.denoiseStrength > 0 ? DenoiseProcessor(strength: fx.denoiseStrength, sr: sr) : nil
         eq = fx.eq.flatMap { $0.isActive ? EQProcessor($0, sr: sr) : nil }
         comp = fx.compressor.flatMap { $0.isActive ? CompressorProcessor($0, sr: sr) : nil }
         reverb = fx.reverb.flatMap { $0.isActive ? ReverbProcessor($0, sr: sr) : nil }
     }
 
     func process(_ l: UnsafeMutablePointer<Float>, _ r: UnsafeMutablePointer<Float>, _ n: Int) {
+        denoise?.process(l, r, n)
         eq?.process(l, r, n)
         comp?.process(l, r, n)
         reverb?.process(l, r, n)
