@@ -269,7 +269,12 @@ public final class RenderAssets {
         lock.unlock()
         guard let g = gen else { return nil }
         // exact は「その時刻に出ているコマ」。計算の誤差で 1 コマ手前にならないよう 1 ms 足す(順次読みの許容と同じ)
-        let t = CMTime(seconds: max(0, time + (exact ? 0.001 : 0)), preferredTimescale: 600)
+        // 素材の終わりを越えた時刻は最後のコマ(書き出しの順次読み `SequentialVideoFrames` と同じ)。
+        // 越えた時刻を失敗扱いにすると、その素材が「見つからない」として記録され、以後のコマが全部黒になる。
+        let total = g.asset.duration.seconds
+        let wanted = max(0, time + (exact ? 0.001 : 0))
+        let clamped = total.isFinite && total > 0 ? min(wanted, max(0, total - 0.002)) : wanted
+        let t = CMTime(seconds: clamped, preferredTimescale: 600)
         if let img = try? g.copyCGImage(at: t, actualTime: nil) { return img }
         lock.lock(); missingVideos.insert(path); lock.unlock()
         return nil
