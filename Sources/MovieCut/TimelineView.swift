@@ -68,6 +68,15 @@ struct TimelineSection: View {
             .padding(.horizontal, 10).padding(.vertical, 6)
             Divider()
             TimelineRepresentable(model: model)
+                .overlay {
+                    // 空の書類: 素材の入れ方を出す(ドロップは下のキャンバスが受ける。文字は操作を奪わない)
+                    if model.project.allClips.isEmpty {
+                        Text("ここに素材をドラッグ、またはファイル ▸ 素材を追加…")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .allowsHitTesting(false)
+                    }
+                }
         }
         .clipped()
     }

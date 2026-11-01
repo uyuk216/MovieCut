@@ -822,7 +822,7 @@ struct CharacterInspector: View {
                 Text(closed ? "立ち絵（口閉じ）" : "立ち絵（口開き）").font(.system(size: 12)).foregroundStyle(.secondary)
                 Text(fileName(path)).font(.system(size: 12)).lineLimit(1).truncationMode(.middle)
                 HStack(spacing: 6) {
-                    Button("選択…") { model.choosePortrait(charId: charId, closed: closed) }
+                    Button("選ぶ…") { model.choosePortrait(charId: charId, closed: closed) }
                         .help(closed ? "口を閉じたときの立ち絵の画像を選ぶ" : "口を開いたときの立ち絵の画像を選ぶ")
                     Button { model.setPortrait(charId: charId, closed: closed, url: nil) } label: { Image(systemName: "xmark") }
                         .disabled(path == nil)
@@ -841,7 +841,7 @@ struct CharacterInspector: View {
                 Text("まばたき（目を閉じた画像）").font(.system(size: 12)).foregroundStyle(.secondary)
                 Text(fileName(c.imgBlink)).font(.system(size: 12)).lineLimit(1).truncationMode(.middle)
                 HStack(spacing: 6) {
-                    Button("選択…") { model.chooseImage(title: "まばたき画像を選ぶ") { model.setBlinkImage(charId: charId, url: $0) } }
+                    Button("選ぶ…") { model.chooseImage(title: "まばたき画像を選ぶ") { model.setBlinkImage(charId: charId, url: $0) } }
                         .help("目を閉じたときに一瞬だけ出す画像を選ぶ")
                     Button { model.setBlinkImage(charId: charId, url: nil) } label: { Image(systemName: "xmark") }
                         .disabled(c.imgBlink == nil)

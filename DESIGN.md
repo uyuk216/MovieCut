@@ -231,7 +231,19 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
 - **モデル** (`ProjectModel+TextStyle.applyTextStyleToAll`): 全体で 1 回の Undo(「スタイルを一括適用: 名前」)。文字クリップを 2 つ以上選んでいればその選択、そうでなければ全部が対象。変わるものが無ければ何もせず 0 を返す。
 - **メニュー**: クリップ ▸ テキスト ▸ スタイルを一括適用 ▸ ○○(ショートカット無し)。
 - **テスト**: `TextStyleBulkTests`(Core: 文字だけ、選択の範囲、ロック、2 回目は変わらない)、`TextStyleBulkAppTests`(1 回の Undo、変化なしは登録しない、複数選択の範囲、メニュー項目)。
-- **未対応**: プロジェクトのテンプレート(保存・新規作成からの読み込み)は未実装。ROADMAP C-2 に残る。
+
+## プロジェクトのテンプレート(ファイル ▸ テンプレート、2026-11-02)
+- ファイル ▸ **テンプレートとして保存…**(名前を聞く。クリップは含めない。キャラクター・レイヤー・設定・マーカーを残す)。ファイル ▸ **テンプレートから新規作成 ▸ 名前**(中身を入れた無題の書類を開く。元のテンプレートは変えない)。ショートカットは付けない。
+- 保存先: `~/Library/Application Support/MovieCut/Templates/<名前>.mcpjc`(プロジェクトと同じ JSON)。同じ名前があれば「名前 2」のように避け、上書きはしない。文字スタイルはアプリ全体の設定なので中身には入らない。
+- 純粋な計算 (`Core/ProjectTemplate.swift`): `make(from:)`(クリップを外す)、`sanitizedName`(区切り文字・先頭のドット・空を整える。最大 60 字)、`uniqueName`、`names(fromFileNames:)`(`.mcpjc` だけ・名前順)、`TemplateStore`(保存先の読み書き)。
+- 画面 (`ProjectModel+Templates.swift`): 一覧は最初の 1 回だけ読み、保存のあとに作り直す。新規作成は `TemplateInbox` で中身を `ProjectDocument.init` に渡す。
+- **テスト**: `Tests/MovieCutCoreTests/ProjectTemplateTests.swift` 10 件(クリップを外す・元は変えない、名前の整理と空、長さ、重複の回避、一覧、保存と読み込み、同名は上書きしない、空の名前、無いものの読み込み)。`Tests/MovieCutTests/ProjectTemplateAppTests.swift` 4 件(項目の作り方、一覧が空、ショートカットなし、箱は一度だけ渡す)。
+- **未確認**: 実際のメニューバーでの見た目と、保存パネル以外のダイアログの操作(画面なし)。
+
+## 画面の細部(2026-11-02)
+- インスペクタの選ぶ系ボタンは「選ぶ…」に統一(「選択…」は使わない)。
+- タイムラインは、クリップが 1 つも無い書類で「ここに素材をドラッグ、またはファイル ▸ 素材を追加…」を出す(SwiftUI の overlay、操作は奪わない)。
+- **未対応**: メニューの無効な項目の理由を状態欄に出すこと(無効の項目は押せないので、出すには項目の表示を変える必要がある。今回は見送り)。
 
 ## 書き出しキューと素材ブラウザ(2026-11-02)
 - **書き出しキュー**: 上の「書き出しキュー(C-1)」を参照。テスト: `Tests/MovieCutTests/ExportQueueAppTests.swift`(偽の runner で、順番・1 件ずつ・積んだ時点の写し・待ちの取り消し・実行中の取り消し・失敗の続行・終わった件だけ消す)。

@@ -25,7 +25,9 @@ final class ProjectDocument: ReferenceFileDocument {
     init() {
         // 復元で渡された書類があれば、新しい書類はその中身で始める(RecoveryInbox)
         let restored = onMain { RecoveryInbox.take() }
-        model = onMain { ProjectModel(project: restored ?? .new()) }
+        // ファイル ▸ テンプレートから新規作成 で渡された中身(無題の書類として始める)
+        let fromTemplate = onMain { TemplateInbox.take() }
+        model = onMain { ProjectModel(project: restored ?? fromTemplate ?? .new()) }
         onMain { model.startAutosave(restored: restored != nil) }
     }
 

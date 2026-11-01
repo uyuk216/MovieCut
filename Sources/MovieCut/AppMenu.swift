@@ -22,6 +22,8 @@ enum MenuCommand: Hashable {
     case exportGIF
     // 出力 ▸ 書き出しキュー(今の設定の MP4 を積む / キューを表示)と、ファイル ▸ 素材ブラウザ(ショートカットは持たない)
     case queueExport, showExportQueue, audioLibrary
+    // ファイル ▸ プロジェクトテンプレート(テンプレートとして保存 / テンプレートから新規作成。ショートカットは持たない)
+    case saveTemplate, newFromTemplate(String)
     // A6: クリップのコピー / 切り取り / 貼り付け / 全選択(ショートカットは持たない: ⌘C ⌘X ⌘V ⌘A は responder chain が受ける)と、レイヤー
     case copyClips, cutClips, pasteClips, selectAllClips, layerLock, layerSolo, layerHeight(LayerHeight)
     case split, delete, addText, addBlur, addCharacter, makeVoices
@@ -139,6 +141,8 @@ struct MenuState: Equatable {
     var canTranscribe = false
     var hasMissingMedia = false
     var hasMarkers = false
+    /// ファイル ▸ テンプレートから新規作成 の一覧(保存されている名前・名前順)
+    var templateNames: [String] = []
     /// A6: メニューの対象のレイヤー(選んだクリップのレイヤー、無ければヘッダーで選んだレイヤー)の状態
     var hasLayerTarget = false
     var layerLocked = false
@@ -226,6 +230,7 @@ struct MenuState: Equatable {
     @MainActor
     init(model: ProjectModel?) {
         previewBackground = PreviewBackgroundStore.current
+        templateNames = ProjectTemplateLibrary.names
         let fan = AppServices.fan
         fanAvailable = fan.isAvailable
         fanEnabled = fan.enabled
@@ -407,6 +412,16 @@ enum AppMenuSpec {
     /// ファイル ▸ 素材の場所を再指定…(欠けている素材があるときだけ。フォルダを選んで探し直す)。
     static func mediaRelink(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .relinkMedia, title: "素材の場所を再指定…", shortcut: nil, enabled: s.canEdit && s.hasMissingMedia, checked: nil, hint: "欠けた素材")
+    }
+
+    /// ファイル ▸ テンプレートとして保存…(クリップは含めない。ショートカットなし)。
+    static func templateSave(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .saveTemplate, title: "テンプレートとして保存…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "クリップは含めない")
+    }
+
+    /// ファイル ▸ テンプレートから新規作成 ▸ の各テンプレート(開くと無題の書類になる)。
+    static func templateNewItems(_ s: MenuState) -> [MenuItemSpec] {
+        s.templateNames.map { MenuItemSpec(command: .newFromTemplate($0), title: $0, shortcut: nil, enabled: true, checked: nil) }
     }
 
     static func chapterCopy(_ s: MenuState) -> MenuItemSpec {
@@ -788,6 +803,7 @@ enum AppMenu {
         case .fanInstall: AppServices.fan.install()
         case .fanUninstall: AppServices.fan.uninstall()
         case .helpShortcuts: ShortcutSheet.show()
+        case .newFromTemplate(let name): ProjectTemplateActions.newDocument(fromTemplate: name)
         case .helpVoicevox: openURL(DependencyStatus.voicevoxURL)
         case .helpAquestalk: openURL(DependencyStatus.aquestalkURL)
         case .helpLicense: HelpDocs.open(.license)
@@ -824,6 +840,7 @@ enum AppMenu {
             case .queueExport: m.chooseAndQueueExport()
             case .showExportQueue: m.showExportQueueSheet = true
             case .audioLibrary: m.showAudioLibrary = true
+            case .saveTemplate: m.saveAsTemplate()
             case .split: m.splitSelected()
             case .duplicate: m.duplicateSelected()
             case .rippleDelete: m.rippleDeleteSelected()

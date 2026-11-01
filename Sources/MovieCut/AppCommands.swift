@@ -51,6 +51,16 @@ struct AppCommands: Commands {
                 items(AppMenuSpec.file(s), run)
                 MenuItemView(spec: AppMenuSpec.subtitleImport(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.mediaRelink(s), perform: run)
+                Divider()
+                MenuItemView(spec: AppMenuSpec.templateSave(s), perform: run)
+                Menu("テンプレートから新規作成") {
+                    if s.templateNames.isEmpty {
+                        Text("テンプレートはありません")
+                    } else {
+                        items(AppMenuSpec.templateNewItems(s), run)
+                    }
+                }
+                Divider()
                 MenuItemView(spec: AppMenuSpec.aiScript(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.aiSettings(s), perform: run)
             }
