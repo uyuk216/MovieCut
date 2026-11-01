@@ -38,7 +38,7 @@ public enum ScriptTimeline {
         var added: [Clip] = []
         for line in lines {
             guard let (who, text) = parse(line: line, characters: project.characters, selectedCharId: selectedCharId) else { continue }
-            let r = try await voice.synthesize(character: who, text: text, in: directory)
+            let r = try await voice.synthesize(character: who, text: ExpressionTag.body(text), in: directory)
             var clip = Clip()
             clip.type = .voice
             clip.start = cursor

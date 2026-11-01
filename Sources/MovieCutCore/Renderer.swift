@@ -154,12 +154,24 @@ public struct Renderer {
             let v = speaking[ch.id]
             if v == nil && !ch.alwaysShow { continue }
             let open = v.map { mouthOpen($0, t: t) } ?? false
-            let path = (open && ch.imgOpen != nil) ? ch.imgOpen : ch.imgClosed
+            // 目: まばたき中は imgBlink(無ければ通常)。瞬きの種はしゃべっているクリップ、無ければキャラ。
+            let blinking = ch.imgBlink != nil && Blink.isClosed(seed: v?.id ?? ch.id, t: t - (v?.start ?? 0))
+            // 口: 開いていれば imgOpen。閉じていれば、その行の表情(タグ)か通常の立ち絵。
+            let expr = v.flatMap { ExpressionTag.imagePath(for: $0.text ?? "", in: ch.expressions) }
+            let path: String?
+            if open, let o = ch.imgOpen { path = o }
+            else if blinking, let b = ch.imgBlink { path = b }
+            else { path = expr ?? ch.imgClosed }
             guard let p = path, let img = assets.image(at: p), img.height > 0 else { continue }
             let h = H * 0.6 * ch.scale
             let w = Double(img.width) * (h / Double(img.height))
+            // 話し中バウンス(オプション): 音量に比例して上へ揺れる
+            var lift = 0.0
+            if let v, ch.bounce == true { lift = Bounce.lift(level: mouthLevel(v, t: t)) }
             ctx.saveGState()
-            ctx.translateBy(x: CGFloat(ch.x * W), y: CGFloat(ch.y * H))
+            // バウンスは 1 ピクセル単位に丸める(小数位置の描画は拡大・補間の遅い経路になるため。バウンスなしは従来どおり)
+            let cy = lift > 0 ? ((ch.y * H - lift * H).rounded()) : ch.y * H
+            ctx.translateBy(x: CGFloat(ch.x * W), y: CGFloat(cy))
             if ch.flip { ctx.scaleBy(x: -1, y: 1) }
             drawCG(ctx, img, CGRect(x: -w / 2, y: -h / 2, width: w, height: h))
             ctx.restoreGState()
@@ -168,7 +180,7 @@ public struct Renderer {
         // 字幕(キャラの色で縁取り)
         for c in subtitles {
             let ch = project.characters.first { $0.id == c.charId }
-            drawText(c.text ?? "", x: W / 2, y: H * 0.88, size: c.fontSize ?? 64, color: "#ffffff", font: c.fontOrDefault, outline: ch?.color ?? "#000000", ctx: ctx, style: c.textStyle)
+            drawText(ExpressionTag.body(c.text ?? ""), x: W / 2, y: H * 0.88, size: c.fontSize ?? 64, color: "#ffffff", font: c.fontOrDefault, outline: ch?.color ?? "#000000", ctx: ctx, style: c.textStyle)
         }
     }
 
@@ -214,9 +226,16 @@ public struct Renderer {
     // MARK: 口パク
 
     func mouthOpen(_ clip: Clip, t: Double) -> Bool {
-        guard let src = clip.src, let env = assets.mouthEnvelope(for: src) else { return false }
+        guard let src = clip.src, let st = assets.mouthStates(for: src) else { return false }
         let i = Int(floor((t - clip.start + clip.offset) * 60))
-        return i >= 0 && i < env.count && env[i] > 0.03
+        return i >= 0 && i < st.count && st[i]
+    }
+
+    /// 話しているクリップの、時刻 t での音量(RMS)。素材が無ければ 0。
+    func mouthLevel(_ clip: Clip, t: Double) -> Float {
+        guard let src = clip.src, let env = assets.mouthEnvelope(for: src) else { return 0 }
+        let i = Int(floor((t - clip.start + clip.offset) * 60))
+        return i >= 0 && i < env.count ? env[i] : 0
     }
 
     // MARK: クリップ本体

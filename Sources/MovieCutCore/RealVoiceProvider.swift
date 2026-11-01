@@ -53,7 +53,7 @@ extension ScriptTimeline {
     /// 音声を作り直す(セリフやキャラを変えたとき)。新しい src、長さ = 音声 + 0.15、offset は 0 に戻す。
     public static func regenerateVoice(clip: inout Clip, project: Project, provider: VoiceProvider, directory: URL = FileManager.default.temporaryDirectory) async throws {
         guard let ch = project.characters.first(where: { $0.id == (clip.charId ?? "") }) else { return }
-        let r = try await provider.synthesize(character: ch, text: clip.text ?? "", in: directory)
+        let r = try await provider.synthesize(character: ch, text: ExpressionTag.body(clip.text ?? ""), in: directory)
         clip.src = r.url.path
         clip.duration = clipDuration(forAudio: r.duration)
         clip.offset = 0

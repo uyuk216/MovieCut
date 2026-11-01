@@ -182,3 +182,14 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
 - **自動保存と復元** (`Core/AutosaveRecovery.swift`、`ProjectModel+Recovery`): 編集済みで版が変わったときだけ、30 秒ごとに `~/Library/Application Support/MovieCut/Recovery/<セッション番号>.mcrecover`(JSON: 名前・元のパス・保存時刻・プロジェクトの JSON)に書く。利用者のファイルは書かない。保存済み・閉じたときは写しを消す。起動時に残りを確認(復元 / 捨てる / あとで)。復元は `RecoveryInbox` で新しい書類に渡し、すぐ写しを残す。復元の書類は保存するまで編集済み扱い。DebugHooks の静かな起動では動かさない。
 - **素材チェック** (`Core/MissingMedia.swift`、`ProjectModel+Media`): `src` を持つクリップ(画像・動画・音声・ボイス)でファイルが無いものを列挙。書き出しは保存パネルの前と `runExport` の両方で止め、先頭 5 件の名前を出す。ファイル ▸ 素材の場所を再指定…: フォルダ(中のフォルダも)から同じファイル名を探して差し替える。1 回の Undo。ロックされたレイヤーのクリップは `edit` の規則で変えられない。
 - **範囲のドラッグと範囲ループ** (`TimelineView` の `RangeDrag`、`Core/ExportRange.swift` の `ExportRangeLoop`): ルーラー上で書き出し範囲の印(5pt 以内)を掴んで動かす。離したときに「書き出し範囲の移動」(1 回の Undo)。再生 ▸ 範囲をループ再生は `ProjectModel.rangeLoop`(保存しない・Undo に載せない)。ループ中は範囲の終わりで頭に戻して音を鳴らし直す(`PlaybackController.tick`)。
+
+## キャラクター演出(B-7)
+- **任意項目**(既定のときは書かない。古いファイルは変わらない): キャラ(`characters[]`)に `imgBlink`(まばたき = 目を閉じた画像)、`expressions`(表情名 → 画像。空は書かない)、`bounce: true`(話し中の上下の揺れ。オフは書かない)。`imgClosed` / `imgOpen` は従来どおり(null で書く)。
+- **口パク**: 音量エンベロープ(1/60 秒の RMS)を `MouthGate.states` でヒステリシス付きに開閉する(開く > 0.03、閉じる < 0.02)。先頭から順に決まるので決定的で、`RenderAssets.mouthStates` が素材ごとにキャッシュする。プレビューと書き出しは同じ `Renderer` を通る。
+- **まばたき**: `Blink.isClosed(seed:t:)`。種はしゃべっているクリップの id(しゃべっていなければキャラの id)。FNV-1a + SplitMix64 の擬似乱数で、最初の瞬きは 3〜5 秒後、以後の間隔も 3〜5 秒、目を閉じるのは 0.15 秒。
+- **表情タグ**: 台本のセリフの先頭 `[名前]`(`ExpressionTag.split`)。その行の間、口が閉じているときに `expressions[名前]` の画像を使う。辞書に無い名前は通常の立ち絵のまま。タグは字幕と読み上げの本文から除く(`Clip.text` にはタグを残す。表情の判定に使う)。口が開いているときは `imgOpen` が優先される(表情は口を閉じた画像だけに効く)。
+- **優先順位**: 口が開いている → `imgOpen` / まばたき中 → `imgBlink` / それ以外 → 表情(タグの行のみ)か `imgClosed`。
+- **バウンス**: `Bounce.lift(level:)` は音量に比例し、画面の高さの 1.2% まで上へ。バウンスがオンのときは 1 ピクセル単位に丸める(小数位置の描画は遅い経路になり、1080p で約 2 倍遅くなったため)。
+- **計測(1920×1080・`moviecut-cli frame --bench 60`・単一の 400px 画像)**: 変更前 0.91〜1.14 ms、変更後(無音・バウンスなし)0.91 ms、(しゃべり中・バウンスあり)0.91〜1.11 ms。`swift test` 623 件、失敗 0。
+- **未対応**: インスペクタで画像を割り当てる UI(今回は未着手)、口の形(あいうえお)によるリップシンク、表情の画像を口の開閉で切り替える組み合わせ(開いた口は共通の `imgOpen`)。
+

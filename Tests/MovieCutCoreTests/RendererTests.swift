@@ -209,6 +209,33 @@ final class RendererTests: XCTestCase {
         XCTAssertEqual(try render(p, t: 1.5, assets: assets).rgb(200, 100).0, 0)
     }
 
+    func testExpressionTagAndBlinkChangeStandingImage() throws {
+        // 表情タグ [笑顔] はその行の間だけ表情画像に切り替わり、字幕からはタグが消える
+        let closed = try solidPNG("eclosed.png", r: 255, g: 0, b: 0)
+        let smile = try solidPNG("esmile.png", r: 0, g: 255, b: 0)
+        let blink = try solidPNG("eblink.png", r: 255, g: 255, b: 0)
+        let wav = try writeToneWAV("etone.wav")
+        var ch = Character(); ch.id = "c2"; ch.name = "B"; ch.imgClosed = closed; ch.imgBlink = blink
+        ch.expressions = ["笑顔": smile]
+        ch.x = 0.5; ch.y = 0.5; ch.scale = 1; ch.flip = false; ch.alwaysShow = false
+        var v = Clip(); v.type = .voice; v.start = 0; v.duration = 1; v.charId = "c2"; v.src = wav
+        v.text = "[笑顔]あ"; v.subtitle = false
+        let p = project(clips: [v], characters: [ch])
+        let assets = RenderAssets()
+        // 0.25 秒: 口閉じ。タグの行なので笑顔画像(緑)
+        let quiet = try render(p, t: 0.25, assets: assets).rgb(200, 100)
+        XCTAssertGreaterThan(quiet.1, 200); XCTAssertLessThan(quiet.0, 50)
+        // 未知のタグは通常画像(赤)
+        var u = v; u.text = "[未知]あ"
+        let unk = try render(project(clips: [u], characters: [ch]), t: 0.25, assets: assets).rgb(200, 100)
+        XCTAssertGreaterThan(unk.0, 200); XCTAssertLessThan(unk.1, 50)
+        // セリフの無いキャラの瞬き(開始から最初の瞬きの途中)は黄色
+        var idle = Character(); idle.id = "idle"; idle.imgClosed = closed; idle.imgBlink = blink; idle.x = 0.5; idle.y = 0.5; idle.scale = 1; idle.flip = false
+        let idleStart = Blink.starts(seed: "idle", until: 10)[0]
+        let eyes = try render(project(clips: [], characters: [idle]), t: idleStart + 0.05, assets: assets).rgb(200, 100)
+        XCTAssertGreaterThan(eyes.0, 200); XCTAssertGreaterThan(eyes.1, 200); XCTAssertLessThan(eyes.2, 50)
+    }
+
     func testSubtitleDrawnAtBottom() throws {
         var ch = Character(); ch.id = "c1"; ch.color = "#ff0000"; ch.alwaysShow = false
         var v = Clip(); v.type = .voice; v.start = 0; v.duration = 1; v.charId = "c1"; v.text = "あいう"; v.subtitle = true; v.fontSize = 30

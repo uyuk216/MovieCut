@@ -10,6 +10,7 @@ public final class RenderAssets {
     private var images: [String: CGImage] = [:]
     private var missingImages: Set<String> = []
     private var envelopes: [String: [Float]] = [:]
+    private var mouthStateCache: [String: [Bool]] = [:]
     private var missingEnvelopes: Set<String> = []
     private var generators: [String: AVAssetImageGenerator] = [:]
     private var missingVideos: Set<String> = []
@@ -46,6 +47,16 @@ public final class RenderAssets {
         }
         envelopes[path] = env
         return env
+    }
+
+    /// 口の開閉(`MouthGate` のヒステリシス)を 1/60 秒ごとに。エンベロープから決まるので、結果も素材ごとにキャッシュする。
+    public func mouthStates(for path: String) -> [Bool]? {
+        guard let env = mouthEnvelope(for: path) else { return nil }
+        lock.lock(); defer { lock.unlock() }
+        if let s = mouthStateCache[path] { return s }
+        let s = MouthGate.states(env)
+        mouthStateCache[path] = s
+        return s
     }
 
     static func computeEnvelope(_ path: String) -> [Float]? {
