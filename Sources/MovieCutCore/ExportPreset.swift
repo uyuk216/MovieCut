@@ -1,16 +1,84 @@
 import Foundation
 import AVFoundation
 
-/// 書き出しプリセット(M7)。プロジェクトの「写し」に解像度・コーデック・fps を当てて書き出すので、元のドキュメントは変わらない。
+/// 書き出しの fps の決め方。`keep` はプロジェクトのまま、`cap` は上限、`fixed` は固定。
+public enum ExportFPS: Equatable, Sendable {
+    case keep
+    case cap(Double)
+    case fixed(Double)
+
+    public func resolve(_ fps: Double) -> Double {
+        switch self {
+        case .keep: return fps
+        case .cap(let m): return min(fps, m)
+        case .fixed(let v): return v
+        }
+    }
+}
+
+/// 書き出しの仕様(組み込みプリセットでも、ユーザーが保存したプリセットでも、この形に直して使う)。
+/// 元のプロジェクトは変えず、`apply(to:)` で写しに当てる。
+public struct ExportSpec: Equatable, Sendable {
+    /// 表示名(保存パネルの提案名の一部にもなる)。
+    public var name: String
+    /// 提案名・CLI の名前(組み込みは rawValue、保存したものは名前)。
+    public var stem: String
+    /// 音声のみのときは 0。
+    public var width: Int
+    public var height: Int
+    /// "h264" か "hevc"。
+    public var codec: String
+    public var fps: ExportFPS
+    /// nil なら解像度から決まる既定値。
+    public var bitrateMbps: Double?
+    public var audioOnly: Bool
+
+    public init(name: String, stem: String, width: Int, height: Int, codec: String, fps: ExportFPS = .keep, bitrateMbps: Double? = nil, audioOnly: Bool = false) {
+        self.name = name; self.stem = stem; self.width = width; self.height = height
+        self.codec = codec; self.fps = fps; self.bitrateMbps = bitrateMbps; self.audioOnly = audioOnly
+    }
+
+    /// ビットレートとして受け付ける範囲(Mbps)。外れた値は nil(既定)として扱う。
+    public static let bitrateRangeMbps: ClosedRange<Double> = 1...100
+    /// 解像度として受け付ける範囲(偶数・この範囲だけ)。
+    public static let sideRange: ClosedRange<Int> = 16...7680
+
+    public static func validBitrate(_ v: Double?) -> Double? {
+        guard let v, v.isFinite, bitrateRangeMbps.contains(v) else { return nil }
+        return v
+    }
+
+    /// プロジェクトの写し(解像度・文字の大きさ・コーデック・fps)。音声のみは映像の設定を変えない。
+    public func apply(to project: Project) -> Project {
+        guard !audioOnly else { return project }
+        var p = project.scaledForResolution(newWidth: width, newHeight: height)
+        p.codec = codec
+        p.fps = fps.resolve(project.fps)
+        return p
+    }
+
+    /// 保存パネルの提案名 `<書類名>-<stem>.mp4|.m4a`。
+    public func suggestedFileName(documentName: String) -> String {
+        "\(documentName)-\(stem).\(audioOnly ? "m4a" : "mp4")"
+    }
+}
+
+/// 書き出しプリセット(M7 + 拡充)。プロジェクトの「写し」に解像度・コーデック・fps・ビットレートを当てて書き出すので、元のドキュメントは変わらない。
 public enum ExportPreset: String, CaseIterable, Sendable {
-    case youtube1080, youtube4k, short, light, audio
+    case youtube1080, youtube1080p60, youtube4k, short, shorts, tiktok, reels, x720, x1080, light, audio
 
     /// 日本語の表示名(メニュー)。
     public var title: String {
         switch self {
         case .youtube1080: return "YouTube 1080p"
+        case .youtube1080p60: return "YouTube 1080p60"
         case .youtube4k: return "YouTube 4K"
         case .short: return "ショート縦"
+        case .shorts: return "YouTube Shorts"
+        case .tiktok: return "TikTok"
+        case .reels: return "Instagram リール"
+        case .x720: return "X 720p"
+        case .x1080: return "X 1080p"
         case .light: return "軽量 720p"
         case .audio: return "音声のみ"
         }
@@ -20,10 +88,33 @@ public enum ExportPreset: String, CaseIterable, Sendable {
     public var summary: String {
         switch self {
         case .youtube1080: return "1920×1080 · H.264"
+        case .youtube1080p60: return "1920×1080 · H.264 · 60fps"
         case .youtube4k: return "3840×2160 · HEVC"
         case .short: return "1080×1920 · H.264"
+        case .shorts, .tiktok, .reels: return "1080×1920 · H.264 · 30fps · 8 Mbps"
+        case .x720: return "1280×720 · H.264 · 30fps · 8 Mbps"
+        case .x1080: return "1920×1080 · H.264 · 60fps · 8 Mbps"
         case .light: return "1280×720 · H.264 · 30fps まで"
         case .audio: return "AAC · .m4a"
+        }
+    }
+
+    /// 組み込みの仕様表。ここを変えると書き出しの中身が変わるので、テストで値を固定している。
+    public var spec: ExportSpec {
+        func s(_ w: Int, _ h: Int, _ codec: String, fps: ExportFPS = .keep, mbps: Double? = nil) -> ExportSpec {
+            ExportSpec(name: title, stem: rawValue, width: w, height: h, codec: codec, fps: fps, bitrateMbps: mbps)
+        }
+        switch self {
+        case .youtube1080: return s(1920, 1080, "h264")
+        case .youtube1080p60: return s(1920, 1080, "h264", fps: .fixed(60))
+        case .youtube4k: return s(3840, 2160, "hevc")
+        case .short: return s(1080, 1920, "h264")
+        case .shorts, .tiktok, .reels: return s(1080, 1920, "h264", fps: .fixed(30), mbps: 8)
+        case .x720: return s(1280, 720, "h264", fps: .fixed(30), mbps: 8)
+        case .x1080: return s(1920, 1080, "h264", fps: .fixed(60), mbps: 8)
+        case .light: return s(1280, 720, "h264", fps: .cap(30))
+        case .audio:
+            return ExportSpec(name: title, stem: rawValue, width: 0, height: 0, codec: "aac", audioOnly: true)
         }
     }
 
@@ -38,28 +129,12 @@ public enum ExportPreset: String, CaseIterable, Sendable {
 
     /// 保存パネルの提案名 `<書類名>-<プリセット>.mp4|.m4a`。
     public func suggestedFileName(documentName: String) -> String {
-        "\(documentName)-\(rawValue).\(fileExtension)"
+        spec.suggestedFileName(documentName: documentName)
     }
 
     /// プリセットを当てた写しを返す(元は変えない)。解像度は `scaledForResolution`(文字・ぼかしの大きさも合わせる)。
     /// 音声のみは映像の設定を変えない。
-    public func apply(to project: Project) -> Project {
-        func sized(_ w: Int, _ h: Int, _ codec: String) -> Project {
-            var p = project.scaledForResolution(newWidth: w, newHeight: h)
-            p.codec = codec
-            return p
-        }
-        switch self {
-        case .youtube1080: return sized(1920, 1080, "h264")
-        case .youtube4k: return sized(3840, 2160, "hevc")
-        case .short: return sized(1080, 1920, "h264")
-        case .light:
-            var p = sized(1280, 720, "h264")
-            p.fps = min(project.fps, 30)
-            return p
-        case .audio: return project
-        }
-    }
+    public func apply(to project: Project) -> Project { spec.apply(to: project) }
 }
 
 /// プリセット(または現在の設定)で書き出す入口。アプリもコマンドラインもこれを通る。
@@ -69,12 +144,17 @@ public enum ExportJob {
         preset?.apply(to: project) ?? project
     }
 
-    public static func run(project: Project, preset: ExportPreset?, range: ExportRange? = nil, to url: URL, assets: RenderAssets = RenderAssets(), progress: ((Double) -> Void)? = nil) async throws {
-        let p = resolvedProject(project, preset: preset)
-        if preset?.isAudioOnly == true {
+    /// `spec`(保存したプリセットなど)があればそれを優先する。`bitrateMbps` は仕様の値より優先する(`--bitrate`)。
+    public static func run(project: Project, preset: ExportPreset?, spec: ExportSpec? = nil, bitrateMbps: Double? = nil, range: ExportRange? = nil, to url: URL, assets: RenderAssets = RenderAssets(), progress: ((Double) -> Void)? = nil) async throws {
+        let chosen = spec ?? preset?.spec
+        let p = chosen?.apply(to: project) ?? project
+        let audioOnly = chosen?.audioOnly ?? false
+        if audioOnly {
             try await AudioExporter.export(project: p, range: range, to: url, progress: progress)
         } else {
-            try await Exporter(project: p, assets: assets, range: range).export(to: url, progress: progress)
+            let mbps = ExportSpec.validBitrate(bitrateMbps) ?? chosen?.bitrateMbps
+            let rate = mbps.map { Int(($0 * 1_000_000).rounded()) }
+            try await Exporter(project: p, assets: assets, range: range, videoBitrate: rate).export(to: url, progress: progress)
         }
     }
 }

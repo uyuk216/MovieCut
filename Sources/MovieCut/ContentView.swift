@@ -70,6 +70,8 @@ struct ContentView: View {
         .sheet(isPresented: $model.showSettings) { SettingsSheet(model: model) }
         .sheet(isPresented: $model.showResolutionSheet) { ResolutionSheet(model: model) }
         .sheet(isPresented: $model.showFpsSheet) { FrameRateSheet(model: model) }
+        .sheet(isPresented: $model.showLoudnessSheet) { LoudnessSheet(model: model) }
+        .sheet(isPresented: $model.showScopeSheet) { ScopeSheet(model: model) }
         .sheet(isPresented: $model.showJumpSheet) { JumpToTimeSheet(model: model) }
         .sheet(isPresented: $model.showSilenceSheet) { SilenceCutSheet(model: model) }
         .sheet(isPresented: $model.showFillerSheet) { FillerCutSheet(model: model) }

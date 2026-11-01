@@ -64,11 +64,14 @@ public final class Exporter {
 
     /// 書き出す区間(nil なら全体)。
     public let range: ExportRange?
+    /// 映像の目標ビットレート(bps)。nil なら解像度から決める既定値(従来どおり)。
+    public let videoBitrate: Int?
 
-    public init(project: Project, assets: RenderAssets, range: ExportRange? = nil) {
+    public init(project: Project, assets: RenderAssets, range: ExportRange? = nil, videoBitrate: Int? = nil) {
         self.project = project
         self.assets = assets
         self.range = range
+        self.videoBitrate = videoBitrate
     }
 
     /// 正確な分数のフレームレート(29.97 → 30000/1001 など)。
@@ -140,8 +143,10 @@ public final class Exporter {
         let isHEVC = plan.codec == "hevc"
         let base = Double(ew) * Double(eh) * fpsValue * 0.1
         let h264Rate = min(60_000_000, max(8_000_000, base))
+        // 指定があれば、そのまま使う(HEVC の補正もしない)
+        let averageRate = videoBitrate ?? Int(isHEVC ? h264Rate * 0.75 : h264Rate)
         var props: [String: Any] = [
-            AVVideoAverageBitRateKey: Int(isHEVC ? h264Rate * 0.75 : h264Rate),
+            AVVideoAverageBitRateKey: averageRate,
             AVVideoExpectedSourceFrameRateKey: fpsValue,
             AVVideoMaxKeyFrameIntervalKey: max(1, Int((2 * fpsValue).rounded())),
         ]

@@ -58,8 +58,8 @@ final class ExportPresetTests: XCTestCase {
     }
 
     func testNamesAndCliKeys() {
-        XCTAssertEqual(ExportPreset.allCases.map(\.title), ["YouTube 1080p", "YouTube 4K", "ショート縦", "軽量 720p", "音声のみ"])
-        XCTAssertEqual(ExportPreset.allCases.map(\.rawValue), ["youtube1080", "youtube4k", "short", "light", "audio"])
+        XCTAssertEqual(ExportPreset.allCases.map(\.title), ["YouTube 1080p", "YouTube 1080p60", "YouTube 4K", "ショート縦", "YouTube Shorts", "TikTok", "Instagram リール", "X 720p", "X 1080p", "軽量 720p", "音声のみ"])
+        XCTAssertEqual(ExportPreset.allCases.map(\.rawValue), ["youtube1080", "youtube1080p60", "youtube4k", "short", "shorts", "tiktok", "reels", "x720", "x1080", "light", "audio"])
         XCTAssertEqual(ExportPreset.youtube1080.suggestedFileName(documentName: "動画"), "動画-youtube1080.mp4")
         XCTAssertEqual(ExportPreset.audio.suggestedFileName(documentName: "動画"), "動画-audio.m4a")
         XCTAssertEqual(ExportPreset(cliName: "SHORT"), .short)

@@ -4,7 +4,7 @@ import MovieCutCore
 /// メニューバーの項目が呼ぶ操作(ツールバーと同じモデルの関数に行き着く)。
 enum MenuCommand: Hashable {
     case about, settings, videoSettings
-    case addMedia, export, exportPreset(ExportPreset)
+    case addMedia, export, exportPreset(ExportPreset), exportCustomPreset(String), saveCustomPreset
     // 出力 ▸ 書き出し中のファン最大化(設定と、ヘルパーのインストール / 削除)
     case fanMaxToggle, fanInstall, fanUninstall
     // 字幕(B3)とチャプター
@@ -22,6 +22,8 @@ enum MenuCommand: Hashable {
     case exportGIF
     // 出力 ▸ 書き出しキュー(今の設定の MP4 を積む / キューを表示)と、ファイル ▸ 素材ブラウザ(ショートカットは持たない)
     case queueExport, showExportQueue, audioLibrary
+    // 出力 ▸ ラウドネスを測る…、表示 ▸ スコープ…(ショートカットは持たない)
+    case measureLoudness, showScopes
     // ファイル ▸ プロジェクトテンプレート(テンプレートとして保存 / テンプレートから新規作成。ショートカットは持たない)
     case saveTemplate, newFromTemplate(String)
     // A6: クリップのコピー / 切り取り / 貼り付け / 全選択(ショートカットは持たない: ⌘C ⌘X ⌘V ⌘A は responder chain が受ける)と、レイヤー
@@ -496,15 +498,32 @@ enum AppMenuSpec {
     }
 
     /// 出力 ▸ 書き出しキューに追加… / 書き出しキューを表示…(ショートカットは持たない)。
+    static func scopeItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .showScopes, title: "スコープ…", shortcut: nil, enabled: true, checked: nil, hint: "波形・ヒストグラム(今のコマ)")
+    }
+
+    static func loudnessItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .measureLoudness, title: "ラウドネスを測る…", shortcut: nil, enabled: s.canEdit && s.canExport, checked: nil, hint: "LUFS と真のピーク")
+    }
+
     static func exportQueueItems(_ s: MenuState) -> [MenuItemSpec] {
         [MenuItemSpec(command: .queueExport, title: "書き出しキューに追加…", shortcut: nil, enabled: s.canEdit && s.canExport, checked: nil, hint: "今の設定で MP4"),
          MenuItemSpec(command: .showExportQueue, title: "書き出しキューを表示…", shortcut: nil, enabled: s.canEdit, checked: nil)]
     }
 
-    static func exportPresets(_ s: MenuState) -> [MenuItemSpec] {
+    /// 出力 ▸ 書き出しプリセット: 組み込み + 保存したプリセット(`custom` は呼び出し側が読んで渡す)。
+    static func exportPresets(_ s: MenuState, custom: [CustomExportPreset] = []) -> [MenuItemSpec] {
         ExportPreset.allCases.map {
             MenuItemSpec(command: .exportPreset($0), title: $0.title, shortcut: nil, enabled: s.canEdit && s.canExport, checked: nil, hint: $0.summary)
+        } + custom.map {
+            MenuItemSpec(command: .exportCustomPreset($0.name), title: $0.name, shortcut: nil, enabled: s.canEdit && s.canExport, checked: nil,
+                         hint: "\($0.width)×\($0.height) · \($0.codec == "hevc" ? "HEVC" : "H.264")")
         }
+    }
+
+    /// 出力 ▸ 書き出しプリセット ▸ 現在の設定をプリセットに保存…(ショートカットは持たない)。
+    static func saveCustomPreset(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .saveCustomPreset, title: "現在の設定をプリセットに保存…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "名前を付けて保存")
     }
 
     // MARK: クリップメニュー
@@ -858,7 +877,7 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, settings(s), videoSettings(s)] + file(s) + [subtitleImport(s), mediaRelink(s), subtitleExport(s), subtitleGenerate(s), transcribeSubtitles(s), chapterCopy(s), aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s)] + exportPresets(s) + exportQueueItems(s) + [makeProxies(s)] + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textCounterItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + layerHeightItems(s) + playback(s)
+        [about, settings(s), videoSettings(s)] + file(s) + [subtitleImport(s), mediaRelink(s), subtitleExport(s), subtitleGenerate(s), transcribeSubtitles(s), chapterCopy(s), aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s)] + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), makeProxies(s)] + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textCounterItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + layerHeightItems(s) + playback(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerColorItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + [previewProxy(s), fullScreen(s)] + help.flatMap { $0 }
@@ -897,6 +916,9 @@ enum AppMenu {
             case .addMedia: m.chooseAndAddMedia()
             case .export: m.chooseAndExport()
             case .exportPreset(let p): m.chooseAndExport(preset: p)
+            case .exportCustomPreset(let name):
+                if let c = CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL()).first(where: { $0.name == name }) { m.chooseAndExport(spec: c.spec) }
+            case .saveCustomPreset: m.saveCurrentAsCustomPreset()
             case .importSubtitles: m.chooseAndImportSubtitles()
             case .exportSubtitles: m.chooseAndExportSubtitles()
             case .generateSubtitles: m.generateSubtitlesFromScript()
@@ -918,6 +940,8 @@ enum AppMenu {
             case .queueExport: m.chooseAndQueueExport()
             case .showExportQueue: m.showExportQueueSheet = true
             case .makeProxies: m.makeProxies()
+            case .measureLoudness: m.showLoudnessSheet = true
+            case .showScopes: m.showScopeSheet = true
             case .aiImage: m.openAIImage()
             case .audioLibrary: m.showAudioLibrary = true
             case .saveTemplate: m.saveAsTemplate()

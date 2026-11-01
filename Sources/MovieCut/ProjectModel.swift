@@ -157,6 +157,10 @@ final class ProjectModel: ObservableObject {
     /// 「解像度を入力」「フレームレートを入力」のシート。
     @Published var showResolutionSheet = false
     @Published var showFpsSheet = false
+    /// 出力 ▸ ラウドネスを測る…(プロジェクトの音の全体を測って見せる)
+    @Published var showLoudnessSheet = false
+    /// 表示 ▸ スコープ…(今のプレビューのコマの波形・ヒストグラム)
+    @Published var showScopeSheet = false
     /// 出力 ▸ 書き出しキューを表示… / 素材ブラウザ(ファイル ▸ 素材ブラウザを開く…)のシート。
     @Published var showExportQueueSheet = false
     @Published var showAudioLibrary = false
@@ -495,23 +499,24 @@ final class ProjectModel: ObservableObject {
 
     /// 書き出し(ツールバーのボタンも MC_DEBUG_EXPORT もこれを呼ぶ)。
     /// `preset` があれば、プロジェクトの「写し」にプリセットを当てて書き出す(ドキュメント自体は変えない)。
-    func runExport(to url: URL, preset: ExportPreset? = nil, range: ExportRange? = nil) async -> ExportOutcome {
+    func runExport(to url: URL, preset: ExportPreset? = nil, spec: ExportSpec? = nil, bitrateMbps: Double? = nil, range: ExportRange? = nil) async -> ExportOutcome {
         guard !directExportBlocked() else { return .failure(ExportError.writerFailed(nil)) }
         // 素材が欠けたまま書き出すと、その部分が静かに抜けるので止める(保存パネルの前にも同じ確認をする)
         if reportMissingMediaForExport() { return .failure(ExportError.writerFailed(nil)) }
-        let exporting = ExportJob.resolvedProject(project, preset: preset)
+        let chosen = spec ?? preset?.spec
+        let exporting = chosen?.apply(to: project) ?? project
         let plan = OutputPlan.make(width: exporting.width, height: exporting.height, codec: exporting.codec)
-        let isVideo = preset?.isAudioOnly != true
+        let isVideo = chosen?.audioOnly != true
         var notices: [String] = []
         if isVideo, plan.error == nil {
             if plan.usesFallbackCodec { notices.append(OutputPlan.fallbackNotice) }
             if let h = OutputPlan.heavyWarning(width: plan.width, height: plan.height, fps: exporting.fps) { notices.append(h) }
         }
         let snapshot = project
-        let title = (preset.map { $0.isAudioOnly ? "音声を書き出しています" : "\($0.title) で書き出しています" } ?? "MP4 を書き出しています")
+        let title = (chosen.map { $0.audioOnly ? "音声を書き出しています" : "\($0.name) で書き出しています" } ?? "MP4 を書き出しています")
         return await runJob(title: title, fileName: url.lastPathComponent, notices: notices,
                             success: "\(url.lastPathComponent) に書き出しました" + (plan.usesFallbackCodec && isVideo ? "(HEVC)" : ""), result: url) { progress in
-            try await ExportJob.run(project: snapshot, preset: preset, range: range, to: url, progress: progress)
+            try await ExportJob.run(project: snapshot, preset: preset, spec: spec, bitrateMbps: bitrateMbps, range: range, to: url, progress: progress)
         }
     }
 

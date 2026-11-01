@@ -75,7 +75,7 @@ final class MenuM7Tests: XCTestCase {
         let s = state()
         XCTAssertEqual(AppMenuSpec.exportCurrent(s).title, "MP4 を書き出す…")
         XCTAssertEqual(AppMenuSpec.exportCurrent(s).shortcut, sc("e", .command))
-        XCTAssertEqual(AppMenuSpec.exportPresets(s).map(\.title), ["YouTube 1080p", "YouTube 4K", "ショート縦", "軽量 720p", "音声のみ"])
+        XCTAssertEqual(AppMenuSpec.exportPresets(s).map(\.title), ExportPreset.allCases.map(\.title))
         XCTAssertTrue(AppMenuSpec.exportPresets(s).allSatisfy { $0.shortcut == nil && $0.enabled })
         XCTAssertEqual(AppMenuSpec.exportPresets(s).first?.displayTitle, "YouTube 1080p  (1920×1080 · H.264)")
     }

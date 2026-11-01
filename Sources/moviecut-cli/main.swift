@@ -33,17 +33,20 @@ func parseFps(_ s: String) -> Double {
 }
 
 /// 書き出して、進み具合(約10%ごと)を stderr、最後に コマ数・秒・実時間比 を stdout に出す。
-func runExport(_ p: Project, to url: URL, preset: ExportPreset? = nil, range: ExportRange? = nil) async throws {
-    let resolved = ExportJob.resolvedProject(p, preset: preset)
-    let frames = preset?.isAudioOnly == true ? 0 : Exporter(project: resolved, assets: RenderAssets(), range: range).totalFrames
-    if preset?.isAudioOnly != true {
+func runExport(_ p: Project, to url: URL, preset: ExportPreset? = nil, spec: ExportSpec? = nil, bitrateMbps: Double? = nil, range: ExportRange? = nil) async throws {
+    let chosen = spec ?? preset?.spec
+    let audioOnly = chosen?.audioOnly ?? false
+    let resolved = chosen?.apply(to: p) ?? p
+    let frames = audioOnly ? 0 : Exporter(project: resolved, assets: RenderAssets(), range: range).totalFrames
+    if !audioOnly {
         let plan = Exporter(project: resolved, assets: RenderAssets()).plan
+        if let b = bitrateMbps ?? chosen?.bitrateMbps { print(String(format: "bitrate: %.1f Mbps(指定)", b)) }
         print("plan: \(plan.width)x\(plan.height) \(plan.codec)\(plan.usesFallbackCodec ? " (H.264 では書けないので HEVC に切り替え)" : "") fps=\(FrameRate.label(resolved.fps)) (\(resolved.frameRate.num)/\(resolved.frameRate.den))")
         if let w = OutputPlan.heavyWarning(width: plan.width, height: plan.height, fps: resolved.fps) { print("caution: " + w) }
     }
     var nextMark = 0.1
     let t0 = Date()
-    try await ExportJob.run(project: p, preset: preset, range: range, to: url) { v in
+    try await ExportJob.run(project: p, preset: preset, spec: spec, bitrateMbps: bitrateMbps, range: range, to: url) { v in
         if v >= nextMark - 1e-9 {
             FileHandle.standardError.write(Data(String(format: "  %3.0f%%\n", v * 100).utf8))
             nextMark = (v * 10 + 1e-9).rounded(.down) / 10 + 0.1
@@ -195,7 +198,7 @@ case "frame" where args.count >= 2:
         print("wrote \(outPath) (\(p.width)x\(p.height))")
     } catch { fail("読めませんでした: \(error)") }
 case "export" where args.count >= 3:
-    // export <in.mcpjc> <out.mp4|out.m4a> [--range a:b|project] [--preset youtube1080|youtube4k|short|light|audio] [--size WxH] [--fps 29.97] [--codec h264|hevc]
+    // export <in.mcpjc> <out.mp4|out.m4a> [--range a:b|project] [--preset <組み込み名 または保存したプリセット名>] [--bitrate 8(Mbps)] [--size WxH] [--fps 29.97] [--codec h264|hevc]
     // --preset はプロジェクトの写しに当てるだけ(入力ファイルは変えない)。--size / --codec は、プリセットの前に当てる。
     do {
         var p = try Project.load(from: URL(fileURLWithPath: args[1]))
@@ -203,14 +206,39 @@ case "export" where args.count >= 3:
         if let f = optValue("--fps") { p.fps = parseFps(f) }
         if let c = optValue("--codec") { guard ["h264", "hevc"].contains(c) else { fail("--codec は h264 か hevc") }; p.codec = c }
         var preset: ExportPreset?
+        var spec: ExportSpec?
         if let name = optValue("--preset") {
-            guard let pr = ExportPreset(cliName: name) else { fail("--preset は " + ExportPreset.allCases.map(\.rawValue).joined(separator: " / ") + " のどれか") }
-            preset = pr
-            if pr.isAudioOnly, !args[2].lowercased().hasSuffix(".m4a") { FileHandle.standardError.write(Data("注意: 音声のみの出力先は .m4a にしてください\n".utf8)) }
+            // 組み込みの名前、または保存したプリセットの名前(大文字小文字は問わない)
+            if let pr = ExportPreset(cliName: name) {
+                preset = pr
+            } else if let c = CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL()).first(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) {
+                spec = c.spec
+            } else {
+                fail("--preset は " + ExportPreset.allCases.map(\.rawValue).joined(separator: " / ") + " か、保存したプリセット名のどれか")
+            }
+            if (spec?.audioOnly ?? preset?.isAudioOnly) == true, !args[2].lowercased().hasSuffix(".m4a") { FileHandle.standardError.write(Data("注意: 音声のみの出力先は .m4a にしてください\n".utf8)) }
+        }
+        var bitrate: Double?
+        if let b = optValue("--bitrate") {
+            guard let v = Double(b), let ok = ExportSpec.validBitrate(v) else { fail("--bitrate は \(Int(ExportSpec.bitrateRangeMbps.lowerBound))〜\(Int(ExportSpec.bitrateRangeMbps.upperBound)) の Mbps(例 8)") }
+            bitrate = ok
         }
         let range = parseRange(p)
-        try await withFanMax(args.contains("--fan-max")) { try await runExport(p, to: URL(fileURLWithPath: args[2]), preset: preset, range: range) }
+        try await withFanMax(args.contains("--fan-max")) { try await runExport(p, to: URL(fileURLWithPath: args[2]), preset: preset, spec: spec, bitrateMbps: bitrate, range: range) }
     } catch { fail("書き出せませんでした: \(error.localizedDescription)") }
+case "loudness" where args.count >= 2:
+    // loudness <project> [--range a:b|project]: 書き出しと同じミックスダウンを BS.1770 で測る(読み取りのみ・自動では音量を変えない)
+    do {
+        let p = try Project.load(from: URL(fileURLWithPath: args[1]))
+        guard let r = try LoudnessAnalysis.measure(project: p, range: parseRange(p)) else { fail("音声がありません") }
+        func f(_ v: Double) -> String { v.isFinite ? String(format: "%.1f", v) : "−∞" }
+        print("duration: \(String(format: "%.2f", r.duration)) s")
+        print("integrated: \(f(r.integrated)) LUFS")
+        print("short-term max: \(f(r.shortTermMax)) LUFS")
+        print("true peak: \(f(r.truePeakDb)) dBTP")
+        print("sample peak: \(f(r.samplePeakDb)) dBFS")
+        if let d = r.differenceToYouTube() { print("YouTube 目安(-14 LUFS)との差: \(String(format: "%+.1f", d)) dB(目安だけ。自動では音量を変えません)") }
+    } catch { fail("測れませんでした: \(error.localizedDescription)") }
 case "sequence" where args.count >= 2:
     // sequence <project> --out <dir> [--format png|jpeg] [--name base] [--range a:b|project] [--fps 30] [--size WxH]
     guard let outPath = optValue("--out") else { fail("--out(出力先のフォルダ)が必要です") }
@@ -501,5 +529,5 @@ case "smoke":
         try await runExport(p, to: URL(fileURLWithPath: outPath))
     } catch { fail("書き出せませんでした: \(error.localizedDescription)") }
 default:
-    fail("usage:\n  moviecut-cli info <file.ymproj>\n  moviecut-cli new <out.ymproj>\n  moviecut-cli export <in.mcpjc> <out.mp4|out.m4a> [--range a:b|project] [--preset youtube1080|youtube4k|short|light|audio] [--size WxH] [--fps 29.97] [--codec h264|hevc] [--fan-max [--fan-port 1200|1201]]\n  moviecut-cli fan status | fan test [--seconds 8] [--fan-port 1200|1201]\n  moviecut-cli smoke --out <mp4> [--size WxH] [--fps 23.976] [--codec h264|hevc] [--blur] [--tone] [--save-project p.ymproj]\n  moviecut-cli speak (--voicevox <id> [--speed --pitch --intonation] | --voice <preset> [--speed]) --text <t> --out <wav>\n  moviecut-cli speakers | deps | script <script.txt> --out <p.ymproj>\n  moviecut-cli frame <in.ymproj> --t <sec> --out <png|jpg> [--size WxH] [--bench N]\n  moviecut-cli gif <in.mcpjc> --out <x.gif> [--fps 10] [--width 480] [--range a:b|project]\n  moviecut-cli sequence <in.mcpjc> --out <dir> [--format png|jpeg] [--name base] [--range a:b|project] [--fps 30] [--size WxH]\n  moviecut-cli addvideo <in.ymproj> <clip.mp4> <out.ymproj>\n  moviecut-cli genclips <N> <out.ymproj>\n  moviecut-cli silence <project|media> [--threshold -40] [--min 0.4] [--pad 0.1]\n  moviecut-cli subs <project> --out <x.srt|x.vtt>\n  moviecut-cli transcribe <media|project> --out <x.srt|x.vtt> [--clip 0] [--locale ja-JP]\n  moviecut-cli chapters <project>\n  moviecut-cli project-info <project>   (JSON。読み取り専用)\n  moviecut-cli ai script --theme <t> [--chars 霊夢,魔理沙] [--lines 12] (--provider-cmd \"claude -p\" | --provider-url http://127.0.0.1:11434 --model <m>) [--timeout 120] [--out x.txt] [--show-prompt]")
+    fail("usage:\n  moviecut-cli info <file.ymproj>\n  moviecut-cli new <out.ymproj>\n  moviecut-cli export <in.mcpjc> <out.mp4|out.m4a> [--range a:b|project] [--preset youtube1080|youtube1080p60|youtube4k|short|shorts|tiktok|reels|x720|x1080|light|audio|<保存したプリセット名>] [--bitrate 8(Mbps)] [--size WxH] [--fps 29.97] [--codec h264|hevc] [--fan-max [--fan-port 1200|1201]]\n  moviecut-cli fan status | fan test [--seconds 8] [--fan-port 1200|1201]\n  moviecut-cli smoke --out <mp4> [--size WxH] [--fps 23.976] [--codec h264|hevc] [--blur] [--tone] [--save-project p.ymproj]\n  moviecut-cli speak (--voicevox <id> [--speed --pitch --intonation] | --voice <preset> [--speed]) --text <t> --out <wav>\n  moviecut-cli speakers | deps | script <script.txt> --out <p.ymproj>\n  moviecut-cli frame <in.ymproj> --t <sec> --out <png|jpg> [--size WxH] [--bench N]\n  moviecut-cli gif <in.mcpjc> --out <x.gif> [--fps 10] [--width 480] [--range a:b|project]\n  moviecut-cli sequence <in.mcpjc> --out <dir> [--format png|jpeg] [--name base] [--range a:b|project] [--fps 30] [--size WxH]\n  moviecut-cli addvideo <in.ymproj> <clip.mp4> <out.ymproj>\n  moviecut-cli genclips <N> <out.ymproj>\n  moviecut-cli silence <project|media> [--threshold -40] [--min 0.4] [--pad 0.1]\n  moviecut-cli subs <project> --out <x.srt|x.vtt>\n  moviecut-cli transcribe <media|project> --out <x.srt|x.vtt> [--clip 0] [--locale ja-JP]\n  moviecut-cli chapters <project>\n  moviecut-cli loudness <project> [--range a:b|project]\n  moviecut-cli project-info <project>   (JSON。読み取り専用)\n  moviecut-cli ai script --theme <t> [--chars 霊夢,魔理沙] [--lines 12] (--provider-cmd \"claude -p\" | --provider-url http://127.0.0.1:11434 --model <m>) [--timeout 120] [--out x.txt] [--show-prompt]")
 }

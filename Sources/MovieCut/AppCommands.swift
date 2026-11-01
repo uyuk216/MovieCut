@@ -1,4 +1,5 @@
 import SwiftUI
+import MovieCutCore
 
 /// 項目表(MenuItemSpec)を SwiftUI のメニュー項目にする。ラジオは Toggle(✓)で表す。
 struct MenuItemView: View {
@@ -189,7 +190,11 @@ struct AppCommands: Commands {
                 MenuItemView(spec: AppMenuSpec.videoSettings(s), perform: run)
                 Divider()
                 MenuItemView(spec: AppMenuSpec.exportCurrent(s), perform: run)
-                Menu("書き出しプリセット") { items(AppMenuSpec.exportPresets(s), run) }
+                Menu("書き出しプリセット") {
+                    items(AppMenuSpec.exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())), run)
+                    Divider()
+                    MenuItemView(spec: AppMenuSpec.saveCustomPreset(s), perform: run)
+                }
                 Divider()
                 items(AppMenuSpec.exportQueueItems(s), run)
                 Divider()
@@ -200,6 +205,8 @@ struct AppCommands: Commands {
                 items(AppMenuSpec.imageExportItems(s), run)
                 Divider()
                 MenuItemView(spec: AppMenuSpec.gifExport(s), perform: run)
+                Divider()
+                MenuItemView(spec: AppMenuSpec.loudnessItem(s), perform: run)
                 Divider()
                 MenuItemView(spec: AppMenuSpec.fanMaxToggle(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.fanInstall(s), perform: run)
@@ -224,6 +231,8 @@ struct AppCommands: Commands {
                 Divider()
                 Menu("プレビューの背景") { items(AppMenuSpec.previewBackgroundItems(s), run) }
                 MenuItemView(spec: AppMenuSpec.previewProxy(s), perform: run)
+                Divider()
+                MenuItemView(spec: AppMenuSpec.scopeItem(s), perform: run)
                 Divider()
             }
         }

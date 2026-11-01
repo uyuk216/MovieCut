@@ -298,8 +298,8 @@ final class LevelMeter {
     private(set) var frames = 0
     private var pre = (l: BiquadState(), r: BiquadState()), rlb = (l: BiquadState(), r: BiquadState())
     // 48 kHz 用の係数(BS.1770-4)
-    private static let preFilter = Biquad(b0: 1.53512485958697, b1: -2.69169618940638, b2: 1.19839281085285, a0: 1, a1: -1.69065929318241, a2: 0.73248077421585)
-    private static let rlbFilter = Biquad(b0: 1, b1: -2, b2: 1, a0: 1, a1: -1.99004745483398, a2: 0.99007225036621)
+    static let preFilter = Biquad(b0: 1.53512485958697, b1: -2.69169618940638, b2: 1.19839281085285, a0: 1, a1: -1.69065929318241, a2: 0.73248077421585)
+    static let rlbFilter = Biquad(b0: 1, b1: -2, b2: 1, a0: 1, a1: -1.99004745483398, a2: 0.99007225036621)
 
     func add(_ l: UnsafePointer<Float>, _ r: UnsafePointer<Float>, _ n: Int) {
         for i in 0..<n {
