@@ -39,6 +39,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>LSApplicationCategoryType</key><string>public.app-category.video</string>
   <key>NSHighResolutionCapable</key><true/>
+  <key>NSSpeechRecognitionUsageDescription</key><string>動画や音声の話し声を、このMacの中で文字にして字幕を作るために使います。音声は外部に送りません。</string>
   <key>NSPrincipalClass</key><string>NSApplication</string>
   <key>NSHumanReadableCopyright</key><string>Copyright © 2026 Movie Cut. All rights reserved.</string>
   <key>CFBundleDocumentTypes</key>

@@ -247,6 +247,42 @@ case "subs" where args.count >= 2:
         try SubtitleFile.format(cues, as: fmt).write(to: outURL, atomically: true, encoding: .utf8)
         print("wrote \(outPath) cues=\(cues.count)")
     } catch { fail("書けませんでした: \(error)") }
+case "transcribe" where args.count >= 2:
+    // transcribe <media|project> --out x.srt|x.vtt [--clip 0] [--locale ja-JP]: 音声認識(オンデバイス)で字幕を作って書く(画面なしの確認用。アプリと同じ経路)。
+    guard let outPath = optValue("--out") else { fail("--out が必要です") }
+    guard let fmt = SubtitleFormat(pathExtension: URL(fileURLWithPath: outPath).pathExtension) else { fail("--out の拡張子は .srt か .vtt") }
+    let path = args[1]
+    guard FileManager.default.fileExists(atPath: path) else { fail("見つかりません: \(path)") }
+    let locale = optValue("--locale") ?? "ja-JP"
+    do {
+        // プロジェクトなら、指定したクリップ(既定は最初の音のあるクリップ)。素材なら、その音声・動画全体。
+        let ext = (path as NSString).pathExtension.lowercased()
+        var clip: Clip
+        var project = Project.new()
+        if ext == "mcpjc" || ext == "ymproj" {
+            project = try Project.load(from: URL(fileURLWithPath: path))
+            let idx = optValue("--clip").flatMap(Int.init) ?? 0
+            let candidates = project.allClips.filter { TranscriptionSupport.supports($0) }
+            guard candidates.indices.contains(idx) else { fail("音のあるクリップが \(candidates.count) 件です(--clip は 0 から)") }
+            clip = candidates[idx]
+        } else {
+            let kind = ClipEditing.kindOf(path: path)
+            guard kind != .image else { fail("音声か動画のファイルを指定してください") }
+            let dur = await ClipEditing.probeDuration(url: URL(fileURLWithPath: path), kind: kind)
+            clip = ClipEditing.makeMediaClip(path: path, kind: kind, duration: dur, start: 0)
+        }
+        print("clip: \(clip.type.rawValue) \(String(format: "%.3f", clip.duration)) s  locale=\(locale)")
+        let started = Date()
+        let r = try await SubtitleTranscription.run(clip: clip, project: project, transcriber: SpeechFrameworkTranscriber(localeIdentifier: locale, requestsPermission: false),
+                                                    style: nil, onProgress: { p in FileHandle.standardError.write(Data(String(format: "  %3.0f%%\n", p * 100).utf8)) })
+        let cues = r.map { SubtitleFile.cues(from: $0.project) } ?? []
+        guard !cues.isEmpty else { fail("認識できた文字がありませんでした") }
+        try SubtitleFile.format(cues, as: fmt).write(to: URL(fileURLWithPath: outPath), atomically: true, encoding: .utf8)
+        for c in cues { print(String(format: "  %@ --> %@  %@", SubtitleFile.timestamp(c.start, format: .srt), SubtitleFile.timestamp(c.end, format: .srt), c.text)) }
+        print(String(format: "wrote %@ cues=%d wall=%.2fs", outPath, cues.count, Date().timeIntervalSince(started)))
+    } catch let e as TranscriptionError {
+        fail(e.errorDescription ?? "音声から字幕を作れませんでした")
+    } catch { fail("音声から字幕を作れませんでした: \(error)") }
 case "chapters" where args.count == 2:
     // chapters <project>: マーカーから YouTube のチャプター行を出す(注意は stderr)
     do {
@@ -436,5 +472,5 @@ case "smoke":
         try await runExport(p, to: URL(fileURLWithPath: outPath))
     } catch { fail("書き出せませんでした: \(error.localizedDescription)") }
 default:
-    fail("usage:\n  moviecut-cli info <file.ymproj>\n  moviecut-cli new <out.ymproj>\n  moviecut-cli export <in.mcpjc> <out.mp4|out.m4a> [--range a:b|project] [--preset youtube1080|youtube4k|short|light|audio] [--size WxH] [--fps 29.97] [--codec h264|hevc] [--fan-max [--fan-port 1200|1201]]\n  moviecut-cli fan status | fan test [--seconds 8] [--fan-port 1200|1201]\n  moviecut-cli smoke --out <mp4> [--size WxH] [--fps 23.976] [--codec h264|hevc] [--blur] [--tone] [--save-project p.ymproj]\n  moviecut-cli speak (--voicevox <id> [--speed --pitch --intonation] | --voice <preset> [--speed]) --text <t> --out <wav>\n  moviecut-cli speakers | deps | script <script.txt> --out <p.ymproj>\n  moviecut-cli frame <in.ymproj> --t <sec> --out <png|jpg> [--size WxH] [--bench N]\n  moviecut-cli sequence <in.mcpjc> --out <dir> [--format png|jpeg] [--name base] [--range a:b|project] [--fps 30] [--size WxH]\n  moviecut-cli addvideo <in.ymproj> <clip.mp4> <out.ymproj>\n  moviecut-cli genclips <N> <out.ymproj>\n  moviecut-cli silence <project|media> [--threshold -40] [--min 0.4] [--pad 0.1]\n  moviecut-cli subs <project> --out <x.srt|x.vtt>\n  moviecut-cli chapters <project>\n  moviecut-cli project-info <project>   (JSON。読み取り専用)\n  moviecut-cli ai script --theme <t> [--chars 霊夢,魔理沙] [--lines 12] (--provider-cmd \"claude -p\" | --provider-url http://127.0.0.1:11434 --model <m>) [--timeout 120] [--out x.txt] [--show-prompt]")
+    fail("usage:\n  moviecut-cli info <file.ymproj>\n  moviecut-cli new <out.ymproj>\n  moviecut-cli export <in.mcpjc> <out.mp4|out.m4a> [--range a:b|project] [--preset youtube1080|youtube4k|short|light|audio] [--size WxH] [--fps 29.97] [--codec h264|hevc] [--fan-max [--fan-port 1200|1201]]\n  moviecut-cli fan status | fan test [--seconds 8] [--fan-port 1200|1201]\n  moviecut-cli smoke --out <mp4> [--size WxH] [--fps 23.976] [--codec h264|hevc] [--blur] [--tone] [--save-project p.ymproj]\n  moviecut-cli speak (--voicevox <id> [--speed --pitch --intonation] | --voice <preset> [--speed]) --text <t> --out <wav>\n  moviecut-cli speakers | deps | script <script.txt> --out <p.ymproj>\n  moviecut-cli frame <in.ymproj> --t <sec> --out <png|jpg> [--size WxH] [--bench N]\n  moviecut-cli sequence <in.mcpjc> --out <dir> [--format png|jpeg] [--name base] [--range a:b|project] [--fps 30] [--size WxH]\n  moviecut-cli addvideo <in.ymproj> <clip.mp4> <out.ymproj>\n  moviecut-cli genclips <N> <out.ymproj>\n  moviecut-cli silence <project|media> [--threshold -40] [--min 0.4] [--pad 0.1]\n  moviecut-cli subs <project> --out <x.srt|x.vtt>\n  moviecut-cli transcribe <media|project> --out <x.srt|x.vtt> [--clip 0] [--locale ja-JP]\n  moviecut-cli chapters <project>\n  moviecut-cli project-info <project>   (JSON。読み取り専用)\n  moviecut-cli ai script --theme <t> [--chars 霊夢,魔理沙] [--lines 12] (--provider-cmd \"claude -p\" | --provider-url http://127.0.0.1:11434 --model <m>) [--timeout 120] [--out x.txt] [--show-prompt]")
 }

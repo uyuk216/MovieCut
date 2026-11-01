@@ -28,6 +28,21 @@ public enum SubtitleGeneration {
     /// 生成できるボイスが 1 つでもあるか(メニューの有効・無効に使う)。
     public static func hasTargets(_ project: Project) -> Bool { !targets(in: project).isEmpty }
 
+    /// 字幕(時刻と本文)を、字幕の自動生成と同じ見た目(`style`)の文字クリップにして「字幕」レイヤーへ足す。
+    /// 音声認識の結果の配置に使う(台本のボイスは関係しない。元のクリップの字幕表示は変えない)。0 件なら nil。
+    public static func appendCues(_ cues: [SubtitleCue], to project: Project, style: TextLook?) -> Result? {
+        let valid = cues.filter { $0.end > $0.start && !SubtitleFile.cleanBody($0.text).isEmpty }.sorted { $0.start < $1.start }
+        guard !valid.isEmpty else { return nil }
+        let clips: [Clip] = valid.map { cue in
+            var clip = SubtitleImport.makeClip(cue, project: project)
+            if let style { style.apply(to: &clip) }
+            return clip
+        }
+        var p = project
+        SubtitleImport.appendLanes(clips, to: &p)
+        return Result(project: p, count: clips.count)
+    }
+
     /// 台本(ボイス)から字幕の文字クリップを作る。`style` があれば文字の見た目(色・縁・装飾)を当てる。
     /// 生成が無ければ nil(何も変えない)。新しい文字クリップは「字幕」「字幕 2」…の新しいレイヤーに、重ならないように入れる。
     public static func generate(_ project: Project, style: TextLook?) -> Result? {

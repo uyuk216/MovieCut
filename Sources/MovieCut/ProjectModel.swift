@@ -190,6 +190,8 @@ final class ProjectModel: ObservableObject {
     /// AI 連携の画面部品(テストで差し替える)と、問い合わせ中のキャンセル。
     var aiUI = AIUI()
     var aiCancel: (() -> Void)?
+    /// 音声認識(出力 ▸ 音声から字幕を作る)の取り消し。
+    var transcribeCancel: (() -> Void)?
     var voiceProviderFactory: (Project) -> VoiceProvider = { RealVoiceProvider(project: $0, engine: AppServices.engine) }
     /// タイムラインの「全体表示」(タイムラインのビューが差し込む)。
     var onFitTimeline: () -> Void = {}

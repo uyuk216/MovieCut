@@ -186,6 +186,7 @@ struct AppCommands: Commands {
                 Divider()
                 MenuItemView(spec: AppMenuSpec.subtitleExport(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.subtitleGenerate(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.transcribeSubtitles(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.chapterCopy(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.aiChapters(s), perform: run)
             }

@@ -183,6 +183,19 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
 - **素材チェック** (`Core/MissingMedia.swift`、`ProjectModel+Media`): `src` を持つクリップ(画像・動画・音声・ボイス)でファイルが無いものを列挙。書き出しは保存パネルの前と `runExport` の両方で止め、先頭 5 件の名前を出す。ファイル ▸ 素材の場所を再指定…: フォルダ(中のフォルダも)から同じファイル名を探して差し替える。1 回の Undo。ロックされたレイヤーのクリップは `edit` の規則で変えられない。
 - **範囲のドラッグと範囲ループ** (`TimelineView` の `RangeDrag`、`Core/ExportRange.swift` の `ExportRangeLoop`): ルーラー上で書き出し範囲の印(5pt 以内)を掴んで動かす。離したときに「書き出し範囲の移動」(1 回の Undo)。再生 ▸ 範囲をループ再生は `ProjectModel.rangeLoop`(保存しない・Undo に載せない)。ループ中は範囲の終わりで頭に戻して音を鳴らし直す(`PlaybackController.tick`)。
 
+## 音声から字幕を作る(D-1 の最小版、2026-11-02)
+- **Core** (`Core/Transcription.swift`、`Core/SpeechTranscriber.swift`): `protocol Transcriber`(`transcribe(audioURL:duration:onProgress:) async throws -> [TranscriptSegment]`、`TranscriptSegment` = 文字・開始秒・終了秒、認識の時刻は音声の頭から)。本番は `SpeechFrameworkTranscriber`(SFSpeechRecognizer、既定 ja-JP、`requiresOnDeviceRecognition = true`、句読点を付ける、部分結果で進みを出す)。キャンセルは `RecognitionSession` が認識タスクを止めて `CancellationError` で返す。許可・利用不可・日本語の言語データ無し・音が無いは `TranscriptionError`(日本語の `errorDescription`)。
+- **文のまとめ**: `TranscriptGrouping.phrases` が単語の列を字幕の 1 件にする(間が 0.8 秒を超える・文末の 。！？ の後・30 文字を超える、のどれかで切る。英数字どうしだけ空白を入れる)。
+- **時刻の配置**: `TranscriptSubtitles.cues(from:clip:)` は クリップの開始 + 認識の時刻。クリップの長さの外は切り、本文が空・長さ 0 は捨てる。対象は `TranscriptionSupport.supports`(= `SilenceDetector.supports`: 音のある素材で、速度・逆再生・フリーズが無いもの。時刻が 1 対 1 になるため)。
+- **音声の書き出し**: `TranscriptionAudio.writeWAV` が `AudioMixer.openSource` で クリップの範囲(offset から長さ)を読み、モノラル 16 ビット WAV(48 kHz)に書く。一時ファイルは `tempDirectory`(既定は system の一時フォルダ)に作り、終わったら必ず消す。1 分あたり約 5.8 MB。
+- **実行**: `SubtitleTranscription.run(clip:project:transcriber:style:tempDirectory:onProgress:)` が 書き出し → 認識 → `TranscriptSubtitles.cues` → `SubtitleGeneration.appendCues`(字幕の自動生成と同じ見た目 `builtin.classic` と、同じ「字幕」レイヤーの配置 `SubtitleImport.appendLanes`)。認識結果が無ければ nil(何も変えない)。
+- **アプリ**: `ProjectModel+Transcribe.swift` の `transcribeSelectedToSubtitles(transcriber:)`。処理中は `busyMessage`(進みの %)と `transcribeCancel`(オーバーレイの「キャンセル」。`ContentView` が `transcribeCancel ?? aiCancel` を渡す)。結果は `edit("音声から字幕を作る")` で 1 回の Undo。認識中に編集が変わっていたら入れない。キャンセルは状態欄、失敗は `errorTitle` / `errorMessage`。
+- **メニュー**: 出力 ▸ **音声から字幕を作る…**(`AppMenuSpec.transcribeSubtitles`、ショートカットなし、`MenuState.canTranscribe`)→ `AppMenu.perform` → `ProjectModel.transcribeSelectedToSubtitles`。
+- **CLI**: `moviecut-cli transcribe <素材|プロジェクト> --out x.srt|x.vtt [--clip 0] [--locale ja-JP]`。アプリと同じ `SubtitleTranscription.run`(`requestsPermission: false`)。許可がまだ無ければ日本語で止まる(下の「許可」)。
+- **許可**: `Scripts/make-app.sh` の Info.plist に `NSSpeechRecognitionUsageDescription`。アプリの外(素のコマンドライン)は許可を求めると TCC が異常終了するため、CLI は聞かずに `permissionNotChecked`(「アプリで一度実行して許可してください」)を返す。埋め込み Info.plist でも回避できないことを確認済み。
+- **テスト**: `Tests/MovieCutCoreTests/TranscriptionTests.swift` 14 件(時刻の配置・はみ出し・空の本文・並び順、文のまとめ、対象の判定、WAV の形、偽の認識器での実行と字幕レイヤー・見た目・一時ファイルの掃除、結果なし、許可エラー、キャンセル、音なし、日本語のエラー文)。`Tests/MovieCutTests/TranscribeAppTests.swift` 6 件(1 回の Undo、結果なしは何もしない、選択なし、キャンセル、許可エラーの表示、メニューの項目)。
+- **未確認**: 実際の認識結果(この環境では許可がなく認識が返らない)、アプリでの許可ダイアログ、オーバーレイの見た目、長い素材の時間と一時ファイルの大きさ、認識の精度(話者・雑音)。
+
 ## 吹き出し(B-2)
 - **項目**: 文字クリップの任意項目 `bubble`(`Bubble`、`Sources/MovieCutCore/Bubble.swift`)。無いクリップはファイルに書かない(古いファイルは読んで書き戻しても変わらない。`CharacterAnimTests` / `BubbleTests` で確認)。中身は `shape`(`rounded` / `cloud` / `rect`。知らない値は rounded)・`fill`・`stroke`・`strokeWidth`(0〜60)・`tail`(尾の on/off)・`tailX`・`tailY`(尾の先の正規化点)・`tailChar`(キャラ id。あれば、そのキャラの位置に `tailDX`・`tailDY` を足した点を指す)。壊れた色・範囲外の値は読むときに既定へ直す。
 - **描画**: `Renderer.drawBubble`。文字の枠に余白(横 0.7 × 文字の大きさ、縦 0.45 ×)を足した大きさで、文字より先(後ろ)に描く。形の幾何は `BubbleGeometry`(雲は内側の矩形と周囲の円の集まり、尾は本体の中心から見て目標が向いている辺に三角を付ける)。縁は「縁の色で 2 倍の太さに塗ってから塗りで上書き」して外側の半分だけを出し、重なった内側の線を消す。吹き出しはキャンバス基準で描き、文字の回転・斜めの変形には従わない(文字の位置・拡大を追う。フェードは吹き出しに掛からない)。

@@ -9,6 +9,8 @@ enum MenuCommand: Hashable {
     case fanMaxToggle, fanInstall, fanUninstall
     // 字幕(B3)とチャプター
     case importSubtitles, exportSubtitles, generateSubtitles, copyChapters
+    // 音声から字幕を作る(オンデバイスの音声認識。選んでいるクリップ)
+    case transcribeSubtitles
     // 素材(欠落の再指定)
     case relinkMedia
     // 範囲ループ再生(再生メニュー)
@@ -127,6 +129,8 @@ struct MenuState: Equatable {
     /// B3: 書き出せる字幕がある / マーカーがある
     var canExportSubtitles = false
     var canGenerateSubtitles = false
+    /// 選んでいるクリップが音声認識の対象(音のある素材で、速度・逆再生なし)
+    var canTranscribe = false
     var hasMissingMedia = false
     var hasMarkers = false
     /// A6: メニューの対象のレイヤー(選んだクリップのレイヤー、無ければヘッダーで選んだレイヤー)の状態
@@ -285,6 +289,7 @@ struct MenuState: Equatable {
             canAudioFx = AudioFxEditing.supports(c)
             hasAudioFx = AudioFxEditing.hasAnyFx(c)
             canSilenceCut = SilenceDetector.supports(c)
+            canTranscribe = TranscriptionSupport.supports(c)
             canDuck = DuckEditing.supports(c)
             isDucking = c.hasDuck
         }
@@ -382,6 +387,11 @@ enum AppMenuSpec {
     /// 出力 ▸ 字幕を自動生成(台本のセリフから字幕の文字クリップを作る。ショートカットなし)。
     static func subtitleGenerate(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .generateSubtitles, title: "字幕を自動生成", shortcut: nil, enabled: s.canEdit && s.canGenerateSubtitles, checked: nil, hint: "セリフから")
+    }
+
+    /// 出力 ▸ 音声から字幕を作る…(選んでいる音のあるクリップを音声認識し、字幕レイヤーに文字クリップを足す。ショートカットなし)。
+    static func transcribeSubtitles(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .transcribeSubtitles, title: "音声から字幕を作る…", shortcut: nil, enabled: s.canEdit && s.canTranscribe, checked: nil, hint: "音声認識")
     }
 
     /// ファイル ▸ 素材の場所を再指定…(欠けている素材があるときだけ。フォルダを選んで探し直す)。
@@ -729,7 +739,7 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, settings(s), videoSettings(s)] + file(s) + [subtitleImport(s), mediaRelink(s), subtitleExport(s), subtitleGenerate(s), chapterCopy(s), aiScript(s), aiSettings(s), aiChapters(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + exportPresets(s) + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), lutLoadItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + layerHeightItems(s) + playback(s)
+        [about, settings(s), videoSettings(s)] + file(s) + [subtitleImport(s), mediaRelink(s), subtitleExport(s), subtitleGenerate(s), transcribeSubtitles(s), chapterCopy(s), aiScript(s), aiSettings(s), aiChapters(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + exportPresets(s) + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), lutLoadItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + layerHeightItems(s) + playback(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + [fullScreen(s)] + help.flatMap { $0 }
@@ -766,6 +776,7 @@ enum AppMenu {
             case .importSubtitles: m.chooseAndImportSubtitles()
             case .exportSubtitles: m.chooseAndExportSubtitles()
             case .generateSubtitles: m.generateSubtitlesFromScript()
+            case .transcribeSubtitles: Task { await m.transcribeSelectedToSubtitles() }
             case .relinkMedia: m.chooseAndRelinkMedia()
             case .toggleRangeLoop: m.rangeLoop.toggle()
             case .copyChapters: m.copyChapters()
