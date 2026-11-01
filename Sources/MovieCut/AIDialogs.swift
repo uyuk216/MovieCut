@@ -73,6 +73,20 @@ enum AIDialogs {
     }
 
     /// 言い換えの種類を選ぶ。
+    /// 翻訳先の言語を選ぶ(字幕の数を見せる)。キャンセルなら nil。
+    static func chooseTranslateLanguage(count: Int) -> AITranslatePrompt.Language? {
+        let a = NSAlert()
+        a.messageText = "字幕を翻訳して書き出す"
+        a.informativeText = "字幕 \(count) 件を AI で訳し、SRT にします(時刻はそのまま)。次の画面で、送る内容を確認できます。"
+        let pop = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 260, height: 26), pullsDown: false)
+        pop.addItems(withTitles: AITranslatePrompt.Language.allCases.map(\.label))
+        a.accessoryView = pop
+        a.addButton(withTitle: "次へ")
+        a.addButton(withTitle: "キャンセル")
+        guard a.runModal() == .alertFirstButtonReturn else { return nil }
+        return AITranslatePrompt.Language.allCases[max(0, pop.indexOfSelectedItem)]
+    }
+
     static func chooseRewriteMode(original: String) -> AIRewritePrompt.Mode? {
         let a = NSAlert()
         a.messageText = "セリフを AI で直す"

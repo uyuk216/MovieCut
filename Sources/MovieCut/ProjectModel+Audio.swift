@@ -29,6 +29,7 @@ extension ProjectModel {
     static let normalizeUndoName = "ノーマライズの変更"
     static let panUndoName = "パンの変更"
     static let denoiseUndoName = "ノイズ除去の変更"
+    static let pitchUndoName = "音程の変更"
 
     // MARK: メニュー「クリップ ▸ 音声」
 

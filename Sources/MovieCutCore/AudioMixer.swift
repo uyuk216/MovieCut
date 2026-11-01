@@ -242,7 +242,9 @@ public enum AudioMixer {
                 var sf = Int((c.start * sr).rounded()) - shift
                 let fullStart = sf, fullLength = Int((c.duration * sr).rounded())
                 let ef = min(total, sf + fullLength)
-                let remap = c.hasAudioRemap
+                // 速度・逆再生・音程のかかったクリップは、タイムライン上の長さに直した一時ファイルを読む(音程だけのときも同じ経路)
+                let pitched = (c.audioFx?.pitchSemitones ?? 0) != 0
+                let remap = c.hasAudioRemap || pitched
                 // 速度・逆再生は、タイムライン上の長さに直した一時ファイルを読む(その中の位置 = クリップの頭からの秒)
                 var off = remap ? 0 : c.offset
                 if sf < 0 { off += Double(-sf) / sr; sf = 0 }  // 負の開始は頭を切る
@@ -385,7 +387,16 @@ public enum AudioMixer {
             FileHandle.standardError.write(Data("警告: 速度・逆再生の音声を作れなかったので無音にします(\((c.src as NSString?)?.lastPathComponent ?? "?"): \(error))\n".utf8))
             return nil
         }
-        do { return try FilePCMSource(url: url, offset: it.offset) }
+        var out = url
+        let semis = it.fx?.pitchSemitones ?? 0
+        if semis != 0 {
+            do { out = try PitchShift.renderFile(from: url, semitones: semis, in: remapDir) }
+            catch {
+                FileHandle.standardError.write(Data("警告: 音程を変えられなかったので無音にします(\(error))\n".utf8))
+                return nil
+            }
+        }
+        do { return try FilePCMSource(url: out, offset: it.offset) }
         catch {
             FileHandle.standardError.write(Data("警告: 速度・逆再生の音声を読めなかったので無音にします(\(error))\n".utf8))
             return nil

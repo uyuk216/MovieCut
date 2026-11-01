@@ -173,6 +173,12 @@ public enum AudioFxEditing {
     /// 既定の強さ(ノイズ除去を初めて入れるとき)。
     public static let defaultDenoise = 0.5
 
+    /// 音程(半音)。0.1 刻みに丸め、0 に戻ったら項目ごと外す。変化があれば true。
+    public static func setPitch(_ c: inout Clip, _ semitones: Double) -> Bool {
+        let x = (AudioFx.clampPitch(semitones) * 10).rounded() / 10
+        return edit(&c) { fx in fx.pitch = x != 0 ? x : nil }
+    }
+
     // MARK: パン
 
     /// −1〜1(小数 2 桁)。0 は未設定に戻す。

@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 import MovieCutCore
 
 /// AI 連携の画面側の流れ。どの呼び出しも、メニューを選んだときだけ・送る内容を見せて確認したあとだけ。
@@ -120,6 +121,40 @@ extension ProjectModel {
             for m in AIChapterPrompt.markers(from: chapters) where !p.markers.contains(where: { abs($0.time - m.time) < 0.5 }) { p.markers.append(m) }
             p.markers = MarkerEditing.sorted(p.markers)
         }
+    }
+
+    // MARK: d) 字幕の翻訳
+
+    /// 出力 ▸ 字幕を翻訳して書き出す…(字幕の文を AI で訳し、SRT にして保存する。送る前と保存の前に内容を見せる)
+    func openAITranslateSubtitles() { Task { await translateSubtitlesWithAI() } }
+
+    @discardableResult
+    func translateSubtitlesWithAI() async -> Bool {
+        let cues = SubtitleFile.cues(from: project)
+        guard !cues.isEmpty else { statusText = "字幕(ボイスのセリフ)がありません"; return false }
+        guard let lang = AIDialogs.chooseTranslateLanguage(count: cues.count) else { return false }
+        let prompt: String
+        do { prompt = try AITranslatePrompt.build(cues: cues, language: lang) } catch {
+            errorTitle = "翻訳できません"
+            errorMessage = "字幕が長すぎます(\(AITranslatePrompt.maxInputCharacters) 文字まで)。字幕を分けてから、もう一度試してください。"
+            return false
+        }
+        guard let reply = await askAI(prompt) else { return false }
+        let texts: [String]
+        do { texts = try AITranslatePrompt.parse(reply, expected: cues.count) } catch { report(error); return false }
+        let srt = SubtitleFile.format(AITranslatePrompt.translated(cues, texts: texts), as: .srt)
+        // 保存の前に、訳を見て直せる(編集できる)
+        guard let r = aiUI.review("翻訳した字幕（\(lang.label)）", "\(cues.count) 件。直してから保存できます。時刻は元のままです。",
+                                  srt, true, ["保存…", "キャンセル"]), r.button == 0 else { statusText = "翻訳は保存しませんでした"; return false }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [UTType(filenameExtension: "srt")].compactMap { $0 }
+        panel.nameFieldStringValue = documentName + "-" + lang.fileSuffix + ".srt"
+        panel.canCreateDirectories = true
+        panel.title = "翻訳した字幕を書き出す"
+        guard panel.runModal() == .OK, let url = panel.url else { statusText = "翻訳は保存しませんでした"; return false }
+        do { try r.text.write(to: url, atomically: true, encoding: .utf8) } catch { report(error); return false }
+        statusText = "翻訳した字幕(\(lang.label))を書き出しました: \(url.lastPathComponent)"
+        return true
     }
 
     // MARK: c) セリフの言い換え・短縮

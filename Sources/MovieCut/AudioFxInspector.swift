@@ -18,6 +18,11 @@ struct AudioFxPanel: View {
     fileprivate var clip: Clip? { model.clip(clipId) }
 
     private static func db(_ v: Double) -> String { (v > 0 ? "+" : v < 0 ? "−" : "") + String(format: "%.1f dB", abs(v)) }
+    private static func pitchText(_ v: Double) -> String {
+        if v == 0 { return "0 半音" }
+        let sign = v > 0 ? "+" : "−"
+        return sign + String(format: "%.1f 半音", abs(v))
+    }
     private static func panText(_ v: Double) -> String {
         let p = Int((abs(v) * 100).rounded())
         return p == 0 ? "中央" : (v < 0 ? "左 \(p)%" : "右 \(p)%")
@@ -41,6 +46,10 @@ struct AudioFxPanel: View {
             VStack(alignment: .leading, spacing: 8) {
                 fxSlider("パン", value: c.panOrDefault, range: -1...1, step: 0.01, format: Self.panText, undo: ProjectModel.panUndoName) {
                     _ = AudioFxEditing.setPan(&$0, $1)
+                }
+                fxSlider("音程（半音）", value: c.audioFx?.pitchSemitones ?? 0, range: AudioFx.pitchRange, step: 0.1,
+                         format: Self.pitchText, undo: ProjectModel.pitchUndoName) {
+                    _ = AudioFxEditing.setPitch(&$0, $1)
                 }
                 fxSlider("ノイズ除去", value: c.audioFx?.denoiseStrength ?? 0, range: 0...1, step: 0.01,
                          format: { "\(Int(($0 * 100).rounded()))%" }, undo: ProjectModel.denoiseUndoName) {

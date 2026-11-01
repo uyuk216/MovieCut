@@ -9,6 +9,8 @@ enum MenuCommand: Hashable {
     case fanMaxToggle, fanInstall, fanUninstall
     // 字幕(B3)とチャプター
     case importSubtitles, exportSubtitles, generateSubtitles, copyChapters
+    // 字幕を AI で翻訳して SRT に書き出す(ショートカットは持たない)
+    case translateSubtitles
     // 音声から字幕を作る(オンデバイスの音声認識。選んでいるクリップ)
     case transcribeSubtitles
     // 素材(欠落の再指定)
@@ -63,6 +65,8 @@ enum MenuCommand: Hashable {
     case stabilizeToggle
     // 縦動画に自動リフレーム(映像・画像。ショートカットは持たない)
     case autoReframe
+    // 動きに追従させる(文字・図形・画像。ショートカットは持たない)
+    case motionTrack
     // 複合クリップ: まとめる・解除(ショートカットは持たない)
     case compoundGroup, compoundUngroup
     // 編集 ▸ 検索と置換(テロップとセリフの一括置換。ショートカットは持たない)
@@ -238,6 +242,7 @@ struct MenuState: Equatable {
     var canStabilize = false         // 映像クリップを選んでいる(手ぶれ補正ができる)
     var isStabilized = false         // 選択クリップの手ぶれ補正がオン
     var canAutoReframe = false       // 映像・画像を選んでいる(縦動画に自動リフレームできる)
+    var canMotionTrack = false       // 文字・図形・画像を選んでいて、下に映像・画像のレイヤーがある(動きに追従できる)
     var canCompoundGroup = false     // 2 つ以上のクリップを選んでいる(まとめられる)
     var canCompoundUngroup = false   // 選択が複合クリップ(解除できる)
     /// 表示 ▸ プレビューの背景(アプリ全体の設定)。
@@ -349,6 +354,7 @@ struct MenuState: Equatable {
             canStabilize = StabilizeEditing.supports(c)
             isStabilized = c.stabilizeStrength > 0
             canAutoReframe = m.canAutoReframe(c)
+            canMotionTrack = m.canTrackMotion(c)
             canCompoundUngroup = CompoundEditing.supports(c)
         }
         canCompoundGroup = m.selectedClipIDs.count >= 2
@@ -443,6 +449,11 @@ enum AppMenuSpec {
     /// 出力 ▸ 字幕を書き出す… / チャプターをコピー(ショートカットは持たない)。
     static func subtitleExport(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .exportSubtitles, title: "字幕を書き出す…", shortcut: nil, enabled: s.canEdit && s.canExportSubtitles, checked: nil, hint: "SRT / VTT")
+    }
+
+    /// 出力 ▸ 字幕を翻訳して書き出す…(AI。送る前と保存の前に内容を見せる)
+    static func subtitleTranslate(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .translateSubtitles, title: "字幕を翻訳して書き出す…", shortcut: nil, enabled: s.canEdit && s.canExportSubtitles, checked: nil, hint: "AI で訳して SRT")
     }
 
     /// 出力 ▸ 字幕を自動生成(台本のセリフから字幕の文字クリップを作る。ショートカットなし)。
@@ -579,6 +590,7 @@ enum AppMenuSpec {
          MenuItemSpec(command: .rippleDelete, title: "すき間を詰めて削除", shortcut: MenuShortcut(key: .delete, modifiers: [.option, .command]), enabled: s.canEdit && s.hasSelection, checked: nil),
          MenuItemSpec(command: .stabilizeToggle, title: "手ぶれ補正（映像を滑らかにする）", shortcut: nil, enabled: s.canEdit && s.canStabilize, checked: s.canStabilize ? s.isStabilized : nil),
          MenuItemSpec(command: .autoReframe, title: "縦動画に自動リフレーム", shortcut: nil, enabled: s.canEdit && s.canAutoReframe, checked: nil),
+         MenuItemSpec(command: .motionTrack, title: "動きに追従させる", shortcut: nil, enabled: s.canEdit && s.canMotionTrack, checked: nil),
          MenuItemSpec(command: .compoundGroup, title: "複合クリップにまとめる", shortcut: nil, enabled: s.canEdit && s.canCompoundGroup, checked: nil),
          MenuItemSpec(command: .compoundUngroup, title: "複合クリップを解除", shortcut: nil, enabled: s.canEdit && s.canCompoundUngroup, checked: nil)]
     }
@@ -912,7 +924,7 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, settings(s), videoSettings(s)] + file(s) + [subtitleImport(s), mediaRelink(s), subtitleExport(s), subtitleGenerate(s), transcribeSubtitles(s), chapterCopy(s), aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s)] + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), makeProxies(s)] + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textCounterItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), beatMarkersItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + layerHeightItems(s) + playback(s)
+        [about, settings(s), videoSettings(s)] + file(s) + [subtitleImport(s), mediaRelink(s), subtitleExport(s), subtitleTranslate(s), subtitleGenerate(s), transcribeSubtitles(s), chapterCopy(s), aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s)] + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), makeProxies(s)] + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textCounterItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), beatMarkersItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + layerHeightItems(s) + playback(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerColorItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + guideItems(s) + [previewProxy(s), fullScreen(s)] + help.flatMap { $0 }
@@ -959,6 +971,7 @@ enum AppMenu {
             case .saveCustomPreset: m.saveCurrentAsCustomPreset()
             case .importSubtitles: m.chooseAndImportSubtitles()
             case .exportSubtitles: m.chooseAndExportSubtitles()
+            case .translateSubtitles: m.openAITranslateSubtitles()
             case .generateSubtitles: m.generateSubtitlesFromScript()
             case .transcribeSubtitles: Task { await m.transcribeSelectedToSubtitles() }
             case .relinkMedia: m.chooseAndRelinkMedia()
@@ -1050,6 +1063,7 @@ enum AppMenu {
             case .audioDuckToggle: m.toggleDuckSelected()
             case .stabilizeToggle: m.toggleStabilizeSelected()
             case .autoReframe: m.autoReframeSelected()
+            case .motionTrack: m.trackMotionSelected()
             case .compoundGroup: m.groupSelectedCompound()
             case .compoundUngroup: m.ungroupSelectedCompound()
             case .silenceCut: m.openSilenceSheet()

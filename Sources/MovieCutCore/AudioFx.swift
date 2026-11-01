@@ -12,16 +12,26 @@ public struct AudioFx: Codable, Equatable, Sendable {
     public var normalize: Normalize?
     /// ノイズ除去の強さ(0〜1)。0 と未設定は同じ(書かない)。
     public var denoise: Double?
+    /// 音程(半音、−12〜+12)。0 と未設定は同じ(書かない)。音の高さだけを変え、長さは変えない。
+    public var pitch: Double?
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["eq", "compressor", "reverb", "normalize", "denoise"]
+    static let knownKeys: Set<String> = ["eq", "compressor", "reverb", "normalize", "denoise", "pitch"]
 
-    public init(eq: EQ? = nil, compressor: Compressor? = nil, reverb: Reverb? = nil, normalize: Normalize? = nil, denoise: Double? = nil) {
-        self.eq = eq; self.compressor = compressor; self.reverb = reverb; self.normalize = normalize; self.denoise = denoise
+    public init(eq: EQ? = nil, compressor: Compressor? = nil, reverb: Reverb? = nil, normalize: Normalize? = nil, denoise: Double? = nil, pitch: Double? = nil) {
+        self.eq = eq; self.compressor = compressor; self.reverb = reverb; self.normalize = normalize; self.denoise = denoise; self.pitch = pitch
     }
 
     /// 何も入っていない(ファイルに書かない)。
-    public var isEmpty: Bool { eq == nil && compressor == nil && reverb == nil && normalize == nil && denoiseStrength == 0 && extra.isEmpty }
+    public var isEmpty: Bool { eq == nil && compressor == nil && reverb == nil && normalize == nil && denoiseStrength == 0 && pitchSemitones == 0 && extra.isEmpty }
+
+    /// 音程の半音数(−12〜+12 に収めた値。有限でなければ 0)。0 でないときだけ音程を変える。
+    public var pitchSemitones: Double { Self.clampPitch(pitch) }
+    public static let pitchRange: ClosedRange<Double> = -12...12
+    public static func clampPitch(_ v: Double?) -> Double {
+        guard let v, v.isFinite else { return 0 }
+        return min(max(v, pitchRange.lowerBound), pitchRange.upperBound)
+    }
 
     /// ノイズ除去の強さ(0〜1に収めた値)。効くのは 0 より大きいとき。
     public var denoiseStrength: Double { Self.clampDenoise(denoise) }
@@ -32,7 +42,7 @@ public struct AudioFx: Codable, Equatable, Sendable {
 
     /// 実際に音を変えるものが 1 つでもある。
     public var isActive: Bool {
-        (eq?.isActive ?? false) || (compressor?.isActive ?? false) || (reverb?.isActive ?? false) || (normalize?.isActive ?? false) || denoiseStrength > 0
+        (eq?.isActive ?? false) || (compressor?.isActive ?? false) || (reverb?.isActive ?? false) || (normalize?.isActive ?? false) || denoiseStrength > 0 || pitchSemitones != 0
     }
 
     /// EQ・コンプレッサー・リバーブ・ノイズ除去のどれかが効く(ノーマライズだけのときは false)。
@@ -46,6 +56,7 @@ public struct AudioFx: Codable, Equatable, Sendable {
         if let r = reverb, r.isActive { parts.append("rev=\(r.mix),\(r.sizeOrDefault.rawValue)") }
         if let n = normalize, n.isActive { parts.append("norm=\(n.targetDb),\(n.modeOrDefault.rawValue)") }
         if denoiseStrength > 0 { parts.append("dn=\(denoiseStrength)") }
+        if pitchSemitones != 0 { parts.append("pitch=\(pitchSemitones)") }
         return parts.joined(separator: ";")
     }
 
@@ -242,6 +253,7 @@ public struct AudioFx: Codable, Equatable, Sendable {
         let l = Lenient(c: try decoder.container(keyedBy: AnyKey.self), known: Self.knownKeys)
         eq = l.value("eq"); compressor = l.value("compressor"); reverb = l.value("reverb"); normalize = l.value("normalize")
         denoise = l.double("denoise")
+        pitch = l.double("pitch")
         extra = l.extra()
         // 読めなかった項目は捨てずに、そのまま書き戻す
         for key in Self.knownKeys {
@@ -252,6 +264,7 @@ public struct AudioFx: Codable, Equatable, Sendable {
             case "compressor": ok = compressor != nil
             case "reverb": ok = reverb != nil
             case "denoise": ok = denoise != nil
+            case "pitch": ok = pitch != nil
             default: ok = normalize != nil
             }
             if !ok { extra[key] = raw }
@@ -266,6 +279,7 @@ public struct AudioFx: Codable, Equatable, Sendable {
         try c.encodeIfPresent(reverb, forKey: AnyKey("reverb"))
         try c.encodeIfPresent(normalize, forKey: AnyKey("normalize"))
         if denoiseStrength > 0 { try c.encode(denoiseStrength, forKey: AnyKey("denoise")) }
+        if pitchSemitones != 0 { try c.encode(pitchSemitones, forKey: AnyKey("pitch")) }
     }
 }
 
