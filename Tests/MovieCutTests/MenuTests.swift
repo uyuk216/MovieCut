@@ -45,7 +45,7 @@ final class MenuTests: XCTestCase {
         let clipAdd = AppMenuSpec.clipAdd(s)
         XCTAssertEqual(clipAdd.map(\.title), ["テキストを追加", "ぼかし範囲を追加"])
         XCTAssertEqual(clipAdd.map(\.shortcut), [sc("t", [.command, .shift]), sc("b", [.command, .shift])])
-        XCTAssertEqual(AppMenuSpec.playback(s).map(\.title), ["再生 / 停止", "先頭へ戻る", "1コマ戻る", "1コマ進む"])
+        XCTAssertEqual(AppMenuSpec.playback(s).map(\.title), ["再生 / 停止", "先頭へ戻る", "1コマ戻る", "1コマ進む", "範囲をループ再生"])
         let zoom = AppMenuSpec.zoom(s)
         XCTAssertEqual(zoom.map(\.title), ["タイムラインを拡大", "タイムラインを縮小", "全体表示"])
         XCTAssertEqual(zoom.map(\.shortcut), [sc("+", .command), sc("-", .command), sc("0", .command)])
@@ -116,7 +116,8 @@ final class MenuTests: XCTestCase {
         XCTAssertFalse(item(AppMenuSpec.clipEdit(s), .delete)!.enabled)
         XCTAssertTrue(AppMenuSpec.editAdd(s).allSatisfy(\.enabled))
         XCTAssertTrue(AppMenuSpec.clipAdd(s).allSatisfy(\.enabled))
-        XCTAssertTrue(AppMenuSpec.playback(s).allSatisfy(\.enabled))
+        XCTAssertTrue(AppMenuSpec.playback(s).filter { $0.command != .toggleRangeLoop }.allSatisfy(\.enabled))
+        XCTAssertFalse(item(AppMenuSpec.playback(s), .toggleRangeLoop)!.enabled, "範囲が無いとループ再生は使えない")
     }
 
     func testSelectionEnablesDeleteAndSplitNeedsPlayheadInside() {

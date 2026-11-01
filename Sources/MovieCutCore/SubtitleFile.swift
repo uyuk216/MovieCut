@@ -198,24 +198,27 @@ public enum SubtitleImport {
         }.sorted { $0.start < $1.start }
         guard !shifted.isEmpty else { return nil }
 
-        // 重ならないように、最初に入れられるレイヤーへ
+        let clips = shifted.map { makeClip($0, project: project) }
+        var p = project
+        appendLanes(clips, to: &p)
+        return (p, clips.map(\.id))
+    }
+
+    /// 文字クリップを、重ならないレイヤーに分けて末尾(一番上)へ足す。レイヤー名は「字幕」「字幕 2」…
+    /// (開始順に並んでいること。足す順で最初に入るレイヤーを使う)。
+    static func appendLanes(_ clips: [Clip], to p: inout Project) {
         var lanes: [[Clip]] = []
-        var ids: [String] = []
-        for cue in shifted {
-            let clip = makeClip(cue, project: project)
-            ids.append(clip.id)
+        for clip in clips {
             if let i = lanes.firstIndex(where: { ($0.last.map { $0.start + $0.duration } ?? 0) <= clip.start + 1e-9 }) {
                 lanes[i].append(clip)
             } else {
                 lanes.append([clip])
             }
         }
-        var p = project
-        for (i, clips) in lanes.enumerated() {
+        for (i, laneClips) in lanes.enumerated() {
             var t = Track(name: i == 0 ? SubtitleFile.layerName : "\(SubtitleFile.layerName) \(i + 1)")
-            t.clips = clips
+            t.clips = laneClips
             p.tracks.append(t)
         }
-        return (p, ids)
     }
 }

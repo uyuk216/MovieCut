@@ -8,7 +8,11 @@ enum MenuCommand: Hashable {
     // 出力 ▸ 書き出し中のファン最大化(設定と、ヘルパーのインストール / 削除)
     case fanMaxToggle, fanInstall, fanUninstall
     // 字幕(B3)とチャプター
-    case importSubtitles, exportSubtitles, copyChapters
+    case importSubtitles, exportSubtitles, generateSubtitles, copyChapters
+    // 素材(欠落の再指定)
+    case relinkMedia
+    // 範囲ループ再生(再生メニュー)
+    case toggleRangeLoop
     case aiScript, aiChapters, aiRewrite, aiSettings
     // 書き出し範囲(イン / アウト / 解除)と、静止画・連番画像の書き出し
     case rangeIn, rangeOut, rangeClear, exportStill, exportSequence
@@ -108,6 +112,7 @@ struct MenuState: Equatable {
     /// 書き出し範囲を指定できる / ルーラーに印がある
     var canMarkRange = false
     var hasRange = false
+    var rangeLoop = false
     var hasSelection = false
     /// A6: 選んでいるクリップの数 / 貼り付けられるものがある / クリップが 1 つでもある
     var selectionCount = 0
@@ -115,6 +120,8 @@ struct MenuState: Equatable {
     var hasClips = false
     /// B3: 書き出せる字幕がある / マーカーがある
     var canExportSubtitles = false
+    var canGenerateSubtitles = false
+    var hasMissingMedia = false
     var hasMarkers = false
     /// A6: メニューの対象のレイヤー(選んだクリップのレイヤー、無ければヘッダーで選んだレイヤー)の状態
     var hasLayerTarget = false
@@ -214,11 +221,14 @@ struct MenuState: Equatable {
         canExport = m.canExport
         canMarkRange = m.canMarkRange
         hasRange = m.hasRangeMarks
+        rangeLoop = m.rangeLoop
         hasSelection = m.selectedClip != nil
         selectionCount = m.selectedClipIDs.count
         canPasteClips = m.canPasteClips
         hasClips = !m.project.allClips.isEmpty
         canExportSubtitles = m.canExportSubtitles
+        canGenerateSubtitles = SubtitleGeneration.hasTargets(m.project)
+        hasMissingMedia = !MissingMedia.find(in: m.project).isEmpty
         hasMarkers = !m.project.markers.isEmpty
         if let li = m.targetLayerIndex, m.project.tracks.indices.contains(li) {
             hasLayerTarget = true
@@ -361,6 +371,16 @@ enum AppMenuSpec {
         MenuItemSpec(command: .exportSubtitles, title: "字幕を書き出す…", shortcut: nil, enabled: s.canEdit && s.canExportSubtitles, checked: nil, hint: "SRT / VTT")
     }
 
+    /// 出力 ▸ 字幕を自動生成(台本のセリフから字幕の文字クリップを作る。ショートカットなし)。
+    static func subtitleGenerate(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .generateSubtitles, title: "字幕を自動生成", shortcut: nil, enabled: s.canEdit && s.canGenerateSubtitles, checked: nil, hint: "セリフから")
+    }
+
+    /// ファイル ▸ 素材の場所を再指定…(欠けている素材があるときだけ。フォルダを選んで探し直す)。
+    static func mediaRelink(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .relinkMedia, title: "素材の場所を再指定…", shortcut: nil, enabled: s.canEdit && s.hasMissingMedia, checked: nil, hint: "欠けた素材")
+    }
+
     static func chapterCopy(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .copyChapters, title: "チャプターをコピー", shortcut: nil, enabled: s.canEdit && s.hasMarkers, checked: nil, hint: "YouTube")
     }
@@ -476,7 +496,8 @@ enum AppMenuSpec {
         [MenuItemSpec(command: .playPause, title: "再生 / 停止", shortcut: nil, enabled: s.canEdit, checked: nil),
          MenuItemSpec(command: .toStart, title: "先頭へ戻る", shortcut: nil, enabled: s.canEdit, checked: nil),
          MenuItemSpec(command: .stepBack, title: "1コマ戻る", shortcut: nil, enabled: s.canEdit, checked: nil),
-         MenuItemSpec(command: .stepForward, title: "1コマ進む", shortcut: nil, enabled: s.canEdit, checked: nil)]
+         MenuItemSpec(command: .stepForward, title: "1コマ進む", shortcut: nil, enabled: s.canEdit, checked: nil),
+         MenuItemSpec(command: .toggleRangeLoop, title: "範囲をループ再生", shortcut: nil, enabled: s.canEdit && s.hasRange, checked: s.rangeLoop, hint: "書き出し範囲")]
     }
 
     // MARK: 移動メニュー
@@ -690,7 +711,7 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, settings(s), videoSettings(s)] + file(s) + [subtitleImport(s), subtitleExport(s), chapterCopy(s), aiScript(s), aiSettings(s), aiChapters(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + exportPresets(s) + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textAnimItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), lutLoadItem(s)] + editAdd(s) + clipboardItems(s) + layerItems(s) + layerHeightItems(s) + playback(s)
+        [about, settings(s), videoSettings(s)] + file(s) + [subtitleImport(s), mediaRelink(s), subtitleExport(s), subtitleGenerate(s), chapterCopy(s), aiScript(s), aiSettings(s), aiChapters(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + exportPresets(s) + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textAnimItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), lutLoadItem(s)] + editAdd(s) + clipboardItems(s) + layerItems(s) + layerHeightItems(s) + playback(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + [fullScreen(s)] + help.flatMap { $0 }
@@ -726,6 +747,9 @@ enum AppMenu {
             case .exportPreset(let p): m.chooseAndExport(preset: p)
             case .importSubtitles: m.chooseAndImportSubtitles()
             case .exportSubtitles: m.chooseAndExportSubtitles()
+            case .generateSubtitles: m.generateSubtitlesFromScript()
+            case .relinkMedia: m.chooseAndRelinkMedia()
+            case .toggleRangeLoop: m.rangeLoop.toggle()
             case .copyChapters: m.copyChapters()
             case .aiScript: m.openAIScriptDialog()
             case .aiChapters: m.openAIChapters()

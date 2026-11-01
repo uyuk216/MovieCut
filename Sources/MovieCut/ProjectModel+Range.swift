@@ -26,6 +26,9 @@ extension ProjectModel {
         return edit("書き出し範囲の解除", enforcesLock: false) { $0 = ExportRangeEditing.clearing($0) }
     }
 
+    /// ループ再生が効いている範囲(ループがオフ・範囲が無いときは nil)。
+    var activeLoopRange: ExportRange? { rangeLoop ? project.exportRange : nil }
+
     private func applyRange(_ name: String, _ new: Project?, refusal: String) -> Bool {
         guard canMarkRange else { return false }
         guard let new else { statusText = refusal; return false }

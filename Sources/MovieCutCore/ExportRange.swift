@@ -188,3 +188,16 @@ public enum ImageSequenceExporter {
         return try await withTaskCancellationHandler { try await work.value } onCancel: { work.cancel() }
     }
 }
+
+/// 範囲ループ再生の時刻の決め方(純粋な計算)。
+public enum ExportRangeLoop {
+    /// 再生を始める時刻: 範囲の外(頭より前・終わり以降)にいたら範囲の頭、範囲の中ならそのまま。
+    public static func startTime(current t: Double, range r: ExportRange) -> Double {
+        (t < r.start || t >= r.end - 1e-6) ? r.start : t
+    }
+
+    /// 再生中の時刻 t が範囲の終わりに届いたら、戻す先(範囲の頭)。まだなら nil。
+    public static func wrap(_ t: Double, range r: ExportRange) -> Double? {
+        t >= r.end ? r.start : nil
+    }
+}

@@ -165,6 +165,16 @@ final class TimelineCanvas: NSView {
         var base = Project()
     }
     private(set) var markerDrag: MarkerDrag?
+    /// 書き出し範囲の印(イン点・アウト点)のドラッグ。ルーラー上の印を掴んで動かす。
+    struct RangeDrag {
+        var isIn: Bool
+        var downPoint: NSPoint
+        var active = false
+        var base = Project()
+    }
+    private(set) var rangeDrag: RangeDrag?
+    /// 印の掴める幅(pt)。
+    static let rangeGrab: CGFloat = 5
     /// 選択クリップの下端の菱形(キーフレーム)を押している最中の操作。動かさずに離せばその時刻へ移動、動かせば全項目のキーをまとめて動かす。
     struct KeyDrag {
         var clipId: String
@@ -239,6 +249,18 @@ final class TimelineCanvas: NSView {
     func markerHit(at p: NSPoint) -> Marker? {
         guard p.y < TimelineLayout.rulerHeight, p.x >= TimelineLayout.headerWidth else { return nil }
         return project.markers.last { flagHitRect($0).contains(p) }
+    }
+
+    /// ルーラー上で書き出し範囲の印を掴めるか(true = イン点、false = アウト点。近いほうを取る)。
+    func rangeEdgeHit(at p: NSPoint) -> Bool? {
+        guard p.y < TimelineLayout.rulerHeight, p.x >= TimelineLayout.headerWidth else { return nil }
+        var best: (isIn: Bool, d: CGFloat)?
+        for (isIn, t) in [(true, project.rangeIn), (false, project.rangeOut)] {
+            guard let t else { continue }
+            let d = abs(p.x - geometry.x(forTime: t))
+            if d <= Self.rangeGrab, best == nil || d < best!.d { best = (isIn, d) }
+        }
+        return best?.isIn
     }
 
     /// 旗の名前を出せるだけの幅(次の旗または右端まで)があるか。あれば名前の描画幅を返す。
@@ -1058,7 +1080,9 @@ final class TimelineCanvas: NSView {
         mouseIsDown = true
         let hw = TimelineLayout.headerWidth
         if p.y < TimelineLayout.rulerHeight {
-            if let m = markerHit(at: p) {
+            if let isIn = rangeEdgeHit(at: p), let m = model, !m.isLocked {
+                rangeDrag = RangeDrag(isIn: isIn, downPoint: p)     // 範囲の印: ドラッグで動かす(離したときに 1 回の Undo)
+            } else if let m = markerHit(at: p) {
                 markerDrag = MarkerDrag(id: m.id, downPoint: p, downTime: m.time)    // 旗: クリックで移動、ドラッグで動かす
             } else if p.x >= hw {
                 beginScrub(at: p)
@@ -1120,6 +1144,23 @@ final class TimelineCanvas: NSView {
 
     func mouseDragged(to p: NSPoint) {
         if isScrubbing { scrub(to: p); return }
+        if var rd = rangeDrag {
+            if !rd.active {
+                guard abs(p.x - rd.downPoint.x) >= Self.dragThreshold, let m = model else { return }
+                m.beginGesture()
+                rd.active = true
+                rd.base = m.project
+                rangeDrag = rd
+            }
+            let t = geometry.time(forX: p.x)
+            let next = rd.isIn ? ExportRangeEditing.settingIn(rd.base, at: t) : ExportRangeEditing.settingOut(rd.base, at: t)
+            if let next {
+                model?.updateGesture(next)
+                syncFromModel()
+                needsDisplay = true
+            }
+            return
+        }
         if var wd = wedgeDrag {
             if !wd.active {
                 guard abs(p.x - wd.downX) >= Self.dragThreshold, let m = model else { return }
@@ -1203,6 +1244,15 @@ final class TimelineCanvas: NSView {
 
     func mouseUp() {
         mouseIsDown = false
+        if let rd = rangeDrag {
+            rangeDrag = nil
+            if rd.active {
+                model?.commitGesture("書き出し範囲の移動")     // 変わっていれば 1 回の Undo
+                syncFromModel()
+            }
+            needsDisplay = true
+            return
+        }
         if let wd = wedgeDrag {
             wedgeDrag = nil
             if wd.active {

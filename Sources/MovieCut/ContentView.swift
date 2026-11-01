@@ -99,7 +99,7 @@ struct ContentView: View {
         .task { await AppServices.deps.refresh(project: model.project) }
         .task(id: model.project.voicevoxUrl) { await AppServices.speakers.load(baseURL: model.project.voicevoxUrl) }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { note in
-            if let w = note.object as? NSWindow, w === model.window { model.shutdown(); ActiveDocument.shared.deactivate(model) }
+            if let w = note.object as? NSWindow, w === model.window { model.closeRecovery(); model.shutdown(); ActiveDocument.shared.deactivate(model) }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeMainNotification)) { note in
             if let w = note.object as? NSWindow, w === model.window { ActiveDocument.shared.activate(model) }

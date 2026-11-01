@@ -103,6 +103,12 @@ final class ProjectModel: ObservableObject {
     }
     nonisolated let mirror: ProjectMirror
     private(set) var projectRevision = 0
+    /// 自動保存(復元の写し)の持ち主の番号と、最後に写したときの版・タイマー。
+    let recoverySessionID = UUID().uuidString
+    var recoveryWrittenRevision: Int?
+    var recoveryTimer: Timer?
+    /// 復元で開いた書類は、保存するまで「編集済み」扱い(写しを消さない)。
+    var restoredFromRecovery = false
     /// ドラッグ中の編集の出発点(M4a。ドラッグの間は Undo に積まず、離したときに 1 回だけ登録する)。
     var gestureBase: Project?
     @Published var selectedClipId: String? {
@@ -162,6 +168,8 @@ final class ProjectModel: ObservableObject {
     @Published var pps: Double = TimelineLayout.defaultPps
     @Published var snapEnabled = true
     @Published var isPlaying = false
+    /// 書き出し範囲だけをループ再生する(表示の状態。プロジェクトには保存せず、Undo にも載せない)。
+    @Published var rangeLoop = false
     /// 増やすと、同じ時刻でもプレビューを描き直す(再生を止めたとき)。
     @Published var previewEpoch = 0
 
@@ -462,6 +470,8 @@ final class ProjectModel: ObservableObject {
     /// `preset` があれば、プロジェクトの「写し」にプリセットを当てて書き出す(ドキュメント自体は変えない)。
     func runExport(to url: URL, preset: ExportPreset? = nil, range: ExportRange? = nil) async -> ExportOutcome {
         guard !isExporting else { return .failure(ExportError.writerFailed(nil)) }
+        // 素材が欠けたまま書き出すと、その部分が静かに抜けるので止める(保存パネルの前にも同じ確認をする)
+        if reportMissingMediaForExport() { return .failure(ExportError.writerFailed(nil)) }
         let exporting = ExportJob.resolvedProject(project, preset: preset)
         let plan = OutputPlan.make(width: exporting.width, height: exporting.height, codec: exporting.codec)
         let isVideo = preset?.isAudioOnly != true

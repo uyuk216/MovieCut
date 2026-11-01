@@ -32,6 +32,8 @@ extension ProjectModel {
     /// プリセットはプロジェクトの写しに当てるので、ドキュメントは変わらない。保存パネルの提案名は `<書類名>-<プリセット>.mp4|.m4a`。
     func chooseAndExport(preset: ExportPreset? = nil) {
         guard canExport else { return }
+        // 欠けている素材があれば、保存パネルを出す前に止める
+        if reportMissingMediaForExport() { return }
         let panel = NSSavePanel()
         panel.allowedContentTypes = [preset?.isAudioOnly == true ? .mpeg4Audio : .mpeg4Movie]
         panel.nameFieldStringValue = exportSuggestedName(preset: preset)

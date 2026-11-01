@@ -93,6 +93,20 @@ extension ProjectModel {
         return true
     }
 
+    /// 出力 ▸ 字幕を自動生成: 台本(ボイス)の文字から字幕の文字クリップを作る。見た目は組み込みの「ゆっくり風」。Undo は 1 回。
+    @discardableResult
+    func generateSubtitlesFromScript() -> Bool {
+        guard !isLocked else { return false }
+        let style = TextStyleLibrary.builtins.first { $0.id == "builtin.classic" }?.look
+        guard let r = SubtitleGeneration.generate(project, style: style) else {
+            statusText = "字幕にするセリフがありません(字幕オフのセリフや、ロック・非表示のレイヤーは対象外)"
+            return false
+        }
+        edit("字幕の自動生成") { $0 = r.project }
+        statusText = "字幕 \(r.count) 件を作りました。元のセリフの字幕表示は切りました"
+        return true
+    }
+
     /// 出力 ▸ チャプターをコピー: YouTube の説明欄に貼る行をクリップボードへ。注意があれば状態欄に出す。
     @discardableResult
     func copyChapters() -> Bool {

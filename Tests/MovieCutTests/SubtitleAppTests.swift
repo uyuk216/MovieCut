@@ -69,6 +69,27 @@ final class SubtitleAppTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: srt, encoding: .utf8), "1\n00:00:00,000 --> 00:00:01,500\nあ\nい\n\n")
     }
 
+    func testGenerateSubtitlesIsOneUndoStepAndIdempotent() {
+        let m = makeModel()
+        var v = Clip(); v.type = .voice; v.start = 1; v.duration = 2; v.text = "やあ"
+        var tr = Track(name: "声"); tr.clips = [v]
+        m.project.tracks = [tr]
+        let before = m.project
+        XCTAssertTrue(m.generateSubtitlesFromScript())
+        XCTAssertEqual(m.effectiveUndoManager.undoActionName, "字幕の自動生成")
+        XCTAssertEqual(undoSteps(m), 1)
+        XCTAssertEqual(SubtitleFile.cues(from: m.project), [SubtitleCue(start: 1, end: 3, text: "やあ")])
+        XCTAssertFalse(m.generateSubtitlesFromScript(), "生成済みなら何もしない")
+        m.effectiveUndoManager.undo()
+        XCTAssertEqual(m.project, before)
+    }
+
+    func testGenerateSubtitlesWithNothingToDoLeavesUndoAlone() {
+        let m = makeModel()
+        XCTAssertFalse(m.generateSubtitlesFromScript())
+        XCTAssertFalse(m.effectiveUndoManager.canUndo)
+    }
+
     func testCopyChaptersToPasteboard() {
         let m = makeModel()
         XCTAssertFalse(m.copyChapters(), "マーカーが無ければコピーしない")

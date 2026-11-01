@@ -50,6 +50,7 @@ struct AppCommands: Commands {
             MenuSection { s, run in
                 items(AppMenuSpec.file(s), run)
                 MenuItemView(spec: AppMenuSpec.subtitleImport(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.mediaRelink(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.aiScript(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.aiSettings(s), perform: run)
             }
@@ -181,6 +182,7 @@ struct AppCommands: Commands {
                 MenuItemView(spec: AppMenuSpec.fanUninstall(s), perform: run)
                 Divider()
                 MenuItemView(spec: AppMenuSpec.subtitleExport(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.subtitleGenerate(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.chapterCopy(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.aiChapters(s), perform: run)
             }

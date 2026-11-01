@@ -23,7 +23,10 @@ final class ProjectDocument: ReferenceFileDocument {
     let model: ProjectModel
 
     init() {
-        model = onMain { ProjectModel(project: .new()) }
+        // 復元で渡された書類があれば、新しい書類はその中身で始める(RecoveryInbox)
+        let restored = onMain { RecoveryInbox.take() }
+        model = onMain { ProjectModel(project: restored ?? .new()) }
+        onMain { model.startAutosave(restored: restored != nil) }
     }
 
     required init(configuration: ReadConfiguration) throws {
@@ -32,6 +35,7 @@ final class ProjectDocument: ReferenceFileDocument {
         }
         let p = try Project.decode(from: data)
         model = onMain { ProjectModel(project: p) }
+        onMain { model.startAutosave() }
     }
 
     func snapshot(contentType: UTType) throws -> Data {

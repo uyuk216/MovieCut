@@ -25,6 +25,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { Self.settleLaunchWindows(closeAllBlank: false) }
         }
         DebugHooks.shared.appDidLaunch()
+        // 異常終了で残った自動保存の写しがあれば、復元するかを聞く(静かな検証では聞かない)
+        if !DebugHooks.isQuiet {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { MainActor.assumeIsolated { RecoveryPrompt.offerIfNeeded() } }
+        }
         // ファン最大化: 終了シグナルでも自動に戻す。機種とサービスの検出は裏で 1 回(静かな検証では行わない)
         MainActor.assumeIsolated {
             AppServices.fan.installSignalHandlers()

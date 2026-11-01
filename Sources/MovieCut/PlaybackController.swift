@@ -183,7 +183,11 @@ final class PlaybackController {
         armed = true
         let end = model.project.endTime
         guard end > 0 else { return }
-        if model.currentTime >= end - 1e-6 { model.currentTime = 0 }   // 終わりにいるときは先頭から
+        if let r = model.activeLoopRange {
+            model.currentTime = ExportRangeLoop.startTime(current: model.currentTime, range: r)   // 範囲の外なら範囲の頭から
+        } else if model.currentTime >= end - 1e-6 {
+            model.currentTime = 0   // 終わりにいるときは先頭から
+        }
         let key = currentKey()
         if key == cacheKey || key == failedKey {
             begin()
@@ -317,6 +321,11 @@ final class PlaybackController {
         tickCount += 1
         var t = backend.currentTime() ?? (startT + clock.now() - clockStart)
         t = max(t, lastT)                        // 巻き戻らない
+        if let r = model.activeLoopRange, let back = ExportRangeLoop.wrap(t, range: r) {
+            model.currentTime = back             // 範囲ループ: 範囲の終わりで頭へ戻して鳴らし直す
+            restartAudio(at: back)
+            return
+        }
         lastT = t
         let end = model.project.endTime
         if t >= end {

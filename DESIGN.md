@@ -176,3 +176,9 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
 - **範囲選択(ルーラーの ⌥ ドラッグ)・範囲の削除は未実装**(ロードマップに残す)。
 
 計測(A6): ① タイムラインの再描画(`TimelineBenchTests`。クリップ 200 個・1400×260pt・debug ビルド・`draw` の時間の中央値): 変更前 3.81 ms → 変更後 4.20 ms(素材なしの中身。サムネイルと波形の問い合わせの分)、サムネイルと波形が全部できたあと 5.11 ms(最初の 1 回、まだ何も無いとき 3.95 ms)。② `moviecut-cli`(release、1920×1080・10 秒 60fps、画像 + 文字 + ぼかし + 音声 2 本・レイヤーの locked / solo / height つき): `frame --bench 40` 変更前 2.60 / 2.52 ms → 変更後 2.57 / 2.35 ms、`export` 4.16 / 4.13 / 4.14 倍速 → 4.14 / 4.11 / 4.15 倍速(ソロなしでも 4.12 → 4.12)。`smoke --blur --tone` 3.68 倍速。③ ソロの確認(ffmpeg volumedetect、m4a): ソロなし 平均 −24.0 / 最大 −20.2 dB → 小さい音の側をソロ 平均 −44.1 / 最大 −40.9 dB(ちょうど −20 dB)。ソロ + 消音は音が 1 つも無い扱いで、音声のみの書き出しは従来どおり「音声がありません」で断る。
+
+## 字幕の自動生成・自動保存・素材チェック・範囲ループ(2026-11-02)
+- **字幕の自動生成** (`Core/SubtitleGeneration.swift`、`ProjectModel+Subtitles`): 字幕オンのボイス(本文あり・長さ > 0・非表示・ロックでないレイヤー)ごとに、同じ時刻の文字クリップを「字幕」「字幕 2」…の新しいレイヤーに作る。見た目は組み込みの「ゆっくり風」(`TextLook.apply`)。元のボイスは `subtitle = false`(ファイルに書かれる任意項目。描画の二重表示を防ぐ)。対象が無ければ何もしない(冪等)。1 回の Undo(「字幕の自動生成」)。メニュー: 出力 ▸ 字幕を自動生成。
+- **自動保存と復元** (`Core/AutosaveRecovery.swift`、`ProjectModel+Recovery`): 編集済みで版が変わったときだけ、30 秒ごとに `~/Library/Application Support/MovieCut/Recovery/<セッション番号>.mcrecover`(JSON: 名前・元のパス・保存時刻・プロジェクトの JSON)に書く。利用者のファイルは書かない。保存済み・閉じたときは写しを消す。起動時に残りを確認(復元 / 捨てる / あとで)。復元は `RecoveryInbox` で新しい書類に渡し、すぐ写しを残す。復元の書類は保存するまで編集済み扱い。DebugHooks の静かな起動では動かさない。
+- **素材チェック** (`Core/MissingMedia.swift`、`ProjectModel+Media`): `src` を持つクリップ(画像・動画・音声・ボイス)でファイルが無いものを列挙。書き出しは保存パネルの前と `runExport` の両方で止め、先頭 5 件の名前を出す。ファイル ▸ 素材の場所を再指定…: フォルダ(中のフォルダも)から同じファイル名を探して差し替える。1 回の Undo。ロックされたレイヤーのクリップは `edit` の規則で変えられない。
+- **範囲のドラッグと範囲ループ** (`TimelineView` の `RangeDrag`、`Core/ExportRange.swift` の `ExportRangeLoop`): ルーラー上で書き出し範囲の印(5pt 以内)を掴んで動かす。離したときに「書き出し範囲の移動」(1 回の Undo)。再生 ▸ 範囲をループ再生は `ProjectModel.rangeLoop`(保存しない・Undo に載せない)。ループ中は範囲の終わりで頭に戻して音を鳴らし直す(`PlaybackController.tick`)。
