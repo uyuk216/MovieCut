@@ -180,6 +180,8 @@ struct AppCommands: Commands {
                 Divider()
                 items(AppMenuSpec.imageExportItems(s), run)
                 Divider()
+                MenuItemView(spec: AppMenuSpec.gifExport(s), perform: run)
+                Divider()
                 MenuItemView(spec: AppMenuSpec.fanMaxToggle(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.fanInstall(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.fanUninstall(s), perform: run)

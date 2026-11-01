@@ -235,6 +235,35 @@ case "sequence" where args.count >= 2:
         let wall = Date().timeIntervalSince(t0)
         print(String(format: "wrote %@ files=%d wall=%.2fs (%.1f fps)", outPath, r.frameCount, wall, Double(r.frameCount) / max(wall, 1e-9)))
     } catch { fail("書き出せませんでした: \(error.localizedDescription)") }
+case "gif" where args.count >= 2:
+    // gif <in.mcpjc> --out <x.gif> [--fps 10] [--width 480] [--range a:b|project]
+    guard let outPath = optValue("--out") else { fail("--out(出力先の .gif)が必要です") }
+    var options = GIFOptions.standard
+    if let f = optValue("--fps") {
+        guard let v = Double(f), let fps = GIFOptions.validFPS(v) else { fail("--fps は \(Int(GIFOptions.fpsRange.lowerBound))〜\(Int(GIFOptions.fpsRange.upperBound)) の数字") }
+        options.fps = fps
+    }
+    if let w = optValue("--width") {
+        guard let v = Int(w), GIFOptions.widthRange.contains(v) else { fail("--width は \(GIFOptions.widthRange.lowerBound)〜\(GIFOptions.widthRange.upperBound) の整数(px)") }
+        options.maxWidth = v
+    }
+    do {
+        let p = try Project.load(from: URL(fileURLWithPath: args[1]))
+        let range = parseRange(p)
+        let plan = GIFExporter.plan(project: p, range: range, options: options)
+        print("plan: \(plan.width)x\(plan.height) fps=\(FrameRate.label(options.fps)) frames=\(plan.frames) delay=\(String(format: "%.3f", plan.delay))s")
+        if let r = range { print(String(format: "range: %.3f - %.3f s (%.3f s)", r.start, r.end, r.duration)) }
+        var nextMark = 0.1
+        let t0 = Date()
+        let r = try await GIFExporter.export(project: p, range: range, options: options, to: URL(fileURLWithPath: outPath)) { v in
+            if v >= nextMark - 1e-9 {
+                FileHandle.standardError.write(Data(String(format: "  %3.0f%%\n", v * 100).utf8))
+                nextMark = (v * 10 + 1e-9).rounded(.down) / 10 + 0.1
+            }
+        }
+        let wall = Date().timeIntervalSince(t0)
+        print(String(format: "wrote %@ frames=%d bytes=%d wall=%.2fs (%.1f fps)", outPath, r.frameCount, r.bytes, wall, Double(r.frameCount) / max(wall, 1e-9)))
+    } catch { fail("書き出せませんでした: \(error.localizedDescription)") }
 case "subs" where args.count >= 2:
     // subs <project> --out x.srt|x.vtt: 字幕(ボイスの字幕と「字幕」レイヤーの文字)を書き出す(画面なしの確認用)
     guard let outPath = optValue("--out") else { fail("--out が必要です") }
@@ -472,5 +501,5 @@ case "smoke":
         try await runExport(p, to: URL(fileURLWithPath: outPath))
     } catch { fail("書き出せませんでした: \(error.localizedDescription)") }
 default:
-    fail("usage:\n  moviecut-cli info <file.ymproj>\n  moviecut-cli new <out.ymproj>\n  moviecut-cli export <in.mcpjc> <out.mp4|out.m4a> [--range a:b|project] [--preset youtube1080|youtube4k|short|light|audio] [--size WxH] [--fps 29.97] [--codec h264|hevc] [--fan-max [--fan-port 1200|1201]]\n  moviecut-cli fan status | fan test [--seconds 8] [--fan-port 1200|1201]\n  moviecut-cli smoke --out <mp4> [--size WxH] [--fps 23.976] [--codec h264|hevc] [--blur] [--tone] [--save-project p.ymproj]\n  moviecut-cli speak (--voicevox <id> [--speed --pitch --intonation] | --voice <preset> [--speed]) --text <t> --out <wav>\n  moviecut-cli speakers | deps | script <script.txt> --out <p.ymproj>\n  moviecut-cli frame <in.ymproj> --t <sec> --out <png|jpg> [--size WxH] [--bench N]\n  moviecut-cli sequence <in.mcpjc> --out <dir> [--format png|jpeg] [--name base] [--range a:b|project] [--fps 30] [--size WxH]\n  moviecut-cli addvideo <in.ymproj> <clip.mp4> <out.ymproj>\n  moviecut-cli genclips <N> <out.ymproj>\n  moviecut-cli silence <project|media> [--threshold -40] [--min 0.4] [--pad 0.1]\n  moviecut-cli subs <project> --out <x.srt|x.vtt>\n  moviecut-cli transcribe <media|project> --out <x.srt|x.vtt> [--clip 0] [--locale ja-JP]\n  moviecut-cli chapters <project>\n  moviecut-cli project-info <project>   (JSON。読み取り専用)\n  moviecut-cli ai script --theme <t> [--chars 霊夢,魔理沙] [--lines 12] (--provider-cmd \"claude -p\" | --provider-url http://127.0.0.1:11434 --model <m>) [--timeout 120] [--out x.txt] [--show-prompt]")
+    fail("usage:\n  moviecut-cli info <file.ymproj>\n  moviecut-cli new <out.ymproj>\n  moviecut-cli export <in.mcpjc> <out.mp4|out.m4a> [--range a:b|project] [--preset youtube1080|youtube4k|short|light|audio] [--size WxH] [--fps 29.97] [--codec h264|hevc] [--fan-max [--fan-port 1200|1201]]\n  moviecut-cli fan status | fan test [--seconds 8] [--fan-port 1200|1201]\n  moviecut-cli smoke --out <mp4> [--size WxH] [--fps 23.976] [--codec h264|hevc] [--blur] [--tone] [--save-project p.ymproj]\n  moviecut-cli speak (--voicevox <id> [--speed --pitch --intonation] | --voice <preset> [--speed]) --text <t> --out <wav>\n  moviecut-cli speakers | deps | script <script.txt> --out <p.ymproj>\n  moviecut-cli frame <in.ymproj> --t <sec> --out <png|jpg> [--size WxH] [--bench N]\n  moviecut-cli gif <in.mcpjc> --out <x.gif> [--fps 10] [--width 480] [--range a:b|project]\n  moviecut-cli sequence <in.mcpjc> --out <dir> [--format png|jpeg] [--name base] [--range a:b|project] [--fps 30] [--size WxH]\n  moviecut-cli addvideo <in.ymproj> <clip.mp4> <out.ymproj>\n  moviecut-cli genclips <N> <out.ymproj>\n  moviecut-cli silence <project|media> [--threshold -40] [--min 0.4] [--pad 0.1]\n  moviecut-cli subs <project> --out <x.srt|x.vtt>\n  moviecut-cli transcribe <media|project> --out <x.srt|x.vtt> [--clip 0] [--locale ja-JP]\n  moviecut-cli chapters <project>\n  moviecut-cli project-info <project>   (JSON。読み取り専用)\n  moviecut-cli ai script --theme <t> [--chars 霊夢,魔理沙] [--lines 12] (--provider-cmd \"claude -p\" | --provider-url http://127.0.0.1:11434 --model <m>) [--timeout 120] [--out x.txt] [--show-prompt]")
 }

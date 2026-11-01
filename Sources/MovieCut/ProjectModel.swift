@@ -503,7 +503,7 @@ final class ProjectModel: ObservableObject {
         }
     }
 
-    private func runJob(title: String, fileName: String, notices: [String], success: String, result: URL,
+    func runJob(title: String, fileName: String, notices: [String], success: String, result: URL,
                         _ job: @escaping (@escaping (Double) -> Void) async throws -> Void) async -> ExportOutcome {
         isExporting = true
         exportProgress = 0
