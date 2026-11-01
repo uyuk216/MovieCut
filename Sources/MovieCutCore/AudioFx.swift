@@ -33,7 +33,7 @@ public struct AudioFx: Codable, Equatable, Sendable {
     public var cacheToken: String {
         var parts: [String] = []
         if let e = eq, e.isActive { parts.append("eq=\(e.lowDb),\(e.midDb),\(e.highDb)") }
-        if let c = compressor, c.isActive { parts.append("comp=\(c.thresholdDb),\(String(describing: c.ratio)),\(c.attackMs),\(c.releaseMs),\(String(describing: c.makeupDb))") }
+        if let c = compressor, c.isActive { parts.append("comp=\(c.thresholdDb),\(c.ratioValue),\(c.attackMs),\(c.releaseMs),\(String(describing: c.makeupDb))") }
         if let r = reverb, r.isActive { parts.append("rev=\(r.mix),\(r.sizeOrDefault.rawValue)") }
         if let n = normalize, n.isActive { parts.append("norm=\(n.targetDb),\(n.modeOrDefault.rawValue)") }
         return parts.joined(separator: ";")

@@ -26,6 +26,25 @@ final class LayoutQASnapshotTests: XCTestCase {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try data.write(to: url)
         XCTAssertGreaterThan(data.count, 5_000)
+        // 中身があることの確認: 背景色(0.11)から離れた画素が一定数ある(真っ黒・白紙の描画を弾く)
+        let fraction = Self.nonBackgroundFraction(rep)
+        XCTAssertGreaterThan(fraction, 0.02, "描画が背景のままの可能性(\(name))")
+    }
+
+    /// 間引いて画素を調べ、背景(灰色 0.11)と明るさが違う画素の割合。
+    static func nonBackgroundFraction(_ rep: NSBitmapImageRep) -> Double {
+        let w = rep.pixelsWide, h = rep.pixelsHigh
+        guard w > 0, h > 0 else { return 0 }
+        var hit = 0, total = 0
+        for y in stride(from: 0, to: h, by: max(1, h / 60)) {
+            for x in stride(from: 0, to: w, by: max(1, w / 90)) {
+                total += 1
+                guard let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { continue }
+                let lum = (c.redComponent + c.greenComponent + c.blueComponent) / 3
+                if abs(lum - 0.11) > 0.04 { hit += 1 }
+            }
+        }
+        return total == 0 ? 0 : Double(hit) / Double(total)
     }
 
     /// 文字・吹き出し・クロマキー付きの素材・キャラを用意したモデル。
@@ -75,7 +94,7 @@ final class LayoutQASnapshotTests: XCTestCase {
         let clipId = try XCTUnwrap(ids.first)
         m.selectOnly(clipId)
         let ok1 = m.addEffect(.chromaKey, clipId: clipId), ok2 = m.addEffect(.lut, clipId: clipId)
-        print("EFFECT-ADD image chroma=\(ok1) lut=\(ok2)")
+        XCTAssertTrue(ok1 && ok2)
         try snap(InspectorView(model: m, speakers: SpeakerCatalog()), size: NSSize(width: 340, height: 1400), name: "inspector-image-chroma-lut.png")
     }
 

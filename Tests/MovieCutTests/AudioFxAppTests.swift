@@ -227,6 +227,24 @@ final class AudioFxAppTests: XCTestCase {
         XCTAssertEqual(key { $0.tracks[0].clips[1].keyframes["x"] = [Keyframe(t: 0, v: 0.5)] }, k0, "音量以外のキーは音に関係しない")
     }
 
+    /// コンプレッサーの比率を変えたら鍵が変わる(以前は指定値の文字列を使っていて、既定値と同じ値の指定でも区別していた)。
+    /// 比率を省いた場合と既定値を明示した場合は、音が同じなので鍵も同じ。
+    func testAudioCacheKeyChangesWhenCompressorRatioChanges() {
+        let m = makeModel()
+        var p = m.project
+        p.tracks[0].clips[1].fadeIn = 0.5
+        let dates: (String) -> Date? = { _ in Date(timeIntervalSinceReferenceDate: 1000) }
+        func key(_ comp: AudioFx.Compressor) -> AudioCacheKey {
+            var q = p; q.tracks[0].clips[1].audioFx = AudioFx(compressor: comp); return AudioCacheKey.make(for: q, fileDate: dates)
+        }
+        let r2 = key(AudioFx.Compressor(threshold: -20, ratio: 2))
+        let r4 = key(AudioFx.Compressor(threshold: -20, ratio: 4))
+        XCTAssertNotEqual(r2, r4, "比率が変われば再生用ミックスを作り直す")
+        XCTAssertNotEqual(key(AudioFx.Compressor(threshold: -20, ratio: 2)), key(AudioFx.Compressor(threshold: -20, ratio: 8)))
+        XCTAssertEqual(key(AudioFx.Compressor(threshold: -20)), key(AudioFx.Compressor(threshold: -20, ratio: AudioFx.Compressor.defaultRatio)),
+                       "比率の省略と既定値は同じ音なので同じ鍵")
+    }
+
     // MARK: 画像(見て確かめる)
 
     private func writePNG(_ view: NSView, _ name: String) throws {
