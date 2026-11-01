@@ -111,6 +111,8 @@ public struct Renderer {
                 switch c.type {
                 case .blur:
                     drawBlurRegion(c, t: t, ctx: ctx, W: W, H: H)
+                case .adjustment:
+                    applyAdjustment(c, t: t, ctx: ctx, W: W, H: H)
                 case .image, .video, .text:
                     var pose = ClipPose(c, at: t)
                     var mask: TransitionMask?
@@ -303,6 +305,7 @@ public struct Renderer {
                     visible = st.visible
                     if st.scale != 1 { pose.scale *= st.scale }
                     if st.dx != 0 || st.dy != 0 { pose.x += st.dx / W; pose.y += st.dy / H }
+                    if st.shiftX != 0 || st.shiftY != 0 { pose.x += st.shiftX; pose.y += st.shiftY }
                 }
             }
             // 吹き出し(任意): 文字の後ろに、キャンバス基準で描く(文字の回転には従わない)
@@ -386,6 +389,8 @@ public struct Renderer {
 
     /// クリップの枠(回転も含めて囲む四角)。キャンバスの画素・左上原点。素材が読めなければ nil。
     func contentBounds(_ c: Clip, pose: ClipPose, t: Double) -> CGRect? {
+        // スクロールする文字は、どこまで流れるか枠では決まらないので、キャンバス全体を作業範囲にする
+        if c.type == .text, c.textAnim?.known?.isScroll == true { return CGRect(x: 0, y: 0, width: Double(project.width), height: Double(project.height)) }
         guard let size = objectSize(of: c, at: t) else { return nil }
         // objectSize は設定・キーの拡大で測るので、トランジションの拡大ぶんを掛ける
         let base = ClipPose(c, at: t).scale
@@ -424,6 +429,23 @@ public struct Renderer {
         ctx.saveGState()
         ctx.setAlpha(CGFloat(pose.opacity))
         drawCG(ctx, out, work)
+        ctx.restoreGState()
+    }
+
+    /// 調整レイヤー: いまキャンバスに描いてある全部(背景と、それより前のレイヤー・クリップ)の合成結果に、
+    /// クリップのエフェクトを一度かける。不透明度は元の絵との混ぜ具合(0 で何もしない)。プレビューと書き出しで同じ道。
+    func applyAdjustment(_ c: Clip, t: Double, ctx: CGContext, W: Double, H: Double) {
+        let fx = c.hasActiveEffects ? EffectPipeline.resolve(c, atClipTime: t - c.start) : []
+        guard !fx.isEmpty else { return }
+        let opacity = ClipPose(c, at: t).opacity
+        guard opacity > 0, let snap = ctx.makeImage() else { return }
+        let canvas = CGRect(x: 0, y: 0, width: W, height: H)
+        let resScale = (W * H / (1920.0 * 1080.0)).squareRoot()
+        let ci = EffectPipeline.apply(CIImage(cgImage: snap), effects: fx, bounds: canvas, scale: resScale)
+        guard let out = EffectPipeline.makeImage(ci, from: canvas) else { return }
+        ctx.saveGState()
+        ctx.setAlpha(CGFloat(opacity))
+        drawCG(ctx, out, canvas)
         ctx.restoreGState()
     }
 

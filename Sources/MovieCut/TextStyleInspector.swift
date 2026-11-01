@@ -268,7 +268,14 @@ struct TextStyleInspector: View {
             }
             .labelsHidden()
         }
-        if kind != .none {
+        if kind.isScroll {
+            InspectorField(label: "速さ（/秒）") {
+                NumField(value: c.textAnim?.speedOrDefault ?? TextAnim.defaultSpeed, step: 0.01, decimals: 2, clamp: { TextAnim.clampSpeed($0) },
+                         onCommit: { model.setTextAnim(kind, speed: $0, clipId: clipId) },
+                         onStep: { model.coalescedTextAnimSpeed($0, clipId: clipId) })
+            }
+            Text("画面の高さ（上へ）・幅（左へ）に対する割合。クリップの終わりまで流れます。位置は基準の位置から、下端（右端）の外へ入ります。").font(.system(size: 11)).foregroundStyle(.secondary)
+        } else if kind != .none {
             InspectorField(label: "長さ（秒）") {
                 NumField(value: c.textAnim?.durationOrDefault ?? 1, step: 0.1, decimals: 2, clamp: { TextAnim.clampDuration($0) },
                          onCommit: { model.setTextAnim(kind, duration: $0, clipId: clipId) },

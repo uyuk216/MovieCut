@@ -298,6 +298,59 @@ final class TextStyleTests: XCTestCase {
         XCTAssertEqual(try render(c, t: 0.3).d, try render(textClip("HHH", size: 80)).d)
     }
 
+    // MARK: スクロール(クレジット・流れる帯)
+
+    func testScrollStateIsLinearInSpeedAndIgnoresDuration() {
+        // 既定の速さ 0.1/秒。基準の位置の 0.5 下から、上へ流れる(クリップの終わりまで、長さに関係なく)
+        let up = TextAnim(kind: "scrollUp", duration: 1)
+        XCTAssertEqual(TextAnimMath.state(up, text: "a", rel: 0, size: 50).shiftY, 0.5, accuracy: 1e-12)
+        XCTAssertEqual(TextAnimMath.state(up, text: "a", rel: 1, size: 50).shiftY, 0.4, accuracy: 1e-12)
+        XCTAssertEqual(TextAnimMath.state(up, text: "a", rel: 3, size: 50).shiftY, 0.2, accuracy: 1e-12, "長さ 1 秒を過ぎても流れる")
+        XCTAssertTrue(TextAnimMath.state(up, text: "a", rel: 30, size: 50).active)
+        XCTAssertEqual(TextAnimMath.state(up, text: "a", rel: 1, size: 50).shiftX, 0)
+        XCTAssertNil(TextAnimMath.state(up, text: "ab", rel: 1, size: 50).visible, "文字は全部見せる")
+        // 速さを変えると比例する
+        let fast = TextAnim(kind: "scrollUp", speed: 0.25)
+        XCTAssertEqual(TextAnimMath.state(fast, text: "a", rel: 2, size: 50).shiftY, 0, accuracy: 1e-12)
+        XCTAssertEqual(TextAnimMath.state(TextAnim(kind: "scrollUp", speed: 9), text: "a", rel: 0.5, size: 50).shiftY, 0.5 - 0.5, accuracy: 1e-12, "速さは 1 に丸める")
+        // 左へ流す帯は x だけ動く。前は出ない
+        let left = TextAnimMath.state(TextAnim(kind: "scrollLeft"), text: "a", rel: 2, size: 50)
+        XCTAssertEqual(left.shiftX, 0.3, accuracy: 1e-12); XCTAssertEqual(left.shiftY, 0)
+        XCTAssertFalse(TextAnimMath.state(TextAnim(kind: "scrollLeft"), text: "a", rel: -0.1, size: 50).active)
+        XCTAssertEqual(TextAnim.clampSpeed(0), 0.01); XCTAssertEqual(TextAnim.clampSpeed(0.5), 0.5)
+    }
+
+    func testScrollSpeedIsOptionalInFile() throws {
+        let plain = try JSONEncoder().encode(TextAnim(kind: "scrollUp", duration: 2))
+        XCTAssertFalse(String(decoding: plain, as: UTF8.self).contains("speed"), "既定の速さは書かない")
+        let fast = try JSONEncoder().encode(TextAnim(kind: "scrollUp", speed: 0.2))
+        XCTAssertTrue(String(decoding: fast, as: UTF8.self).contains("\"speed\""))
+        XCTAssertEqual(try JSONDecoder().decode(TextAnim.self, from: fast).speed, 0.2)
+        // 古い形(速さの無い文字アニメーション)は、そのまま読めて同じ形で書き戻る
+        let old = try JSONDecoder().decode(TextAnim.self, from: Data(#"{"kind":"typewriter","duration":2}"#.utf8))
+        XCTAssertNil(old.speed)
+        XCTAssertEqual(String(decoding: try JSONEncoder().encode(old), as: UTF8.self), String(decoding: try JSONEncoder().encode(TextAnim(kind: "typewriter", duration: 2)), as: UTF8.self))
+    }
+
+    func testScrollRendersMovingTextUntilTheEnd() throws {
+        // 高さ 300・既定の速さ 0.1/秒: 中心は 150 + (0.5 − 0.1t)·300 → t=1 と t=2 で 30px 上がる
+        let c = textClip("HHH", size: 40, anim: TextAnim(kind: "scrollUp"))
+        let a = try XCTUnwrap(try render(c, t: 1.0).bounds(where: isWhiteish))
+        let b = try XCTUnwrap(try render(c, t: 2.0).bounds(where: isWhiteish))
+        let dy = Double(a.minY + a.maxY - b.minY - b.maxY) / 2
+        XCTAssertEqual(dy, 30, accuracy: 2)
+        XCTAssertEqual(a.minX, b.minX, "縦に流れるだけ")
+        // クリップの長さ(4 秒)を過ぎた範囲でも、止まらずに動き続けるのはクリップの中の話: 3.5 秒と 3 秒で違う絵
+        XCTAssertNotEqual(try render(c, t: 3.5).d, try render(c, t: 3.0).d)
+        // 左へ流す帯
+        let l = textClip("HHH", size: 40, anim: TextAnim(kind: "scrollLeft", speed: 0.2))
+        let l1 = try XCTUnwrap(try render(l, t: 0.5).bounds(where: isWhiteish))
+        let l2 = try XCTUnwrap(try render(l, t: 1.5).bounds(where: isWhiteish))
+        // 1 秒で幅の 0.2 倍(600 × 0.2 = 120px)左へ
+        XCTAssertEqual(Double(l1.minX + l1.maxX - l2.minX - l2.maxX) / 2, 120, accuracy: 3)
+        XCTAssertEqual(l1.minY, l2.minY, "横に流れるだけ")
+    }
+
     // MARK: ファイル
 
     func project(_ clip: Clip) -> Project {

@@ -157,6 +157,7 @@ public enum Animation {
     public static func keys(for clip: Clip) -> [String] {
         switch clip.type {
         case .blur: return blurRegionKeys
+        case .adjustment: return ["opacity"] + clip.effectKeys
         case .video: return transformKeys + ["blur"] + clip.effectKeys + [volumeKey]
         case .image, .text: return transformKeys + ["blur"] + clip.effectKeys
         case .audio, .voice: return clip.isFreeze ? [] : [volumeKey]

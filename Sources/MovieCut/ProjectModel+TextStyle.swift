@@ -26,17 +26,23 @@ extension ProjectModel {
     }
 
     @discardableResult
-    func setTextAnim(_ kind: TextAnimKind, duration: Double? = nil, clipId: String? = nil) -> Bool {
+    func setTextAnim(_ kind: TextAnimKind, duration: Double? = nil, speed: Double? = nil, clipId: String? = nil) -> Bool {
         guard let c = styleTarget(clipId) else { return false }
         var probe = c
-        guard TextStyleEditing.setAnim(&probe, kind: kind, duration: duration) else { return false }
-        setClipProperty({ _ = TextStyleEditing.setAnim(&$0, kind: kind, duration: duration) }, name: "文字アニメーション: " + kind.label, clipId: c.id)
+        guard TextStyleEditing.setAnim(&probe, kind: kind, duration: duration, speed: speed) else { return false }
+        setClipProperty({ _ = TextStyleEditing.setAnim(&$0, kind: kind, duration: duration, speed: speed) }, name: "文字アニメーション: " + kind.label, clipId: c.id)
         return true
     }
 
     func coalescedTextAnimDuration(_ d: Double, clipId: String? = nil) {
         guard let c = styleTarget(clipId), let k = c.textAnim?.known, k != .none else { return }
         coalescedClipProperty({ _ = TextStyleEditing.setAnim(&$0, kind: k, duration: d) }, name: "文字アニメーションの長さの変更", clipId: clipId)
+    }
+
+    /// スクロールの速さ(ドラッグや増減でまとめて 1 回の Undo)。
+    func coalescedTextAnimSpeed(_ v: Double, clipId: String? = nil) {
+        guard let c = styleTarget(clipId), let k = c.textAnim?.known, k.isScroll else { return }
+        coalescedClipProperty({ _ = TextStyleEditing.setAnim(&$0, kind: k, speed: v) }, name: "スクロールの速さの変更", clipId: clipId)
     }
 
     // MARK: スタイル

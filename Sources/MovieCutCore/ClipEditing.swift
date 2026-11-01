@@ -317,6 +317,15 @@ public enum ClipEditing {
         return c
     }
 
+    /// 調整レイヤー(3 秒・エフェクトなし。エフェクトは後から足す。素材を持たない)。
+    public static func makeAdjustmentClip(at t: Double, project: Project) -> Clip {
+        var c = Clip()
+        c.type = .adjustment
+        c.start = t
+        c.duration = 3
+        return c
+    }
+
     /// 一番上のレイヤー(配列の最後)の末尾にクリップを足す。レイヤーが 1 つもなければ作る。
     public static func appendToTopLayer(_ clip: Clip, in project: inout Project) {
         if project.tracks.isEmpty { project.tracks.append(Track(name: "レイヤー1")) }

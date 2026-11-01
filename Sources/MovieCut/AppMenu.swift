@@ -26,7 +26,7 @@ enum MenuCommand: Hashable {
     case saveTemplate, newFromTemplate(String)
     // A6: クリップのコピー / 切り取り / 貼り付け / 全選択(ショートカットは持たない: ⌘C ⌘X ⌘V ⌘A は responder chain が受ける)と、レイヤー
     case copyClips, cutClips, pasteClips, selectAllClips, layerLock, layerSolo, layerHeight(LayerHeight)
-    case split, delete, addText, addBlur, addQRCode, addCharacter, makeVoices
+    case split, delete, addText, addBlur, addAdjustment, addQRCode, addCharacter, makeVoices
     // クリップ(M7)
     case duplicate, rippleDelete, trimBefore, trimAfter, prevClip, nextClip, moveLayerUp, moveLayerDown, addLayer, regenerateVoice
     case playPause, toStart, stepBack, stepForward
@@ -495,6 +495,7 @@ enum AppMenuSpec {
     static func clipAdd(_ s: MenuState) -> [MenuItemSpec] {
         [MenuItemSpec(command: .addText, title: "テキストを追加", shortcut: cmd("t", shift: true), enabled: s.canEdit, checked: nil),
          MenuItemSpec(command: .addBlur, title: "ぼかし範囲を追加", shortcut: cmd("b", shift: true), enabled: s.canEdit, checked: nil),
+         MenuItemSpec(command: .addAdjustment, title: "調整レイヤーを追加", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "下の全レイヤーに効く"),
          addQRCode(s)]
     }
 
@@ -940,6 +941,7 @@ enum AppMenu {
             case .delete: m.deleteSelected()
             case .addText: m.addTextClip()
             case .addBlur: m.addBlurClip()
+            case .addAdjustment: m.addAdjustmentClip()
             case .addQRCode: m.openAddQRCode()
             case .addCharacter: m.addCharacter()
             case .makeVoices: Task { await m.generateVoicesFromScript() }

@@ -232,13 +232,15 @@ public enum TextStyleEditing {
 
     /// 文字のアニメーションを設定する(kind が none なら外す)。
     @discardableResult
-    public static func setAnim(_ c: inout Clip, kind: TextAnimKind, duration: Double? = nil) -> Bool {
+    public static func setAnim(_ c: inout Clip, kind: TextAnimKind, duration: Double? = nil, speed: Double? = nil) -> Bool {
         guard c.type == .text else { return false }
         let new: TextAnim?
         if kind == .none { new = nil } else {
             var a = c.textAnim ?? TextAnim(kind: kind.rawValue)
             a.kind = kind.rawValue
             if let d = duration { a.duration = TextAnim.clampDuration(d) }
+            // 速さは既定の値なら書かない(任意項目)
+            if let v = speed { let s = TextAnim.clampSpeed(v); a.speed = s == TextAnim.defaultSpeed ? nil : s }
             new = a
         }
         guard new != c.textAnim else { return false }
@@ -250,7 +252,7 @@ public enum TextStyleEditing {
 // MARK: - 文字のアニメーション
 
 public enum TextAnimKind: String, CaseIterable, Sendable {
-    case none, typewriter, pop, shake
+    case none, typewriter, pop, shake, scrollUp, scrollLeft
 
     public var label: String {
         switch self {
@@ -258,24 +260,33 @@ public enum TextAnimKind: String, CaseIterable, Sendable {
         case .typewriter: return "タイプライター"
         case .pop: return "ポップ"
         case .shake: return "シェイク"
+        case .scrollUp: return "スクロール（上へ）"
+        case .scrollLeft: return "スクロール（左へ）"
         }
     }
+
+    /// クレジット(上へ流す)・テロップ帯(左へ流す)。長さではなく速さで動き、クリップの終わりまで流れ続ける。
+    public var isScroll: Bool { self == .scrollUp || self == .scrollLeft }
 }
 
-/// 文字クリップの頭から `duration` 秒かけて動くアニメーション。知らない種類は文字列のまま残し、描くときは何もしない。
+/// 文字クリップの頭から `duration` 秒かけて動くアニメーション(スクロールは速さで、クリップの終わりまで)。知らない種類は文字列のまま残し、描くときは何もしない。
 public struct TextAnim: Codable, Equatable, Sendable {
     public var kind: String
     public var duration: Double?
+    /// スクロールの速さ(画面の高さ・幅に対する割合 / 秒)。無ければ既定値。スクロールの種類だけ使う。
+    public var speed: Double?
     public var extra: [String: JSONValue] = [:]
-    static let knownKeys: Set<String> = ["kind", "duration"]
+    static let knownKeys: Set<String> = ["kind", "duration", "speed"]
     public static let defaultDuration = 1.0
+    public static let defaultSpeed = 0.1
 
-    public init(kind: String, duration: Double? = nil) { self.kind = kind; self.duration = duration }
+    public init(kind: String, duration: Double? = nil, speed: Double? = nil) { self.kind = kind; self.duration = duration; self.speed = speed }
 
     public init(from decoder: Decoder) throws {
         let l = Lenient(c: try decoder.container(keyedBy: AnyKey.self), known: Self.knownKeys)
         kind = l.string("kind") ?? "none"
         duration = l.double("duration")
+        speed = l.double("speed")
         extra = l.extra()
     }
 
@@ -284,11 +295,14 @@ public struct TextAnim: Codable, Equatable, Sendable {
         for (k, v) in extra { try c.encode(v, forKey: AnyKey(k)) }
         try c.encode(kind, forKey: AnyKey("kind"))
         try c.encodeIfPresent(duration, forKey: AnyKey("duration"))
+        try c.encodeIfPresent(speed, forKey: AnyKey("speed"))
     }
 
     public var known: TextAnimKind? { TextAnimKind(rawValue: kind) }
     public var durationOrDefault: Double { Self.clampDuration(duration ?? Self.defaultDuration) }
+    public var speedOrDefault: Double { Self.clampSpeed(speed ?? Self.defaultSpeed) }
     public static func clampDuration(_ d: Double) -> Double { TextStyle.clamp(d, 0.1...30, defaultDuration) }
+    public static func clampSpeed(_ v: Double) -> Double { TextStyle.clamp(v, 0.01...1, defaultSpeed) }
 }
 
 /// ある時刻でのアニメーションの状態。
@@ -298,6 +312,9 @@ public struct TextAnimState: Equatable, Sendable {
     public var scale = 1.0
     public var dx = 0.0
     public var dy = 0.0
+    /// スクロールによる位置のずれ(キャンバスの幅・高さに対する割合。基準の位置へ足す)。
+    public var shiftX = 0.0
+    public var shiftY = 0.0
     /// まだ動いている(描画のキャッシュを使えない)。
     public var active = false
 }
@@ -340,8 +357,16 @@ public enum TextAnimMath {
 
     public static func state(_ a: TextAnim, text: String, rel: Double, size: Double) -> TextAnimState {
         guard let kind = a.known, kind != .none else { return TextAnimState() }
-        let d = a.durationOrDefault
         var s = TextAnimState()
+        if kind.isScroll {
+            // 基準の位置(0.5 ぶん下・右の外)から、速さで流れる。長さは使わず、クリップの終わりまで続く
+            guard rel.isFinite, rel >= 0 else { return s }
+            s.active = true
+            let offset = 0.5 - a.speedOrDefault * rel
+            if kind == .scrollUp { s.shiftY = offset } else { s.shiftX = offset }
+            return s
+        }
+        let d = a.durationOrDefault
         guard rel < d else { return s }
         s.active = true
         switch kind {
@@ -352,7 +377,7 @@ public enum TextAnimMath {
         case .shake:
             let o = shakeOffset(rel: rel, duration: d, amplitude: size * 0.08)
             s.dx = o.dx; s.dy = o.dy
-        case .none:
+        case .none, .scrollUp, .scrollLeft:
             s.active = false
         }
         return s

@@ -427,6 +427,7 @@ struct ClipInspector: View {
         case .text: return "テキスト"
         case .voice: return "ボイス"
         case .blur: return "ぼかし範囲"
+        case .adjustment: return "調整レイヤー"
         default: return t.rawValue
         }
     }

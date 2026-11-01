@@ -81,6 +81,16 @@ extension ProjectModel {
         return c.id
     }
 
+    /// 「調整レイヤー」(メニュー ▸ クリップ): 一番上のレイヤーの再生ヘッド位置に 3 秒の調整レイヤーを足して選択する。
+    @discardableResult
+    func addAdjustmentClip() -> String? {
+        guard !isLocked else { return nil }
+        let c = ClipEditing.makeAdjustmentClip(at: currentTime, project: project)
+        edit("調整レイヤーの追加") { ClipEditing.appendToTopLayer(c, in: &$0) }
+        selectedClipId = c.id
+        return c.id
+    }
+
     /// 「素材を追加」: ファイルを選ぶパネルを出して、選んだものを置く。
     func chooseAndAddMedia() {
         guard !isLocked else { return }

@@ -255,7 +255,9 @@ public struct ClipType: RawRepresentable, Codable, Hashable, Sendable {
     public static let text = ClipType(rawValue: "text")
     public static let voice = ClipType(rawValue: "voice")
     public static let blur = ClipType(rawValue: "blur")
-    public static let known: [ClipType] = [.image, .video, .audio, .text, .voice, .blur]
+    /// 調整レイヤー: 素材を持たず、それより下(前に描いた全部)の合成結果に、自分のエフェクトを一度かける。
+    public static let adjustment = ClipType(rawValue: "adjustment")
+    public static let known: [ClipType] = [.image, .video, .audio, .text, .voice, .blur, .adjustment]
     public var isKnown: Bool { Self.known.contains(self) }
 
     public init(from decoder: Decoder) throws {

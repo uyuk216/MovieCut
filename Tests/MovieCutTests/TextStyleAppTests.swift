@@ -143,8 +143,8 @@ final class TextStyleAppTests: XCTestCase {
         XCTAssertEqual(items.map(\.title), ["標準", "ゆっくり風", "ニュース帯", "見出し", "吹き出し風", "注意", "自分用"])
         XCTAssertEqual(items.map(\.command), (TextStyleLibrary.builtins.map(\.id) + ["user.1"]).map { MenuCommand.textStyleApply($0) })
         XCTAssertTrue(items.allSatisfy { $0.enabled && $0.shortcut == nil })
-        XCTAssertEqual(AppMenuSpec.textAnimItems(on).map(\.title), ["なし", "タイプライター", "ポップ", "シェイク"])
-        XCTAssertEqual(AppMenuSpec.textAnimItems(on).map(\.checked), [true, false, false, false])
+        XCTAssertEqual(AppMenuSpec.textAnimItems(on).map(\.title), ["なし", "タイプライター", "ポップ", "シェイク", "スクロール（上へ）", "スクロール（左へ）"])
+        XCTAssertEqual(AppMenuSpec.textAnimItems(on).map(\.checked), [true, false, false, false, false, false])
         let off = state { $0.textStyleChoices = on.textStyleChoices }
         XCTAssertTrue(AppMenuSpec.textStyleItems(off).allSatisfy { !$0.enabled })
         XCTAssertTrue(AppMenuSpec.textAnimItems(off).allSatisfy { !$0.enabled })
@@ -160,7 +160,16 @@ final class TextStyleAppTests: XCTestCase {
         AppMenu.perform(.textAnim(.shake), model: m)
         s = MenuState(model: m)
         XCTAssertEqual(s.textAnimKind, .shake)
-        XCTAssertEqual(AppMenuSpec.textAnimItems(s).map(\.checked), [false, false, false, true])
+        XCTAssertEqual(AppMenuSpec.textAnimItems(s).map(\.checked), [false, false, false, true, false, false])
+        // スクロールの速さ: 既定の値は書かない・Undo 1 回で戻る
+        m.setTextAnim(.scrollUp, clipId: "t")
+        XCTAssertNil(m.clip("t")?.textAnim?.speed)
+        m.coalescedTextAnimSpeed(0.25, clipId: "t"); m.coalescedTextAnimSpeed(0.3, clipId: "t")
+        XCTAssertEqual(m.clip("t")?.textAnim?.speed, 0.3)
+        m.flushCoalesced()  // 連続編集は確定してから 1 回で戻す
+        m.effectiveUndoManager.undo()
+        XCTAssertNil(m.clip("t")?.textAnim?.speed, "速さの連続変更は 1 回で戻る")
+        XCTAssertEqual(m.clip("t")?.textAnim?.kind, "scrollUp")
         m.selectedClipId = "i"
         XCTAssertFalse(MenuState(model: m).isTextClip)
         AppMenu.perform(.textStyleApply("builtin.news"), model: m)
