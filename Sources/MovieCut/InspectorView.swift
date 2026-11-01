@@ -460,6 +460,7 @@ struct ClipInspector: View {
                 if c.type == .visualizer { visualizerSections(c) }
                 if Clip.supportsSpeed(c.type) { speedSections(c) }
                 if StabilizeEditing.supports(c) { stabilizeSections(c) }
+                if Clip.supportsEffects(c.type) { maskSections(c) }
                 if (c.type == .video || c.type == .audio) && !c.isFreeze {
                     InspectorSection(title: "音声")
                     slider("音量", .volume, step: 0.05, format: Self.pct)
@@ -570,6 +571,41 @@ struct ClipInspector: View {
                        change: { model.liveStabilizeStrength($0, clipId: clipId) },
                        end: { model.commitGesture(ProjectModel.stabilizeStrengthUndoName) })
         }
+    }
+
+    /// 形のマスク(矩形・楕円・反転・羽根)。オフは nil(ファイルに書かない)。ドラッグは 1 回の Undo。
+    @ViewBuilder private func maskSections(_ c: Clip) -> some View {
+        InspectorSection(title: "形のマスク")
+        Toggle("形で切り抜く（外は透明）", isOn: Binding(get: { c.mask != nil }, set: { on in
+            model.setClipMask(on ? ClipMask() : nil, clipId: clipId)
+        }))
+        .toggleStyle(.checkbox)
+        if let m = c.mask {
+            Picker("形", selection: Binding(get: { m.shape }, set: { s in
+                model.setMaskField(clipId: clipId) { $0.shape = s }
+            })) {
+                Text("矩形").tag("rect")
+                Text("楕円").tag("ellipse")
+            }
+            .pickerStyle(.segmented)
+            .disabled(model.isLocked)
+            maskSlider("横位置", m.x, \.x, range: 0...1)
+            maskSlider("縦位置", m.y, \.y, range: 0...1)
+            maskSlider("幅", m.w, \.w, range: 0.01...1)
+            maskSlider("高さ", m.h, \.h, range: 0.01...1)
+            maskSlider("羽根（ぼかし）", m.feather, \.feather, range: 0...1)
+            Toggle("反転（中を透明にする）", isOn: Binding(get: { m.invert }, set: { on in
+                model.setMaskField(clipId: clipId) { $0.invert = on }
+            }))
+            .toggleStyle(.checkbox)
+        }
+    }
+
+    private func maskSlider(_ label: String, _ value: Double, _ key: WritableKeyPath<ClipMask, Double>, range: ClosedRange<Double>) -> some View {
+        LiveSlider(label: label, value: value, range: range, step: 0.01, format: Self.pct,
+                   begin: { model.beginGesture() },
+                   change: { v in model.liveMaskField(clipId: clipId) { $0[keyPath: key] = v } },
+                   end: { model.commitGesture(ProjectModel.maskUndoName) })
     }
 
     /// 速度ランプ(時間で速さが変わる)の点の一覧。点ごとに時刻(クリップの頭から)と速度を直せる。どの操作も Undo は 1 回。

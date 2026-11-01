@@ -158,7 +158,7 @@ public struct Renderer {
                     }
                     // 複合クリップで、キャンバスいっぱいに・効果なし・不透明度 100% なら、中身を親の画面に直接描く(中間の画像を作らない)。
                     // 直接描くので、まとめる前のクリップを描いたときと画素が完全に一致する
-                    if c.type == .compound, mask == nil, pose.isFullCanvasCompound, !c.hasActiveEffects, let child = compoundRenderer(c) {
+                    if c.type == .compound, mask == nil, c.mask == nil, pose.isFullCanvasCompound, !c.hasActiveEffects, let child = compoundRenderer(c) {
                         ctx.saveGState()
                         child.drawFrame(t: t - c.start + c.offset, into: ctx)
                         ctx.restoreGState()
@@ -166,7 +166,7 @@ public struct Renderer {
                     }
                     // エフェクトは、クリップ自身の画素(変形まで済み)にかけてから、不透明度・マスクで重ねる。無いクリップは従来の速い道
                     let fx = c.hasActiveEffects ? EffectPipeline.resolve(c, atClipTime: t - c.start) : []
-                    if !fx.isEmpty {
+                    if !fx.isEmpty || c.mask != nil {
                         drawEffectedClip(c, pose: pose, effects: fx, t: t, ctx: ctx, W: W, H: H)
                     } else if pose.blur > 0 {
                         drawBlurredClip(c, pose: pose, t: t, ctx: ctx, W: W, H: H)
@@ -461,6 +461,7 @@ public struct Renderer {
     /// エフェクト付きのクリップ: 作業用の範囲(枠 + はみ出しの余白、キャンバス内)だけ透明なビットマップに描き、
     /// CIFilter の連なりをかけ(`EffectPipeline`)、クリップごとのぼかしがあればその後にかけて、不透明度で重ねる。
     func drawEffectedClip(_ c: Clip, pose: ClipPose, effects fx: [ResolvedEffect], t: Double, ctx: CGContext, W: Double, H: Double) {
+        // 形のマスク(クリップの `mask`)は、エフェクトとぼかしの後にかける。マスクの外は透明にして、不透明度で重ねる
         let canvas = CGRect(x: 0, y: 0, width: W, height: H)
         let resScale = (W * H / (1920.0 * 1080.0)).squareRoot()
         let blurSigma = min(300, pose.blur)
@@ -482,6 +483,7 @@ public struct Renderer {
         let faces = fx.contains { $0.kind == .faceBlur } ? faceRects(for: c, t: t, pose: pose, image: snap) : []
         var ci = EffectPipeline.apply(CIImage(cgImage: snap), effects: fx, bounds: localBounds, scale: resScale, faces: faces)
         if blurSigma > 0 { ci = ci.applyingGaussianBlur(sigma: blurSigma) }
+        if let m = c.mask { ci = ShapeMask.apply(ci, mask: m, canvasWidth: W, canvasHeight: H, originX: work.minX, originY: work.minY) }
         guard let out = EffectPipeline.makeImage(ci, from: rect) else { return }
         ctx.saveGState()
         ctx.setAlpha(CGFloat(pose.opacity))

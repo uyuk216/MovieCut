@@ -25,6 +25,8 @@ public enum EffectKind: String, CaseIterable, Sendable {
     case brightness, contrast, saturation, hue, exposure, sharpen, mono, sepia
     case vignette, pixelate, gaussianBlur, zoomBlur, motionBlur, glow, dropShadow, outline
     case chromaKey, lut, faceBlur
+    /// 色温度・ティント(ホワイトバランス)と、持ち上げ・ガンマ・ゲインのカラーホイール。
+    case whiteBalance, colorWheels
 
     public var label: String {
         switch self {
@@ -47,6 +49,8 @@ public enum EffectKind: String, CaseIterable, Sendable {
         case .chromaKey: return "クロマキー"
         case .lut: return "LUT"
         case .faceBlur: return "顔ぼかし"
+        case .whiteBalance: return "ホワイトバランス"
+        case .colorWheels: return "カラーホイール"
         }
     }
 
@@ -78,6 +82,12 @@ public enum EffectKind: String, CaseIterable, Sendable {
                                  Self.p("spill", "色かぶりの除去", 0, 1, 0.5, 0.01, .percent)]
         case .lut: return [Self.p("intensity", "強さ", 0, 1, 1, 0.01, .percent)]
         case .faceBlur: return [Self.p("strength", "強さ", 0, 1, 0.6, 0.01, .percent), Self.p("mode", "方式", 0, 1, 0, 1, .mode)]
+        case .whiteBalance: return [Self.p("temperature", "色温度（青↔橙）", -1, 1, 0, 0.01), Self.p("tint", "ティント（緑↔紫）", -1, 1, 0, 0.01)]
+        case .colorWheels: return [
+            Self.p("liftAngle", "持ち上げ・色相（°）", -180, 180, 0, 1, .degrees), Self.p("liftAmount", "持ち上げ・強さ", 0, 1, 0, 0.01, .percent),
+            Self.p("gammaAngle", "ガンマ・色相（°）", -180, 180, 0, 1, .degrees), Self.p("gammaAmount", "ガンマ・強さ", 0, 1, 0, 0.01, .percent),
+            Self.p("gainAngle", "ゲイン・色相（°）", -180, 180, 0, 1, .degrees), Self.p("gainAmount", "ゲイン・強さ", 0, 1, 0, 0.01, .percent),
+        ]
         }
     }
 

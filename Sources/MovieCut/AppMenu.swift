@@ -55,6 +55,8 @@ enum MenuCommand: Hashable {
     case silenceCut, fillerCut, transcriptEdit, audioDuckToggle
     // 手ぶれ補正の切り替え(映像クリップ。ショートカットは持たない)
     case stabilizeToggle
+    // 縦動画に自動リフレーム(映像・画像。ショートカットは持たない)
+    case autoReframe
     // 複合クリップ: まとめる・解除(ショートカットは持たない)
     case compoundGroup, compoundUngroup
     // 編集 ▸ 検索と置換(テロップとセリフの一括置換。ショートカットは持たない)
@@ -226,6 +228,7 @@ struct MenuState: Equatable {
     var isDucking = false            // 選択クリップの自動ダッキングがオン
     var canStabilize = false         // 映像クリップを選んでいる(手ぶれ補正ができる)
     var isStabilized = false         // 選択クリップの手ぶれ補正がオン
+    var canAutoReframe = false       // 映像・画像を選んでいる(縦動画に自動リフレームできる)
     var canCompoundGroup = false     // 2 つ以上のクリップを選んでいる(まとめられる)
     var canCompoundUngroup = false   // 選択が複合クリップ(解除できる)
     /// 表示 ▸ プレビューの背景(アプリ全体の設定)。
@@ -332,6 +335,7 @@ struct MenuState: Equatable {
             isDucking = c.hasDuck
             canStabilize = StabilizeEditing.supports(c)
             isStabilized = c.stabilizeStrength > 0
+            canAutoReframe = m.canAutoReframe(c)
             canCompoundUngroup = CompoundEditing.supports(c)
         }
         canCompoundGroup = m.selectedClipIDs.count >= 2
@@ -553,6 +557,7 @@ enum AppMenuSpec {
          MenuItemSpec(command: .delete, title: "クリップを削除", shortcut: nil, enabled: s.canEdit && s.hasSelection, checked: nil, hint: "⌫"),
          MenuItemSpec(command: .rippleDelete, title: "すき間を詰めて削除", shortcut: MenuShortcut(key: .delete, modifiers: [.option, .command]), enabled: s.canEdit && s.hasSelection, checked: nil),
          MenuItemSpec(command: .stabilizeToggle, title: "手ぶれ補正（映像を滑らかにする）", shortcut: nil, enabled: s.canEdit && s.canStabilize, checked: s.canStabilize ? s.isStabilized : nil),
+         MenuItemSpec(command: .autoReframe, title: "縦動画に自動リフレーム", shortcut: nil, enabled: s.canEdit && s.canAutoReframe, checked: nil),
          MenuItemSpec(command: .compoundGroup, title: "複合クリップにまとめる", shortcut: nil, enabled: s.canEdit && s.canCompoundGroup, checked: nil),
          MenuItemSpec(command: .compoundUngroup, title: "複合クリップを解除", shortcut: nil, enabled: s.canEdit && s.canCompoundUngroup, checked: nil)]
     }
@@ -1010,6 +1015,7 @@ enum AppMenu {
             case .audioClear: m.clearAudioFxSelected()
             case .audioDuckToggle: m.toggleDuckSelected()
             case .stabilizeToggle: m.toggleStabilizeSelected()
+            case .autoReframe: m.autoReframeSelected()
             case .compoundGroup: m.groupSelectedCompound()
             case .compoundUngroup: m.ungroupSelectedCompound()
             case .silenceCut: m.openSilenceSheet()

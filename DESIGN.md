@@ -357,3 +357,17 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
 - **設定**: `AIImageSettings`(UserDefaults `aiImage.command`)。AI の文章用の設定とは別。メニューから入れると次回のために覚える。
 - **テスト**: `AIImageTests`(無害な sh スクリプトが画像をコピーする。標準入力と環境変数が一致すること、出力なし・画像でない・終了コード・プロンプトの空と長さ・キャンセル)、`ProxyAIImageAppTests`(確認のあと画像クリップが 1 つ・Undo 1 回、断ると何も置かない、空のプロンプトとコマンド不明は確認の前に止まる)。
 - **未対応**: 画像の再生成(同じプロンプトで作り直す)、長さ・置く場所の指定、コマンドの一覧の管理、画像以外の出力。
+
+## 色補正・形のマスク・自動リフレーム(2026-11-02)
+- **エフェクト 2 種を追加**(`EffectKind` は 21 種): `whiteBalance`(ホワイトバランス: `temperature` −1〜1 / `tint` −1〜1。`CITemperatureAndTint`。色温度 + で暖かく(R > B)、ティント + で紫寄り(緑が減る)。既定 0 は何もしない)と `colorWheels`(カラーホイール: `liftAngle`/`gammaAngle`/`gainAngle` = −180〜180 度、`liftAmount`/`gammaAmount`/`gainAmount` = 0〜1。`ColorWheels.swift` が 17³ の CIColorCube を作る。持ち上げ `out = in + L(1−in)`、L = 0.25·強さ·cos(角度 − チャンネル位相)、ゲイン `out ×= 1 + 0.5·強さ·効き`、ガンマ `out = out^(1/γ)`、γ = exp(0.5·強さ·効き)。全部 0 は何もしない)。どちらも既存の `params` とキーフレーム(`fx.<番号>.<引数>`)の仕組みに乗る。インスペクタの行は `EffectKind.params` から自動で出る。
+- **形のマスク**(`Clip.mask`、任意。省くと nil で何もしない・ファイルに書かない): `ClipMask { shape: "rect"|"ellipse", x, y, w, h(キャンバスに対する割合・左上原点), feather(0〜1。既定 0 は書かない), invert(既定 false は書かない) }`。`ShapeMask`(`ClipMask.swift`)がキャンバス大の白黒マスクを作り(矩形は白を羽根 = 短辺 × 羽根 × 0.25 でぼかす。楕円は単位円の放射状グラデーションを縦横に伸ばす)、`CIBlendWithMask` で作業範囲に重ねる。`Renderer.drawEffectedClip` の中で、エフェクトとクリップのぼかしの後・不透明度の前にかける(`mask != nil` のクリップは、エフェクトが無くてもこの道を通る)。複合クリップの「直接描く」速い道はマスクがあると使わない。インスペクタ: 「形のマスク」(オン/オフ・形・位置・大きさ・羽根・反転。ドラッグは 1 回の Undo)。
+- **自動リフレーム**(メニュー ▸ クリップ ▸ 縦動画に自動リフレーム。ショートカットなし。映像・画像で、切り抜き(crop)が無いクリップ):
+  - 純粋な計算は `AutoReframe`(`AutoReframe.swift`)。素材の高さをキャンバス(1080×1920)いっぱいに拡大(`scale = (H/h0) / min(W/w0, H/h0)`)し、横の窓(キャンバスに見える部分。素材に対する幅 = (W/H)/(w0/h0))の中心を、被写体の横の中心(面積の重み付き平均)へ動かす。窓は常に素材の内側に収まる(縁に空きが出ない)。
+  - 横位置 `x` のキーフレームに変換: `x = 0.5 + (0.5 − 窓の中心) × 絵の幅(キャンバス比)`。拡大は静的、縦位置 `y` と既存の拡大のキーは外す。
+  - 平滑化: 検出の列に対し、前→後・後→前の一次の低域通過を 1 回ずつかける(時定数 0.8 秒、位相のずれなし)。窓の中心は平滑化のあとで素材の内側へ収める。
+  - 検出: `SubjectDetecting` の差し替え可能なプロトコル。実装 `VisionSubjectDetector` は顔(`VNDetectFaceRectanglesRequest`)を優先し、無ければ注目領域(`VNGenerateAttentionBasedSaliencyImageRequest` の salientObjects)。`Renderer.reframeSamples` が 5 コマ/秒で取り(画像は 1 回だけ検出)、同じ描画の入口(`videoFrame`)を使う。検出は裏のタスク(`ProjectModel+Reframe.swift`)。
+  - 適用: 出力を 1080×1920 に切り替えて(`scaledForResolution`。コーデックは H.264 で書けなければ HEVC)、クリップに計画を書く。解像度の切り替えと計画の適用は 1 回の Undo。横長でない素材(縦・9:16)では何もせず、エラーを出す。
+  - 注意: 出力の解像度はプロジェクト全体に効くので、ほかのクリップも 1080×1920 のキャンバスに合わせて変わる。
+  - テスト: `AutoReframeTests`(偽の検出器。動く被写体を窓が追う・窓が素材の内側・キーが窓の中心を示す・キャンバスの縁に空きがない・平滑化でジッターが半分以下・縦長では計画なし・適用・画像 1 枚の検出は 1 回)、`AutoReframeAppTests`(メニューの項目・1 回の Undo で解像度も戻る・対象外の判定)。
+- **未確認**: 実機での検出の質(Vision の顔・注目領域の当たり)、1 分を超える素材での検出の時間(5 コマ/秒の Vision 呼び出し)、マスクの見た目の細部(プレビュー上の縁)、カラーホイールの見た目の好み(数値の強さは目安)。
+

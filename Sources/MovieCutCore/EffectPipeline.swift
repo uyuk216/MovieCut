@@ -42,6 +42,8 @@ public enum EffectPipeline {
         case .chromaKey: return false
         case .lut: return v("intensity") < eps
         case .faceBlur: return v("strength") < eps
+        case .whiteBalance: return abs(v("temperature")) < eps && abs(v("tint")) < eps
+        case .colorWheels: return v("liftAmount") < eps && v("gammaAmount") < eps && v("gainAmount") < eps
         }
     }
 
@@ -184,6 +186,18 @@ public enum EffectPipeline {
             return ChromaKey.apply(img, key: e.color, similarity: e.v("similarity"), smoothness: e.v("smoothness"), spill: e.v("spill"))
         case .faceBlur:
             return FaceBlur.apply(img, faces: faces, mode: FaceBlur.Mode(e.v("mode")), strength: e.v("strength"), scale: scale)
+        case .whiteBalance:
+            // 色温度を上げると「入力の白は青すぎた」と見なして、橙寄りに直す。ティントは緑↔紫(正で紫)
+            let neutral = CIVector(x: 6500 + 2500 * e.v("temperature"), y: 100 * e.v("tint"))
+            return img.applyingFilter("CITemperatureAndTint", parameters: ["inputNeutral": neutral, "inputTargetNeutral": CIVector(x: 6500, y: 0)])
+        case .colorWheels:
+            let lift = ColorWheels.Wheel(angle: e.v("liftAngle"), amount: e.v("liftAmount"))
+            let gamma = ColorWheels.Wheel(angle: e.v("gammaAngle"), amount: e.v("gammaAmount"))
+            let gain = ColorWheels.Wheel(angle: e.v("gainAngle"), amount: e.v("gainAmount"))
+            let data = ColorWheels.cubeData(lift: lift, gamma: gamma, gain: gain)
+            return img.unpremultiplyingAlpha()
+                .applyingFilter("CIColorCube", parameters: ["inputCubeDimension": ColorWheels.dimension, "inputCubeData": data])
+                .premultiplyingAlpha()
         case .lut:
             guard let p = e.path, let c = LUTCache.shared.cube(atPath: p) else { return img }
             return LUTApply.apply(img, lut: c.lut, dimension: c.dimension, data: c.data, intensity: e.v("intensity"))

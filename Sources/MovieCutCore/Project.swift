@@ -351,9 +351,11 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var stabilize: Double? = nil
     /// 複合クリップの中のレイヤー(type が compound のときだけ。無いときは書かない)。子の `start` は複合クリップの頭からの秒。
     public var tracks: [Track]? = nil
+    /// 形のマスク(キャンバスの矩形・楕円。省いたときは何もしない)。
+    public var mask: ClipMask? = nil
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["id", "type", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "duck", "visualizer", "stabilize", "tracks"]
+    static let knownKeys: Set<String> = ["id", "type", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "duck", "visualizer", "stabilize", "tracks", "mask"]
 
     public init() {}
 
@@ -485,6 +487,9 @@ public struct Clip: Codable, Equatable, Identifiable {
         if let raw: JSONValue = l.value("stabilize") {
             if let v: Double = l.value("stabilize"), v.isFinite { stabilize = v > 0 ? min(v, 1) : nil } else { extra["stabilize"] = raw }
         }
+        if let raw: JSONValue = l.value("mask") {
+            if let v: ClipMask = l.value("mask") { mask = v } else { extra["mask"] = raw }
+        }
         // 複合クリップの中身: 読めなければ捨てずにそのまま書き戻す
         if let raw: JSONValue = l.value("tracks") {
             if let v: [Track] = l.value("tracks") { tracks = v } else { extra["tracks"] = raw }
@@ -566,6 +571,7 @@ public struct Clip: Codable, Equatable, Identifiable {
         try c.encodeIfPresent(duck, forKey: AnyKey("duck"))
         try c.encodeIfPresent(visualizer, forKey: AnyKey("visualizer"))
         if let t = tracks { try c.encode(t, forKey: AnyKey("tracks")) }
+        try c.encodeIfPresent(mask, forKey: AnyKey("mask"))
         if let s = stabilize, s > 0 { try c.encode(min(s, 1), forKey: AnyKey("stabilize")) }
     }
 }
