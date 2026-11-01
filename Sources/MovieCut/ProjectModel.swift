@@ -165,6 +165,8 @@ final class ProjectModel: ObservableObject {
     /// 「無音をカット…」のシートと、その対象のクリップ。
     @Published var showSilenceSheet = false
     var silenceClipId: String?
+    @Published var showFillerSheet = false
+    var fillerClipId: String?
     /// 「検索と置換…」のシート(テロップとセリフの一括置換)。
     @Published var showFindSheet = false
     /// 名前を変えているマーカー(シートを出す)。

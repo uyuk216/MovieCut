@@ -120,3 +120,34 @@ extension ProjectModel {
         return r.changedIds.count
     }
 }
+
+// MARK: カウントダウン(文字クリップ)
+extension ProjectModel {
+    /// カウントダウンを置く・外す(nil で外す)。変わらないときは何もしない(Undo に載せない)。1 回の Undo。
+    func setCounter(_ counter: TextCounter?, name: String, clipId: String? = nil) {
+        guard let c = styleTarget(clipId), c.type == .text else { return }
+        var probe = c
+        guard CounterEditing.set(&probe, to: counter) else { return }
+        setClipProperty({ _ = CounterEditing.set(&$0, to: counter) }, name: name, clipId: c.id)
+    }
+
+    /// メニュー「テキスト ▸ カウントダウンにする」(付いていれば外す)。
+    func toggleCounterSelected() {
+        guard let c = styleTarget(nil), c.type == .text else { return }
+        setCounter(c.counter == nil ? TextCounter() : nil, name: c.counter == nil ? "カウントダウンにする" : "カウントダウンを外す", clipId: c.id)
+    }
+
+    /// 付いているカウントダウンの項目を 1 つ書き換える(入力欄の確定)。付いていないときは何もしない。
+    func editCounter(_ change: (inout TextCounter) -> Void, name: String, clipId: String? = nil) {
+        guard let c = styleTarget(clipId), c.type == .text, c.counter != nil else { return }
+        var probe = c
+        guard CounterEditing.update(&probe, change) else { return }
+        setClipProperty({ _ = CounterEditing.update(&$0, change) }, name: name, clipId: c.id)
+    }
+
+    /// ステッパーなど連続する編集(まとめて 1 回の Undo)。
+    func coalescedCounter(_ change: @escaping (inout TextCounter) -> Void, name: String, clipId: String? = nil) {
+        guard let c = styleTarget(clipId), c.counter != nil else { return }
+        coalescedClipProperty({ _ = CounterEditing.update(&$0, change) }, name: name, clipId: c.id)
+    }
+}

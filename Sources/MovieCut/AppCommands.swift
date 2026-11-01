@@ -95,6 +95,7 @@ struct AppCommands: Commands {
                 Divider()
                 Menu("キーフレーム") { items(AppMenuSpec.keyframeItems(s), run) }
                 Menu("アニメーション") { items(AppMenuSpec.animationItems(s), run) }
+                Menu("配置") { items(AppMenuSpec.pipItems(s), run) }
                 Divider()
                 Menu("トランジション") {
                     Menu("開始") { items(AppMenuSpec.transitionKindItems(s, edge: .in), run) }
@@ -113,11 +114,13 @@ struct AppCommands: Commands {
                 Divider()
                 Menu("音声") { items(AppMenuSpec.audioItems(s), run) }
                 MenuItemView(spec: AppMenuSpec.silenceCutItem(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.fillerCutItem(s), perform: run)
                 Divider()
                 Menu("テキスト") {
                     Menu("スタイルを適用") { items(AppMenuSpec.textStyleItems(s), run) }
                     Menu("スタイルを一括適用") { items(AppMenuSpec.textStyleAllItems(s), run) }
                     Menu("文字アニメーション") { items(AppMenuSpec.textAnimItems(s), run) }
+                    MenuItemView(spec: AppMenuSpec.textCounterItem(s), perform: run)
                 }
                 Divider()
                 Menu("エフェクト") {

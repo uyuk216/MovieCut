@@ -272,3 +272,9 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
 - **タイトル案をAIで作る…**: 出力 ▸ (`AppMenuSpec.aiTitles`、ショートカットなし)→ `ProjectModel.suggestAITitles`。送る前に確認(`askAI`)→ 返事を `AITitlePrompt`(Core)で 5 件に → 確認シートで「コピーする」。プロジェクトは変えない(Undo なし)。字幕とマーカーの名前だけを送る。
 - **カウントダウン(文字クリップの任意項目 `counter`)**: `{from, to, format}`。`format` は `mm:ss`(既定)か `ss`。未設定のときはファイルに書かない。表示は `Clip.displayText(at:)` = `text` の後ろに残りの数(減る向きは切り上げ、増える向きは切り捨て)。`Renderer` の文字の経路が使う。**画面の入力欄はまだ無い**(モデルと描画だけ)。
 - **QR コード(画像クリップ)**: クリップ ▸ QRコードを追加…(ショートカットなし)→ `ProjectModel+QR.swift`。`QRCode.pngData`(Core・CIQRCodeGenerator、白地・既定 800 px)で作り、Application Support/MovieCut/QRCodes/<文字の FNV-1a>.png に保存して、画像クリップ(5 秒)として再生ヘッドに置く(Undo 1 回)。画像は外に置いたままなので、移動すると素材の再リンクが要る。
+
+## 追加機能(2026-11-02 第2弾)
+- **カウントダウンの入力欄**: インスペクタ ▸ 文字 ▸「カウントダウン」(付ける・開始・終わり・表示)と、クリップ ▸ テキスト ▸ カウントダウンにする(チェックで付いている表示)。Core は `CounterEditing`(文字クリップだけ・変わらない編集は false)。モデルは `ProjectModel+TextStyle.swift` の `setCounter` / `editCounter` / `coalescedCounter` / `toggleCounterSelected`。1 回の Undo。
+- **配置(ピクチャー・イン・ピクチャー)**: クリップ ▸ 配置 ▸ 右上・右下・左上・左下に小さく。`PictureInPicture`(Core)が拡大 0.3・余白 3% の x・y・scale を求め、既存の変形の項目だけを書く(キーフレームはそのまま。キーがあれば描画ではキーが優先し、状態欄に出す)。素材の縦横比は既定 16:9 の前提で、`ProjectModel+Placement.swift` がプロジェクトの解像度の比を渡す。
+- **話し手ごとの字幕の色**: キャラの任意項目 `subtitleColor`(#rrggbb)。未設定ならファイルに書かない。字幕の自動生成(`SubtitleGeneration.generate`)が、セリフのキャラに色があるとき文字スタイルより優先して使う。キャラ欄の「字幕の文字色」(色ピッカー・既定に戻す)。既存の `color`(字幕の縁の色)とは別。
+- **フィラー語をカット**: クリップ ▸ フィラー語をカット…(ショートカットなし)→ `FillerCutSheet`。`FillerDetector`(Core)が音声認識の単語から、語(既定: えー・あー・えーと・えっと・ええと・あのー・あの・その・うーん)を探す。隣の単語が 0.8 秒以内に続けば連結して比べる。認識は既存の `Transcriber`(本番は `SpeechFrameworkTranscriber`)で、テストは偽物。見つかった区間をチェックしてから、`ClipEditing.removeSilence`(後ろを詰める)で 1 回の Undo でカットする。**実際の認識精度は未確認**(実機の音声で確かめるまで「あの」「その」は誤検出しうる)。

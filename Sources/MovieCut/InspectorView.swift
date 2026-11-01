@@ -892,6 +892,20 @@ struct CharacterInspector: View {
                 ColorField(label: "字幕の縁の色", hex: c.color) { hex in
                     model.coalescedCharacterProperty({ $0.color = hex }, name: "字幕の縁の色の変更", charId: charId)
                 }
+                InspectorField(label: "字幕の文字色") {
+                    HStack(spacing: 8) {
+                        ColorPicker("", selection: Binding(get: { Color(hex: c.subtitleColor ?? "#ffffff") }, set: { v in
+                            model.coalescedCharacterProperty({ $0.subtitleColor = SpeakerSubtitleColor.normalized(v.hexString) }, name: "話し手の字幕の色の変更", charId: charId)
+                        }), supportsOpacity: false)
+                            .labelsHidden()
+                            .frame(width: 56, height: 28)
+                        Text(c.subtitleColor?.uppercased() ?? "文字スタイルの色").font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
+                        Button("既定に戻す") { model.setCharacterProperty({ $0.subtitleColor = nil }, name: "話し手の字幕の色を外す", charId: charId) }
+                            .controlSize(.small)
+                            .disabled(c.subtitleColor == nil)
+                    }
+                }
+                .disabled(model.isLocked)
                 InspectorSection(title: "声")
                 InspectorField(label: "音声エンジン") {
                     Picker("", selection: Binding(get: { c.engine }, set: { model.characterEngineChanged(charId: charId, to: $0) })) {

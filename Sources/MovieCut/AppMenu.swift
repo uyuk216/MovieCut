@@ -42,13 +42,15 @@ enum MenuCommand: Hashable {
     // エフェクト
     case effectAdd(EffectKind), effectPreset(EffectPreset), effectClear, effectCopy, effectPaste, lutLoad
     // 文字(スタイルを適用 = id、文字アニメーション)
-    case textStyleApply(String), textStyleApplyAll(String), textAnim(TextAnimKind)
+    case textStyleApply(String), textStyleApplyAll(String), textAnim(TextAnimKind), toggleCounter
+    // 配置(ピクチャー・イン・ピクチャーの角)
+    case pip(PipCorner)
     // 速度・逆再生・フリーズフレーム
     case speed(Double), toggleReverse, freezeFrame
     // 音声(ノーマライズ・音量の段階・ボイス向けプリセット・エフェクトを外す)
     case audioNormalize, audioVolumeUp, audioVolumeDown, audioVoicePreset, audioClear
     // 無音カット(シートを開く)と、BGM の自動ダッキングの切り替え
-    case silenceCut, audioDuckToggle
+    case silenceCut, fillerCut, audioDuckToggle
     // 編集 ▸ 検索と置換(テロップとセリフの一括置換。ショートカットは持たない)
     case findReplace
     case zoomIn, zoomOut, zoomFit
@@ -197,6 +199,8 @@ struct MenuState: Equatable {
     // 文字
     var isTextClip = false           // 文字クリップを選んでいる
     var textAnimKind: TextAnimKind = .none
+    var hasCounter = false           // 選択中の文字クリップにカウントダウンが付いている
+    var canPip = false               // 映像に見える素材(画像・動画・文字)を選んでいる
     var textStyleChoices: [TextStyleChoice] = []
     struct TextStyleChoice: Equatable { var id: String; var name: String; var builtin: Bool }
     // 速度
@@ -295,6 +299,8 @@ struct MenuState: Equatable {
             hasEffects = !c.effects.isEmpty
             isTextClip = c.type == .text
             textAnimKind = c.textAnim?.known ?? .none
+            hasCounter = c.counter != nil
+            canPip = PictureInPicture.supports(c.type)
             canSpeed = SpeedEditing.supports(c)
             speedValue = c.effectiveSpeed
             isReversed = c.effectiveReverse
@@ -672,6 +678,16 @@ enum AppMenuSpec {
     }
 
     /// クリップ ▸ テキスト ▸ 文字アニメーション(ラジオ)。
+    /// クリップ ▸ 配置 ▸ 右上・右下・左上・左下に小さく(ショートカットは付けない)。
+    static func pipItems(_ s: MenuState) -> [MenuItemSpec] {
+        PipCorner.allCases.map { MenuItemSpec(command: .pip($0), title: $0.label, shortcut: nil, enabled: s.canEdit && s.canPip, checked: nil) }
+    }
+
+    /// テキスト ▸ カウントダウンにする(チェックで付いている表示。ショートカットは付けない)。
+    static func textCounterItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .toggleCounter, title: "カウントダウンにする", shortcut: nil, enabled: s.canEdit && s.isTextClip, checked: s.isTextClip ? s.hasCounter : nil)
+    }
+
     static func textAnimItems(_ s: MenuState) -> [MenuItemSpec] {
         TextAnimKind.allCases.map { MenuItemSpec(command: .textAnim($0), title: $0.label, shortcut: nil, enabled: s.canEdit && s.isTextClip, checked: s.isTextClip && s.textAnimKind == $0) }
     }
@@ -711,6 +727,11 @@ enum AppMenuSpec {
     /// クリップ ▸ LUT を読み込む…(.cube を選ぶ)。
     static func lutLoadItem(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .lutLoad, title: "LUT を読み込む…", shortcut: nil, enabled: s.canEdit && s.canEffect, checked: nil)
+    }
+
+    /// クリップ ▸ フィラー語をカット…(音声認識を使うのでメニューの音声の項目と同じ条件。ショートカットは付けない)。
+    static func fillerCutItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .fillerCut, title: "フィラー語をカット…", shortcut: nil, enabled: s.canEdit && s.canTranscribe, checked: nil)
     }
 
     static func silenceCutItem(_ s: MenuState) -> MenuItemSpec {
@@ -791,7 +812,7 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, settings(s), videoSettings(s)] + file(s) + [subtitleImport(s), mediaRelink(s), subtitleExport(s), subtitleGenerate(s), transcribeSubtitles(s), chapterCopy(s), aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s)] + exportPresets(s) + exportQueueItems(s) + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), lutLoadItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + layerHeightItems(s) + playback(s)
+        [about, settings(s), videoSettings(s)] + file(s) + [subtitleImport(s), mediaRelink(s), subtitleExport(s), subtitleGenerate(s), transcribeSubtitles(s), chapterCopy(s), aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s)] + exportPresets(s) + exportQueueItems(s) + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textCounterItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), fillerCutItem(s), lutLoadItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + layerHeightItems(s) + playback(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerColorItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + [fullScreen(s)] + help.flatMap { $0 }
@@ -902,6 +923,8 @@ enum AppMenu {
             case .textStyleApply(let id): m.applyTextStyleSelected(id)
             case .textStyleApplyAll(let id): m.applyTextStyleToAll(id: id)
             case .textAnim(let k): m.setTextAnim(k)
+            case .toggleCounter: m.toggleCounterSelected()
+            case .pip(let k): m.setPipCorner(k)
             case .speed(let v): m.setSpeedSelected(v)
             case .toggleReverse: m.toggleReverseSelected()
             case .freezeFrame: m.freezeFrameSelected()
@@ -912,6 +935,7 @@ enum AppMenu {
             case .audioClear: m.clearAudioFxSelected()
             case .audioDuckToggle: m.toggleDuckSelected()
             case .silenceCut: m.openSilenceSheet()
+            case .fillerCut: m.openFillerSheet()
             case .findReplace: m.openFindReplace()
             case .delete: m.deleteSelected()
             case .addText: m.addTextClip()

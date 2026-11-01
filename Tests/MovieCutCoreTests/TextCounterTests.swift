@@ -59,4 +59,46 @@ final class TextCounterTests: XCTestCase {
         let back = try JSONDecoder().decode(Clip.self, from: data)
         XCTAssertEqual(back.counter, TextCounter(from: 30, to: 0, format: "mm:ss"))
     }
+
+    // MARK: 編集(CounterEditing)
+
+    private func textClip(counter: TextCounter? = nil) -> Clip {
+        var c = Clip()
+        c.id = "t1"; c.type = .text; c.start = 0; c.duration = 5; c.text = "残り "; c.counter = counter
+        return c
+    }
+
+    func testSetAddsAndRemovesOnTextClipOnly() {
+        var c = textClip()
+        XCTAssertTrue(CounterEditing.set(&c, to: TextCounter()))
+        XCTAssertEqual(c.counter, TextCounter())
+        XCTAssertFalse(CounterEditing.set(&c, to: TextCounter()), "同じ値は変更なし")
+        XCTAssertTrue(CounterEditing.set(&c, to: nil))
+        XCTAssertNil(c.counter)
+        XCTAssertFalse(CounterEditing.set(&c, to: nil), "無いものを外しても変更なし")
+
+        var img = Clip()
+        img.type = .image
+        XCTAssertFalse(CounterEditing.set(&img, to: TextCounter()), "文字以外には付けない")
+        XCTAssertNil(img.counter)
+    }
+
+    func testUpdateNormalizesAndReportsNoOp() {
+        var c = textClip(counter: TextCounter(from: 10, to: 0))
+        XCTAssertFalse(CounterEditing.update(&c) { _ in }, "変わらない編集は false")
+        XCTAssertTrue(CounterEditing.update(&c) { $0.from = -4 })
+        XCTAssertEqual(c.counter?.from, 0, "負の値は 0 に丸める")
+        XCTAssertTrue(CounterEditing.update(&c) { $0.format = "ss" })
+        XCTAssertTrue(CounterEditing.update(&c) { $0.format = "bogus" }, "不明な形は既定に戻して変わる")
+        XCTAssertEqual(c.counter?.format, TextCounter.defaultFormat)
+
+        var none = textClip()
+        XCTAssertFalse(CounterEditing.update(&none) { $0.from = 3 }, "付いていないときは何もしない")
+        XCTAssertNil(none.counter)
+    }
+
+    func testEncodingOmitsCounterWhenAbsent() throws {
+        let data = try JSONEncoder().encode(textClip())
+        XCTAssertFalse(String(decoding: data, as: UTF8.self).contains("\"counter\""))
+    }
 }

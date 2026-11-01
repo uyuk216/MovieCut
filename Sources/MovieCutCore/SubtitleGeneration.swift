@@ -56,7 +56,28 @@ public enum SubtitleGeneration {
             clips.append(clip)
         }
         for t in found { p.tracks[t.track].clips[t.clip].subtitle = false }
+        // 話し手の字幕の色は文字スタイルより優先する(キャラに色があるときだけ上書き)
+        for (i, t) in found.sorted(by: { ($0.cue.start, $0.track, $0.clip) < ($1.cue.start, $1.track, $1.clip) }).enumerated() {
+            if let hex = SpeakerSubtitleColor.color(of: project.tracks[t.track].clips[t.clip], in: project) { clips[i].color = hex }
+        }
         SubtitleImport.appendLanes(clips, to: &p)
         return Result(project: p, count: clips.count)
+    }
+}
+
+/// 話し手ごとの字幕の色(キャラの `subtitleColor`)。字幕の自動生成が、セリフのキャラの色を文字の色に使う。
+public enum SpeakerSubtitleColor {
+    /// "#RRGGBB"(前後の空白・大文字は可)を "#rrggbb" にする。形が違えば nil。
+    public static func normalized(_ s: String?) -> String? {
+        guard var t = s?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(), t.hasPrefix("#"), t.count == 7 else { return nil }
+        t.removeFirst()
+        guard t.allSatisfy({ $0.isHexDigit }) else { return nil }
+        return "#" + t
+    }
+
+    /// セリフ(ボイス)のキャラに字幕の色があれば、その色。無ければ nil。
+    public static func color(of clip: Clip, in project: Project) -> String? {
+        guard let cid = clip.charId else { return nil }
+        return normalized(project.characters.first { $0.id == cid }?.subtitleColor)
     }
 }

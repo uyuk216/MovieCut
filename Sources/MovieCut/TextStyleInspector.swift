@@ -22,7 +22,7 @@ struct TextStyleInspector: View {
         if let c = clip {
             if c.type == .text { styleSection(c) }
             decorationSections(c)
-            if c.type == .text { bubbleSection(c); animationSection(c) }
+            if c.type == .text { bubbleSection(c); animationSection(c); counterSection(c) }
         }
     }
 
@@ -220,6 +220,39 @@ struct TextStyleInspector: View {
         Button { model.setTextStyle({ $0 = TextStyle() }, name: "装飾をリセット", clipId: clipId) } label: { Text("装飾をリセット").frame(maxWidth: .infinity) }
             .controlSize(.small)
             .disabled(model.isLocked || c.textStyle == nil)
+    }
+
+    // MARK: カウントダウン(文字クリップ)
+
+    @ViewBuilder private func counterSection(_ c: Clip) -> some View {
+        InspectorSection(title: "カウントダウン")
+        Toggle("カウントダウンを付ける", isOn: Binding(get: { c.counter != nil }, set: { on in
+            model.setCounter(on ? TextCounter() : nil, name: on ? "カウントダウンにする" : "カウントダウンを外す", clipId: clipId)
+        }))
+        .toggleStyle(.checkbox).font(.system(size: 12)).disabled(model.isLocked)
+        if let k = c.counter {
+            VStack(alignment: .leading, spacing: 6) {
+                InspectorField(label: "開始（秒）") {
+                    NumField(value: k.from, step: 1, decimals: 0, clamp: { min(max($0.rounded(), 0), 3600) },
+                             onCommit: { v in model.editCounter({ $0.from = v }, name: "カウントダウンの開始の変更", clipId: clipId) },
+                             onStep: { v in model.coalescedCounter({ $0.from = v }, name: "カウントダウンの開始の変更", clipId: clipId) })
+                }
+                InspectorField(label: "終わり（秒）") {
+                    NumField(value: k.to, step: 1, decimals: 0, clamp: { min(max($0.rounded(), 0), 3600) },
+                             onCommit: { v in model.editCounter({ $0.to = v }, name: "カウントダウンの終わりの変更", clipId: clipId) },
+                             onStep: { v in model.coalescedCounter({ $0.to = v }, name: "カウントダウンの終わりの変更", clipId: clipId) })
+                }
+                InspectorField(label: "表示") {
+                    Picker("", selection: Binding(get: { k.format }, set: { v in model.editCounter({ $0.format = v }, name: "カウントダウンの表示の変更", clipId: clipId) })) {
+                        Text("分:秒").tag("mm:ss"); Text("秒だけ").tag("ss")
+                    }
+                    .pickerStyle(.segmented).labelsHidden()
+                }
+            }
+            .padding(.leading, 10)
+            .disabled(model.isLocked)
+            Text("クリップの頭から終わりまで、開始から終わりへ直線に変わります。文字は「テキスト」の後ろに続きます。").font(.system(size: 11)).foregroundStyle(.secondary)
+        }
     }
 
     // MARK: アニメーション

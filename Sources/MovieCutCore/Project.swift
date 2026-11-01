@@ -99,6 +99,8 @@ public struct Character: Codable, Equatable, Identifiable {
     public var expressions: [String: String]? = nil
     /// B-7: 話している間に上下へ揺れる。オンのときだけ書く。
     public var bounce: Bool? = nil
+    /// 話し手ごとの字幕の文字色(#rrggbb)。字幕の自動生成でこのキャラのセリフの字幕に使う。未設定 = 文字スタイルの色。
+    public var subtitleColor: String? = nil
     public var x: Double = 0.5
     public var y: Double = 0.72
     public var scale: Double = 1
@@ -106,7 +108,7 @@ public struct Character: Codable, Equatable, Identifiable {
     public var alwaysShow: Bool = true
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["id", "name", "engine", "speaker", "voice", "speed", "pitch", "intonation", "color", "imgClosed", "imgOpen", "imgBlink", "expressions", "bounce", "x", "y", "scale", "flip", "alwaysShow"]
+    static let knownKeys: Set<String> = ["id", "name", "engine", "speaker", "voice", "speed", "pitch", "intonation", "color", "imgClosed", "imgOpen", "imgBlink", "expressions", "bounce", "subtitleColor", "x", "y", "scale", "flip", "alwaysShow"]
 
     public init() {}
 
@@ -146,6 +148,7 @@ public struct Character: Codable, Equatable, Identifiable {
         imgBlink = l.string("imgBlink")
         expressions = l.value("expressions").flatMap { (d: [String: String]) in d.isEmpty ? nil : d }
         bounce = l.bool("bounce")
+        subtitleColor = l.string("subtitleColor").flatMap(SpeakerSubtitleColor.normalized)
         x = l.double("x") ?? x
         y = l.double("y") ?? y
         scale = l.double("scale") ?? scale
@@ -172,6 +175,7 @@ public struct Character: Codable, Equatable, Identifiable {
         try c.encodeIfPresent(imgBlink, forKey: AnyKey("imgBlink"))
         if let e = expressions, !e.isEmpty { try c.encode(e, forKey: AnyKey("expressions")) }
         if bounce == true { try c.encode(true, forKey: AnyKey("bounce")) }
+        if let s = subtitleColor { try c.encode(s, forKey: AnyKey("subtitleColor")) }
         try c.encode(x, forKey: AnyKey("x"))
         try c.encode(y, forKey: AnyKey("y"))
         try c.encode(scale, forKey: AnyKey("scale"))

@@ -44,3 +44,27 @@ public extension Clip {
         return (text ?? "") + counter.text(at: t - start, duration: duration)
     }
 }
+
+/// カウントダウンの編集(インスペクタ・メニュー)。文字クリップだけが対象。何も変わらないときは false(何もしない)。
+public enum CounterEditing {
+    /// 文字クリップのカウントダウンを置く(nil で外す)。値は `TextCounter` の既定値に丸めてから書く。
+    @discardableResult
+    public static func set(_ c: inout Clip, to counter: TextCounter?) -> Bool {
+        guard c.type == .text else { return false }
+        let new = counter.map { TextCounter(from: $0.from, to: $0.to, format: $0.format) }
+        guard new != c.counter else { return false }
+        c.counter = new
+        return true
+    }
+
+    /// 付いているカウントダウンの項目を書き換える。付いていないとき・変わらないときは false。
+    @discardableResult
+    public static func update(_ c: inout Clip, _ change: (inout TextCounter) -> Void) -> Bool {
+        guard c.type == .text, var k = c.counter else { return false }
+        change(&k)
+        let n = TextCounter(from: k.from, to: k.to, format: k.format)
+        guard n != c.counter else { return false }
+        c.counter = n
+        return true
+    }
+}
