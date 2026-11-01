@@ -53,7 +53,8 @@ struct Lenient {
     /// 60 でも 60.0 でも "60" 相当でも Int として読む。
     func int(_ key: String) -> Int? {
         if let v: Int = value(key) { return v }
-        if let d: Double = value(key), d.isFinite { return Int(d.rounded()) }
+        // Int の範囲外(1e308 など)は変換すると落ちるので、読めなかったことにして既定値に任せる
+        if let d: Double = value(key), d.isFinite, abs(d) < 9.0e18 { return Int(d.rounded()) }
         return nil
     }
     func double(_ key: String) -> Double? { value(key) }

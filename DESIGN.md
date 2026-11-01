@@ -294,3 +294,7 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
 - 描画: `Renderer.drawEffectedClip` が、作業範囲の画像(クリップを描いたもの、エフェクトの前)から顔の枠を求め、`EffectPipeline.apply(…, faces:)` に渡す。`FaceBlur.apply`: 枠を各辺 25% 広げ、`CIPixellate`(ブロック 4〜60 px)か `clampedToExtent` のガウスぼかし(σ 2〜40 px)を作り、枠のマスク(白い矩形)で `CIBlendWithMask`。枠の外は変えない。
 - **調整レイヤーには効かない**(合成後の絵に検出をかけるのは、配置が変わるとキャッシュが合わないため未対応)。
 - 計測(偽の検出器、1920×1080、このマシン、`FaceBlurTests.testTimingAt1080p`、10 回の平均): モザイク 0.60 ms・ぼかし 0.60 ms(CIFilter の描画だけ。Vision の検出時間は含まない。検出は別)。単一の計測で、環境により変わる。
+
+## 読み込みの堅牢化(2026-11-02)
+- **ファジング**: `Tests/MovieCutCoreTests/ProjectFuzzTests.swift`。`Fixtures` の全 `.ymproj` / `.json` を、固定シード(SplitMix64)で JSON の削除・値の差し替え(型を変える・極端な数)・未知のキー追加・配列の切り詰め・バイト列の切り詰めで壊し、`Project.decode` が「拒否」か「読めた」で止まることを見る。読めたものは書き直し→読み直しで同じバイト列(安定)、ルート直下に足した未知のキーは残ることを確かめる。
+- **見つけて直した不具合**: `Lenient.int` が `Int(d.rounded())` で変換していたため、`1e308` のような値で `Fatal error` で落ちていた。範囲外(`abs ≥ 9e18`)は読めなかったことにして既定値に任せる(通常の値は変わらない)。
