@@ -1,7 +1,7 @@
 import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
-import MovieCutCore
+@preconcurrency import MovieCutCore
 
 /// 画面のドッキング(パネルの配置)の持ち主。アプリ全体で 1 つ(ドキュメントごとではない)。
 /// 変わるたびに UserDefaults へ書き(`defaults` が nil のときは書かない)、起動時に読み戻す(壊れていれば初期配置)。

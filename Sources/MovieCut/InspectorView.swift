@@ -572,7 +572,9 @@ struct ClipInspector: View {
                 .foregroundStyle(status == .ok ? Color.secondary : Color.red)
                 .help(path)
             Spacer(minLength: 4)
-            Button("選ぶ…") { model.chooseAndLoadLUT(clipId: clipId) }.controlSize(.small).disabled(model.isLocked)
+            Button("選ぶ…") { model.chooseAndLoadLUT(clipId: clipId) }
+                .controlSize(.small).disabled(model.isLocked)
+                .help("LUT の .cube ファイルを選ぶ")
         }
         if status == .missing { Text("ファイルが見つかりません（何もかかりません）").font(.system(size: 10)).foregroundStyle(.red) }
         if status == .invalid { Text(".cube として読めません（何もかかりません）").font(.system(size: 10)).foregroundStyle(.red) }
@@ -821,6 +823,7 @@ struct CharacterInspector: View {
                 Text(fileName(path)).font(.system(size: 12)).lineLimit(1).truncationMode(.middle)
                 HStack(spacing: 6) {
                     Button("選択…") { model.choosePortrait(charId: charId, closed: closed) }
+                        .help(closed ? "口を閉じたときの立ち絵の画像を選ぶ" : "口を開いたときの立ち絵の画像を選ぶ")
                     Button { model.setPortrait(charId: charId, closed: closed, url: nil) } label: { Image(systemName: "xmark") }
                         .disabled(path == nil)
                         .help("画像を外す")
@@ -839,6 +842,7 @@ struct CharacterInspector: View {
                 Text(fileName(c.imgBlink)).font(.system(size: 12)).lineLimit(1).truncationMode(.middle)
                 HStack(spacing: 6) {
                     Button("選択…") { model.chooseImage(title: "まばたき画像を選ぶ") { model.setBlinkImage(charId: charId, url: $0) } }
+                        .help("目を閉じたときに一瞬だけ出す画像を選ぶ")
                     Button { model.setBlinkImage(charId: charId, url: nil) } label: { Image(systemName: "xmark") }
                         .disabled(c.imgBlink == nil)
                         .help("画像を外す")
@@ -875,6 +879,7 @@ struct CharacterInspector: View {
         }
         .controlSize(.small)
         .disabled(model.isLocked)
+        .help("セリフの先頭に [名前] と書くと、その行の間にこの画像が出ます")
     }
 
     var body: some View {

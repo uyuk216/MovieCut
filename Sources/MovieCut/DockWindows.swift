@@ -1,7 +1,7 @@
 import SwiftUI
 import AppKit
 import Combine
-import MovieCutCore
+@preconcurrency import MovieCutCore
 
 /// 別ウインドウに出したパネルのウインドウ。UndoManager は書類のものを共有する(⌘Z が書類と同じ履歴に効く)。
 final class DockPanelWindow: NSWindow {

@@ -84,7 +84,7 @@ enum MenuOrder {
             })
         }
         observers.append(nc.addObserver(forName: NSApplication.didUpdateNotification, object: nil, queue: .main) { _ in
-            MainActor.assumeIsolated { fixMenu(menu()) }
+            _ = MainActor.assumeIsolated { fixMenu(menu()) }
         })
         fixMenu(menu())
     }
