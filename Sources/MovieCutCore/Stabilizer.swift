@@ -132,6 +132,8 @@ public final class StabilizationCache: @unchecked Sendable {
 
     private let lock = NSLock()
     private var store: [String: Stabilization] = [:]
+    private var inFlight: Set<String> = []
+    private var failed: Set<String> = []
 
     public init() {}
 
@@ -148,8 +150,33 @@ public final class StabilizationCache: @unchecked Sendable {
         return v
     }
 
+    /// プレビュー用: 解析が終わっていればそれを返す。無ければ背景で解析を始めて nil を返す(呼び出し側は補正なしのコマを出す)。
+    /// 解析が終わったら `onReady` を背景のスレッドで呼ぶ(呼び出し側が主スレッドへ送る)。同じ鍵の解析は同時に 1 つだけ。
+    /// 書き出し・CLI は `value(key:build:)` を使い、結果が出るまで待つ(書き出しの結果は解析の完了を待つので常に同じ)。
+    public func lazyValue(key: String, build: @escaping () -> Stabilization?, onReady: (() -> Void)?) -> Stabilization? {
+        lock.lock()
+        if let v = store[key] { lock.unlock(); return v }
+        if failed.contains(key) || inFlight.contains(key) { lock.unlock(); return nil }
+        inFlight.insert(key)
+        lock.unlock()
+        DispatchQueue.global(qos: .utility).async { [self] in
+            let v = build()
+            lock.lock()
+            inFlight.remove(key)
+            if let v {
+                if store.count >= Self.capacity { store.removeAll(keepingCapacity: true) }
+                store[key] = v
+            } else {
+                failed.insert(key)   // 解析できない素材は、描くたびに解析し直さない
+            }
+            lock.unlock()
+            onReady?()
+        }
+        return nil
+    }
+
     public var count: Int { lock.lock(); defer { lock.unlock() }; return store.count }
-    public func clear() { lock.lock(); store.removeAll(); lock.unlock() }
+    public func clear() { lock.lock(); store.removeAll(); failed.removeAll(); lock.unlock() }
 }
 
 // MARK: - クリップ側
@@ -166,6 +193,15 @@ public enum StabilizeEditing {
     public static func toggle(_ c: inout Clip) -> Bool {
         let before = c.stabilize
         c.stabilize = c.stabilizeStrength > 0 ? nil : defaultStrength
+        return c.stabilize != before
+    }
+
+    /// 強さを決める(0〜1 に丸める。0 は「オフ」なので `stabilize` を nil にする = ファイルに書かない)。値が変わったら true。
+    @discardableResult
+    public static func setStrength(_ c: inout Clip, _ v: Double) -> Bool {
+        let before = c.stabilize
+        let s = v.isFinite ? min(max(v, 0), 1) : 0
+        c.stabilize = s > 0 ? s : nil
         return c.stabilize != before
     }
 }

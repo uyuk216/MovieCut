@@ -259,7 +259,9 @@ public struct ClipType: RawRepresentable, Codable, Hashable, Sendable {
     public static let adjustment = ClipType(rawValue: "adjustment")
     /// 音声ビジュアライザ: 素材を持たず、プロジェクトの合成音声の大きさで棒・波を描く(`Visualizer`)。
     public static let visualizer = ClipType(rawValue: "visualizer")
-    public static let known: [ClipType] = [.image, .video, .audio, .text, .voice, .blur, .adjustment, .visualizer]
+    /// 複合クリップ: 素材を持たず、中のレイヤー(`Clip.tracks`)を 1 つの映像・音声として扱う(`CompoundEditing`)。
+    public static let compound = ClipType(rawValue: "compound")
+    public static let known: [ClipType] = [.image, .video, .audio, .text, .voice, .blur, .adjustment, .visualizer, .compound]
     public var isKnown: Bool { Self.known.contains(self) }
 
     public init(from decoder: Decoder) throws {
@@ -347,9 +349,11 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var visualizer: Visualizer? = nil
     /// 手ぶれ補正の強さ(映像クリップ。0〜1)。無い・0 のときはファイルに書かない(オフ)。
     public var stabilize: Double? = nil
+    /// 複合クリップの中のレイヤー(type が compound のときだけ。無いときは書かない)。子の `start` は複合クリップの頭からの秒。
+    public var tracks: [Track]? = nil
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["id", "type", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "duck", "visualizer", "stabilize"]
+    static let knownKeys: Set<String> = ["id", "type", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "duck", "visualizer", "stabilize", "tracks"]
 
     public init() {}
 
@@ -481,6 +485,10 @@ public struct Clip: Codable, Equatable, Identifiable {
         if let raw: JSONValue = l.value("stabilize") {
             if let v: Double = l.value("stabilize"), v.isFinite { stabilize = v > 0 ? min(v, 1) : nil } else { extra["stabilize"] = raw }
         }
+        // 複合クリップの中身: 読めなければ捨てずにそのまま書き戻す
+        if let raw: JSONValue = l.value("tracks") {
+            if let v: [Track] = l.value("tracks") { tracks = v } else { extra["tracks"] = raw }
+        }
         if let raw: JSONValue = l.value("visualizer") {
             if let v: Visualizer = l.value("visualizer") { visualizer = v } else { extra["visualizer"] = raw }
         }
@@ -557,6 +565,7 @@ public struct Clip: Codable, Equatable, Identifiable {
         try c.encodeIfPresent(counter, forKey: AnyKey("counter"))
         try c.encodeIfPresent(duck, forKey: AnyKey("duck"))
         try c.encodeIfPresent(visualizer, forKey: AnyKey("visualizer"))
+        if let t = tracks { try c.encode(t, forKey: AnyKey("tracks")) }
         if let s = stabilize, s > 0 { try c.encode(min(s, 1), forKey: AnyKey("stabilize")) }
     }
 }

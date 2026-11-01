@@ -13,6 +13,8 @@ private func rgb(_ hex: UInt32, _ a: CGFloat = 1) -> NSColor {
 enum TimelinePalette {
     static let video = rgb(0x3d6bb3), image = rgb(0x3f8f6b), audio = rgb(0x8a5ab0), text = rgb(0xb07a3a), blur = rgb(0xb0436a)
     static let unknown = rgb(0x3c4050)
+    /// 複合クリップ(中身をまとめた 1 本)。
+    static let compound = rgb(0x4f8f8f)
     static let voiceBase: (r: CGFloat, g: CGFloat, b: CGFloat) = (0x16 / 255.0, 0x17 / 255.0, 0x1c / 255.0)
     static let areaBG = rgb(0x191a1e), panel = rgb(0x26282f), line = rgb(0x383b45), rowLine = rgb(0x2a2c33)
     static let rulerBG = rgb(0x22242a), tick = rgb(0x5a5d6a), tickText = rgb(0xcfd1da), label = rgb(0xb9bcc8), text0 = rgb(0xe6e6ea)
@@ -31,6 +33,7 @@ enum TimelinePalette {
         case .audio: return audio
         case .text: return text
         case .blur: return blur
+        case .compound: return compound
         default: return unknown
         }
     }
@@ -646,6 +649,7 @@ final class TimelineCanvas: NSView {
         case .voice: return "\(charNames[c.charId ?? ""] ?? "?"): \(c.text ?? "")"
         case .text: return "T \(c.text ?? "")"
         case .blur: return "ぼかし範囲"
+        case .compound: return "複合 (\(c.tracks?.reduce(0) { $0 + $1.clips.count } ?? 0)クリップ)"
         default: return (c.src as NSString?)?.lastPathComponent ?? ""
         }
     }

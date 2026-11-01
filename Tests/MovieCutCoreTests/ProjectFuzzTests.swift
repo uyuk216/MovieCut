@@ -167,4 +167,34 @@ final class ProjectFuzzTests: XCTestCase {
         XCTAssertGreaterThan(rejected, 0)
         print("fuzz: decoded=\(decodedOK) rejected=\(rejected) unknownKeyKept=\(unknownChecked)")
     }
+
+    /// 入れ子の複合クリップを含む書類を壊しても、読み込み・音声の平らな列・循環と深さの判定がクラッシュしない。
+    /// (描画は壊れた解像度で大きな画像を作りうるので、ここでは描かない。描画の入れ子は CompoundTests で確かめる。)
+    func testNestedCompoundDocumentsNeverCrash() throws {
+        var clipA = Clip(); clipA.id = "a"; clipA.type = .image; clipA.src = "/x/a.png"; clipA.start = 0; clipA.duration = 2
+        var clipB = clipA; clipB.id = "b"; clipB.start = 1
+        var clipC = clipA; clipC.id = "c"; clipC.start = 0.5
+        var p = Project()
+        p.tracks = [Track(name: "1"), Track(name: "2")]
+        p.tracks[0].clips = [clipA, clipB]
+        p.tracks[1].clips = [clipC]
+        let inner = try XCTUnwrap(CompoundEditing.group(p, clipIds: ["a", "b"]))
+        let outer = try XCTUnwrap(CompoundEditing.group(inner.project, clipIds: [inner.compoundId, "c"]))
+        let enc = JSONEncoder(); enc.outputFormatting = [.sortedKeys]
+        let base = try JSONDecoder().decode(JSONValue.self, from: try enc.encode(outer.project))
+        var rng = SplitMix64(state: 0x4E65_7374_4544)  // "NestED"
+        var decoded = 0
+        for n in 0..<300 {
+            let (doc, _) = mutate(base, &rng, index: n)
+            let bytes = try JSONEncoder().encode(doc)
+            guard let back = try? JSONDecoder().decode(Project.self, from: bytes) else { continue }
+            decoded += 1
+            _ = CompoundEditing.audibleClips(in: back)
+            for c in back.allClips where c.type == .compound {
+                _ = CompoundEditing.hasCycle(c)
+                _ = CompoundEditing.depth(of: c)
+            }
+        }
+        XCTAssertGreaterThan(decoded, 0, "読めた書類が 1 つもない(壊し方が強すぎる)")
+    }
 }

@@ -160,7 +160,7 @@ public enum Animation {
         case .visualizer: return ["x", "y", "w", "h"]
         case .adjustment: return ["opacity"] + clip.effectKeys
         case .video: return transformKeys + ["blur"] + clip.effectKeys + [volumeKey]
-        case .image, .text: return transformKeys + ["blur"] + clip.effectKeys
+        case .image, .text, .compound: return transformKeys + ["blur"] + clip.effectKeys
         case .audio, .voice: return clip.isFreeze ? [] : [volumeKey]
         default: return []
         }

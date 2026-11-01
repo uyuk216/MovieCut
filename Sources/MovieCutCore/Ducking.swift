@@ -75,11 +75,10 @@ public enum Ducking {
     /// 声として扱うクリップ: 音の出る(src があり、長さがあり、音量が 0 でない)ボイスクリップ。消音・ソロで鳴らないレイヤーは除く。
     public static func voiceSpans(in project: Project) -> [Span] {
         var spans: [Span] = []
-        for tr in project.tracks where project.isAudible(tr) {
-            for c in tr.clips where c.type == .voice {
-                guard let s = c.src, !s.isEmpty, c.duration > 0, c.volumeOrDefault > 0 else { continue }
-                spans.append(Span(start: c.start, end: c.start + c.duration))
-            }
+        // 複合クリップの中の声も数える(`audibleClips` は中身を平らにした列)
+        for c in CompoundEditing.audibleClips(in: project) where c.type == .voice {
+            guard let s = c.src, !s.isEmpty, c.duration > 0, c.volumeOrDefault > 0 else { continue }
+            spans.append(Span(start: c.start, end: c.start + c.duration))
         }
         return merged(spans)
     }

@@ -429,6 +429,7 @@ struct ClipInspector: View {
         case .blur: return "ぼかし範囲"
         case .adjustment: return "調整レイヤー"
         case .visualizer: return "音声ビジュアライザ"
+        case .compound: return "複合クリップ"
         default: return t.rawValue
         }
     }
@@ -451,12 +452,14 @@ struct ClipInspector: View {
                 if c.type == .voice { voiceSections(c) }
                 if c.type == .text { textSections(c) }
                 if TextStyleEditing.supports(c.type) { TextStyleInspector(model: model, store: model.textStyles, clipId: clipId) }
-                if [ClipType.image, .video, .text].contains(c.type) { placeSections(c) }
+                if [ClipType.image, .video, .text, .compound].contains(c.type) { placeSections(c) }
+                if c.type == .compound { compoundSection(c) }
                 if EffectEditing.supports(c.type) { effectSections(c) }
                 if TransitionEditing.supportsVideo(c.type) { transitionSections(c) }
                 if c.type == .blur { blurSections(c) }
                 if c.type == .visualizer { visualizerSections(c) }
                 if Clip.supportsSpeed(c.type) { speedSections(c) }
+                if StabilizeEditing.supports(c) { stabilizeSections(c) }
                 if (c.type == .video || c.type == .audio) && !c.isFreeze {
                     InspectorSection(title: "音声")
                     slider("音量", .volume, step: 0.05, format: Self.pct)
@@ -541,6 +544,31 @@ struct ClipInspector: View {
                     .disabled(c.effectiveReverse)
                     .help("スローモーションのコマ落ちを、前後のコマの重ね合わせで滑らかにします")
             }
+        }
+    }
+
+    /// 複合クリップの中身の概要(編集は、まとめを解除して子のクリップを直す)。
+    @ViewBuilder private func compoundSection(_ c: Clip) -> some View {
+        InspectorSection(title: "中身")
+        let kids = c.tracks ?? []
+        let n = kids.reduce(0) { $0 + $1.clips.count }
+        Text("レイヤー \(kids.count)・クリップ \(n)。位置・効果・トランジションは、この複合クリップ全体にかかります。中身を直すには「複合クリップを解除」します。")
+            .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// 手ぶれ補正(映像クリップ)。オンオフは強さ 0 と同じ(0 はファイルに書かない)。つまみは 1 回の Undo。
+    @ViewBuilder private func stabilizeSections(_ c: Clip) -> some View {
+        InspectorSection(title: "手ぶれ補正")
+        Toggle("映像を滑らかにする（移動のみ・縁は少し拡大して隠す）", isOn: Binding(get: { c.stabilizeStrength > 0 }, set: { on in
+            model.setStabilizeStrength(on ? StabilizeEditing.defaultStrength : 0, clipId: clipId)
+        }))
+        .toggleStyle(.checkbox)
+        .help("解析は初回の表示のあいだに背景で行い、終わるまでは補正なしで表示します")
+        if c.stabilizeStrength > 0 {
+            LiveSlider(label: "強さ", value: c.stabilizeStrength, range: 0...1, step: 0.05, format: Self.pct,
+                       begin: { model.beginGesture() },
+                       change: { model.liveStabilizeStrength($0, clipId: clipId) },
+                       end: { model.commitGesture(ProjectModel.stabilizeStrengthUndoName) })
         }
     }
 

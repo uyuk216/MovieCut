@@ -255,4 +255,42 @@ final class StabilizerTests: XCTestCase {
         let zero = try JSONDecoder().decode(Clip.self, from: Data(#"{"type":"video","src":"/a.mov","stabilize":0}"#.utf8))
         XCTAssertNil(zero.stabilize)
     }
+
+    /// 強さの設定: 0〜1 に丸める。0 は「オフ」(キーごと消える = ファイルに書かない)。
+    func testSetStrengthClampsAndZeroIsOff() {
+        var c = Clip(); c.type = .video; c.src = "/tmp/x.mov"
+        XCTAssertTrue(StabilizeEditing.setStrength(&c, 0.5))
+        XCTAssertEqual(c.stabilizeStrength, 0.5)
+        XCTAssertFalse(StabilizeEditing.setStrength(&c, 0.5), "同じ値なら変わらない")
+        XCTAssertTrue(StabilizeEditing.setStrength(&c, 7))
+        XCTAssertEqual(c.stabilizeStrength, 1)
+        XCTAssertTrue(StabilizeEditing.setStrength(&c, -2) == true)
+        XCTAssertNil(c.stabilize, "0 以下はオフ")
+        XCTAssertFalse(StabilizeEditing.setStrength(&c, .nan), "NaN はオフ扱いで、もともとオフなら変わらない")
+    }
+
+    /// プレビュー用の遅延解析: 解析が無ければ nil を返して背景で作り、終わったら onReady が呼ばれて値が取れる。
+    /// 解析できなかった鍵は、描くたびに解析し直さない。
+    func testLazyValueReturnsNilThenCachedAfterReady() throws {
+        let cache = StabilizationCache()
+        let ready = expectation(description: "onReady")
+        var builds = 0
+        let make = { () -> Stabilization? in builds += 1; return Stabilization(step: 1 / 30, dx: [0], dy: [0], zoom: 1) }
+        XCTAssertNil(cache.lazyValue(key: "k", build: make, onReady: { ready.fulfill() }))
+        wait(for: [ready], timeout: 5)
+        XCTAssertEqual(cache.lazyValue(key: "k", build: make, onReady: nil)?.zoom, 1)
+        XCTAssertEqual(builds, 1, "同じ鍵は一度だけ解析する")
+    }
+
+    func testLazyValueDoesNotRetryFailedAnalysis() throws {
+        let cache = StabilizationCache()
+        let done = expectation(description: "failed build finished")
+        var builds = 0
+        let fail = { () -> Stabilization? in builds += 1; return nil }
+        XCTAssertNil(cache.lazyValue(key: "bad", build: fail, onReady: { done.fulfill() }))
+        wait(for: [done], timeout: 5)
+        XCTAssertNil(cache.lazyValue(key: "bad", build: fail, onReady: nil))
+        XCTAssertNil(cache.lazyValue(key: "bad", build: fail, onReady: nil))
+        XCTAssertEqual(builds, 1)
+    }
 }

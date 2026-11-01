@@ -236,8 +236,8 @@ public enum AudioMixer {
         var items: [Item] = []
         // ダッキング: 声(ボイスクリップ)の区間。BGM が複数あっても 1 回だけ数える
         let voiceSpans = project.allClips.contains(where: { $0.hasDuck }) ? Ducking.voiceSpans(in: project) : []
-        for tr in project.tracks where project.isAudible(tr) {
-            for c in tr.clips where c.type == .audio || c.type == .voice || c.type == .video {
+        // 複合クリップの中の音は、親と同じ列に平らにして混ぜる(レイヤーの消音・ソロは各階層で決まる)
+        for c in CompoundEditing.audibleClips(in: project) where c.type == .audio || c.type == .voice || c.type == .video {
                 guard let s = c.src, !s.isEmpty, c.duration > 0, !c.isFreeze else { continue }   // フリーズフレームは無音
                 var sf = Int((c.start * sr).rounded()) - shift
                 let fullStart = sf, fullLength = Int((c.duration * sr).rounded())
@@ -260,7 +260,6 @@ public enum AudioMixer {
                 if c.hasPan { item.pan = AudioPan.gains(c.panOrDefault) }
                 if c.hasDuck, Clip.supportsDuck(c), !voiceSpans.isEmpty { item.duck = c.duck }
                 items.append(item)
-            }
         }
         items.sort { $0.startFrame < $1.startFrame }
 

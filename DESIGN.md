@@ -309,10 +309,29 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
 ## 手ぶれ補正(簡易版、2026-11-02)
 - **計算**(`Sources/MovieCutCore/Stabilizer.swift`): 素材を 30 サンプル/秒で取り、隣り合うコマの画素のずれ(`VisionMotionEstimator` = `VNTranslationalImageRegistrationRequest`、長辺 960 px に縮小して測る)を足し合わせて軌跡にする。軌跡の移動平均(両側 0.5 秒、`MotionSmoothing.smooth`)との差に強さ(0〜1)を掛けたものが、そのコマの補正量(px)。補正は `Stabilizer.warp`(先に平行移動し、中心まわりに拡大)で行い、拡大率は縁が出ない最小の値 `1 / (1 − 2m)`(m = 最大のずれ ÷ 幅)。
 - **推定器の差し込み**: `MotionEstimating` プロトコル。テストは重心を測る偽の推定器を使う(`StabilizerTests`)。Vision の符号(中身の動き = 左上原点・下向き正)は、既知のずれ (+8, +4) の合成画像で確かめた。
-- **キャッシュ**: `StabilizationCache`(鍵 = クリップ・素材・オフセット・長さ・速度・逆再生・時間の割り当て・強さ。上限 16 件で全消去)。解析は初回の描画で 1 回走る(同期。長いクリップでは初回が重い)。
+- **キャッシュ**: `StabilizationCache`(鍵 = クリップ・素材・オフセット・長さ・速度・逆再生・時間の割り当て・強さ。上限 16 件で全消去)。書き出し・CLI は `value(key:build:)` で解析の完了を待つ。プレビューは `lazyValue(key:build:onReady:)`: 解析が無ければ背景(utility)で始めて、その間は補正なしのコマ(恒等の代用)を描く。終わったら `onReady` で同じ時刻を描き直す(`PreviewCoordinator`)。解析できなかった鍵は `failed` に覚えて、描くたびに解析し直さない。同じ鍵の解析は同時に 1 つ。
 - **描画**: `Renderer.drawClipContent` の映像の枠で、切り抜き・拡大より前にコマを補正する(書き出しとプレビューは同じ経路)。時刻の補正量は隣のサンプルとの線形補間。
 - **ファイル**: `Clip.stabilize`(任意の Double、0〜1)。オフ(nil または 0)は書かない。古いファイルは変わらない(`testClipStabilizeIsOnlyWrittenWhenOn`)。
-- **メニュー**: クリップ ▸ 手ぶれ補正（映像を滑らかにする）。`MenuCommand.stabilizeToggle` → `ProjectModel.toggleStabilizeSelected`(1 回の Undo)。ショートカットなし。インスペクタの強さ欄は未実装(強さは既定 0.8 で入る。ファイルの値は読める)。
+- **メニュー**: クリップ ▸ 手ぶれ補正（映像を滑らかにする）。`MenuCommand.stabilizeToggle` → `ProjectModel.toggleStabilizeSelected`(1 回の Undo)。ショートカットなし。
+- **インスペクタ**: 「手ぶれ補正」の切り替え(`setStabilizeStrength`)と強さのつまみ(`LiveSlider`。`beginGesture` 〜 `commitGesture` で 1 回の Undo。`liveStabilizeStrength` はドラッグ開始時の状態から毎回計算するので、動かして戻すと元に戻る)。`StabilizeEditing.setStrength` は 0 を「オフ」(nil・ファイルに書かない)として扱う。
 - **計測**(このマシン、単一の計測。`StabilizerTests.testVisionEstimatorTiming`、10 回の平均): 1920×1080 の 2 コマの推定 約 6.5〜8 ms、補正の描き直し(1920×1080 の 1 コマ)約 2.6 ms。解析の全体時間は素材のデコードに依存するため、実際の映像での計測は未実施。
 - **既知の限界**: 縮小を 480 px にすると 1080p でのずれが 4 px 単位になったため 960 px にした(480 では (12, −6) が (12, −8) と出た)。Vision が特徴を拾えない平らな映像では補正が効かない。意図した大きな pan は一部残るが、0.5 秒より速い揺れを消す設計。速度・逆再生のあるクリップは、描画の時刻の対応をそのまま使う(解析も同じ道)。
+
+## 複合クリップ(2026-11-02)
+- **データ**(`Sources/MovieCutCore/Compound.swift`、`Project.swift`): `ClipType.compound`(素材なし)。中身は `Clip.tracks: [Track]?`(任意項目。複合でなければ書かない。読めない型なら `extra` に退避して書き戻す)。子の `Clip.start` は**複合クリップの頭からの秒**。子のレイヤーは元のレイヤーと同じ id・名前・状態(`Track` をそのまま複製し、クリップだけを入れ替える)。
+- **まとめ** `CompoundEditing.group(_:clipIds:)`: 2 つ以上、見つかること、ロックされたレイヤーに無いこと、深さ 8 段以内、循環が無いこと。頭 = 選んだクリップの最も早い開始。子の開始は `grid(start − 頭)`。複合は、選んだクリップのうち最も前のレイヤーに、開始時刻順で入る。
+- **解除** `CompoundEditing.ungroup(_:clipId:)`: 子を同じ id のレイヤーへ戻す(無ければ複合のあったレイヤー)。開始は `grid(頭 + 子の開始)`。戻し先がロックされていれば拒否。
+- **丸め**: `grid(x)` は 1e-9 秒の格子に丸める。UI の値は高々ミリ秒なので、(a − m) + m の誤差が残らず、まとめ → 解除で `Project` が `==` で一致する(`testGroupThenUngroupRestoresProjectExactly`)。
+- **並び**: レイヤーのクリップは並びを保証していないため、挿すときは開始時刻の順(既存の並びは動かさない)。開始が同じクリップの前後は、往復で入れ替わることがある(記録のみ)。
+- **描画**(`Renderer`): 複合クリップは `drawClipContent` の映像・画像と同じ経路に乗る。子の描画は `compoundRenderer(_:)` が作る `Renderer`(同じプロジェクトの設定・同じ素材・背景と人物の立ち絵は描かない・祖先の id を引き継ぐ)。
+  - **直接描く道**: キャンバスいっぱい・変形なし(x = y = 0.5、拡大 1、回転 0)・不透明度 100%・ぼかしなし・効果なし・マスクなしのとき、子を親の画面へ直接描く(`drawFrame`)。中間の画像を作らないので、まとめる前と**画素が完全に一致**する(`testRenderingCompoundMatchesUngroupedClipsPixelForPixel`、トランジション付きの子も一致)。
+  - **中間の道**: それ以外(位置・拡大・回転・効果・不透明度・マスクのいずれか)は、子を透明な 1 枚(キャンバスと同じ大きさ)に描いて、画像として親の経路に載せる。8 ビットの中間画像を通るため、重なった半透明の縁で 1 段の丸めの差が出うる(未計測)。
+  - **循環と深さ**: 祖先と同じ id の複合、または深さ 8 を超える入れ子は描かない(`compoundRenderer` が nil)。中身が空も描かない。
+- **音声**(`CompoundEditing.audibleClips(in:)`): レイヤーの消音・ソロを見て、音の出るクリップを複合の中まで平らにした列にする(時刻は絶対時刻 = 頭を足す)。`AudioMixer.mixdownDetailed` と `Ducking.voiceSpans` はこの列を使う。中身の消音・ソロは、その複合の中のレイヤーの間だけで決まる。サンプルは同じ列で混ぜるので、まとめる前と一致する(`testAudioSamplesMatchUngroupedClips`、差 1e-6 未満)。
+- **インスペクタ**: 複合クリップは「位置」「効果」「トランジション」を持つ(`EffectEditing` / `TransitionEditing` / `Animation.keys` に入れた)。速度・逆再生・音量・トリムは持たない。中身の概要(レイヤー数・クリップ数)を出す。
+- **メニュー**: クリップ ▸ 複合クリップにまとめる(2 つ以上選んだとき)/ 複合クリップを解除(複合を選んだとき)。`MenuCommand.compoundGroup` / `.compoundUngroup` → `ProjectModel.groupSelectedCompound` / `ungroupSelectedCompound`(各 1 回の Undo。まとめた後は複合を、解除後は戻したクリップを選ぶ)。ショートカットなし。
+- **タイムライン**: 複合は、色(`TimelinePalette.compound`)と「複合 (N クリップ)」の文字で出る。
+- **ファイル**: 古いファイルは変わらない(`testNonCompoundProjectWritesNoTracksKey`、既存のフィクスチャの往復テスト)。ファジング `testNestedCompoundDocumentsNeverCrash` で、入れ子を含む書類を壊してもクラッシュしないことを確かめる。
+- **計測**(このマシン、単一の計測、`testPrintsRenderTimingBeforeAndAfterGrouping`、20 回の平均): 1920×1080 の 1 コマ、まとめる前 5.84 ms、まとめた後 5.89 ms(直接描く道)。
+- **既知の限界**: 中身の編集はまとめを解除してから(複合の中では分割・削除・ドラッグをしない)。複合の長さを変えても中身は切られず、外の部分は描かれない。中の声は立ち絵の口パクを動かさず、立ち絵も描かない。中間の道の画素の一致は未計測。画面の操作(クリップのドラッグ・選択の見た目)は未確認。
 

@@ -51,6 +51,11 @@ struct ClipPose {
     }
 
     /// 回転・反転が無い(切り抜きは絵そのものを切るので関係ない)。文字は拡大・切り抜きも「無し」のとき。
+    /// 複合クリップが、キャンバスいっぱいに・変形なし・不透明度 100%・ぼかしなし(中身を親の画面に直接描ける)。
+    var isFullCanvasCompound: Bool {
+        x == 0.5 && y == 0.5 && scale == 1 && rotation == 0 && opacity >= 1 && blur <= 0
+    }
+
     func isPlain(_ c: Clip) -> Bool {
         if rotation != 0 || c.flipHOrDefault || c.flipVOrDefault { return false }
         if c.type == .text { return scale == 1 && (c.crop?.isEmpty ?? true) }
@@ -72,10 +77,19 @@ struct ClipPose {
 public struct Renderer {
     public let project: Project
     public let assets: RenderAssets
+    /// プレビュー用。手ぶれ補正の解析が無いとき、待たずに補正なしのコマを出し、解析が終わったらこれを呼ぶ(主スレッドへの送りは呼び出し側)。
+    /// nil(既定・書き出し・CLI)のときは解析が終わるまで待つので、結果は常に同じ。
+    public let onStabilized: (() -> Void)?
+    /// 複合クリップの中身を描くとき(`compoundFrame`)の状態。通常の描画では既定のまま。
+    /// 祖先の複合クリップの id(循環を描かないため)・背景を塗るか・人物の立ち絵を描くか(中身では描かない)。
+    var compoundStack: [String] = []
+    var drawsBackground = true
+    var drawsPortraits = true
 
-    public init(project: Project, assets: RenderAssets) {
+    public init(project: Project, assets: RenderAssets, onStabilized: (() -> Void)? = nil) {
         self.project = project
         self.assets = assets
+        self.onStabilized = onStabilized
     }
 
     public func renderImage(t: Double) -> CGImage? {
@@ -100,9 +114,16 @@ public struct Renderer {
         ctx.scaleBy(x: 1, y: -1)
         ctx.interpolationQuality = .high
 
-        ctx.setFillColor(parseHexColor(project.bg) ?? CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 1))
-        ctx.fill(CGRect(x: 0, y: 0, width: W, height: H))
+        if drawsBackground {
+            ctx.setFillColor(parseHexColor(project.bg) ?? CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 1))
+            ctx.fill(CGRect(x: 0, y: 0, width: W, height: H))
+        }
+        drawFrame(t: t, into: ctx)
+    }
 
+    /// 左上原点の ctx に、時刻 t の中身(背景は除く)を描く。複合クリップの中身を、親の画面にそのまま描くときにも使う。
+    func drawFrame(t: Double, into ctx: CGContext) {
+        let W = Double(project.width), H = Double(project.height)
         var speaking: [String: Clip] = [:]  // charId -> 最後に見つかったボイス
         var subtitles: [Clip] = []
         // 合成音声の音量(ビジュアライザが初めて要る時に 1 回だけ作る。無いプロジェクトでは作らない)
@@ -119,7 +140,7 @@ public struct Renderer {
                 case .visualizer:
                     if !mixLoaded { mixEnv = assets.mixEnvelope(for: project); mixLoaded = true }
                     drawVisualizer(c, t: t, env: mixEnv, ctx: ctx, W: W, H: H)
-                case .image, .video, .text:
+                case .image, .video, .text, .compound:
                     var pose = ClipPose(c, at: t)
                     var mask: TransitionMask?
                     if c.hasTransition {
@@ -134,6 +155,14 @@ public struct Renderer {
                     if let m = mask {
                         ctx.saveGState()
                         Renderer.clip(ctx, mask: m, W: W, H: H)
+                    }
+                    // 複合クリップで、キャンバスいっぱいに・効果なし・不透明度 100% なら、中身を親の画面に直接描く(中間の画像を作らない)。
+                    // 直接描くので、まとめる前のクリップを描いたときと画素が完全に一致する
+                    if c.type == .compound, mask == nil, pose.isFullCanvasCompound, !c.hasActiveEffects, let child = compoundRenderer(c) {
+                        ctx.saveGState()
+                        child.drawFrame(t: t - c.start + c.offset, into: ctx)
+                        ctx.restoreGState()
+                        continue
                     }
                     // エフェクトは、クリップ自身の画素(変形まで済み)にかけてから、不透明度・マスクで重ねる。無いクリップは従来の速い道
                     let fx = c.hasActiveEffects ? EffectPipeline.resolve(c, atClipTime: t - c.start) : []
@@ -158,7 +187,7 @@ public struct Renderer {
         }
 
         // 立ち絵(しゃべっている間は口パク)
-        for ch in project.characters {
+        for ch in (drawsPortraits ? project.characters : []) {
             let v = speaking[ch.id]
             if v == nil && !ch.alwaysShow { continue }
             let open = v.map { mouthOpen($0, t: t) } ?? false
@@ -281,9 +310,11 @@ public struct Renderer {
     /// 順序: 切り抜き → 反転 → 拡大 → (クリップの中心まわりに)回転 → (x, y) へ移動。何も変形しないクリップは従来と同じ描き方。
     func drawClipContent(_ c: Clip, pose: ClipPose, t: Double, ctx: CGContext, W: Double, H: Double, fastFade: Bool = false, fadeAlpha: Double = 1) {
         switch c.type {
-        case .image, .video:
+        case .image, .video, .compound:
             var img: CGImage?
-            if let src = c.src {
+            if c.type == .compound {
+                img = compoundFrame(c, t: t)
+            } else if let src = c.src {
                 img = c.type == .image ? assets.image(at: src) : videoFrame(c, src: src, at: t)
             }
             // 手ぶれ補正(映像のみ): 解析は素材ごとに 1 回だけ(キャッシュ)。切り抜き・拡大より前に、コマそのものを補正する
@@ -389,6 +420,10 @@ public struct Renderer {
         let W = Double(project.width), H = Double(project.height)
         let pose = ClipPose(c, at: t)
         switch c.type {
+        case .compound:
+            // 中身はキャンバスと同じ大きさ(枠は全体)
+            let crop = c.cropOrDefault
+            return CGSize(width: W * crop.keptWidth * pose.scale, height: H * crop.keptHeight * pose.scale)
         case .image, .video:
             guard let src = c.src else { return nil }
             let size: CGSize?
@@ -454,13 +489,39 @@ public struct Renderer {
         ctx.restoreGState()
     }
 
+    /// 複合クリップの中身を、その頭からの時刻で、キャンバスと同じ大きさの透明な画像に描く。
+    /// 中身は同じ `Renderer` で描く(トランジション・効果・入れ子の複合もそのまま)。循環・深すぎる入れ子・中身が無いときは nil(何も描かない)。
+    func compoundFrame(_ c: Clip, t: Double) -> CGImage? {
+        guard let child = compoundRenderer(c) else { return nil }
+        return child.renderImage(t: t - c.start + c.offset)
+    }
+
+    /// 複合クリップの中身を描く `Renderer`(背景・人物の立ち絵は描かない。祖先の id を引き継ぐ)。描けない(循環・深すぎる・中身なし)なら nil。
+    func compoundRenderer(_ c: Clip) -> Renderer? {
+        guard let kids = c.tracks, !kids.isEmpty, !compoundStack.contains(c.id), compoundStack.count < CompoundEditing.maxDepth else { return nil }
+        var sub = project
+        sub.tracks = kids
+        var child = Renderer(project: sub, assets: assets, onStabilized: onStabilized)
+        child.compoundStack = compoundStack + [c.id]
+        child.drawsBackground = false
+        child.drawsPortraits = false
+        return child
+    }
+
     /// 手ぶれ補正: 解析結果(キャッシュ)の時刻の補正量で、コマを動かして拡大する。解析できなければ元のコマ。
     /// 解析は素材の全体を一度に読む(初回だけ時間がかかる。以後はキャッシュ)。
     func stabilized(_ c: Clip, src: String, frame: CGImage, t: Double) -> CGImage {
-        let st = StabilizationCache.shared.value(key: c.stabilizeCacheKey(src: src)) {
+        let key = c.stabilizeCacheKey(src: src)
+        let build = { () -> Stabilization? in
             Stabilizer.analyze(duration: c.duration, strength: c.stabilizeStrength,
                                frame: { r in self.videoFrame(c, src: src, at: c.start + r) },
                                estimator: VisionMotionEstimator())
+        }
+        let st: Stabilization?
+        if let onStabilized {
+            st = StabilizationCache.shared.lazyValue(key: key, build: build, onReady: onStabilized)
+        } else {
+            st = StabilizationCache.shared.value(key: key, build: build)
         }
         guard let s = st else { return frame }
         let (dx, dy) = s.correction(atClipTime: t - c.start)

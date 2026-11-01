@@ -56,14 +56,22 @@ final class PreviewCoordinator {
     // 主スレッドだけで触る
     private var lastProject: Project?
     private var lastTime: Double?
+    private var lastAssets: RenderAssets?
     private var lastEpoch = -1
     private var seq = 0
 
     init(model: ProjectModel) { self.model = model }
 
+    /// 手ぶれ補正の解析が終わった: 同じ時刻をもう一度描く(補正なしで出していたコマを置き換える)。
+    private func redrawAfterStabilization() {
+        guard let p = lastProject, let t = lastTime, let a = lastAssets else { return }
+        lastProject = nil
+        request(project: p, time: t, assets: a, epoch: lastEpoch)
+    }
+
     func request(project: Project, time: Double, assets: RenderAssets, epoch: Int = 0) {
         if lastEpoch == epoch && lastTime == time && lastProject == project { return }
-        lastProject = project; lastTime = time; lastEpoch = epoch
+        lastProject = project; lastTime = time; lastEpoch = epoch; lastAssets = assets
         seq += 1
         let mySeq = seq
         MainActor.assumeIsolated { model.previewRequested() }
@@ -84,7 +92,10 @@ final class PreviewCoordinator {
             guard let job = pending else { running = false; lock.unlock(); return }
             pending = nil
             lock.unlock()
-            let img = Renderer(project: job.project, assets: job.assets).renderImage(t: job.time)
+            let img = Renderer(project: job.project, assets: job.assets, onStabilized: { [weak self] in
+                // 解析は背景で終わる: 再描画は主スレッドで
+                DispatchQueue.main.async { self?.redrawAfterStabilization() }
+            }).renderImage(t: job.time)
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
                 if let img { self.view?.show(image: img) }

@@ -74,4 +74,31 @@ final class StabilizeAppTests: XCTestCase {
         AppMenu.perform(.stabilizeToggle, model: m)
         XCTAssertEqual(m.selectedClip?.stabilizeStrength, StabilizeEditing.defaultStrength)
     }
+
+    /// インスペクタの強さ: 1 回の Undo(数値の確定)、ドラッグ(begin/commit)も 1 回。動かして戻すと元に戻る。
+    func testStrengthIsOneUndoStepAndDragReturnsToBase() throws {
+        let m = makeModel([video("v")])
+        m.selectedClipId = "v"
+        XCTAssertTrue(m.setStabilizeStrength(0.6))
+        XCTAssertEqual(m.clip("v")?.stabilizeStrength, 0.6)
+        m.effectiveUndoManager.undo()
+        XCTAssertNil(m.clip("v")?.stabilize, "1 回の Undo で元に戻る")
+
+        m.beginGesture()
+        m.liveStabilizeStrength(0.3, clipId: "v")
+        m.liveStabilizeStrength(0.9, clipId: "v")
+        m.liveStabilizeStrength(0, clipId: "v")
+        m.commitGesture(ProjectModel.stabilizeStrengthUndoName)
+        XCTAssertNil(m.clip("v")?.stabilize, "動かして 0 に戻したら変化なし = Undo に積まない")
+        m.effectiveUndoManager.undo()
+        XCTAssertNil(m.clip("v")?.stabilize)
+
+        m.beginGesture()
+        m.liveStabilizeStrength(0.3, clipId: "v")
+        m.liveStabilizeStrength(0.7, clipId: "v")
+        m.commitGesture(ProjectModel.stabilizeStrengthUndoName)
+        XCTAssertEqual(m.clip("v")?.stabilizeStrength, 0.7)
+        m.effectiveUndoManager.undo()
+        XCTAssertNil(m.clip("v")?.stabilize, "ドラッグ全体で Undo は 1 回")
+    }
 }
