@@ -145,6 +145,38 @@ public enum ProxyStore {
     }
 }
 
+/// 複数の素材をまとめて作った結果。`failed` は素材ごとの理由(存在しない・映像なし・書き出し失敗)。
+public struct ProxyBatchResult: Equatable, Sendable {
+    public var made: [URL] = []
+    public var failed: [(source: URL, reason: String)] = []
+    public static func == (a: ProxyBatchResult, b: ProxyBatchResult) -> Bool {
+        a.made == b.made && a.failed.map(\.source) == b.failed.map(\.source) && a.failed.map(\.reason) == b.failed.map(\.reason)
+    }
+}
+
+extension ProxyStore {
+    /// 素材を順に作る。1 件の失敗(存在しない・映像なし・書き出しの失敗)で止めず、残りを作って失敗を数える。
+    /// キャンセル(Task のキャンセル・`ProxyError.cancelled`)だけは全体を止めて投げる。
+    public static func makeAll(sources: [URL], directory: URL = defaultDirectory(),
+                               progress: @escaping @Sendable (Int, Int, Double) -> Void = { _, _, _ in }) async throws -> ProxyBatchResult {
+        var result = ProxyBatchResult()
+        for (i, src) in sources.enumerated() {
+            try Task.checkCancellation()
+            do {
+                let url = try await make(source: src, directory: directory) { v in progress(i + 1, sources.count, v) }
+                result.made.append(url)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch ProxyError.cancelled {
+                throw ProxyError.cancelled
+            } catch {
+                result.failed.append((src, (error as? LocalizedError)?.errorDescription ?? error.localizedDescription))
+            }
+        }
+        return result
+    }
+}
+
 /// プレビューでプロキシを使うかどうかの設定(アプリ全体。UserDefaults)。既定はオフ。
 public enum ProxySettings {
     public static let key = "previewProxyEnabled"

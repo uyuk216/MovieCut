@@ -20,7 +20,7 @@ extension ProjectModel {
         let paths = videoSourcePaths
         guard !paths.isEmpty else { statusText = "映像の素材がありません"; return }
         busyMessage = "プロキシを作っています 0/\(paths.count)"
-        let task = Task { [weak self] () -> Void in
+        let task = Task { [weak self] () -> ProxyBatchResult in
             defer {
                 Task { @MainActor [weak self] in
                     self?.proxyCancel = nil
@@ -28,19 +28,18 @@ extension ProjectModel {
                     self?.assets.setPreviewProxies(ProxySettings.enabled(), lookup: ProjectModel.previewProxyPath)
                 }
             }
-            for (i, p) in paths.enumerated() {
-                try Task.checkCancellation()
-                let n = i + 1
-                _ = try await ProxyStore.make(source: URL(fileURLWithPath: p), progress: { v in
-                    Task { @MainActor in self?.busyMessage = "プロキシを作っています \(n)/\(paths.count) (\(Int(v * 100))%)" }
-                })
-            }
+            // 1 件の失敗で止めず、残りを作る(失敗の数は結果に入る)
+            return try await ProxyStore.makeAll(sources: paths.map { URL(fileURLWithPath: $0) }, progress: { n, total, v in
+                Task { @MainActor in self?.busyMessage = "プロキシを作っています \(n)/\(total) (\(Int(v * 100))%)" }
+            })
         }
         proxyCancel = { task.cancel() }
         Task { [weak self] in
             do {
-                try await task.value
-                self?.statusText = "プロキシを \(paths.count) 件作りました"
+                let r = try await task.value
+                self?.statusText = r.failed.isEmpty
+                    ? "プロキシを \(r.made.count) 件作りました"
+                    : "プロキシを \(r.made.count) 件作りました(\(r.failed.count) 件は作れませんでした)"
             } catch is CancellationError {
                 self?.statusText = "プロキシの作成を止めました"
             } catch let e as ProxyError where e == .cancelled {

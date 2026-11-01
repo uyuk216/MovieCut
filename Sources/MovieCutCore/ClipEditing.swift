@@ -66,7 +66,8 @@ public enum ClipEditing {
     }
 
     /// トリム・分割で offset を動かす(素材の時間が流れる)クリップか。フリーズ(1コマで止まる)は動かさない。
-    static func movesSource(_ clip: Clip) -> Bool { hasSourceTimeline(clip.type) && !clip.isFreeze }
+    /// 複合クリップも、中身の時刻(offset)で頭・分割の位置を持つ(描画・音声が offset を読む)。
+    static func movesSource(_ clip: Clip) -> Bool { (hasSourceTimeline(clip.type) || clip.type == .compound) && !clip.isFreeze }
 
     /// 本体のドラッグ: 頭と終わりの両方を吸着させる(startDrag と同じ: 頭を吸着 → 終わりを吸着したら終わりに合わせて戻す)。
     /// `targetTrackIndex` が別のレイヤーなら、そこへ移す(元のレイヤーから外して、行き先の末尾に足す)。nil / 範囲外 / 同じなら動かさない。
@@ -273,9 +274,9 @@ public enum ClipEditing {
     /// 置き先のレイヤー: [t, t+dur) に重なるクリップがなく、ボイスもないレイヤーのうち最初のもの。無ければ 0 番。
     public static func placementTrack(in project: Project, start t: Double, duration dur: Double) -> Int {
         let i = project.tracks.firstIndex { tr in
-            tr.clips.allSatisfy { c in c.type != .voice && (c.start >= t + dur || c.start + c.duration <= t) }
+            !tr.isLocked && tr.clips.allSatisfy { c in c.type != .voice && (c.start >= t + dur || c.start + c.duration <= t) }
         }
-        return i ?? 0
+        return i ?? (project.tracks.firstIndex { !$0.isLocked } ?? 0)
     }
 
     /// Electron 版 addMedia が作るクリップ(x .5, y .5, scale 1, opacity 1, volume 1, offset 0。画像以外は srcDuration つき)。
@@ -296,7 +297,11 @@ public enum ClipEditing {
         var ids: [String] = []
         if project.tracks.isEmpty { project.tracks.append(Track(name: "レイヤー1")) }
         for m in media {
-            let ti = placementTrack(in: project, start: start, duration: m.duration)
+            var ti = placementTrack(in: project, start: start, duration: m.duration)
+            if project.tracks[ti].isLocked {   // ロックのレイヤーには置かない: 新しいレイヤーを足す
+                project.tracks.append(Track(name: "レイヤー\(project.tracks.count + 1)"))
+                ti = project.tracks.count - 1
+            }
             let c = makeMediaClip(path: m.path, kind: m.kind, duration: m.duration, start: start)
             project.tracks[ti].clips.append(c)
             ids.append(c.id)

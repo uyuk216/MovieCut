@@ -36,10 +36,12 @@ public enum ProjectTemplate {
 
     /// 既存の名前と重ならない名前を返す。空いていれば base のまま、ふさがっていれば「base 2」「base 3」…。
     public static func uniqueName(base: String, existing: [String]) -> String {
-        let taken = Set(existing)
-        guard taken.contains(base) else { return base }
+        // macOS の既定のファイルシステムは大文字小文字を区別しないので、比べるときは小文字にそろえる
+        let taken = Set(existing.map { $0.lowercased() })
+        guard taken.contains(base.lowercased()) else { return base }
         var n = 2
-        while taken.contains("\(base) \(n)") { n += 1 }
+        while taken.contains("\(base) \(n)".lowercased()) { n += 1 }
+        return "\(base) \(n)"
         return "\(base) \(n)"
     }
 

@@ -22,8 +22,7 @@ extension ClipEditing {
         guard let loc = locate(clipId, in: project) else { return nil }
         var p = project
         let src = p.tracks[loc.track].clips[loc.index]
-        var copy = src
-        copy.id = newId()
+        var copy = CompoundEditing.freshIds(src)   // 複合の中の子にも新しい id
         copy.start = src.start + src.duration
         let end = copy.start + copy.duration
         if isFree(p.tracks[loc.track], start: copy.start, end: end) {

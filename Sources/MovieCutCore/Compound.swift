@@ -104,6 +104,36 @@ public enum CompoundEditing {
         return (out, ids)
     }
 
+    /// 中身を窓 [x, x + d)(複合の頭からの秒)で切り取り、窓の頭を 0 に詰める。窓の外のクリップは落とし、窓をまたぐものは切る
+    /// (切るのは `ClipEditing.split` なので、フェード・キーフレーム・素材の位置も振り分けられる)。
+    static func window(_ clips: [Clip], from x: Double, duration d: Double) -> [Clip] {
+        var out: [Clip] = []
+        for c in clips {
+            var k = c
+            let s = c.start, e = c.start + c.duration
+            if e <= x + ClipEditing.timeEpsilon || s >= x + d - ClipEditing.timeEpsilon { continue }
+            if s < x - ClipEditing.timeEpsilon, let (_, right) = ClipEditing.split(k, at: x) { k = right }
+            if k.start + k.duration > x + d + ClipEditing.timeEpsilon, let (left, _) = ClipEditing.split(k, at: x + d) { k = left }
+            k.start = grid(k.start - x)
+            out.append(k)
+        }
+        return out
+    }
+
+    /// 複製・貼り付け用: クリップと、その中のすべての子に新しい id を振る(元と id が重ならないように)。
+    public static func freshIds(_ c: Clip) -> Clip {
+        var k = c
+        k.id = newId()
+        if let tr = c.tracks {
+            k.tracks = tr.map { t in
+                var u = t
+                u.clips = t.clips.map(freshIds)
+                return u
+            }
+        }
+        return k
+    }
+
     /// 開始時刻の順に挿す(同じ開始時刻なら後ろ。既に並んでいるクリップの順は変えない)。
     static func insertByStart(_ c: Clip, into clips: inout [Clip]) {
         let at = clips.firstIndex { $0.start > c.start } ?? clips.count
@@ -129,7 +159,8 @@ public enum CompoundEditing {
                 let kids = c.tracks ?? []
                 let solo = kids.contains { $0.isSolo }
                 for kt in kids where !kt.isMuted && (!solo || kt.isSolo) {
-                    flatten(kt.clips, base: abs, stack: stack.union([c.id]), into: &out)
+                    // 描画と同じ窓: 複合の頭からの時刻 offset ... offset + duration の中身だけを、窓の頭へ詰めて流す
+                    flatten(window(kt.clips, from: c.offset, duration: c.duration), base: abs, stack: stack.union([c.id]), into: &out)
                 }
             } else {
                 var x = c

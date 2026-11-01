@@ -197,8 +197,8 @@ extension ClipEditing {
             want = max(0, want)
             while p.tracks.count <= want { p.tracks.append(Track(name: "レイヤー\(p.tracks.count + 1)")) }
             if p.tracks[want].isLocked { skipped += 1; continue }
-            var c = item.clip
-            c.id = newId()
+            let c0 = CompoundEditing.freshIds(item.clip)   // 複合の中の子にも新しい id
+            var c = c0
             c.start = max(0, c.start + dt)
             p.tracks[want].clips.append(c)
             ids.append(c.id)
