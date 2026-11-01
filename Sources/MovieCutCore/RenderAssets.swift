@@ -21,8 +21,40 @@ public final class RenderAssets {
     /// 合成音声の音量エンベロープ(直前の 1 件だけ)。キーは音に関わる内容の指紋。
     private var mixEnvelopeKey: String?
     private var mixEnvelopeValue: [Float]?
+    /// プロキシ編集: プレビューの映像だけ、プロキシのファイルを読む(書き出しは読まない)。
+    private var useProxies = false
+    private var proxyLookup: ((String) -> String?)?
+    /// 元のパス → プロキシのパス(nil = プロキシなし)。設定や作成のあとに `setPreviewProxies` で作り直す。
+    private var proxyCache: [String: String?] = [:]
+    /// 今の順次読みがプレビューの再生か(書き出しの順次読みと区別する)。
+    private var previewSession = false
 
     public init() {}
+
+    /// プレビューのプロキシを使うか。`lookup` は元のパスからプロキシのパスを返す(無ければ nil)。
+    /// 書き出しで使う `RenderAssets` には呼ばない(既定はオフ)。
+    public func setPreviewProxies(_ on: Bool, lookup: ((String) -> String?)? = nil) {
+        lock.lock(); defer { lock.unlock() }
+        useProxies = on
+        proxyLookup = lookup
+        proxyCache = [:]
+    }
+
+    /// 読むファイル: プレビューで、設定がオンでプロキシがあるときだけプロキシ。書き出しは常に元の素材。
+    /// ロックを持って呼ぶこと。
+    func sourcePathLocked(_ path: String) -> String {
+        guard useProxies, !exportMode || previewSession, let lookup = proxyLookup else { return path }
+        if let c = proxyCache[path] { return c ?? path }
+        let p = lookup(path)
+        proxyCache[path] = .some(p)
+        return p ?? path
+    }
+
+    /// テスト・検証用: 今この素材を読むときのファイル(プロキシがあればそれ)。
+    public func sourcePath(for path: String) -> String {
+        lock.lock(); defer { lock.unlock() }
+        return sourcePathLocked(path)
+    }
 
     /// 画像(ImageIO)。パスをキーにキャッシュする。
     public func image(at path: String) -> CGImage? {
@@ -140,14 +172,16 @@ public final class RenderAssets {
     }
 
     /// 書き出しモード: 動画フレームを AVAssetReader で前から順に読む(時刻が戻ったときだけ generator)。
-    public func beginExportMode() {
-        lock.lock(); exportMode = true; lock.unlock()
+    /// `preview: true` はプレビューの再生(順次読み)。プロキシが使えるのはこの場合だけ(書き出しは preview を付けない)。
+    public func beginExportMode(preview: Bool = false) {
+        lock.lock(); exportMode = true; previewSession = preview; lock.unlock()
     }
 
     /// 書き出しモードを終えて、読み取り用のリソースを手放す。
     public func endExportMode() {
         lock.lock()
         exportMode = false
+        previewSession = false
         let seqs = sequentials
         let revs = reversers
         sequentials = [:]
@@ -165,7 +199,14 @@ public final class RenderAssets {
         let img = videoFrameUncounted(path: path, time: time, reverse: reverse, exact: exact)
         if let img {
             lock.lock()
-            if videoSizes[path] == nil { videoSizes[path] = CGSize(width: img.width, height: img.height) }
+            if videoSizes[path] == nil {
+                // プロキシのコマは小さいので、大きさは元の素材から取る(プレビューの取っ手・配置の計算に使う)
+                let proxied = sourcePathLocked(path) != path
+                lock.unlock()
+                let size = proxied ? Self.naturalSize(ofVideo: path) ?? CGSize(width: img.width, height: img.height) : CGSize(width: img.width, height: img.height)
+                lock.lock()
+                if videoSizes[path] == nil { videoSizes[path] = size }
+            }
             lock.unlock()
         }
         return img
@@ -177,28 +218,37 @@ public final class RenderAssets {
         return videoSizes[path]
     }
 
+    /// 元の素材の大きさ(向きを直した後)。読めなければ nil。
+    static func naturalSize(ofVideo path: String) -> CGSize? {
+        let asset = AVURLAsset(url: URL(fileURLWithPath: path))
+        guard let t = asset.tracks(withMediaType: .video).first else { return nil }
+        let r = CGRect(origin: .zero, size: t.naturalSize).applying(t.preferredTransform)
+        return CGSize(width: abs(r.width), height: abs(r.height))
+    }
+
     private func videoFrameUncounted(path: String, time: Double, reverse: Bool, exact: Bool) -> CGImage? {
         lock.lock()
-        if exportMode, reverse, !missingVideos.contains(path) {
-            var rev = reversers[path]
+        let src = sourcePathLocked(path)     // プロキシを読むのはプレビューだけ
+        if exportMode, reverse, !missingVideos.contains(src) {
+            var rev = reversers[src]
             if rev == nil {
-                rev = ReverseVideoFrames(url: URL(fileURLWithPath: path)) { [unowned self] t in self.generatorFrame(path: path, time: t, exact: true) }
-                reversers[path] = rev
+                rev = ReverseVideoFrames(url: URL(fileURLWithPath: src)) { [unowned self] t in self.generatorFrame(path: src, time: t, exact: true) }
+                reversers[src] = rev
             }
             lock.unlock()
             return rev?.frame(at: time)
         }
-        if exportMode, !missingVideos.contains(path) {
-            var seq = sequentials[path]
+        if exportMode, !missingVideos.contains(src) {
+            var seq = sequentials[src]
             if seq == nil {
-                seq = SequentialVideoFrames(url: URL(fileURLWithPath: path)) { [unowned self] t in self.generatorFrame(path: path, time: t, exact: exact) }
-                sequentials[path] = seq
+                seq = SequentialVideoFrames(url: URL(fileURLWithPath: src)) { [unowned self] t in self.generatorFrame(path: src, time: t, exact: exact) }
+                sequentials[src] = seq
             }
             lock.unlock()
             return seq?.frame(at: time)
         }
         lock.unlock()
-        return generatorFrame(path: path, time: time, exact: exact || reverse)
+        return generatorFrame(path: src, time: time, exact: exact || reverse)
     }
 
     /// AVAssetImageGenerator で任意時刻のフレームを取る(正確・低速)。

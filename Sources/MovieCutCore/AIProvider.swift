@@ -197,10 +197,11 @@ final class ProcessRun: @unchecked Sendable {
     private var finished = false
     private let input: Data, timeout: TimeInterval, cap: Int
 
-    init(executable: String, arguments: [String], input: Data, timeout: TimeInterval, maxOutputBytes: Int) {
+    init(executable: String, arguments: [String], input: Data, timeout: TimeInterval, maxOutputBytes: Int, environment: [String: String] = [:]) {
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = arguments
         var env = ProcessInfo.processInfo.environment
+        for (k, v) in environment { env[k] = v }
         let extra = "/opt/homebrew/bin:/usr/local/bin:\(NSHomeDirectory())/.local/bin"
         env["PATH"] = (env["PATH"].map { $0 + ":" } ?? "") + extra
         process.environment = env

@@ -60,6 +60,10 @@ enum MenuCommand: Hashable {
     case zoomIn, zoomOut, zoomFit
     case resolution(String), swapResolution, fps(Double), fpsCustom, codec(String), background(String)
     case fullScreen
+    // プロキシ編集(表示 ▸ プロキシで編集 は設定の切り替え、出力 ▸ プロキシを作成 はショートカットなし)
+    case previewProxyToggle, makeProxies
+    // クリップ ▸ AIで画像を作る…(ショートカットは持たない)
+    case aiImage
     // 表示 ▸ プレビューの背景(アプリ全体の設定)
     case previewBackground(PreviewBackground)
     // 画面のドッキング(パネルの表示と、配置のプリセット)
@@ -230,6 +234,9 @@ struct MenuState: Equatable {
     var fanReason: String?
     var fanCanInstall = false
     var fanInstalled = false
+    /// プロキシ編集: 表示のチェック / 映像の素材があって作れる
+    var previewProxyEnabled = false
+    var canMakeProxies = false
 
     struct MarkerItem: Equatable {
         var id: String
@@ -249,6 +256,7 @@ struct MenuState: Equatable {
         fanReason = fan.reason
         fanCanInstall = fan.machineSupported && fan.availability != nil && !fan.helperInstalled && !fan.busy
         fanInstalled = fan.helperInstalled && !fan.busy
+        previewProxyEnabled = ProxySettings.enabled()
         dockVisible = Set(DockPanel.allCases.filter { AppServices.panelDock.layout.isVisible($0) })
         guard let m = model else { return }
         hasDocument = true
@@ -260,6 +268,7 @@ struct MenuState: Equatable {
         hasSelection = m.selectedClip != nil
         hasTextTargets = m.project.allClips.contains { $0.type == .text || $0.type == .voice }
         hasTextClips = m.project.allClips.contains { $0.type == .text }
+        canMakeProxies = !m.videoSourcePaths.isEmpty
         selectionCount = m.selectedClipIDs.count
         canPasteClips = m.canPasteClips
         hasClips = !m.project.allClips.isEmpty
@@ -509,7 +518,13 @@ enum AppMenuSpec {
          MenuItemSpec(command: .addBlur, title: "ぼかし範囲を追加", shortcut: cmd("b", shift: true), enabled: s.canEdit, checked: nil),
          MenuItemSpec(command: .addAdjustment, title: "調整レイヤーを追加", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "下の全レイヤーに効く"),
          MenuItemSpec(command: .addVisualizer, title: "音声ビジュアライザを追加", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "合成音声の大きさで動く"),
-         addQRCode(s)]
+         addQRCode(s),
+         aiImage(s)]
+    }
+
+    /// クリップ ▸ AIで画像を作る…(ローカルのコマンドが画像を書く。送る前に内容を確認。ショートカットは持たない)
+    static func aiImage(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .aiImage, title: "AIで画像を作る…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "ローカルのコマンド")
     }
 
     /// 分割・複製・削除(S / Delete は KeyRouter が受けるので、メニューにはキーを付けずヒントだけ添える)。
@@ -814,6 +829,16 @@ enum AppMenuSpec {
     }
 
     /// 表示 ▸ プレビューの背景: 暗い灰色 / 黒 / 白 / 中間グレー / 緑 / 青(ラジオ)。
+    /// 表示 ▸ プロキシで編集(チェック付き。アプリ全体の設定。プレビューだけに効き、書き出しは元の素材)。
+    static func previewProxy(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .previewProxyToggle, title: "プロキシで編集", shortcut: nil, enabled: true, checked: s.previewProxyEnabled, hint: "プレビューを軽く")
+    }
+
+    /// 出力 ▸ プロキシを作成(映像の素材ごとに 540p。作成中は編集をロック)。
+    static func makeProxies(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .makeProxies, title: "プロキシを作成", shortcut: nil, enabled: s.canEdit && s.canMakeProxies, checked: nil, hint: "540p・背景で")
+    }
+
     static func previewBackgroundItems(_ s: MenuState) -> [MenuItemSpec] {
         PreviewBackground.allCases.map { MenuItemSpec(command: .previewBackground($0), title: $0.title, shortcut: nil, enabled: true, checked: s.previewBackground == $0) }
     }
@@ -833,10 +858,10 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, settings(s), videoSettings(s)] + file(s) + [subtitleImport(s), mediaRelink(s), subtitleExport(s), subtitleGenerate(s), transcribeSubtitles(s), chapterCopy(s), aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s)] + exportPresets(s) + exportQueueItems(s) + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textCounterItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + layerHeightItems(s) + playback(s)
+        [about, settings(s), videoSettings(s)] + file(s) + [subtitleImport(s), mediaRelink(s), subtitleExport(s), subtitleGenerate(s), transcribeSubtitles(s), chapterCopy(s), aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s)] + exportPresets(s) + exportQueueItems(s) + [makeProxies(s)] + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textCounterItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + layerHeightItems(s) + playback(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerColorItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
-            + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + [fullScreen(s)] + help.flatMap { $0 }
+            + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + [previewProxy(s), fullScreen(s)] + help.flatMap { $0 }
     }
 }
 
@@ -861,6 +886,9 @@ enum AppMenu {
         case .dockLayout(let pr): AppServices.panelDock.apply(pr)
         case .previewBackground(let b):
             PreviewBackgroundStore.set(b)
+            ActiveDocument.shared.refresh()
+        case .previewProxyToggle:
+            ProxySettings.set(!ProxySettings.enabled())
             ActiveDocument.shared.refresh()
         default:
             guard let m = model else { return }
@@ -889,6 +917,8 @@ enum AppMenu {
             case .exportGIF: m.chooseAndExportGIF()
             case .queueExport: m.chooseAndQueueExport()
             case .showExportQueue: m.showExportQueueSheet = true
+            case .makeProxies: m.makeProxies()
+            case .aiImage: m.openAIImage()
             case .audioLibrary: m.showAudioLibrary = true
             case .saveTemplate: m.saveAsTemplate()
             case .split: m.splitSelected()

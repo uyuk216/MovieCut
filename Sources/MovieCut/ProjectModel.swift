@@ -201,6 +201,9 @@ final class ProjectModel: ObservableObject {
     var aiCancel: (() -> Void)?
     /// 音声認識(出力 ▸ 音声から字幕を作る)の取り消し。
     var transcribeCancel: (() -> Void)?
+    /// プロキシの作成(出力 ▸ プロキシを作成)と AI 画像生成(クリップ ▸ AIで画像を作る)の取り消し。
+    var proxyCancel: (() -> Void)?
+    var imageGenCancel: (() -> Void)?
     var voiceProviderFactory: (Project) -> VoiceProvider = { RealVoiceProvider(project: $0, engine: AppServices.engine) }
     /// タイムラインの「全体表示」(タイムラインのビューが差し込む)。
     var onFitTimeline: () -> Void = {}
@@ -245,6 +248,12 @@ final class ProjectModel: ObservableObject {
         self.project = project
         self.selectedCharId = project.characters.first?.id
         self.playback = PlaybackController(model: self)
+        // プロキシ編集の設定(アプリ全体)を、この書類の素材キャッシュへ。設定が変わったら付け直す。
+        assets.setPreviewProxies(ProxySettings.enabled(), lookup: ProjectModel.previewProxyPath)
+        let a = assets
+        NotificationCenter.default.addObserver(forName: ProxySettings.didChange, object: nil, queue: .main) { [weak a] _ in
+            a?.setPreviewProxies(ProxySettings.enabled(), lookup: ProjectModel.previewProxyPath)
+        }
     }
 
     var documentName: String {

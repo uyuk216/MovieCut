@@ -243,7 +243,7 @@ final class PlaybackController {
         // 2 倍以上・逆再生は音を止めて、時刻だけを進める
         if isPlaying && !shuttling { backend.pause() }
         if !isPlaying {
-            model.assets.beginExportMode()
+            model.assets.beginExportMode(preview: true)
             isPlaying = true
             scrubbing = false
             startTicking()
@@ -326,7 +326,7 @@ final class PlaybackController {
     private func begin() {
         guard let model else { return }
         let t = model.currentTime
-        model.assets.beginExportMode()          // 再生中は動画を順次読みにする
+        model.assets.beginExportMode(preview: true)          // 再生中は動画を順次読みにする
         restartAudio(at: t)
         isPlaying = true
         scrubbing = false

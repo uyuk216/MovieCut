@@ -193,6 +193,8 @@ struct AppCommands: Commands {
                 Divider()
                 items(AppMenuSpec.exportQueueItems(s), run)
                 Divider()
+                MenuItemView(spec: AppMenuSpec.makeProxies(s), perform: run)
+                Divider()
                 items(AppMenuSpec.rangeItems(s), run)
                 Divider()
                 items(AppMenuSpec.imageExportItems(s), run)
@@ -221,6 +223,7 @@ struct AppCommands: Commands {
                 Menu("レイアウト") { items(AppMenuSpec.dockLayouts(s), run) }
                 Divider()
                 Menu("プレビューの背景") { items(AppMenuSpec.previewBackgroundItems(s), run) }
+                MenuItemView(spec: AppMenuSpec.previewProxy(s), perform: run)
                 Divider()
             }
         }

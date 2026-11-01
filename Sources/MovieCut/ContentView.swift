@@ -66,7 +66,7 @@ struct ContentView: View {
         .frame(minWidth: 1100, minHeight: 700)
         .background(Color(nsColor: .windowBackgroundColor))
         .preferredColorScheme(.dark)
-        .overlay { BusyOverlay(message: model.busyMessage, onCancel: model.transcribeCancel ?? model.aiCancel) }
+        .overlay { BusyOverlay(message: model.busyMessage, onCancel: model.transcribeCancel ?? model.aiCancel ?? model.proxyCancel ?? model.imageGenCancel) }
         .sheet(isPresented: $model.showSettings) { SettingsSheet(model: model) }
         .sheet(isPresented: $model.showResolutionSheet) { ResolutionSheet(model: model) }
         .sheet(isPresented: $model.showFpsSheet) { FrameRateSheet(model: model) }

@@ -335,3 +335,21 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
 - **計測**(このマシン、単一の計測、`testPrintsRenderTimingBeforeAndAfterGrouping`、20 回の平均): 1920×1080 の 1 コマ、まとめる前 5.84 ms、まとめた後 5.89 ms(直接描く道)。
 - **既知の限界**: 中身の編集はまとめを解除してから(複合の中では分割・削除・ドラッグをしない)。複合の長さを変えても中身は切られず、外の部分は描かれない。中の声は立ち絵の口パクを動かさず、立ち絵も描かない。中間の道の画素の一致は未計測。画面の操作(クリップのドラッグ・選択の見た目)は未確認。
 
+
+## プロキシ編集(表示 ▸ プロキシで編集 / 出力 ▸ プロキシを作成、2026-11-02)
+- **作成**: `Sources/MovieCutCore/ProxyStore.swift`。映像の素材ごとに 540p(短い辺を 540、拡大はしない、偶数)の H.264 の mp4(映像だけ)を `Application Support/MovieCut/Proxies` に作る。`AVAssetExportSession` + `AVMutableVideoComposition`(向きを直してから縮める)。進み具合はポーリング、キャンセルは `cancelExport`。途中のファイルは `*.part.mp4` で、完成してから名前を変える。
+- **名前**: 元のパス・更新日時(ミリ秒)・バイト数の SHA-256(先頭 16 バイト)。素材が変われば別の名前になり、古いプロキシは使われない。
+- **使う場所**: `RenderAssets.setPreviewProxies(on, lookup:)`。プレビューの描画(スクラブ・再生の順次読み `beginExportMode(preview: true)`)だけがプロキシを読む。書き出し(`beginExportMode()`、`GIFExporter`・`ExportRange`・`Exporter`)は元の素材を読む。書き出しに使う `RenderAssets` は既定でオフ。
+- **大きさ**: プレビューの取っ手などの大きさは元の素材から取る(`videoSizes` は元のパスで記録)。
+- **設定**: `ProxySettings`(UserDefaults `previewProxyEnabled`、既定オフ、アプリ全体)。変わると開いている書類すべての素材キャッシュを付け直す(通知)。
+- **作成中**: 出力 ▸ プロキシを作成 は背景で素材ごとに順に作り、ボタン(取り消し)つきの処理中表示。作成中は編集をロック(書き出しと同じ)。作成済みは飛ばす。
+- **テスト**: `ProxyStoreTests`(鍵の安定性・大きさ・実際に生成した 1280×720 の動画から 960×540 の H.264 プロキシ・縦の向き・作り直し)、`ProxyRenderTests`(赤い元素材と青い偽プロキシで、プレビューは青・書き出しと書き出しの順次読みは赤、設定オフは赤、再生の順次読みは青)、`ProxyAIImageAppTests`(メニューのチェック)。
+- **未対応**: 複合クリップの中の映像のプロキシ、プロキシの削除 UI(フォルダを消せば作り直される)、プロキシの自動作成、作成の進み具合の詳細表示。
+
+## AI 画像生成フック(クリップ ▸ AIで画像を作る…、2026-11-02)
+- **仕組み**: `Sources/MovieCutCore/AIImage.swift`。ユーザーが指定したローカルのコマンドを、シェルを通さずに起動する(`AICommandLine` と `ProcessRun` を AI の文章用と共用)。プロンプトは標準入力と環境変数 `MOVIECUT_PROMPT` で渡し、出力先(`Application Support/MovieCut/AIImages/<UUID>.png`)はコマンドの指定の後ろに最後の引数として付く。
+- **確認**: 送る前に `aiUI.confirmSend`(AI の文章と同じ確認)で、送信先(コマンド)と内容を見せる。キャンセル可(時間切れは 300 秒)。クラウドは呼ばない。
+- **結果**: 書かれたファイルが ImageIO で読めれば、画像クリップ(5 秒)として再生ヘッドに置く(Undo は 1 回)。読めなければ、ファイルは消して失敗を出す。出力が無いときも失敗。
+- **設定**: `AIImageSettings`(UserDefaults `aiImage.command`)。AI の文章用の設定とは別。メニューから入れると次回のために覚える。
+- **テスト**: `AIImageTests`(無害な sh スクリプトが画像をコピーする。標準入力と環境変数が一致すること、出力なし・画像でない・終了コード・プロンプトの空と長さ・キャンセル)、`ProxyAIImageAppTests`(確認のあと画像クリップが 1 つ・Undo 1 回、断ると何も置かない、空のプロンプトとコマンド不明は確認の前に止まる)。
+- **未対応**: 画像の再生成(同じプロンプトで作り直す)、長さ・置く場所の指定、コマンドの一覧の管理、画像以外の出力。
