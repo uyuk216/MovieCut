@@ -102,6 +102,21 @@ public enum MarkerEditing {
         return (p, m.id)
     }
 
+    /// ビートの時刻にまとめてマーカーを足す(名前は「ビート」)。`tolerance` 秒以内に既にあるマーカーには重ねない。
+    /// 足した数を返す。1 つも足さないときは、同じプロジェクトを返す(呼び出し側は Undo に載せない)。
+    public static func addBeats(in project: Project, times: [Double], tolerance: Double) -> (project: Project, added: Int) {
+        var p = project
+        var added = 0
+        for t in times where t.isFinite && t >= 0 {
+            if p.markers.contains(where: { abs($0.time - t) <= tolerance }) { continue }
+            p.markers.append(Marker(time: t, name: "ビート"))
+            added += 1
+        }
+        guard added > 0 else { return (project, 0) }
+        p.markers = sorted(p.markers)
+        return (p, added)
+    }
+
     /// 時刻 `t` から `tolerance` 秒以内で一番近いマーカー(無ければ nil)。
     public static func nearest(in project: Project, to t: Double, tolerance: Double) -> Marker? {
         var best: Marker?

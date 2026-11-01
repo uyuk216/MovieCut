@@ -429,6 +429,7 @@ struct ClipInspector: View {
         case .blur: return "ぼかし範囲"
         case .adjustment: return "調整レイヤー"
         case .visualizer: return "音声ビジュアライザ"
+        case .shape: return "図形"
         case .compound: return "複合クリップ"
         default: return t.rawValue
         }
@@ -458,6 +459,7 @@ struct ClipInspector: View {
                 if TransitionEditing.supportsVideo(c.type) { transitionSections(c) }
                 if c.type == .blur { blurSections(c) }
                 if c.type == .visualizer { visualizerSections(c) }
+                if c.type == .shape { shapeSections(c) }
                 if Clip.supportsSpeed(c.type) { speedSections(c) }
                 if StabilizeEditing.supports(c) { stabilizeSections(c) }
                 if Clip.supportsEffects(c.type) { maskSections(c) }
@@ -927,6 +929,64 @@ extension ClipInspector {
                 Text("\(vz.countOrDefault) 本").monospacedDigit()
             }
         }
+    }
+
+    /// 図形: 範囲(x・y・w・h は動かせる)と見た目(種類、塗り、線、太さ、角丸)。
+    @ViewBuilder func shapeSections(_ c: Clip) -> some View {
+        let f = c.figureOrDefault
+        InspectorSection(title: "範囲")
+        HStack(alignment: .top, spacing: 10) {
+            num("中心 横", .x)
+            num("中心 縦", .y)
+        }
+        HStack(alignment: .top, spacing: 10) {
+            num("幅", .w)
+            num("高さ", .h)
+        }
+        InspectorSection(title: "見た目")
+        InspectorField(label: "種類") {
+            Picker("", selection: Binding(get: { f.figureKind }, set: { k in model.setClipProperty({ $0.figure = Self.figUpdated($0.figure) { $0.kind = k.rawValue } }, name: "図形の種類の変更", clipId: clipId) })) {
+                ForEach(FigureKind.allCases, id: \.self) { Text($0.title).tag($0) }
+            }
+            .labelsHidden()
+        }
+        Toggle("塗る", isOn: Binding(get: { f.fillOrDefault != Figure.noneColor }, set: { on in
+            model.setClipProperty({ $0.figure = Self.figUpdated($0.figure) { $0.fill = on ? nil : Figure.noneColor } }, name: "図形の塗りの切り替え", clipId: clipId)
+        })).toggleStyle(.checkbox)
+        if f.fillOrDefault != Figure.noneColor {
+            ColorField(label: "塗り", hex: f.fillOrDefault) { hex in
+                model.coalescedClipProperty({ $0.figure = Self.figUpdated($0.figure) { $0.fill = hex } }, name: "図形の塗りの色の変更", clipId: clipId)
+            }
+        }
+        Toggle("線を引く", isOn: Binding(get: { f.strokeOrDefault != Figure.noneColor }, set: { on in
+            model.setClipProperty({ $0.figure = Self.figUpdated($0.figure) { $0.stroke = on ? "#000000" : Figure.noneColor } }, name: "図形の線の切り替え", clipId: clipId)
+        })).toggleStyle(.checkbox)
+        if f.strokeOrDefault != Figure.noneColor {
+            ColorField(label: "線の色", hex: f.strokeOrDefault) { hex in
+                model.coalescedClipProperty({ $0.figure = Self.figUpdated($0.figure) { $0.stroke = hex } }, name: "図形の線の色の変更", clipId: clipId)
+            }
+        }
+        InspectorField(label: "線の太さ") {
+            Stepper(value: Binding(get: { f.strokeWidthOrDefault }, set: { v in model.coalescedClipProperty({ $0.figure = Self.figUpdated($0.figure) { $0.strokeWidth = v } }, name: "図形の線の太さの変更", clipId: clipId) }),
+                    in: Figure.strokeWidthRange, step: 1) {
+                Text("\(Int(f.strokeWidthOrDefault)) px").monospacedDigit()
+            }
+        }
+        if f.figureKind == .rect {
+            InspectorField(label: "角丸") {
+                Stepper(value: Binding(get: { f.cornerOrDefault }, set: { v in model.coalescedClipProperty({ $0.figure = Self.figUpdated($0.figure) { $0.corner = v } }, name: "図形の角丸の変更", clipId: clipId) }),
+                        in: Figure.cornerRange, step: 0.05) {
+                    Text("\(Int((f.cornerOrDefault * 100).rounded())) %").monospacedDigit()
+                }
+            }
+        }
+    }
+
+    /// 図形の見た目を 1 項目書き換えた結果。既定と同じ項目は書かず、全部既定なら `figure` ごと外す。
+    static func figUpdated(_ current: Figure?, _ change: (inout Figure) -> Void) -> Figure? {
+        var f = current ?? Figure()
+        change(&f)
+        return f.normalized
     }
 
     /// 設定を 1 項目書き換えた結果。全部既定値に戻ったら `visualizer` ごと外す(ファイルに余計な項目を残さない)。

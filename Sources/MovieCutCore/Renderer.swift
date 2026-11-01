@@ -140,6 +140,8 @@ public struct Renderer {
                 case .visualizer:
                     if !mixLoaded { mixEnv = assets.mixEnvelope(for: project); mixLoaded = true }
                     drawVisualizer(c, t: t, env: mixEnv, ctx: ctx, W: W, H: H)
+                case .shape:
+                    drawShape(c, t: t, ctx: ctx, W: W, H: H)
                 case .image, .video, .text, .compound:
                     var pose = ClipPose(c, at: t)
                     var mask: TransitionMask?

@@ -31,7 +31,7 @@ final class ExportRangeAppTests: XCTestCase {
     func testMenuSpecsAndNoShortcuts() {
         let on = state { $0.hasRange = true }
         XCTAssertEqual(AppMenuSpec.rangeItems(on).map(\.title), ["書き出し開始を現在位置に", "書き出し終了を現在位置に", "範囲を解除"])
-        XCTAssertEqual(AppMenuSpec.imageExportItems(on).map(\.title), ["現在のフレームを画像で書き出す…", "連番画像を書き出す…"])
+        XCTAssertEqual(AppMenuSpec.imageExportItems(on).map(\.title), ["現在のフレームを画像で書き出す…", "連番画像を書き出す…", "サムネイル画像を書き出す…"])
         for spec in AppMenuSpec.rangeItems(on) + AppMenuSpec.imageExportItems(on) {
             XCTAssertNil(spec.shortcut)
             XCTAssertTrue(spec.enabled)

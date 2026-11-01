@@ -57,14 +57,18 @@ extension ProjectModel {
         if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
     }
 
+    /// 静止画・サムネイルに使う時刻(再生位置をコマに合わせ、終わりの外に出ないようにする)。
+    var stillTime: Double {
+        min(project.frameRate.snapped(currentTime), max(0, project.endTime - project.frameRate.frameDuration))
+    }
+
     /// 今の再生位置のコマを `url` に書く(形式は拡張子。.jpg / .jpeg 以外は PNG)。
     @discardableResult
     func exportStill(to url: URL) -> Bool {
         guard canExport else { return false }
         let format = StillFormat(pathExtension: url.pathExtension) ?? .png
-        let t = min(project.frameRate.snapped(currentTime), max(0, project.endTime - project.frameRate.frameDuration))
         do {
-            try StillExporter.write(project: project, at: t, format: format, to: url)
+            try StillExporter.write(project: project, at: stillTime, format: format, to: url)
             statusText = "\(url.lastPathComponent) に書き出しました"
             return true
         } catch {

@@ -88,6 +88,8 @@ struct AppCommands: Commands {
                     items(g, run)
                 }
                 Divider()
+                Menu("図形を追加") { items(AppMenuSpec.shapeItems(s), run) }
+                Divider()
                 Menu("レイヤー") {
                     items(AppMenuSpec.layerItems(s), run)
                     Divider()
@@ -115,6 +117,7 @@ struct AppCommands: Commands {
                 Divider()
                 Menu("音声") { items(AppMenuSpec.audioItems(s), run) }
                 MenuItemView(spec: AppMenuSpec.silenceCutItem(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.beatMarkersItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.fillerCutItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.transcriptEditItem(s), perform: run)
                 Divider()
@@ -230,6 +233,7 @@ struct AppCommands: Commands {
                 Menu("レイアウト") { items(AppMenuSpec.dockLayouts(s), run) }
                 Divider()
                 Menu("プレビューの背景") { items(AppMenuSpec.previewBackgroundItems(s), run) }
+                Menu("ガイド線") { items(AppMenuSpec.guideItems(s), run) }
                 MenuItemView(spec: AppMenuSpec.previewProxy(s), perform: run)
                 Divider()
                 MenuItemView(spec: AppMenuSpec.scopeItem(s), perform: run)

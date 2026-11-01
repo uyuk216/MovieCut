@@ -363,6 +363,18 @@ public enum ClipEditing {
         return c
     }
 
+    /// 図形(3 秒・画面の中央・種類ごとの既定の大きさ)。見た目は既定のまま、種類だけ `figure` に書く(四角形は書かない)。
+    public static func makeShapeClip(_ kind: FigureKind, at t: Double, project: Project) -> Clip {
+        var c = Clip()
+        c.type = .shape
+        c.start = t
+        c.duration = 3
+        c.x = 0.5; c.y = 0.5
+        c.w = kind.defaultSize.w; c.h = kind.defaultSize.h
+        c.figure = Figure(kind: kind.rawValue).normalized
+        return c
+    }
+
     /// 一番上のレイヤー(配列の最後)の末尾にクリップを足す。レイヤーが 1 つもなければ作る。
     public static func appendToTopLayer(_ clip: Clip, in project: inout Project) {
         if project.tracks.isEmpty { project.tracks.append(Track(name: "レイヤー1")) }

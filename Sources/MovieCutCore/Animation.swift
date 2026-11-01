@@ -158,6 +158,7 @@ public enum Animation {
         switch clip.type {
         case .blur: return blurRegionKeys
         case .visualizer: return ["x", "y", "w", "h"]
+        case .shape: return ["x", "y", "w", "h", "rotation", "opacity"]
         case .adjustment: return ["opacity"] + clip.effectKeys
         case .video: return transformKeys + ["blur"] + clip.effectKeys + [volumeKey]
         case .image, .text, .compound: return transformKeys + ["blur"] + clip.effectKeys

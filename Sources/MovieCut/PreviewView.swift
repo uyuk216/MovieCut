@@ -126,6 +126,8 @@ final class PreviewCanvasView: NSView {
         var name: String
     }
     private(set) var manipulation: ManipulationDrag?
+    /// ガイド線(表示 ▸ ガイド線)。プレビューの上に重ねるだけで、書き出しには入らない。
+    private let guideLayer = CAShapeLayer()
     /// 取っ手に反応する半径(ビューの pt)。
     static let handleRadius: CGFloat = 9
 
@@ -158,8 +160,14 @@ final class PreviewCanvasView: NSView {
         handleLayer.strokeColor = NSColor(white: 0, alpha: 0.7).cgColor
         handleLayer.lineWidth = 1
         handleLayer.isHidden = true
+        guideLayer.fillColor = nil
+        guideLayer.strokeColor = NSColor(white: 1, alpha: 0.6).cgColor
+        guideLayer.lineWidth = 1
+        guideLayer.isHidden = true
+        root.addSublayer(guideLayer)
         root.addSublayer(outlineLayer)
         root.addSublayer(handleLayer)
+        NotificationCenter.default.addObserver(self, selector: #selector(guidesChanged), name: PreviewGuideStore.didChange, object: nil)
     }
     required init?(coder: NSCoder) { fatalError() }
 
@@ -177,6 +185,33 @@ final class PreviewCanvasView: NSView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         rootLayer?.backgroundColor = Self.cgColor(for: PreviewBackgroundStore.current)
+        CATransaction.commit()
+    }
+
+    @objc private func guidesChanged() { redrawGuides() }
+
+    /// ガイド線を描き直す(枠の位置・大きさ・設定が変わったとき)。ガイドが無ければ隠す。
+    private func redrawGuides() {
+        let guides = PreviewGuideStore.current
+        let canvas = aspect
+        let path = CGMutablePath()
+        guard !guides.isEmpty, frameLayer.frame.width > 0 else {
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            guideLayer.isHidden = true
+            CATransaction.commit()
+            return
+        }
+        for r in GuideGeometry.safeRects(guides, canvas: canvas) {
+            let a = viewPoint(CGPoint(x: r.minX, y: r.minY), canvas: canvas), b = viewPoint(CGPoint(x: r.maxX, y: r.maxY), canvas: canvas)
+            path.addRect(CGRect(x: min(a.x, b.x), y: min(a.y, b.y), width: abs(b.x - a.x), height: abs(b.y - a.y)))
+        }
+        for l in GuideGeometry.lines(guides, canvas: canvas) {
+            path.move(to: viewPoint(l.from, canvas: canvas))
+            path.addLine(to: viewPoint(l.to, canvas: canvas))
+        }
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        guideLayer.path = path
+        guideLayer.isHidden = false
         CATransaction.commit()
     }
 
@@ -311,5 +346,6 @@ final class PreviewCanvasView: NSView {
         frameLayer.frame = CGRect(x: (bounds.width - w) / 2, y: (bounds.height - h) / 2, width: w, height: h)
         CATransaction.commit()
         redrawOverlay()
+        redrawGuides()
     }
 }

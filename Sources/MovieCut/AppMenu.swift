@@ -18,6 +18,8 @@ enum MenuCommand: Hashable {
     case aiScript, aiChapters, aiTitles, aiRewrite, aiSettings
     // 書き出し範囲(イン / アウト / 解除)と、静止画・連番画像の書き出し
     case rangeIn, rangeOut, rangeClear, exportStill, exportSequence
+    // 出力 ▸ サムネイル画像を書き出す…(1280×720。ショートカットは持たない)
+    case exportThumbnail
     // 出力 ▸ GIFとして書き出す…(ショートカットは持たない)
     case exportGIF
     // 出力 ▸ 書き出しキュー(今の設定の MP4 を積む / キューを表示)と、ファイル ▸ 素材ブラウザ(ショートカットは持たない)
@@ -29,6 +31,8 @@ enum MenuCommand: Hashable {
     // A6: クリップのコピー / 切り取り / 貼り付け / 全選択(ショートカットは持たない: ⌘C ⌘X ⌘V ⌘A は responder chain が受ける)と、レイヤー
     case copyClips, cutClips, pasteClips, selectAllClips, layerLock, layerSolo, layerHeight(LayerHeight)
     case split, delete, addText, addBlur, addAdjustment, addVisualizer, addQRCode, addCharacter, makeVoices
+    // 図形(クリップ ▸ 図形を追加 ▸ 種類。ショートカットは持たない)
+    case addShape(FigureKind)
     // クリップ(M7)
     case duplicate, rippleDelete, trimBefore, trimAfter, prevClip, nextClip, moveLayerUp, moveLayerDown, addLayer, regenerateVoice
     case playPause, toStart, stepBack, stepForward
@@ -53,6 +57,8 @@ enum MenuCommand: Hashable {
     case audioNormalize, audioVolumeUp, audioVolumeDown, audioVoicePreset, audioClear
     // 無音カット(シートを開く)と、BGM の自動ダッキングの切り替え
     case silenceCut, fillerCut, transcriptEdit, audioDuckToggle
+    // ビートにマーカーを打つ(選んでいる音のクリップ。ショートカットは持たない)
+    case beatMarkers
     // 手ぶれ補正の切り替え(映像クリップ。ショートカットは持たない)
     case stabilizeToggle
     // 縦動画に自動リフレーム(映像・画像。ショートカットは持たない)
@@ -70,6 +76,8 @@ enum MenuCommand: Hashable {
     case aiImage
     // 表示 ▸ プレビューの背景(アプリ全体の設定)
     case previewBackground(PreviewBackground)
+    // 表示 ▸ ガイド線(プレビューだけ。ショートカットは持たない)
+    case guide(PreviewGuide)
     // 画面のドッキング(パネルの表示と、配置のプリセット)
     case dockPanel(DockPanel), dockLayout(DockPreset)
     case helpShortcuts, helpVoicevox, helpAquestalk, helpLicense, helpThirdParty
@@ -224,6 +232,7 @@ struct MenuState: Equatable {
     var canAudioFx = false           // 音声・ボイス・動画(フリーズ以外)のクリップを選んでいる
     var hasAudioFx = false           // 選択クリップに音声エフェクトかパンがある
     var canSilenceCut = false        // 無音カットできるクリップ(音のある素材。速度・逆再生なし)を選んでいる
+    var canBeatMarkers = false       // ビートを測れるクリップ(無音カットと同じ条件)を選んでいる
     var canDuck = false              // BGM(音声クリップ)を選んでいる
     var isDucking = false            // 選択クリップの自動ダッキングがオン
     var canStabilize = false         // 映像クリップを選んでいる(手ぶれ補正ができる)
@@ -233,6 +242,8 @@ struct MenuState: Equatable {
     var canCompoundUngroup = false   // 選択が複合クリップ(解除できる)
     /// 表示 ▸ プレビューの背景(アプリ全体の設定)。
     var previewBackground = PreviewBackground.default
+    /// 表示 ▸ ガイド線: 出しているガイド(アプリ全体の設定)。
+    var previewGuides: Set<PreviewGuide> = []
     /// 出力 ▸ ファン(アプリ全体の設定)。使える / オン / 使えない理由 / 対象機種でヘルパー未導入 / ヘルパー導入済み。
     var fanAvailable = false
     var fanEnabled = false
@@ -254,6 +265,7 @@ struct MenuState: Equatable {
     @MainActor
     init(model: ProjectModel?) {
         previewBackground = PreviewBackgroundStore.current
+        previewGuides = PreviewGuideStore.current
         templateNames = ProjectTemplateLibrary.names
         let fan = AppServices.fan
         fanAvailable = fan.isAvailable
@@ -330,6 +342,7 @@ struct MenuState: Equatable {
             canAudioFx = AudioFxEditing.supports(c)
             hasAudioFx = AudioFxEditing.hasAnyFx(c)
             canSilenceCut = SilenceDetector.supports(c)
+            canBeatMarkers = BeatDetector.supports(c)
             canTranscribe = TranscriptionSupport.supports(c)
             canDuck = DuckEditing.supports(c)
             isDucking = c.hasDuck
@@ -493,7 +506,8 @@ enum AppMenuSpec {
     /// 出力 ▸ 現在のフレームを画像で書き出す… / 連番画像を書き出す…
     static func imageExportItems(_ s: MenuState) -> [MenuItemSpec] {
         [MenuItemSpec(command: .exportStill, title: "現在のフレームを画像で書き出す…", shortcut: nil, enabled: s.canEdit && s.canExport, checked: nil, hint: "PNG / JPEG"),
-         MenuItemSpec(command: .exportSequence, title: "連番画像を書き出す…", shortcut: nil, enabled: s.canEdit && s.canExport, checked: nil, hint: "name_00001.png")]
+         MenuItemSpec(command: .exportSequence, title: "連番画像を書き出す…", shortcut: nil, enabled: s.canEdit && s.canExport, checked: nil, hint: "name_00001.png"),
+         MenuItemSpec(command: .exportThumbnail, title: "サムネイル画像を書き出す…", shortcut: nil, enabled: s.canEdit && s.canExport, checked: nil, hint: "1280×720")]
     }
 
     /// 出力 ▸ GIFとして書き出す…(保存パネルで fps・幅・範囲を決める。ショートカットは持たない)。
@@ -543,6 +557,13 @@ enum AppMenuSpec {
          MenuItemSpec(command: .addVisualizer, title: "音声ビジュアライザを追加", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "合成音声の大きさで動く"),
          addQRCode(s),
          aiImage(s)]
+    }
+
+    /// クリップ ▸ 図形を追加 ▸ 四角形・楕円・線・矢印・星(ショートカットは持たない)。
+    static func shapeItems(_ s: MenuState) -> [MenuItemSpec] {
+        FigureKind.allCases.map {
+            MenuItemSpec(command: .addShape($0), title: $0.title, shortcut: nil, enabled: s.canEdit, checked: nil)
+        }
     }
 
     /// クリップ ▸ AIで画像を作る…(ローカルのコマンドが画像を書く。送る前に内容を確認。ショートカットは持たない)
@@ -797,6 +818,10 @@ enum AppMenuSpec {
     static func silenceCutItem(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .silenceCut, title: "無音をカット…", shortcut: nil, enabled: s.canEdit && s.canSilenceCut, checked: nil)
     }
+    /// クリップ ▸ ビートにマーカーを打つ(音のクリップを選んでいるとき。1 回の Undo。ショートカットは持たない)。
+    static func beatMarkersItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .beatMarkers, title: "ビートにマーカーを打つ", shortcut: nil, enabled: s.canEdit && s.canBeatMarkers, checked: nil, hint: "テンポを測る")
+    }
 
     static func zoom(_ s: MenuState) -> [MenuItemSpec] {
         [MenuItemSpec(command: .zoomIn, title: "タイムラインを拡大", shortcut: cmd("+"), enabled: s.canEdit, checked: nil),
@@ -863,6 +888,11 @@ enum AppMenuSpec {
         MenuItemSpec(command: .makeProxies, title: "プロキシを作成", shortcut: nil, enabled: s.canEdit && s.canMakeProxies, checked: nil, hint: "540p・背景で")
     }
 
+    /// 表示 ▸ ガイド線 ▸ タイトルセーフ・アクションセーフ・中心線・三分割線(チェックで出す。ショートカットは持たない)。
+    static func guideItems(_ s: MenuState) -> [MenuItemSpec] {
+        PreviewGuide.allCases.map { MenuItemSpec(command: .guide($0), title: $0.title, shortcut: nil, enabled: true, checked: s.previewGuides.contains($0)) }
+    }
+
     static func previewBackgroundItems(_ s: MenuState) -> [MenuItemSpec] {
         PreviewBackground.allCases.map { MenuItemSpec(command: .previewBackground($0), title: $0.title, shortcut: nil, enabled: true, checked: s.previewBackground == $0) }
     }
@@ -882,10 +912,10 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, settings(s), videoSettings(s)] + file(s) + [subtitleImport(s), mediaRelink(s), subtitleExport(s), subtitleGenerate(s), transcribeSubtitles(s), chapterCopy(s), aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s)] + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), makeProxies(s)] + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textCounterItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + layerHeightItems(s) + playback(s)
+        [about, settings(s), videoSettings(s)] + file(s) + [subtitleImport(s), mediaRelink(s), subtitleExport(s), subtitleGenerate(s), transcribeSubtitles(s), chapterCopy(s), aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s)] + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), makeProxies(s)] + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textCounterItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), beatMarkersItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + layerHeightItems(s) + playback(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerColorItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
-            + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + [previewProxy(s), fullScreen(s)] + help.flatMap { $0 }
+            + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + guideItems(s) + [previewProxy(s), fullScreen(s)] + help.flatMap { $0 }
     }
 }
 
@@ -910,6 +940,9 @@ enum AppMenu {
         case .dockLayout(let pr): AppServices.panelDock.apply(pr)
         case .previewBackground(let b):
             PreviewBackgroundStore.set(b)
+            ActiveDocument.shared.refresh()
+        case .guide(let g):
+            PreviewGuideStore.toggle(g)
             ActiveDocument.shared.refresh()
         case .previewProxyToggle:
             ProxySettings.set(!ProxySettings.enabled())
@@ -940,6 +973,7 @@ enum AppMenu {
             case .rangeOut: m.setRangeOutAtCurrent()
             case .rangeClear: m.clearExportRange()
             case .exportStill: m.chooseAndExportStill()
+            case .exportThumbnail: m.chooseAndExportThumbnail()
             case .exportSequence: m.chooseAndExportSequence()
             case .exportGIF: m.chooseAndExportGIF()
             case .queueExport: m.chooseAndQueueExport()
@@ -1019,6 +1053,7 @@ enum AppMenu {
             case .compoundGroup: m.groupSelectedCompound()
             case .compoundUngroup: m.ungroupSelectedCompound()
             case .silenceCut: m.openSilenceSheet()
+            case .beatMarkers: m.addBeatMarkersToSelectedClip()
             case .fillerCut: m.openFillerSheet()
             case .transcriptEdit: m.openTranscriptEditSheet()
             case .findReplace: m.openFindReplace()
@@ -1027,6 +1062,7 @@ enum AppMenu {
             case .addBlur: m.addBlurClip()
             case .addAdjustment: m.addAdjustmentClip()
             case .addVisualizer: m.addVisualizerClip()
+            case .addShape(let k): m.addShapeClip(kind: k)
             case .addQRCode: m.openAddQRCode()
             case .addCharacter: m.addCharacter()
             case .makeVoices: Task { await m.generateVoicesFromScript() }
