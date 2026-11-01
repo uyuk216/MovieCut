@@ -326,6 +326,16 @@ public enum ClipEditing {
         return c
     }
 
+    /// 音声ビジュアライザ(3 秒・画面の下に横長の枠・白の棒 32 本。見た目は既定のまま `visualizer` を置かない)。
+    public static func makeVisualizerClip(at t: Double, project: Project) -> Clip {
+        var c = Clip()
+        c.type = .visualizer
+        c.start = t
+        c.duration = 3
+        c.x = 0.5; c.y = 0.85; c.w = 0.6; c.h = 0.2
+        return c
+    }
+
     /// 一番上のレイヤー(配列の最後)の末尾にクリップを足す。レイヤーが 1 つもなければ作る。
     public static func appendToTopLayer(_ clip: Clip, in project: inout Project) {
         if project.tracks.isEmpty { project.tracks.append(Track(name: "レイヤー1")) }

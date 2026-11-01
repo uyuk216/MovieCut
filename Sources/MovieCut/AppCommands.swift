@@ -115,6 +115,7 @@ struct AppCommands: Commands {
                 Menu("音声") { items(AppMenuSpec.audioItems(s), run) }
                 MenuItemView(spec: AppMenuSpec.silenceCutItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.fillerCutItem(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.transcriptEditItem(s), perform: run)
                 Divider()
                 Menu("テキスト") {
                     Menu("スタイルを適用") { items(AppMenuSpec.textStyleItems(s), run) }

@@ -439,6 +439,8 @@ final class PlaybackController {
                 let d = try mixer(project, url)
                 // 口パク用の音量エンベロープも先に作っておく(最初のフレームで待たされないように)
                 if let assets { for c in project.allClips where c.type == .voice { if let s = c.src { _ = assets.mouthEnvelope(for: s) } } }
+                // ビジュアライザがあれば、合成音声の音量も先に作る(もう 1 回ミックスするので、ある時だけ)
+                if let assets, project.allClips.contains(where: { $0.type == .visualizer }) { _ = assets.mixEnvelope(for: project) }
                 return .success(d)
             } catch { return .failure(error) }
         }.value

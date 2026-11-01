@@ -73,6 +73,7 @@ struct ContentView: View {
         .sheet(isPresented: $model.showJumpSheet) { JumpToTimeSheet(model: model) }
         .sheet(isPresented: $model.showSilenceSheet) { SilenceCutSheet(model: model) }
         .sheet(isPresented: $model.showFillerSheet) { FillerCutSheet(model: model) }
+        .sheet(isPresented: $model.showTranscriptEditSheet) { TranscriptEditSheet(model: model) }
         .sheet(isPresented: $model.showFindSheet) { FindReplaceSheet(model: model) }
         .sheet(isPresented: $model.showExportQueueSheet) { ExportQueueSheet(controller: AppServices.exportQueue) { model.showExportQueueSheet = false } }
         .sheet(isPresented: $model.showAudioLibrary) { AudioLibrarySheet(model: model) }

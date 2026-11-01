@@ -428,6 +428,7 @@ struct ClipInspector: View {
         case .voice: return "ボイス"
         case .blur: return "ぼかし範囲"
         case .adjustment: return "調整レイヤー"
+        case .visualizer: return "音声ビジュアライザ"
         default: return t.rawValue
         }
     }
@@ -454,6 +455,7 @@ struct ClipInspector: View {
                 if EffectEditing.supports(c.type) { effectSections(c) }
                 if TransitionEditing.supportsVideo(c.type) { transitionSections(c) }
                 if c.type == .blur { blurSections(c) }
+                if c.type == .visualizer { visualizerSections(c) }
                 if Clip.supportsSpeed(c.type) { speedSections(c) }
                 if (c.type == .video || c.type == .audio) && !c.isFreeze {
                     InspectorSection(title: "音声")
@@ -788,6 +790,51 @@ struct ClipInspector: View {
         }
         InspectorSection(title: "見た目")
         slider("強さ（px）", .strength, step: 1, format: Self.px)
+    }
+}
+
+extension ClipInspector {
+    /// 音声ビジュアライザ: 範囲(x・y・w・h は動かせる)と見た目(棒/波、色、本数)。
+    @ViewBuilder func visualizerSections(_ c: Clip) -> some View {
+        let vz = c.visualizerOrDefault
+        InspectorSection(title: "範囲")
+        HStack(alignment: .top, spacing: 10) {
+            num("中心 横", .x)
+            num("中心 縦", .y)
+        }
+        HStack(alignment: .top, spacing: 10) {
+            num("幅", .w)
+            num("高さ", .h)
+        }
+        InspectorSection(title: "見た目")
+        InspectorField(label: "形") {
+            Picker("", selection: Binding(get: { vz.styleOrDefault }, set: { v in model.setClipProperty({ $0.visualizer = Self.vizUpdated($0.visualizer) { $0.style = v } }, name: "ビジュアライザの形の変更", clipId: clipId) })) {
+                Text("棒").tag("bars")
+                Text("波").tag("wave")
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+        }
+        ColorField(label: "色", hex: vz.colorOrDefault) { hex in
+            model.coalescedClipProperty({ $0.visualizer = Self.vizUpdated($0.visualizer) { $0.color = hex } }, name: "ビジュアライザの色の変更", clipId: clipId)
+        }
+        InspectorField(label: "本数") {
+            Stepper(value: Binding(get: { vz.countOrDefault }, set: { v in model.setClipProperty({ $0.visualizer = Self.vizUpdated($0.visualizer) { $0.count = v } }, name: "ビジュアライザの本数の変更", clipId: clipId) }),
+                    in: Visualizer.countRange) {
+                Text("\(vz.countOrDefault) 本").monospacedDigit()
+            }
+        }
+    }
+
+    /// 設定を 1 項目書き換えた結果。全部既定値に戻ったら `visualizer` ごと外す(ファイルに余計な項目を残さない)。
+    static func vizUpdated(_ current: Visualizer?, _ change: (inout Visualizer) -> Void) -> Visualizer? {
+        var v = current ?? Visualizer()
+        change(&v)
+        // 既定と同じ値は書かない(棒・白・32 本)
+        if v.style == Visualizer.defaultStyle { v.style = nil }
+        if v.color?.lowercased() == Visualizer.defaultColor { v.color = nil }
+        if v.count == Visualizer.defaultCount { v.count = nil }
+        return (v.style == nil && v.color == nil && v.count == nil) ? nil : v
     }
 }
 

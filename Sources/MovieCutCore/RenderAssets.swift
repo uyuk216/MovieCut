@@ -18,6 +18,9 @@ public final class RenderAssets {
     private var sequentials: [String: SequentialVideoFrames] = [:]
     private var reversers: [String: ReverseVideoFrames] = [:]
     private var videoSizes: [String: CGSize] = [:]
+    /// 合成音声の音量エンベロープ(直前の 1 件だけ)。キーは音に関わる内容の指紋。
+    private var mixEnvelopeKey: String?
+    private var mixEnvelopeValue: [Float]?
 
     public init() {}
 
@@ -57,6 +60,62 @@ public final class RenderAssets {
         let s = MouthGate.states(env)
         mouthStateCache[path] = s
         return s
+    }
+
+    /// プロジェクトの合成音声(書き出しと同じミックス)の 1/60 秒ごとの RMS(プロジェクトの時刻 0 から)。
+    /// ビジュアライザが使う。音に関わる内容が同じならキャッシュを返す。作れなければ nil。
+    public func mixEnvelope(for project: Project) -> [Float]? {
+        let key = Self.mixKey(project)
+        lock.lock(); defer { lock.unlock() }
+        if key == mixEnvelopeKey, let v = mixEnvelopeValue { return v }
+        guard let env = Self.computeMixEnvelope(project, assets: self) else { return nil }
+        mixEnvelopeKey = key
+        mixEnvelopeValue = env
+        return env
+    }
+
+    /// 音に関わる部分の指紋(音のあるクリップと、トラックが鳴るかどうか)。映像・文字だけの変更では変わらない。
+    static func mixKey(_ project: Project) -> String {
+        struct AudioTrack: Encodable { let audible: Bool; let clips: [Clip] }
+        let parts = project.tracks.map { tr in
+            AudioTrack(audible: project.isAudible(tr),
+                       clips: tr.clips.filter { [ClipType.audio, .voice, .video].contains($0.type) })
+        }
+        let enc = JSONEncoder()
+        enc.outputFormatting = [.sortedKeys]
+        guard let data = try? enc.encode(parts) else { return UUID().uuidString }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    static func computeMixEnvelope(_ project: Project, assets: RenderAssets) -> [Float]? {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("mc-viz-mix-\(UUID().uuidString).caf")
+        defer { try? FileManager.default.removeItem(at: url) }
+        guard let dur = try? AudioMixer.mixdown(project: project, assets: assets, to: url) else { return nil }
+        // 音が 1 つも無いときは書かれないことがある。その場合は無音の長さ分の 0
+        guard FileManager.default.fileExists(atPath: url.path),
+              let file = try? AVAudioFile(forReading: url) else {
+            return [Float](repeating: 0, count: Int((dur * 60).rounded(.up)))
+        }
+        let frames = AVAudioFrameCount(file.length)
+        guard frames > 0,
+              let buf = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: frames),
+              (try? file.read(into: buf)) != nil,
+              let ch = buf.floatChannelData else { return [] }
+        let n = Int(buf.frameLength)
+        let nch = Int(file.processingFormat.channelCount)
+        let step = max(1, Int(file.processingFormat.sampleRate / 60))
+        var env = [Float](repeating: 0, count: (n + step - 1) / step)
+        for i in 0..<env.count {
+            let s = i * step, e = min(n, s + step)
+            var sum: Float = 0
+            for c in 0..<nch {
+                let data = ch[c]
+                var j = s
+                while j < e { sum += data[j] * data[j]; j += 1 }
+            }
+            env[i] = (sum / Float(max(1, (e - s) * nch))).squareRoot()
+        }
+        return env
     }
 
     static func computeEnvelope(_ path: String) -> [Float]? {

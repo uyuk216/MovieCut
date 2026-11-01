@@ -257,7 +257,9 @@ public struct ClipType: RawRepresentable, Codable, Hashable, Sendable {
     public static let blur = ClipType(rawValue: "blur")
     /// 調整レイヤー: 素材を持たず、それより下(前に描いた全部)の合成結果に、自分のエフェクトを一度かける。
     public static let adjustment = ClipType(rawValue: "adjustment")
-    public static let known: [ClipType] = [.image, .video, .audio, .text, .voice, .blur, .adjustment]
+    /// 音声ビジュアライザ: 素材を持たず、プロジェクトの合成音声の大きさで棒・波を描く(`Visualizer`)。
+    public static let visualizer = ClipType(rawValue: "visualizer")
+    public static let known: [ClipType] = [.image, .video, .audio, .text, .voice, .blur, .adjustment, .visualizer]
     public var isKnown: Bool { Self.known.contains(self) }
 
     public init(from decoder: Decoder) throws {
@@ -337,9 +339,11 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var counter: TextCounter? = nil
     /// BGM の自動ダッキング(音声クリップ。声があるときに下げる)。無いときはファイルに書かない。
     public var duck: Duck? = nil
+    /// 音声ビジュアライザの見た目(visualizer クリップ)。無いときは既定。ファイルには設定した項目だけ書く。
+    public var visualizer: Visualizer? = nil
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["id", "type", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "duck"]
+    static let knownKeys: Set<String> = ["id", "type", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "duck", "visualizer"]
 
     public init() {}
 
@@ -466,6 +470,9 @@ public struct Clip: Codable, Equatable, Identifiable {
         if let raw: JSONValue = l.value("duck") {
             if let v: Duck = l.value("duck") { duck = v } else { extra["duck"] = raw }
         }
+        if let raw: JSONValue = l.value("visualizer") {
+            if let v: Visualizer = l.value("visualizer") { visualizer = v } else { extra["visualizer"] = raw }
+        }
         // 読めなかったトランジションも捨てずに、そのまま書き戻す
         for (key, set) in [("transitionIn", \Clip.transitionIn), ("transitionOut", \Clip.transitionOut)] as [(String, WritableKeyPath<Clip, Transition?>)] {
             if let raw: JSONValue = l.value(key) {
@@ -536,6 +543,7 @@ public struct Clip: Codable, Equatable, Identifiable {
         try c.encodeIfPresent(bubble, forKey: AnyKey("bubble"))
         try c.encodeIfPresent(counter, forKey: AnyKey("counter"))
         try c.encodeIfPresent(duck, forKey: AnyKey("duck"))
+        try c.encodeIfPresent(visualizer, forKey: AnyKey("visualizer"))
     }
 }
 
