@@ -99,4 +99,30 @@ final class FindReplaceAppTests: XCTestCase {
         let empty = ProjectModel(project: Project.new())
         XCTAssertFalse(AppMenuSpec.findReplace(MenuState(model: empty)).enabled)
     }
+
+    /// 置き換える一致がすべてロックされたレイヤーにあるとき、「一致しない」ではなく「ロックのため変えていない」と出す。
+    func testAllMatchesOnLockedLayerSaysLockedNotNoMatch() async {
+        var p = Project.new()
+        p.tracks[1].clips = [text("t2", "魔理沙")]
+        p.tracks[1].locked = true
+        let m = ProjectModel(project: p)
+        m.notices = OneTimeNotices()
+        let before = m.project
+        let n = await m.replaceAllText("魔理沙", with: "アリス", options: TextSearch.Options(), selectionOnly: false)
+        XCTAssertEqual(n, 0)
+        XCTAssertEqual(m.project, before)
+        XCTAssertTrue(m.statusText.contains("ロック"), "状態欄: \(m.statusText)")
+        XCTAssertFalse(m.effectiveUndoManager.canUndo)
+    }
+
+    /// 空の検索語は何も変えず、件数も 0(シートの「すべて置換」も押せない条件と同じ)。
+    func testEmptyNeedleChangesNothingAndCountsZero() async {
+        let (m, _) = makeModel()
+        let before = m.project
+        XCTAssertEqual(m.findTextMatchCount("", selectionOnly: false, options: TextSearch.Options()), 0)
+        let n = await m.replaceAllText("", with: "x", options: TextSearch.Options(), selectionOnly: false)
+        XCTAssertEqual(n, 0)
+        XCTAssertEqual(m.project, before)
+        XCTAssertFalse(m.effectiveUndoManager.canUndo)
+    }
 }

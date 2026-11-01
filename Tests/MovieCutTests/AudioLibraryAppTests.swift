@@ -71,4 +71,14 @@ final class AudioLibraryAppTests: XCTestCase {
         XCTAssertEqual(AudioLibrarySheet.durationText(0.4), "0:00")
         XCTAssertEqual(AudioLibrarySheet.durationText(83.6), "1:24")
     }
+
+    /// 試し聴きが鳴り終わったら、再生ボタンを「停止」のままにしない(再生中の表示を戻す)。
+    func testPreviewResetsWhenPlaybackEnds() async throws {
+        let url = try wav(0.2, name: "short.wav")
+        let player = AudioPreviewPlayer()
+        player.toggle(url)
+        XCTAssertEqual(player.playingURL, url, "鳴らし始めたら印が付く")
+        for _ in 0..<400 where player.playingURL != nil { try await Task.sleep(nanoseconds: 10_000_000) }
+        XCTAssertNil(player.playingURL, "鳴り終わったら印を消す")
+    }
 }

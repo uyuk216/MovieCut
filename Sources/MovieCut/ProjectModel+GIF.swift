@@ -62,7 +62,7 @@ extension ProjectModel {
 
     /// 書き出しシートを出して GIF を書く(MP4 と同じ進み具合・キャンセル・失敗の扱い)。
     func runGIFExport(to url: URL, options: GIFOptions = .standard, range: ExportRange? = nil) async -> ExportOutcome {
-        guard !isExporting else { return .failure(ExportError.writerFailed(nil)) }
+        guard !directExportBlocked() else { return .failure(ExportError.writerFailed(nil)) }
         if reportMissingMediaForExport() { return .failure(ExportError.writerFailed(nil)) }
         let snapshot = project
         let frames = GIFExporter.plan(project: snapshot, range: range, options: options).frames

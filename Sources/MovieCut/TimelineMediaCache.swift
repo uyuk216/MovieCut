@@ -27,6 +27,8 @@ final class TimelineMediaCache {
     /// 同時に作る数と、待たせる数の上限(スクロールで依頼があふれたら古いものを捨てる)。
     static let maxRunning = 2
     static let maxQueued = 160
+    /// 作れなかったものの覚え(再試行しないためのもの)の上限。これを超えたら覚えを作り直す(失敗したものは次に開いたとき、もう一度試すだけ)。
+    static let maxFailed = 2000
 
     init() {
         thumbs.countLimit = 600
@@ -64,9 +66,18 @@ final class TimelineMediaCache {
     }
 
     private func finishThumb(key: String, image: CGImage?) {
-        if let image { thumbs.setObject(image, forKey: key as NSString) } else { failed.insert(key) }
+        if let image { thumbs.setObject(image, forKey: key as NSString) } else { recordFailure(key) }
         finish(key)
     }
+
+    /// 作れなかったキーを覚える(上限を超えたら覚えを空にする)。
+    func recordFailure(_ key: String) {
+        if failed.count >= Self.maxFailed { failed.removeAll() }
+        failed.insert(key)
+    }
+
+    /// 作れなかったものの覚えの数(テスト用)。
+    var failedCount: Int { failed.count }
 
     nonisolated static func loadStill(path: String) -> CGImage? {
         guard let src = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil) else { return nil }

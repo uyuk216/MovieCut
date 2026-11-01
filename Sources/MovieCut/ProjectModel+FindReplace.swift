@@ -27,7 +27,11 @@ extension ProjectModel {
         guard !isLocked, !query.isEmpty else { return 0 }
         let r = TextSearch.replaceAll(query, with: replacement, in: project, scope: findScope(selectionOnly: selectionOnly), options: options)
         guard !r.changes.isEmpty else {
-            statusText = r.skippedEmptyVoices > 0 ? "空になるセリフがあるため、変えませんでした" : "一致する文字はありません"
+            if r.lockedMatches > 0 {
+                statusText = "ロックされたレイヤーの \(r.lockedMatches) 箇所は変えていません"
+            } else {
+                statusText = r.skippedEmptyVoices > 0 ? "空になるセリフがあるため、変えませんでした" : "一致する文字はありません"
+            }
             return 0
         }
         flushCoalesced()

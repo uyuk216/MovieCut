@@ -10,12 +10,48 @@ final class ExportQueueController: ObservableObject {
 
     let queue = ExportQueue()
     private let runner: Runner
+    /// Dock の進行バーの差し替え(テスト用。通常は `AppServices.dock`)。
+    private let dockOverride: DockProgressController?
     /// 件の ID → 保存先のパス(一覧の表示用)。
     private var destinations: [UUID: String] = [:]
 
-    init(runner: Runner? = nil) {
+    init(runner: Runner? = nil, dock: DockProgressController? = nil) {
         self.runner = runner ?? ExportQueueController.defaultRunner
+        self.dockOverride = dock
         queue.onChange = { [weak self] in self?.objectWillChange.send() }
+    }
+
+    /// 1 件を書く間の画面の決まり(直接の書き出しと同じ): Dock の進行バー、ファン最大化、終わりの知らせ。
+    /// 終わったあとに遅れて届いた進み具合では Dock を出し直さない。
+    static func withExportHooks(dock: DockProgressController, progress: @escaping (Double) -> Void,
+                                _ body: (@escaping (Double) -> Void) async throws -> Void) async throws {
+        final class Live { var on = true }
+        let live = Live()
+        let report: (Double) -> Void = { v in
+            progress(v)
+            Task { @MainActor in
+                guard live.on else { return }
+                dock.update(v)
+            }
+        }
+        dock.update(0)
+        await AppServices.fan.beginExport()
+        do {
+            try await body(report)
+        } catch is CancellationError {
+            live.on = false
+            await AppServices.fan.endExport(.cancelled)
+            dock.finish(notify: false)
+            throw CancellationError()
+        } catch {
+            live.on = false
+            await AppServices.fan.endExport(.failed)
+            dock.finish(notify: true)
+            throw error
+        }
+        live.on = false
+        await AppServices.fan.endExport(.finished)
+        dock.finish(notify: true)
     }
 
     /// 本番の書き出し: MP4(今の設定のまま)。描画は書き出しと同じ経路。
@@ -32,8 +68,11 @@ final class ExportQueueController: ObservableObject {
     @discardableResult
     func enqueue(project: Project, range: ExportRange?, to url: URL) -> UUID {
         let run = runner
+        let dock = dockOverride ?? AppServices.dock
         let id = queue.enqueue(title: url.lastPathComponent) { progress in
-            try await run(project, range, url, progress)
+            try await Self.withExportHooks(dock: dock, progress: progress) { report in
+                try await run(project, range, url, report)
+            }
         }
         destinations[id] = url.path
         return id

@@ -238,3 +238,14 @@ final class TimelineMediaTests: XCTestCase {
         m.shutdown()
     }
 }
+
+/// 作れなかったもの(サムネイル・波形)の覚えは上限で止まる(長い編集の間に伸び続けない)。
+@MainActor
+final class TimelineMediaCacheBoundTests: XCTestCase {
+    func testFailureMemoryIsCapped() {
+        let c = TimelineMediaCache()
+        for i in 0..<(TimelineMediaCache.maxFailed * 2 + 5) { c.recordFailure("path|\(i)") }
+        XCTAssertLessThanOrEqual(c.failedCount, TimelineMediaCache.maxFailed)
+        XCTAssertGreaterThan(c.failedCount, 0)
+    }
+}

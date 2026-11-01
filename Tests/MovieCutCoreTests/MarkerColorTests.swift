@@ -74,4 +74,14 @@ final class MarkerColorTests: XCTestCase {
         XCTAssertEqual(Set(hexes).count, MarkerColor.allCases.count)
         XCTAssertEqual(Set(MarkerColor.allCases.map(\.title)).count, MarkerColor.allCases.count)
     }
+
+    /// 未知の色の目印を「既定の色」に直せる(表示は既定でも、保存の値が残ると色の選び直しが効かない)。
+    func testPickingDefaultColorClearsUnknownStoredColor() {
+        var p = Project()
+        var m = Marker(time: 1, name: "a")
+        m.color = "magenta"
+        p.markers = [m]
+        guard let q = MarkerEditing.setColor(in: p, id: m.id, to: .default) else { return XCTFail("未知の色から既定へ直せるはず") }
+        XCTAssertNil(q.markers[0].color)
+    }
 }

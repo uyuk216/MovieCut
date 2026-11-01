@@ -19,7 +19,7 @@ enum AudioLibraryStore {
 
 /// 試し聴き(一度に 1 つだけ)。
 @MainActor
-final class AudioPreviewPlayer: ObservableObject {
+final class AudioPreviewPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
     @Published private(set) var playingURL: URL?
     private var player: AVAudioPlayer?
 
@@ -28,10 +28,21 @@ final class AudioPreviewPlayer: ObservableObject {
         if playingURL == url { stop(); return }
         stop()
         guard let p = try? AVAudioPlayer(contentsOf: url) else { return }
+        p.delegate = self
         p.prepareToPlay()
         p.play()
         player = p
         playingURL = url
+    }
+
+    /// 最後まで鳴ったら印を消す(停止表示のまま残さない)。
+    nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        MainActor.assumeIsolated { self.finished(player) }
+    }
+
+    private func finished(_ p: AVAudioPlayer) {
+        guard p === player else { return }
+        stop()
     }
 
     func stop() {

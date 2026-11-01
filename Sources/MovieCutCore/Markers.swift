@@ -123,7 +123,10 @@ public enum MarkerEditing {
     /// マーカーの色を変える(既定の色は nil として書く)。同じ色なら変えず nil を返す。
     public static func setColor(in project: Project, id: String, to color: MarkerColor) -> Project? {
         guard let i = project.markers.firstIndex(where: { $0.id == id }) else { return nil }
-        guard MarkerColor.resolved(project.markers[i].color) != color else { return nil }
+        // 表示どおり(既知の色か、無い)なら変えない。未知の値は、選んだ色に直す(表示が既定でも保存の値は残っていたため)
+        let stored = project.markers[i].color
+        let storedIsKnown = stored.map { MarkerColor(rawValue: $0) != nil } ?? true
+        guard !(storedIsKnown && MarkerColor.resolved(stored) == color) else { return nil }
         var p = project
         p.markers[i].color = color == .default ? nil : color.rawValue
         return p

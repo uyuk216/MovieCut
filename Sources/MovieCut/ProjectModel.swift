@@ -216,6 +216,8 @@ final class ProjectModel: ObservableObject {
     var notices: OneTimeNotices?
     /// Dock の進行バー(テストでは差し替える。nil ならアプリ全体のもの)。
     var dockOverride: DockProgressController?
+    /// 書き出しキューの差し替え(テスト用。通常は `AppServices.exportQueue`)。
+    var exportQueueOverride: ExportQueueController?
     let keyRouter = KeyRouter()
 
     private var exportTask: Task<Void, Error>?
@@ -478,7 +480,7 @@ final class ProjectModel: ObservableObject {
     /// 書き出し(ツールバーのボタンも MC_DEBUG_EXPORT もこれを呼ぶ)。
     /// `preset` があれば、プロジェクトの「写し」にプリセットを当てて書き出す(ドキュメント自体は変えない)。
     func runExport(to url: URL, preset: ExportPreset? = nil, range: ExportRange? = nil) async -> ExportOutcome {
-        guard !isExporting else { return .failure(ExportError.writerFailed(nil)) }
+        guard !directExportBlocked() else { return .failure(ExportError.writerFailed(nil)) }
         // 素材が欠けたまま書き出すと、その部分が静かに抜けるので止める(保存パネルの前にも同じ確認をする)
         if reportMissingMediaForExport() { return .failure(ExportError.writerFailed(nil)) }
         let exporting = ExportJob.resolvedProject(project, preset: preset)
@@ -499,7 +501,7 @@ final class ProjectModel: ObservableObject {
 
     /// 連番画像を `directory` に書き出す(進み具合とキャンセルは動画の書き出しと同じ)。
     func runSequenceExport(to directory: URL, base: String, format: StillFormat, range: ExportRange?) async -> ExportOutcome {
-        guard !isExporting else { return .failure(ExportError.writerFailed(nil)) }
+        guard !directExportBlocked() else { return .failure(ExportError.writerFailed(nil)) }
         let snapshot = project
         let n = ImageSequenceExporter.plan(project: snapshot, range: range, base: base, format: format).frames
         return await runJob(title: "連番画像(\(format.title))を書き出しています", fileName: directory.lastPathComponent, notices: [],
@@ -508,9 +510,22 @@ final class ProjectModel: ObservableObject {
         }
     }
 
+    /// 直接の書き出しを始めてよいか。書き出し中、またはキューの件が動いている間は始めない(同時に 2 つ走らせない)。
+    func directExportBlocked() -> Bool {
+        if isExporting { return true }
+        if (exportQueueOverride ?? AppServices.exportQueue).queue.isBusy {
+            statusText = "書き出しキューが動いています。終わってから書き出してください"
+            return true
+        }
+        return false
+    }
+
     func runJob(title: String, fileName: String, notices: [String], success: String, result: URL,
                         _ job: @escaping (@escaping (Double) -> Void) async throws -> Void) async -> ExportOutcome {
         isExporting = true
+        // 直接の書き出しの間は、キューの待っている件を始めない(終わったら自動で再開する)
+        let queue = exportQueueOverride ?? AppServices.exportQueue
+        queue.queue.isHeld = true
         exportProgress = 0
         exportFileName = fileName
         exportTitle = title
@@ -518,7 +533,7 @@ final class ProjectModel: ObservableObject {
         exportNotice = notices.joined(separator: "\n")
         let dock = dockOverride ?? AppServices.dock
         dock.update(0)
-        defer { isExporting = false; exportTask = nil }
+        defer { isExporting = false; exportTask = nil; queue.queue.isHeld = false }
         // ファン最大化(オンのときだけ)。開始・終了・キャンセル・失敗のどれでも必ず自動に戻す(下の endExport)
         await AppServices.fan.beginExport()
         let task = Task { [weak self] in

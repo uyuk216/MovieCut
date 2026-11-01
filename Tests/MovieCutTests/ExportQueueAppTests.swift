@@ -112,6 +112,42 @@ final class ExportQueueAppTests: XCTestCase {
         XCTAssertNil(c.destination(of: UUID()))
     }
 
+    /// 直接の書き出しは、キューの件が動いている間は始めない(同じ時に 2 つ走らせない)。
+    func testDirectExportIsRefusedWhileQueuedJobRuns() async {
+        let fake = Fake()
+        let c = makeController(fake)
+        let m = ProjectModel(project: Project.new())
+        m.notices = OneTimeNotices()
+        m.exportQueueOverride = c
+        c.enqueue(project: Project.new(), range: nil, to: url("slow.mp4"))
+        for _ in 0..<400 where !c.queue.isBusy { try? await Task.sleep(nanoseconds: 5_000_000) }
+        let outcome = await m.runExport(to: url("direct.mp4"))
+        guard case .failure = outcome else { return XCTFail("キューが動いている間は直接書き出さない: \(outcome)") }
+        XCTAssertFalse(m.isExporting)
+        XCTAssertTrue(m.statusText.contains("キュー"), "理由を状態欄に出す: \(m.statusText)")
+        c.cancel(c.entries[0].id)
+        await settle(c)
+    }
+
+    /// キューの件は、書き出しシートと同じく Dock の進行バーとアプリ前面でない時の知らせを使う(終わったら消す)。
+    func testQueuedJobDrivesDockProgressAndAttention() async {
+        let dock = DockProgressController(tile: nil)
+        dock.isAppActive = { false }
+        var bounces = 0
+        dock.requestAttention = { bounces += 1 }
+        var seen: [Double] = []
+        let c = ExportQueueController(runner: { _, _, _, progress in
+            progress(0.5)
+            try await Task.sleep(nanoseconds: 30_000_000)
+            seen.append(dock.fraction ?? -1)
+        }, dock: dock)
+        c.enqueue(project: Project.new(), range: nil, to: url("dock.mp4"))
+        await settle(c)
+        XCTAssertEqual(seen, [0.5], "キューの件の間は Dock に進み具合が出る")
+        XCTAssertNil(dock.fraction, "終わったら進行バーを消す")
+        XCTAssertEqual(bounces, 1, "前面でなければ知らせる")
+    }
+
     func testStatusTextForEachState() {
         XCTAssertEqual(ExportQueueSheet.statusText(.waiting), "待機中")
         XCTAssertEqual(ExportQueueSheet.statusText(.running(0.456)), "書き出し中 46%")

@@ -38,6 +38,11 @@ public final class ExportQueue {
     /// 一覧が変わるたびに呼ばれる(シートの更新用)。
     public var onChange: (() -> Void)?
 
+    /// 保留中は、待っている件を始めない(直接の書き出しが動いている間に使う)。解くと、待っている件の実行を再開する。
+    public var isHeld = false {
+        didSet { if !isHeld { pump() } }
+    }
+
     private var works: [UUID: ExportWork] = [:]
     private var running: (id: UUID, task: Task<Void, Never>)?
 
@@ -91,7 +96,7 @@ public final class ExportQueue {
     // MARK: 内部
 
     private func pump() {
-        guard running == nil, let next = entries.first(where: { $0.state == .waiting }), let work = works.removeValue(forKey: next.id) else { return }
+        guard running == nil, !isHeld, let next = entries.first(where: { $0.state == .waiting }), let work = works.removeValue(forKey: next.id) else { return }
         let id = next.id
         set(id, .running(0))
         changed()
