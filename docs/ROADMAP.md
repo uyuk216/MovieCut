@@ -62,6 +62,11 @@
 - 実装は Core `FanControl.swift`(機種の許可リスト・FanGuard・HTTP クライアント・インストール用シェルの組み立て)、アプリ `FanService.swift`、特権ヘルパー `Sources/moviecut-fanhelper`、確認用 CLI `moviecut-cli fan status | fan test` と `export --fan-max`。
 - 未了: 署名・ノータライズ済みの配布では `SMAppService.daemon` に切り替える(いまは `NSAppleScript` の管理者権限で `/usr/local/libexec` と `/Library/LaunchDaemons` に置く暫定方式)。実際の管理者権限インストールは未検証。
 
+## 実装済み: キーボードショートカット一覧・マーカーの色(2026-11-02)
+- **ヘルプ ▸ キーボードショートカット一覧**(読み取り専用。`AppMenuSpec` から生成、通常キーも併記)。`DESIGN.md` の「キーボードショートカット一覧」。
+- **マーカーの色**(移動 ▸ マーカーの色、8 色。旗と点線に反映、Undo 1 回)。`DESIGN.md` の「マーカーの色」。次・前のマーカーへは実装済み(⌥⌘↓ / ⌥⌘↑)。
+- **未対応**: ショートカットの変更(上の「編集」の項目のまま)、カラーマーカーのチャプター出力。
+
 ## 実装済み: 検索と置換(2026-11-02)
 - 編集 ▸ 検索と置換…(テロップとセリフの一括置換・一致の数・大文字小文字・選択だけ)。Undo は 1 回、セリフは音声を作り直す。詳細は `DESIGN.md` の「検索と置換」。
 

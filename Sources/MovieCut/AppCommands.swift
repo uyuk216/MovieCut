@@ -134,6 +134,7 @@ struct AppCommands: Commands {
                 MenuItemView(spec: AppMenuSpec.gotoTime(s), perform: run)
                 Divider()
                 items(AppMenuSpec.markerItems(s), run)
+                Menu("マーカーの色") { items(AppMenuSpec.markerColorItems(s), run) }
                 Menu("マーカー一覧") {
                     if s.markers.isEmpty {
                         Text("マーカーはありません")
@@ -216,9 +217,10 @@ struct AppCommands: Commands {
         // ヘルプ
         CommandGroup(replacing: .help) {
             MenuSection { _, run in
-                items(AppMenuSpec.help[0], run)
-                Divider()
-                items(AppMenuSpec.help[1], run)
+                ForEach(Array(AppMenuSpec.help.enumerated()), id: \.offset) { i, g in
+                    if i > 0 { Divider() }
+                    items(g, run)
+                }
             }
         }
     }

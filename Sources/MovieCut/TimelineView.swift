@@ -17,8 +17,9 @@ enum TimelinePalette {
     static let areaBG = rgb(0x191a1e), panel = rgb(0x26282f), line = rgb(0x383b45), rowLine = rgb(0x2a2c33)
     static let rulerBG = rgb(0x22242a), tick = rgb(0x5a5d6a), tickText = rgb(0xcfd1da), label = rgb(0xb9bcc8), text0 = rgb(0xe6e6ea)
     static let playhead = rgb(0xff4f6a), selection = rgb(0xffd84f), accent = rgb(0x4f8cff)
-    /// マーカーの旗と案内線の色。
+    /// マーカーの旗と案内線の色(既定。マーカーごとの色は markerColor(_:) で決める)。
     static let marker = rgb(0x3dd6c0)
+    static func markerColor(_ m: Marker) -> NSColor { rgb(MarkerColor.resolved(m.color).hex) }
     /// 書き出し範囲の印の色。
     static let rangeMark = rgb(0xffa13d)
 
@@ -301,7 +302,8 @@ final class TimelineCanvas: NSView {
         for (i, m) in ms.enumerated() {
             let x = geometry.x(forTime: m.time)
             if x < TimelineLayout.headerWidth - 12 || x > bounds.width + 4 { continue }
-            TimelinePalette.marker.setFill()
+            let color = TimelinePalette.markerColor(m)
+            color.setFill()
             NSRect(x: x - 0.5, y: 2, width: 1.5, height: rh - 2).fill()
             let flag = NSBezierPath()
             flag.move(to: NSPoint(x: x + 1, y: 2))
@@ -313,7 +315,7 @@ final class TimelineCanvas: NSView {
                 let r = NSRect(x: x + Self.flagWidth + 2, y: 6, width: w, height: 14)
                 TimelinePalette.rulerBG.withAlphaComponent(0.94).setFill()
                 NSBezierPath(roundedRect: r, xRadius: 3, yRadius: 3).fill()
-                (m.name as NSString).draw(in: r.insetBy(dx: 4, dy: 1), withAttributes: [.font: Self.flagFont, .foregroundColor: TimelinePalette.marker, .paragraphStyle: Self.truncStyle])
+                (m.name as NSString).draw(in: r.insetBy(dx: 4, dy: 1), withAttributes: [.font: Self.flagFont, .foregroundColor: color, .paragraphStyle: Self.truncStyle])
             }
         }
     }
@@ -325,10 +327,10 @@ final class TimelineCanvas: NSView {
         let bottom = min(bounds.height, max(rh, geometry.rowTop(project.tracks.count)))
         ctx.saveGState()
         ctx.clip(to: NSRect(x: contentRect.minX, y: rh, width: contentRect.width, height: max(0, bottom - rh)))
-        TimelinePalette.marker.withAlphaComponent(0.6).setStroke()
         for m in project.markers {
             let x = geometry.x(forTime: m.time)
             if x < contentRect.minX - 2 || x > bounds.width + 2 { continue }
+            TimelinePalette.markerColor(m).withAlphaComponent(0.6).setStroke()
             let path = NSBezierPath()
             path.lineWidth = 1
             path.setLineDash([3, 3], count: 2, phase: 0)

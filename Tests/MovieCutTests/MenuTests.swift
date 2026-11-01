@@ -56,7 +56,7 @@ final class MenuTests: XCTestCase {
         XCTAssertEqual(AppMenuSpec.customFps(s).title, "カスタム…")
         XCTAssertEqual(AppMenuSpec.codecItems(s).map(\.title), ["H.264", "HEVC"])
         XCTAssertEqual(AppMenuSpec.backgroundItems(s).map(\.title), ["黒", "白", "緑（クロマキー）"])
-        XCTAssertEqual(AppMenuSpec.help.map { $0.map(\.title) }, [["VOICEVOX 公式サイト", "AquesTalkPlayer 公式サイト"], ["ライセンス", "第三者の規約"]])
+        XCTAssertEqual(AppMenuSpec.help.map { $0.map(\.title) }, [["キーボードショートカット一覧"], ["VOICEVOX 公式サイト", "AquesTalkPlayer 公式サイト"], ["ライセンス", "第三者の規約"]])
     }
 
     func testNoDuplicateAcceleratorsAndNoClashWithSystemOnes() {
@@ -100,7 +100,7 @@ final class MenuTests: XCTestCase {
         XCTAssertFalse(s.hasDocument)
         for spec in AppMenuSpec.all(s) {
             switch spec.command {
-            case .about, .helpVoicevox, .helpAquestalk, .helpLicense, .helpThirdParty, .previewBackground: XCTAssertTrue(spec.enabled, "\(spec.title)")
+            case .about, .helpShortcuts, .helpVoicevox, .helpAquestalk, .helpLicense, .helpThirdParty, .previewBackground: XCTAssertTrue(spec.enabled, "\(spec.title)")
             default: XCTAssertFalse(spec.enabled, "\(spec.title) が有効です")
             }
         }
@@ -132,7 +132,7 @@ final class MenuTests: XCTestCase {
         let s = state { $0.isLocked = true; $0.hasSelection = true; $0.canSplit = true }
         for spec in AppMenuSpec.all(s) {
             switch spec.command {
-            case .about, .helpVoicevox, .helpAquestalk, .helpLicense, .helpThirdParty, .fullScreen, .previewBackground: XCTAssertTrue(spec.enabled, "\(spec.title)")
+            case .about, .helpShortcuts, .helpVoicevox, .helpAquestalk, .helpLicense, .helpThirdParty, .fullScreen, .previewBackground: XCTAssertTrue(spec.enabled, "\(spec.title)")
             default: XCTAssertFalse(spec.enabled, "\(spec.title) が書き出し中も有効です")
             }
         }

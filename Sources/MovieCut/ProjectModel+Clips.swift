@@ -137,6 +137,14 @@ extension ProjectModel {
         return true
     }
 
+    /// 「マーカーの色」: 再生位置(1 コマ以内)のマーカーの色を変える(1 回で Undo)。
+    @discardableResult
+    func setMarkerColorAtPlayhead(_ color: MarkerColor) -> Bool {
+        guard !isLocked, let m = markerNearPlayhead, let p = MarkerEditing.setColor(in: project, id: m.id, to: color) else { return false }
+        edit("マーカーの色の変更") { $0 = p }
+        return true
+    }
+
     /// 「マーカーを削除」: 再生位置(1 コマ以内)のマーカー。
     @discardableResult
     func deleteMarkerAtPlayhead() -> Bool {

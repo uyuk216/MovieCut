@@ -24,7 +24,7 @@ Electron 版のコードは git タグ `electron-final` に残してある(`git 
 JSON。主なキー: width, height, fps(**数値**: 整数のレートは整数、29.97 などは小数で書く。読むときは整数・小数・"29.97"・"30000/1001" の文字列も受け、欠けていれば 60、範囲は 1〜240 に収める。以前の整数だけのファイルもそのまま読める), bg("#rrggbb"), codec("h264"|"hevc"), voicevoxUrl, aquestalkCommand,
 characters[{id,name,engine("voicevox"|"aquestalk"),speaker,voice,speed,pitch,intonation,color,imgClosed,imgOpen,x,y,scale,flip,alwaysShow}],
 tracks[{id,name,hidden?,muted?,**locked?,solo?,height?**(A6。下の「タイムライン(A6)」),clips[...]}],
-**markers[{id,time,name}]**(M7。タイムラインの目印。時刻は秒。空のときはキーごと書かない。古いファイルには無くてよい。マーカー自身の知らないキーも保持する。書き出しには影響しない)。
+**markers[{id,time,name,color?}]**(M7。タイムラインの目印。時刻は秒。空のときはキーごと書かない。古いファイルには無くてよい。マーカー自身の知らないキーも保持する。`color` は任意(下の「マーカーの色」。既定の teal のときは書かない。未知の値も残す)。書き出しには影響しない)。
 clip 共通: id,type("image"|"video"|"audio"|"text"|"voice"|"blur"),start,duration,offset,
 src,srcDuration,x,y,scale,opacity,volume,blur(px);
 text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,font; blur-region: w,h,strength,shape("rect"|"ellipse")。
@@ -237,3 +237,19 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
 - **書き出しキュー**: 上の「書き出しキュー(C-1)」を参照。テスト: `Tests/MovieCutTests/ExportQueueAppTests.swift`(偽の runner で、順番・1 件ずつ・積んだ時点の写し・待ちの取り消し・実行中の取り消し・失敗の続行・終わった件だけ消す)。
 - **素材ブラウザ**: Core `AudioLibrary`(`Sources/MovieCutCore/AudioLibrary.swift`)。拡張子は `ClipEditing.audioExtensions` と同じ(タイムラインに追加できるものだけ一覧に出す)。`scan(folder:)` はフォルダ直下だけを見て、隠しファイル・フォルダ・通常のファイルでないもの(壊れたリンク)は飛ばす。並びは `localizedStandardCompare`(track2 < track10)。長さは `AVURLAsset` で測り、音声トラックがない・開けないファイルは `duration == nil`(一覧には残すが追加・試し聴きはできない)。フォルダが無ければ空。アプリ側は `AudioLibrarySheet.swift`: フォルダは UserDefaults `audioLibrary.folder`(`AudioLibraryStore`)、試し聴きは `AudioPreviewPlayer`(AVAudioPlayer、一度に 1 つ)、「タイムラインに追加」は `addMedia(urls:at: 再生ヘッド)`(既存の素材追加と同じ経路で、1 回の Undo)。メニューは `AppMenuSpec.file` の「素材ブラウザを開く…」(ショートカットなし)。テスト: `Tests/MovieCutCoreTests/AudioLibraryTests.swift`(判定・自然順・壊れたファイル・壊れたリンク・無いフォルダ)、`Tests/MovieCutTests/AudioLibraryAppTests.swift`(フォルダの記憶・追加の位置と Undo 1 回・読めないものは追加しない)。
 - **未対応**: 素材ブラウザの同梱ライブラリ(配布条件の確認が要る)、サブフォルダの再帰、波形の表示、並べ替えの切り替え、BGM のドラッグでの追加。書き出しキューの Dock 進行バー・ファン最大化への接続。
+
+## キーボードショートカット一覧(ヘルプ ▸ キーボードショートカット一覧、2026-11-02)
+- **中身** (`Sources/MovieCut/ShortcutSheet.swift`): `ShortcutList.menuRows()` は `AppMenuSpec.all(MenuState())` のうちショートカットを持つ項目を、メニューの並び順で表にする(表示名・`MenuShortcut.display`)。ショートカットは表示状態に依らないので、既定の状態で作る。メニューにない通常キー(Space・←→・Home・End・S・⌫・Esc)は `ShortcutList.plainKeys` に固定の一覧として並べる(`KeyRouter.keyMap` と合わせる)。
+- **画面**: `ShortcutSheet.show()` は前面のウインドウにシート(無ければ単独のウインドウ)で出す。閉じるは Esc と「閉じる」。読み取り専用で、変更の入口は無い(カスタマイズは ROADMAP の「キーボードショートカットの変更」に残す)。
+- **メニュー**: ヘルプの先頭(ショートカットは持たない)。`AppMenuSpec.help` は 3 グループになった。有効・無効は、ドキュメントが無い時も書き出し中も常に有効(ヘルプと同じ扱い)。
+- **テスト**: `ShortcutSheetTests`(ショートカット付きの全項目が一覧に出る・メニューの順・表示の文字・ショートカットの無い項目は出ない・ヘルプの先頭項目・通常キーの一覧)、`MenuTests`(ヘルプの構成と有効・無効)。
+
+## マーカーの色(移動 ▸ マーカーの色、2026-11-02)
+- **保存** (`Core/Markers.swift`): `Marker.color`(任意。`MarkerColor` の raw 値。既定の `teal` と nil は書かない)。読み込みで `color` が文字列でなければ無視、未知の文字列はそのまま保持し、表示だけ既定の色にする(新しい版の色を古い版で消さない)。
+- **色**: `MarkerColor` は 8 色(ティール・赤・オレンジ・黄・緑・青・紫・グレー)。`hex` と `title` を持つ。Core に AppKit を入れないため、NSColor への変換は `TimelinePalette.markerColor(_:)` が行う。
+- **描画**: ルーラーの旗(柄と名前)と行の上の点線を、マーカーごとの色で描く。色の無いマーカーは従来どおりティール。
+- **操作**: 移動 ▸ マーカーの色 ▸ 8 色(再生位置のマーカーに効く。今の色にチェック)。ショートカットは持たない。`ProjectModel.setMarkerColorAtPlayhead` → `MarkerEditing.setColor`(1 回で Undo「マーカーの色の変更」。同じ色・無いマーカーでは何もせず履歴に載せない)。
+- **次・前のマーカー**: 移動 ▸ 次のマーカーへ / 前のマーカーへ(⌥⌘↓ / ⌥⌘↑)は、このセッションより前から実装済み(`MenuM7Tests` で移動を確認)。新しく割り当てはしない。
+- **テスト**: `MarkerColorTests`(Core: 既定は書かない・往復・古いファイル・未知の色の保持・色の変更と変化なし・パレットの重複なし)、`MarkerColorAppTests`(メニューの並び・チェック・無効・1 回の Undo・変化なしは履歴に載らない・描画の色)。`MarkerTests` の「未知のキーを残す」は `color` を既知の項目として読む形に直した。
+- **未対応**: 色の名前の変更・パレットのユーザー定義、マーカーの色でのチャプター出力、インスペクタからの色の変更(メニューだけ)。
+

@@ -1,13 +1,54 @@
 import Foundation
 
+/// マーカーの色(旗と案内線)。既定は teal。任意項目で、既定のときは書かない。
+public enum MarkerColor: String, CaseIterable, Equatable {
+    case teal, red, orange, yellow, green, blue, purple, gray
+
+    public static let `default` = MarkerColor.teal
+
+    public var title: String {
+        switch self {
+        case .teal: return "ティール"
+        case .red: return "赤"
+        case .orange: return "オレンジ"
+        case .yellow: return "黄"
+        case .green: return "緑"
+        case .blue: return "青"
+        case .purple: return "紫"
+        case .gray: return "グレー"
+        }
+    }
+
+    /// 0xRRGGBB(表示側が NSColor にする)。
+    public var hex: UInt32 {
+        switch self {
+        case .teal: return 0x3dd6c0
+        case .red: return 0xff5c5c
+        case .orange: return 0xffa13d
+        case .yellow: return 0xffd84f
+        case .green: return 0x5ccf6a
+        case .blue: return 0x4f8cff
+        case .purple: return 0xb07cff
+        case .gray: return 0x9a9eab
+        }
+    }
+
+    /// 保存された文字列を色にする。空・未知の値は既定の色(未知の値は保存されたままにする)。
+    public static func resolved(_ raw: String?) -> MarkerColor {
+        raw.flatMap { MarkerColor(rawValue: $0) } ?? .default
+    }
+}
+
 /// タイムライン上の目印(M7)。書き出しには影響しない。
 public struct Marker: Codable, Equatable, Identifiable {
     public var id: String = newId()
     public var time: Double = 0
     public var name: String = ""
+    /// 色(MarkerColor の raw 値)。nil = 既定の色。未知の値はそのまま残す(読み書きで消さない)。
+    public var color: String? = nil
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["id", "time", "name"]
+    static let knownKeys: Set<String> = ["id", "time", "name", "color"]
 
     public init() {}
     public init(time: Double, name: String) { self.time = time; self.name = name }
@@ -18,6 +59,7 @@ public struct Marker: Codable, Equatable, Identifiable {
         let t = l.double("time") ?? 0
         time = t.isFinite ? max(0, t) : 0
         name = l.string("name") ?? name
+        color = l.string("color").flatMap { $0.isEmpty ? nil : $0 }
         extra = l.extra()
     }
 
@@ -27,6 +69,7 @@ public struct Marker: Codable, Equatable, Identifiable {
         try c.encode(id, forKey: AnyKey("id"))
         try c.encode(time, forKey: AnyKey("time"))
         try c.encode(name, forKey: AnyKey("name"))
+        if let color, !color.isEmpty, color != MarkerColor.default.rawValue { try c.encode(color, forKey: AnyKey("color")) }
     }
 }
 
@@ -74,6 +117,15 @@ public enum MarkerEditing {
         guard project.markers.contains(where: { $0.id == id }) else { return nil }
         var p = project
         p.markers.removeAll { $0.id == id }
+        return p
+    }
+
+    /// マーカーの色を変える(既定の色は nil として書く)。同じ色なら変えず nil を返す。
+    public static func setColor(in project: Project, id: String, to color: MarkerColor) -> Project? {
+        guard let i = project.markers.firstIndex(where: { $0.id == id }) else { return nil }
+        guard MarkerColor.resolved(project.markers[i].color) != color else { return nil }
+        var p = project
+        p.markers[i].color = color == .default ? nil : color.rawValue
         return p
     }
 

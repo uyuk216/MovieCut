@@ -31,6 +31,8 @@ enum MenuCommand: Hashable {
     // 移動(M7)
     case goStart, goEnd, prevEdit, nextEdit, prevLine, nextLine, jumpToTime
     case addMarker, renameMarker, prevMarker, nextMarker, deleteMarker, clearMarkers, jumpToMarker(String)
+    // マーカーの色(再生位置のマーカー)
+    case markerColor(MarkerColor)
     // キーフレーム / アニメーション
     case toggleKeyframe, prevKeyframe, nextKeyframe, clearKeyframes, animationPreset(AnimationPreset)
     // トランジション(kind が nil = なし)
@@ -54,7 +56,7 @@ enum MenuCommand: Hashable {
     case previewBackground(PreviewBackground)
     // 画面のドッキング(パネルの表示と、配置のプリセット)
     case dockPanel(DockPanel), dockLayout(DockPreset)
-    case helpVoicevox, helpAquestalk, helpLicense, helpThirdParty
+    case helpShortcuts, helpVoicevox, helpAquestalk, helpLicense, helpThirdParty
 }
 
 /// メニューのショートカット(キーと修飾キー)。
@@ -168,6 +170,8 @@ struct MenuState: Equatable {
     var hasNextLine = false
     var markers: [MarkerItem] = []
     var markerAtPlayhead = false
+    /// 再生位置のマーカーの色(無ければ既定の色)。
+    var playheadMarkerColor = MarkerColor.default
     var hasPrevMarker = false
     var hasNextMarker = false
     // キーフレーム
@@ -309,6 +313,7 @@ struct MenuState: Equatable {
         hasNextLine = lastVoice > t + ClipEditing.timeEpsilon
         markers = p.markers.map { MarkerItem(id: $0.id, time: $0.time, name: $0.name) }
         markerAtPlayhead = m.markerNearPlayhead != nil
+        playheadMarkerColor = MarkerColor.resolved(m.markerNearPlayhead?.color)
         hasPrevMarker = p.markers.contains { $0.time < t - MarkerEditing.epsilon }
         hasNextMarker = p.markers.contains { $0.time > t + MarkerEditing.epsilon }
     }
@@ -574,6 +579,14 @@ enum AppMenuSpec {
     /// マーカー一覧の 1 項目の題(時刻と名前)。
     static func markerTitle(_ m: MenuState.MarkerItem) -> String { "\(timecode(m.time))  \(m.name)" }
 
+    /// 移動 ▸ マーカーの色(再生位置のマーカーに効く。ショートカットは持たない)。
+    static func markerColorItems(_ s: MenuState) -> [MenuItemSpec] {
+        MarkerColor.allCases.map { c in
+            MenuItemSpec(command: .markerColor(c), title: c.title, shortcut: nil, enabled: s.canEdit && s.markerAtPlayhead,
+                         checked: s.markerAtPlayhead && s.playheadMarkerColor == c)
+        }
+    }
+
     static func markerList(_ s: MenuState) -> [MenuItemSpec] {
         s.markers.map { MenuItemSpec(command: .jumpToMarker($0.id), title: markerTitle($0), shortcut: nil, enabled: s.canEdit, checked: nil) }
     }
@@ -747,7 +760,8 @@ enum AppMenuSpec {
     }
 
     static var help: [[MenuItemSpec]] {
-        [[MenuItemSpec(command: .helpVoicevox, title: "VOICEVOX 公式サイト", shortcut: nil, enabled: true, checked: nil),
+        [[MenuItemSpec(command: .helpShortcuts, title: "キーボードショートカット一覧", shortcut: nil, enabled: true, checked: nil)],
+         [MenuItemSpec(command: .helpVoicevox, title: "VOICEVOX 公式サイト", shortcut: nil, enabled: true, checked: nil),
           MenuItemSpec(command: .helpAquestalk, title: "AquesTalkPlayer 公式サイト", shortcut: nil, enabled: true, checked: nil)],
          [MenuItemSpec(command: .helpLicense, title: "ライセンス", shortcut: nil, enabled: true, checked: nil),
           MenuItemSpec(command: .helpThirdParty, title: "第三者の規約", shortcut: nil, enabled: true, checked: nil)]]
@@ -756,7 +770,7 @@ enum AppMenuSpec {
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
         [about, settings(s), videoSettings(s)] + file(s) + [subtitleImport(s), mediaRelink(s), subtitleExport(s), subtitleGenerate(s), transcribeSubtitles(s), chapterCopy(s), aiScript(s), aiSettings(s), aiChapters(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s)] + exportPresets(s) + exportQueueItems(s) + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), lutLoadItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + layerHeightItems(s) + playback(s)
-            + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerList(s)
+            + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerColorItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + [fullScreen(s)] + help.flatMap { $0 }
     }
@@ -773,6 +787,7 @@ enum AppMenu {
         case .fanMaxToggle: AppServices.fan.setEnabled(!AppServices.fan.enabled)
         case .fanInstall: AppServices.fan.install()
         case .fanUninstall: AppServices.fan.uninstall()
+        case .helpShortcuts: ShortcutSheet.show()
         case .helpVoicevox: openURL(DependencyStatus.voicevoxURL)
         case .helpAquestalk: openURL(DependencyStatus.aquestalkURL)
         case .helpLicense: HelpDocs.open(.license)
@@ -840,6 +855,7 @@ enum AppMenu {
             case .nextMarker: m.seekMarker(forward: true)
             case .deleteMarker: m.deleteMarkerAtPlayhead()
             case .clearMarkers: m.clearMarkers()
+            case .markerColor(let c): m.setMarkerColorAtPlayhead(c)
             case .jumpToMarker(let id): m.jumpToMarker(id: id)
             case .toggleKeyframe: m.toggleKeyframeFromMenu()
             case .prevKeyframe: m.seekKeyframe(forward: false)

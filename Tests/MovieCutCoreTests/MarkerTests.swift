@@ -43,7 +43,7 @@ final class MarkerTests: XCTestCase {
         XCTAssertEqual(p.markers[0].id, "m1")
         XCTAssertEqual(p.markers[0].time, 0, "型が違う値は既定に")
         XCTAssertEqual(p.markers[0].name, "")
-        XCTAssertEqual(p.markers[0].extra["color"], .string("#fff"))
+        XCTAssertEqual(p.markers[0].color, "#fff", "色は任意項目として読み、未知の値は残す")
         XCTAssertEqual(p.markers[1].time, 2.5)
         XCTAssertFalse(p.markers[1].id.isEmpty)
         XCTAssertNotNil(p.extra["futureKey"], "プロジェクトの知らないキーも残る")
