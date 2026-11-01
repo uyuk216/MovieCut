@@ -59,7 +59,7 @@ public enum ExportRangeEditing {
     public static func settingIn(_ p: Project, at t: Double) -> Project? {
         guard p.endTime > 0 else { return nil }
         let v = min(max(0, t), p.endTime)
-        if let o = p.rangeOut, o - v < ExportRange.minLength { return nil }
+        if let o = p.rangeOut, o <= p.endTime, o - v < ExportRange.minLength { return nil }   // 終わりより後ろの古い印は無視
         if v >= p.endTime - ExportRange.minLength { return nil }
         var q = p; q.rangeIn = v
         return q
@@ -69,7 +69,7 @@ public enum ExportRangeEditing {
     public static func settingOut(_ p: Project, at t: Double) -> Project? {
         guard p.endTime > 0 else { return nil }
         let v = min(max(0, t), p.endTime)
-        if let i = p.rangeIn, v - i < ExportRange.minLength { return nil }
+        if let i = p.rangeIn, i < p.endTime, v - i < ExportRange.minLength { return nil }
         if v < ExportRange.minLength { return nil }
         var q = p; q.rangeOut = v
         return q

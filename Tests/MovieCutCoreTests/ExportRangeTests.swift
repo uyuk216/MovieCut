@@ -20,6 +20,17 @@ final class ExportRangeTests: XCTestCase {
 
     // MARK: 範囲の計算
 
+    /// クリップを縮めたあと、プロジェクトの終わりより後ろに残った古い印が、新しい範囲の設定を邪魔しない。
+    func testStaleMarksBeyondEndDoNotBlockEditing() {
+        var p = project(duration: 4)
+        p.rangeIn = 10; p.rangeOut = 12          // 縮める前の印(いまの終わりは 4 秒)
+        XCTAssertNil(p.exportRange)
+        let q = ExportRangeEditing.settingOut(p, at: 3)
+        XCTAssertEqual(q?.rangeOut, 3)
+        let r = ExportRangeEditing.settingIn(p, at: 1)
+        XCTAssertEqual(r?.rangeIn, 1)
+    }
+
     func testResolve() {
         XCTAssertNil(ExportRange.resolve(rangeIn: nil, rangeOut: nil, endTime: 4))
         XCTAssertEqual(ExportRange.resolve(rangeIn: 1, rangeOut: 3, endTime: 4), ExportRange(start: 1, end: 3))
