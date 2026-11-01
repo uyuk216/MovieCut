@@ -61,3 +61,8 @@
 - 出力 ▸ 「書き出し中はファンを最大にする」(設定シートの「書き出し」欄にも同じチェック)。アプリ全体の設定(UserDefaults `fanMaxDuringExport`)。仕組み・安全策・ポート・手順は DESIGN.md の「書き出し中のファン最大化」と README.md を参照。
 - 実装は Core `FanControl.swift`(機種の許可リスト・FanGuard・HTTP クライアント・インストール用シェルの組み立て)、アプリ `FanService.swift`、特権ヘルパー `Sources/moviecut-fanhelper`、確認用 CLI `moviecut-cli fan status | fan test` と `export --fan-max`。
 - 未了: 署名・ノータライズ済みの配布では `SMAppService.daemon` に切り替える(いまは `NSAppleScript` の管理者権限で `/usr/local/libexec` と `/Library/LaunchDaemons` に置く暫定方式)。実際の管理者権限インストールは未検証。
+
+## 実装済み: 検索と置換(2026-11-02)
+- 編集 ▸ 検索と置換…(テロップとセリフの一括置換・一致の数・大文字小文字・選択だけ)。Undo は 1 回、セリフは音声を作り直す。詳細は `DESIGN.md` の「検索と置換」。
+
+- 実装済み: スタイルの一括適用(クリップ ▸ テキスト ▸ スタイルを一括適用。1 回の Undo。`DESIGN.md` の「スタイルの一括適用」)。プロジェクトのテンプレートは未実装(C-2 に残る)。

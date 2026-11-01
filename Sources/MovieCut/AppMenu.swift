@@ -32,13 +32,15 @@ enum MenuCommand: Hashable {
     // エフェクト
     case effectAdd(EffectKind), effectPreset(EffectPreset), effectClear, effectCopy, effectPaste, lutLoad
     // 文字(スタイルを適用 = id、文字アニメーション)
-    case textStyleApply(String), textAnim(TextAnimKind)
+    case textStyleApply(String), textStyleApplyAll(String), textAnim(TextAnimKind)
     // 速度・逆再生・フリーズフレーム
     case speed(Double), toggleReverse, freezeFrame
     // 音声(ノーマライズ・音量の段階・ボイス向けプリセット・エフェクトを外す)
     case audioNormalize, audioVolumeUp, audioVolumeDown, audioVoicePreset, audioClear
     // 無音カット(シートを開く)と、BGM の自動ダッキングの切り替え
     case silenceCut, audioDuckToggle
+    // 編集 ▸ 検索と置換(テロップとセリフの一括置換。ショートカットは持たない)
+    case findReplace
     case zoomIn, zoomOut, zoomFit
     case resolution(String), swapResolution, fps(Double), fpsCustom, codec(String), background(String)
     case fullScreen
@@ -114,6 +116,10 @@ struct MenuState: Equatable {
     var hasRange = false
     var rangeLoop = false
     var hasSelection = false
+    /// 文字クリップかボイスクリップがある(検索と置換の対象)
+    var hasTextTargets = false
+    /// 文字クリップがある(スタイルの一括適用の対象)
+    var hasTextClips = false
     /// A6: 選んでいるクリップの数 / 貼り付けられるものがある / クリップが 1 つでもある
     var selectionCount = 0
     var canPasteClips = false
@@ -223,6 +229,8 @@ struct MenuState: Equatable {
         hasRange = m.hasRangeMarks
         rangeLoop = m.rangeLoop
         hasSelection = m.selectedClip != nil
+        hasTextTargets = m.project.allClips.contains { $0.type == .text || $0.type == .voice }
+        hasTextClips = m.project.allClips.contains { $0.type == .text }
         selectionCount = m.selectedClipIDs.count
         canPasteClips = m.canPasteClips
         hasClips = !m.project.allClips.isEmpty
@@ -485,6 +493,11 @@ enum AppMenuSpec {
         }
     }
 
+    /// 編集 ▸ 検索と置換…(文字とセリフの一括置換)。⌘F は標準の検索に任せ、ショートカットは付けない。
+    static func findReplace(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .findReplace, title: "検索と置換…", shortcut: nil, enabled: s.canEdit && s.hasTextTargets, checked: nil)
+    }
+
     /// 編集メニューに残すもの(キャラクターと台本)。
     static func editAdd(_ s: MenuState) -> [MenuItemSpec] {
         [MenuItemSpec(command: .addCharacter, title: "キャラクターを追加", shortcut: cmd("c", shift: true), enabled: s.canEdit, checked: nil),
@@ -590,6 +603,11 @@ enum AppMenuSpec {
     /// クリップ ▸ テキスト ▸ スタイルを適用(組み込み → 保存したもの)。文字クリップを選んでいるときだけ使える。
     static func textStyleItems(_ s: MenuState) -> [MenuItemSpec] {
         s.textStyleChoices.map { MenuItemSpec(command: .textStyleApply($0.id), title: $0.name, shortcut: nil, enabled: s.canEdit && s.isTextClip, checked: nil) }
+    }
+
+    /// テキスト ▸ 一括適用 ▸ ○○(文字クリップすべて。複数選んでいればその分だけ)。
+    static func textStyleAllItems(_ s: MenuState) -> [MenuItemSpec] {
+        s.textStyleChoices.map { MenuItemSpec(command: .textStyleApplyAll($0.id), title: $0.name, shortcut: nil, enabled: s.canEdit && s.hasTextClips, checked: nil) }
     }
 
     /// クリップ ▸ テキスト ▸ 文字アニメーション(ラジオ)。
@@ -711,7 +729,7 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, settings(s), videoSettings(s)] + file(s) + [subtitleImport(s), mediaRelink(s), subtitleExport(s), subtitleGenerate(s), chapterCopy(s), aiScript(s), aiSettings(s), aiChapters(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + exportPresets(s) + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textAnimItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), lutLoadItem(s)] + editAdd(s) + clipboardItems(s) + layerItems(s) + layerHeightItems(s) + playback(s)
+        [about, settings(s), videoSettings(s)] + file(s) + [subtitleImport(s), mediaRelink(s), subtitleExport(s), subtitleGenerate(s), chapterCopy(s), aiScript(s), aiSettings(s), aiChapters(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + exportPresets(s) + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), lutLoadItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + layerHeightItems(s) + playback(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + [fullScreen(s)] + help.flatMap { $0 }
@@ -810,6 +828,7 @@ enum AppMenu {
             case .effectPaste: m.pasteEffectsSelected()
             case .lutLoad: m.chooseAndLoadLUT()
             case .textStyleApply(let id): m.applyTextStyleSelected(id)
+            case .textStyleApplyAll(let id): m.applyTextStyleToAll(id: id)
             case .textAnim(let k): m.setTextAnim(k)
             case .speed(let v): m.setSpeedSelected(v)
             case .toggleReverse: m.toggleReverseSelected()
@@ -821,6 +840,7 @@ enum AppMenu {
             case .audioClear: m.clearAudioFxSelected()
             case .audioDuckToggle: m.toggleDuckSelected()
             case .silenceCut: m.openSilenceSheet()
+            case .findReplace: m.openFindReplace()
             case .delete: m.deleteSelected()
             case .addText: m.addTextClip()
             case .addBlur: m.addBlurClip()

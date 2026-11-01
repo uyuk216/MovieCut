@@ -160,6 +160,8 @@ final class ProjectModel: ObservableObject {
     /// 「無音をカット…」のシートと、その対象のクリップ。
     @Published var showSilenceSheet = false
     var silenceClipId: String?
+    /// 「検索と置換…」のシート(テロップとセリフの一括置換)。
+    @Published var showFindSheet = false
     /// 名前を変えているマーカー(シートを出す)。
     @Published var renamingMarkerId: String?
     /// 左の台本欄の文字(ツールバー・メニューの「台本から音声を作る」が読む)。

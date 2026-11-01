@@ -62,6 +62,8 @@ struct AppCommands: Commands {
                 Divider()
                 items(AppMenuSpec.clipboardItems(s), run)
                 Divider()
+                MenuItemView(spec: AppMenuSpec.findReplace(s), perform: run)
+                Divider()
                 items(AppMenuSpec.editAdd(s), run)
             }
         }
@@ -104,6 +106,7 @@ struct AppCommands: Commands {
                 Divider()
                 Menu("テキスト") {
                     Menu("スタイルを適用") { items(AppMenuSpec.textStyleItems(s), run) }
+                    Menu("スタイルを一括適用") { items(AppMenuSpec.textStyleAllItems(s), run) }
                     Menu("文字アニメーション") { items(AppMenuSpec.textAnimItems(s), run) }
                 }
                 Divider()

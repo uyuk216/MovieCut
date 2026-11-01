@@ -204,3 +204,16 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
 - **テスト**: `InspectorModelTests`(追加・名前変更・差し替え・削除の Undo、変化なしの編集は履歴に載らない)、`CharacterAnimTests.testBlinkScheduleTable`(6 つの種で、間隔 3〜5 秒・閉じる 0.15 秒の境界・決定性)、`RendererTests.testBounceOffsetFollowsVoiceLevel`(無音では動かず、大音量で上へ最大 1.2% = 1080p で約 5 px。バウンスなしは音量に関係なく同じ位置)。
 - **未対応**: 口の形(あいうえお)によるリップシンク、表情の画像を口の開閉で切り替える組み合わせ(開いた口は共通の `imgOpen`)。インスペクタの画像欄のスナップショット(撮影)は未追加。
 
+
+## 検索と置換(編集 ▸ 検索と置換…、2026-11-02)
+- **純粋な計算** (`Core/TextSearch.swift`): テロップ(文字クリップ)とセリフ(ボイス)の `text` を対象にする。大文字と小文字は既定で区別しない(`caseSensitive` で切り替え)。一致は左から重ならないように数える。`matches` は一致の一覧(クリップ id・文字数での位置と長さ)、`replaceAll` は変わるクリップ(`Change`)・置換の数・ロックされたレイヤーで置かなかった数・空になるセリフの数を返す。ロックされたレイヤーは変えない。範囲は `scope`(選んだクリップの id の集合)で絞れる。
+- **モデル** (`ProjectModel+FindReplace`): `replaceAllText` は全体で 1 回の Undo(「検索と置換」)。セリフの文字が変わったものは `ScriptTimeline.regenerateVoice` で音声を作り直す(セリフの編集と同じ作り方)。1 つでも作れなければ何も変えない。何も変わらないときは Undo に載せない。
+- **画面**: `FindReplaceSheet`(検索・置換・大文字小文字・選択だけ・一致の数)。メニューは編集の中、ショートカットは無し(⌘F は標準の検索に任せる)。
+- **テスト**: `TextSearchTests`(Core)、`FindReplaceAppTests`(Undo 1 回・変化なしは登録しない・セリフの音声の作り直し・選択だけ・メニュー項目)。
+
+## スタイルの一括適用(テキスト ▸ スタイルを一括適用、2026-11-02)
+- **純粋な計算** (`Core/TextStyleBulk.swift`): 保存したスタイル(`TextLook`)を文字クリップに当てる。文字クリップだけが対象(セリフ・画像は変えない)。ロックされたレイヤーは変えず、数を `lockedSkipped` に返す。変わらないクリップは `changedIds` に入れない。
+- **モデル** (`ProjectModel+TextStyle.applyTextStyleToAll`): 全体で 1 回の Undo(「スタイルを一括適用: 名前」)。文字クリップを 2 つ以上選んでいればその選択、そうでなければ全部が対象。変わるものが無ければ何もせず 0 を返す。
+- **メニュー**: クリップ ▸ テキスト ▸ スタイルを一括適用 ▸ ○○(ショートカット無し)。
+- **テスト**: `TextStyleBulkTests`(Core: 文字だけ、選択の範囲、ロック、2 回目は変わらない)、`TextStyleBulkAppTests`(1 回の Undo、変化なしは登録しない、複数選択の範囲、メニュー項目)。
+- **未対応**: プロジェクトのテンプレート(保存・新規作成からの読み込み)は未実装。ROADMAP C-2 に残る。

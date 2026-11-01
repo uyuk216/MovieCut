@@ -97,3 +97,26 @@ extension ProjectModel {
         }, name: name, clipId: c.id)
     }
 }
+
+// MARK: スタイルの一括適用(item 7)
+extension ProjectModel {
+    /// 保存したスタイルを文字クリップに一括で当てる(全体で 1 回の Undo)。
+    /// 対象は、文字クリップを 2 つ以上選んでいればその選択、そうでなければ全部の文字クリップ。ロックされたレイヤーは変えない。
+    /// 変わるものが無ければ何もせず 0 を返す(Undo に載せない)。
+    @discardableResult
+    func applyTextStyleToAll(id: String) -> Int {
+        guard !isLocked, let s = textStyles.find(id) else { return 0 }
+        flushCoalesced()
+        let scope: Set<String>? = selectedClipIDs.count > 1 ? selectedClipIDs : nil
+        let r = TextStyleBulk.apply(s.look, to: project, scope: scope)
+        guard !r.changedIds.isEmpty else {
+            statusText = r.lockedSkipped > 0 ? "ロックされたレイヤーの文字は変えませんでした" : "変わる文字クリップがありません"
+            return 0
+        }
+        edit("スタイルを一括適用: " + s.name) { $0 = r.project }
+        var note = "\(r.changedIds.count) 個の文字クリップにスタイルを当てました"
+        if r.lockedSkipped > 0 { note += "(ロックされた \(r.lockedSkipped) 個は変えていません)" }
+        statusText = note
+        return r.changedIds.count
+    }
+}
