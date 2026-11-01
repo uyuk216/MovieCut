@@ -22,6 +22,8 @@ enum AppServices {
     @MainActor static let dock = DockProgressController(tile: NSApp?.dockTile)
     /// 書き出し中のファン最大化(設定・検出・ヘルパーのインストール)。アプリ全体で 1 つ。
     @MainActor static var fan = FanService()
+    /// 書き出しキュー(アプリ全体で 1 つ。書類を切り替えても、待っている件は続く)。
+    @MainActor static let exportQueue = ExportQueueController()
     /// 起動時の依存チェックとバナー(アプリ全体で 1 つ。閉じたらこの起動中は出さない)。
     @MainActor static let deps = DependencyNoticeCenter(checker: DependencyNoticeCenter.debugChecker() ?? { p in await DependencyStatus.check(project: p) })
 }
@@ -155,6 +157,9 @@ final class ProjectModel: ObservableObject {
     /// 「解像度を入力」「フレームレートを入力」のシート。
     @Published var showResolutionSheet = false
     @Published var showFpsSheet = false
+    /// 出力 ▸ 書き出しキューを表示… / 素材ブラウザ(ファイル ▸ 素材ブラウザを開く…)のシート。
+    @Published var showExportQueueSheet = false
+    @Published var showAudioLibrary = false
     /// 「時間を指定して移動…」のシート。
     @Published var showJumpSheet = false
     /// 「無音をカット…」のシートと、その対象のクリップ。

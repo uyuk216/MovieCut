@@ -20,6 +20,8 @@ enum MenuCommand: Hashable {
     case rangeIn, rangeOut, rangeClear, exportStill, exportSequence
     // 出力 ▸ GIFとして書き出す…(ショートカットは持たない)
     case exportGIF
+    // 出力 ▸ 書き出しキュー(今の設定の MP4 を積む / キューを表示)と、ファイル ▸ 素材ブラウザ(ショートカットは持たない)
+    case queueExport, showExportQueue, audioLibrary
     // A6: クリップのコピー / 切り取り / 貼り付け / 全選択(ショートカットは持たない: ⌘C ⌘X ⌘V ⌘A は responder chain が受ける)と、レイヤー
     case copyClips, cutClips, pasteClips, selectAllClips, layerLock, layerSolo, layerHeight(LayerHeight)
     case split, delete, addText, addBlur, addCharacter, makeVoices
@@ -373,7 +375,8 @@ enum AppMenuSpec {
     }
 
     static func file(_ s: MenuState) -> [MenuItemSpec] {
-        [MenuItemSpec(command: .addMedia, title: "素材を追加…", shortcut: cmd("i"), enabled: s.canEdit, checked: nil)]
+        [MenuItemSpec(command: .addMedia, title: "素材を追加…", shortcut: cmd("i"), enabled: s.canEdit, checked: nil),
+         MenuItemSpec(command: .audioLibrary, title: "素材ブラウザを開く…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "BGM・効果音のフォルダ")]
     }
 
     /// ファイル ▸ 字幕を読み込む…(ショートカットは持たない)。
@@ -440,6 +443,12 @@ enum AppMenuSpec {
     /// 出力 ▸ GIFとして書き出す…(保存パネルで fps・幅・範囲を決める。ショートカットは持たない)。
     static func gifExport(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .exportGIF, title: "GIFとして書き出す…", shortcut: nil, enabled: s.canEdit && s.canExport, checked: nil, hint: "アニメーション GIF")
+    }
+
+    /// 出力 ▸ 書き出しキューに追加… / 書き出しキューを表示…(ショートカットは持たない)。
+    static func exportQueueItems(_ s: MenuState) -> [MenuItemSpec] {
+        [MenuItemSpec(command: .queueExport, title: "書き出しキューに追加…", shortcut: nil, enabled: s.canEdit && s.canExport, checked: nil, hint: "今の設定で MP4"),
+         MenuItemSpec(command: .showExportQueue, title: "書き出しキューを表示…", shortcut: nil, enabled: s.canEdit, checked: nil)]
     }
 
     static func exportPresets(_ s: MenuState) -> [MenuItemSpec] {
@@ -746,7 +755,7 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, settings(s), videoSettings(s)] + file(s) + [subtitleImport(s), mediaRelink(s), subtitleExport(s), subtitleGenerate(s), transcribeSubtitles(s), chapterCopy(s), aiScript(s), aiSettings(s), aiChapters(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s)] + exportPresets(s) + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), lutLoadItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + layerHeightItems(s) + playback(s)
+        [about, settings(s), videoSettings(s)] + file(s) + [subtitleImport(s), mediaRelink(s), subtitleExport(s), subtitleGenerate(s), transcribeSubtitles(s), chapterCopy(s), aiScript(s), aiSettings(s), aiChapters(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s)] + exportPresets(s) + exportQueueItems(s) + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), lutLoadItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + layerHeightItems(s) + playback(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + [fullScreen(s)] + help.flatMap { $0 }
@@ -797,6 +806,9 @@ enum AppMenu {
             case .exportStill: m.chooseAndExportStill()
             case .exportSequence: m.chooseAndExportSequence()
             case .exportGIF: m.chooseAndExportGIF()
+            case .queueExport: m.chooseAndQueueExport()
+            case .showExportQueue: m.showExportQueueSheet = true
+            case .audioLibrary: m.showAudioLibrary = true
             case .split: m.splitSelected()
             case .duplicate: m.duplicateSelected()
             case .rippleDelete: m.rippleDeleteSelected()
