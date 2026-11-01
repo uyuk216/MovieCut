@@ -28,6 +28,9 @@ public struct ClipMask: Codable, Equatable, Sendable {
     static func clampUnit(_ v: Double) -> Double { v.isFinite ? min(max(v, 0), 1) : 0 }
 
     enum CodingKeys: String, CodingKey { case shape, x, y, w, h, feather, invert }
+    /// 知らないキー(新しい版が書いた項目)。そのまま書き戻す。
+    public var extra: [String: JSONValue] = [:]
+    static let knownKeys: Set<String> = ["shape", "x", "y", "w", "h", "feather", "invert"]
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -39,18 +42,20 @@ public struct ClipMask: Codable, Equatable, Sendable {
                   h: (try? c.decodeIfPresent(Double.self, forKey: .h)) ?? d.h,
                   feather: (try? c.decodeIfPresent(Double.self, forKey: .feather)) ?? d.feather,
                   invert: (try? c.decodeIfPresent(Bool.self, forKey: .invert)) ?? d.invert)
+        extra = Lenient(c: try decoder.container(keyedBy: AnyKey.self), known: Self.knownKeys).extra()
     }
 
     /// 既定値の羽根・反転は書かない。
     public func encode(to encoder: Encoder) throws {
-        var c = encoder.container(keyedBy: CodingKeys.self)
-        try c.encode(shape, forKey: .shape)
-        try c.encode(x, forKey: .x)
-        try c.encode(y, forKey: .y)
-        try c.encode(w, forKey: .w)
-        try c.encode(h, forKey: .h)
-        if feather > 0 { try c.encode(feather, forKey: .feather) }
-        if invert { try c.encode(true, forKey: .invert) }
+        var c = encoder.container(keyedBy: AnyKey.self)
+        for (k, v) in extra { try c.encode(v, forKey: AnyKey(k)) }
+        try c.encode(shape, forKey: AnyKey("shape"))
+        try c.encode(x, forKey: AnyKey("x"))
+        try c.encode(y, forKey: AnyKey("y"))
+        try c.encode(w, forKey: AnyKey("w"))
+        try c.encode(h, forKey: AnyKey("h"))
+        if feather > 0 { try c.encode(feather, forKey: AnyKey("feather")) }
+        if invert { try c.encode(true, forKey: AnyKey("invert")) }
     }
 }
 

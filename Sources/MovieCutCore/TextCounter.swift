@@ -12,10 +12,28 @@ public struct TextCounter: Codable, Equatable, Sendable {
     public var to: Double
     public var format: String
 
+    /// 知らないキー(新しい版が書いた項目)。そのまま書き戻す。
+    public var extra: [String: JSONValue] = [:]
+    static let knownKeys: Set<String> = ["from", "to", "format"]
+
     public init(from: Double = 10, to: Double = 0, format: String = TextCounter.defaultFormat) {
         self.from = max(0, from)
         self.to = max(0, to)
         self.format = Self.formats.contains(format) ? format : Self.defaultFormat
+    }
+
+    public init(from decoder: Decoder) throws {
+        let l = Lenient(c: try decoder.container(keyedBy: AnyKey.self), known: Self.knownKeys)
+        self.init(from: l.double("from") ?? 10, to: l.double("to") ?? 0, format: l.string("format") ?? Self.defaultFormat)
+        extra = l.extra()
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: AnyKey.self)
+        for (k, v) in extra { try c.encode(v, forKey: AnyKey(k)) }
+        try c.encode(from, forKey: AnyKey("from"))
+        try c.encode(to, forKey: AnyKey("to"))
+        try c.encode(format, forKey: AnyKey("format"))
     }
 
     /// クリップの頭からの秒 `rel` のときの数(`duration` で `from` → `to` へ直線)。範囲の外は端に留める。

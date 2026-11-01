@@ -55,8 +55,32 @@ public struct Figure: Codable, Equatable, Sendable {
     /// 角丸(四角形だけ。短い辺に対する割合 0〜0.5)。
     public var corner: Double?
 
+    /// 知らないキー(新しい版が書いた項目)。そのまま書き戻す。
+    public var extra: [String: JSONValue] = [:]
+    static let knownKeys: Set<String> = ["kind", "fill", "stroke", "strokeWidth", "corner"]
+
     public init(kind: String? = nil, fill: String? = nil, stroke: String? = nil, strokeWidth: Double? = nil, corner: Double? = nil) {
         self.kind = kind; self.fill = fill; self.stroke = stroke; self.strokeWidth = strokeWidth; self.corner = corner
+    }
+
+    public init(from decoder: Decoder) throws {
+        let l = Lenient(c: try decoder.container(keyedBy: AnyKey.self), known: Self.knownKeys)
+        kind = l.string("kind")
+        fill = l.string("fill")
+        stroke = l.string("stroke")
+        strokeWidth = l.double("strokeWidth")
+        corner = l.double("corner")
+        extra = l.extra()
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: AnyKey.self)
+        for (k, v) in extra { try c.encode(v, forKey: AnyKey(k)) }
+        try c.encodeIfPresent(kind, forKey: AnyKey("kind"))
+        try c.encodeIfPresent(fill, forKey: AnyKey("fill"))
+        try c.encodeIfPresent(stroke, forKey: AnyKey("stroke"))
+        try c.encodeIfPresent(strokeWidth, forKey: AnyKey("strokeWidth"))
+        try c.encodeIfPresent(corner, forKey: AnyKey("corner"))
     }
 
     public var figureKind: FigureKind { FigureKind(rawValue: kind ?? "") ?? .rect }
@@ -79,7 +103,7 @@ public struct Figure: Codable, Equatable, Sendable {
         if f.stroke == Self.noneColor { f.stroke = nil }
         if f.strokeWidth == (figureKind.isStrokeOnly ? Self.defaultStrokeOnlyWidth : 0) { f.strokeWidth = nil }
         if f.corner == 0 { f.corner = nil }
-        let empty = f.kind == nil && f.fill == nil && f.stroke == nil && f.strokeWidth == nil && f.corner == nil
+        let empty = f.kind == nil && f.fill == nil && f.stroke == nil && f.strokeWidth == nil && f.corner == nil && f.extra.isEmpty
         return empty ? nil : f
     }
 }

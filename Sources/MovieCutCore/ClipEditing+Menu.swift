@@ -27,7 +27,7 @@ extension ClipEditing {
         let end = copy.start + copy.duration
         if isFree(p.tracks[loc.track], start: copy.start, end: end) {
             p.tracks[loc.track].clips.insert(copy, at: loc.index + 1)
-        } else if let ti = p.tracks.indices.first(where: { isFree(p.tracks[$0], start: copy.start, end: end) }) {
+        } else if let ti = p.tracks.indices.first(where: { !p.tracks[$0].isLocked && isFree(p.tracks[$0], start: copy.start, end: end) }) {
             p.tracks[ti].clips.append(copy)
         } else {
             var t = Track(name: "レイヤー\(p.tracks.count + 1)")
