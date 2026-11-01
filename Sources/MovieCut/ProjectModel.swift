@@ -211,6 +211,8 @@ final class ProjectModel: ObservableObject {
     var voiceProviderFactory: (Project) -> VoiceProvider = { RealVoiceProvider(project: $0, engine: AppServices.engine) }
     /// タイムラインの「全体表示」(タイムラインのビューが差し込む)。
     var onFitTimeline: () -> Void = {}
+    /// 表示 ▸ 選択クリップにズーム(キャンバスが実装する)。
+    var onZoomSelection: () -> Void = {}
     /// プレビューの状態(検証用)。
     var previewFrameCount = 0
     var previewIdle = false

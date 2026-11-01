@@ -94,6 +94,7 @@ struct TimelineRepresentable: NSViewRepresentable {
         v.model = model
         if ProcessInfo.processInfo.environment["MC_NOCANVAS"] != nil { v.isHidden = true }
         model.onFitTimeline = { [weak v] in v?.fitToWindow() }
+        model.onZoomSelection = { [weak v] in v?.zoomToSelection() }
         v.apply(state)
         return v
     }
@@ -500,6 +501,19 @@ final class TimelineCanvas: NSView {
         let np = TimelineLayout.fitPps(visibleWidth: bounds.width - TimelineLayout.headerWidth, projectEnd: end)
         geometry.scrollX = 0
         if abs(np - geometry.pps) > 1e-9 { geometry.pps = np; model?.pps = np }
+        clampScroll()
+        needsDisplay = true
+    }
+
+    /// 表示 ▸ 選択クリップにズーム: 選んだクリップの全体が見える拡大率にして、その頭へ横スクロールする。
+    func zoomToSelection() {
+        guard let m = model else { return }
+        let ids = m.selectedClipIDs
+        let clips = m.project.allClips.filter { ids.contains($0.id) }
+        guard let lo = clips.map(\.start).min(), let hi = clips.map({ $0.start + $0.duration }).max() else { return }
+        let np = TimelineLayout.zoomPps(visibleWidth: bounds.width - TimelineLayout.headerWidth, span: hi - lo)
+        geometry.pps = np; m.pps = np
+        geometry.scrollX = CGFloat(lo * np) - 24
         clampScroll()
         needsDisplay = true
     }

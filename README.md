@@ -22,6 +22,7 @@ Scripts/make-app.sh dmg          # build/MovieCut-0.2.0-arm64.dmg も作る
 swift test
 ```
 VOICEVOX / AquesTalkPlayer が入っていれば、実エンジンのテストも動きます(無ければ skip)。
+2026-11-02(カラオケ字幕・スタンプ・1 コマ移動の後): XCTest は合計 1017 件、失敗 0(2 回実行)。
 2026-11-02(図形・ビート・ガイド線・サムネイルの後): XCTest は Core 974・App 473 件、失敗 0(2 回実行)。
 2026-11-02(複合クリップ・手ぶれ補正の強さと背景解析の後): XCTest は Core 860・App 455 件、失敗 0(2 回実行)。書類の読み込みは `ProjectFuzzTests`(フィクスチャを固定シードで壊して、クラッシュしないことと未知のキーの往復を確認)。
 ヘッドレスの確認には `swift run moviecut-cli deps`、`moviecut-cli smoke --out x.mp4 --blur` などが使えます。

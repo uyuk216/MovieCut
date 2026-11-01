@@ -365,9 +365,17 @@ public struct Renderer {
             if c.bubble != nil { drawBubble(c, x: pose.x * W, y: pose.y * H, scale: pose.scale, W: W, H: H, ctx: ctx) }
             // 位置・拡大・回転が動く文字は、位置ごとにキャッシュしても使い回せないので直接描く
             let geometryAnimated = c.hasKeyframes && ["x", "y", "scale", "rotation"].contains { Animation.isAnimated($0, in: c) }
+            // カラオケ字幕: 話している部分(先頭から)を色を変えて重ね描きする。終わったあとは全部その色。
+            let hlVisible = style?.highlight.map { min(KaraokeMath.coloredCount(text: shown, highlight: $0, rel: t - c.start, duration: c.duration), visible ?? Int.max) }
+            let hlStyle = Renderer.highlightPassStyle(style)
             if pose.isPlain(c) {
+                let plainCacheable = !geometryAnimated && !pose.transitionMoves && !animating && (pose.opacity >= 1 || blurred)
                 drawText(shown, x: pose.x * W, y: pose.y * H, size: size, color: c.colorOrDefault, font: c.fontOrDefault, outline: c.outlineOrDefault, ctx: ctx,
-                         cacheable: !geometryAnimated && !pose.transitionMoves && !animating && (pose.opacity >= 1 || blurred), style: style, visible: visible)
+                         cacheable: plainCacheable, style: style, visible: visible)
+                if let n = hlVisible, n > 0, let hl = style?.highlight {
+                    drawText(shown, x: pose.x * W, y: pose.y * H, size: size, color: hl.colorOrDefault, font: c.fontOrDefault, outline: c.outlineOrDefault, ctx: ctx,
+                             cacheable: plainCacheable, style: hlStyle, visible: n)
+                }
             } else {
                 ctx.saveGState()
                 pose.concat(c, ctx: ctx, W: W, H: H)
@@ -381,11 +389,21 @@ public struct Renderer {
                     oy = -(crop.t - crop.b) / 2 * box.height
                 }
                 drawText(shown, x: ox, y: oy, size: size, color: c.colorOrDefault, font: c.fontOrDefault, outline: c.outlineOrDefault, ctx: ctx, cacheable: false, style: style, visible: visible)
+                if let n = hlVisible, n > 0, let hl = style?.highlight {
+                    drawText(shown, x: ox, y: oy, size: size, color: hl.colorOrDefault, font: c.fontOrDefault, outline: c.outlineOrDefault, ctx: ctx, cacheable: false, style: hlStyle, visible: n)
+                }
                 ctx.restoreGState()
             }
         default:
             break
         }
+    }
+
+    /// カラオケの色つけの重ね描き用の装飾。字形と字間に関わる項目だけ残し、影・箱・グラデーションは最初の描きに任せる(二重に濃くしない)。
+    static func highlightPassStyle(_ s: TextStyle?) -> TextStyle? {
+        guard var st = s else { return nil }
+        st.shadow = nil; st.box = nil; st.gradient = nil; st.highlight = nil
+        return st
     }
 
     /// 等倍・整数位置でない画像の不透明度つき描画: 枠の範囲だけの透明なビットマップに不透明で描いてから、直接重ねる(CoreGraphics の不透明度つき汎用経路より速い)。
@@ -689,11 +707,29 @@ public struct Renderer {
                     continue
                 }
             }
+            // 絵文字は輪郭が取れない(カラー字形)ので、CoreText で字形どおりに描く
+            if line.path.isEmpty, shown.unicodeScalars.contains(where: { $0.properties.isEmojiPresentation }) {
+                Renderer.drawColorGlyphs(shown, f: f, spacing: spacing, italic: italic, x: ox, baseline: baseline, ctx: ctx)
+                continue
+            }
             ctx.saveGState()
             ctx.translateBy(x: CGFloat(ox), y: CGFloat(baseline))
             Renderer.paintLine(line, f, size: size, fill: fillC, outline: outC, ctx: ctx)
             ctx.restoreGState()
         }
+    }
+
+    /// 字形の輪郭が無い文字(絵文字)を、CoreText で直接描く。ctx は y 下向きなので、文字の行列を上下反転して合わせる。
+    static func drawColorGlyphs(_ text: String, f: TextFont, spacing: Double, italic: Bool, x: Double, baseline: Double, ctx: CGContext) {
+        let attr = NSAttributedString(string: text, attributes: [NSAttributedString.Key(kCTFontAttributeName as String): f.ct,
+                                                                 NSAttributedString.Key(kCTKernAttributeName as String): spacing])
+        let line = CTLineCreateWithAttributedString(attr)
+        ctx.saveGState()
+        ctx.translateBy(x: CGFloat(x), y: CGFloat(baseline))
+        ctx.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
+        ctx.textPosition = .zero
+        CTLineDraw(line, ctx)
+        ctx.restoreGState()
     }
 
     /// 原点(基準線の左端)に移動済みの ctx(左上原点)へ 1 行を描く。

@@ -41,6 +41,12 @@ enum TimelineLayout {
         return clampPps(Double(visibleWidth) / secs)
     }
 
+    /// 選択の長さ `span` 秒が、見える幅 `visibleWidth` の 9 割に収まる拡大率(範囲内に収める)。
+    static func zoomPps(visibleWidth: CGFloat, span: Double) -> Double {
+        guard visibleWidth > 0, span.isFinite, span > 0 else { return defaultPps }
+        return clampPps(Double(visibleWidth) * 0.9 / span)
+    }
+
     /// 目盛りのラベル。1 秒以上の刻みは "mm:ss"、それ未満は "mm:ss.f"。
     static func tickLabel(seconds s: Double, step: Double) -> String {
         if step >= 1 {

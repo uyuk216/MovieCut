@@ -35,6 +35,8 @@ enum MenuCommand: Hashable {
     case split, delete, addText, addBlur, addAdjustment, addVisualizer, addQRCode, addCharacter, makeVoices
     // 図形(クリップ ▸ 図形を追加 ▸ 種類。ショートカットは持たない)
     case addShape(FigureKind)
+    // スタンプ(クリップ ▸ スタンプを追加 ▸ 絵文字。ショートカットは持たない)
+    case addStamp(String)
     // クリップ(M7)
     case duplicate, rippleDelete, trimBefore, trimAfter, prevClip, nextClip, moveLayerUp, moveLayerDown, addLayer, regenerateVoice
     case playPause, toStart, stepBack, stepForward
@@ -71,7 +73,9 @@ enum MenuCommand: Hashable {
     case compoundGroup, compoundUngroup
     // 編集 ▸ 検索と置換(テロップとセリフの一括置換。ショートカットは持たない)
     case findReplace
-    case zoomIn, zoomOut, zoomFit
+    case zoomIn, zoomOut, zoomFit, zoomSelection
+    // クリップ ▸ 1 コマ前へ / 後ろへ(ショートカットは持たない: ⌥← は文字欄の単語移動と競合するため)
+    case nudgeEarlier, nudgeLater
     case resolution(String), swapResolution, fps(Double), fpsCustom, codec(String), background(String)
     case fullScreen
     // プロキシ編集(表示 ▸ プロキシで編集 は設定の切り替え、出力 ▸ プロキシを作成 はショートカットなし)
@@ -577,6 +581,13 @@ enum AppMenuSpec {
         }
     }
 
+    /// クリップ ▸ スタンプを追加 ▸ 組み込みの 24 種(ショートカットは持たない)。
+    static func stampItems(_ s: MenuState) -> [MenuItemSpec] {
+        StampCatalog.items.map {
+            MenuItemSpec(command: .addStamp($0.emoji), title: "\($0.emoji) \($0.title)", shortcut: nil, enabled: s.canEdit, checked: nil)
+        }
+    }
+
     /// クリップ ▸ AIで画像を作る…(ローカルのコマンドが画像を書く。送る前に内容を確認。ショートカットは持たない)
     static func aiImage(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .aiImage, title: "AIで画像を作る…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "ローカルのコマンド")
@@ -588,6 +599,8 @@ enum AppMenuSpec {
          MenuItemSpec(command: .duplicate, title: "クリップを複製", shortcut: cmd("d"), enabled: s.canEdit && s.hasSelection, checked: nil),
          MenuItemSpec(command: .delete, title: "クリップを削除", shortcut: nil, enabled: s.canEdit && s.hasSelection, checked: nil, hint: "⌫"),
          MenuItemSpec(command: .rippleDelete, title: "すき間を詰めて削除", shortcut: MenuShortcut(key: .delete, modifiers: [.option, .command]), enabled: s.canEdit && s.hasSelection, checked: nil),
+         MenuItemSpec(command: .nudgeEarlier, title: "1 コマ前へ動かす", shortcut: nil, enabled: s.canEdit && s.hasSelection, checked: nil),
+         MenuItemSpec(command: .nudgeLater, title: "1 コマ後ろへ動かす", shortcut: nil, enabled: s.canEdit && s.hasSelection, checked: nil),
          MenuItemSpec(command: .stabilizeToggle, title: "手ぶれ補正（映像を滑らかにする）", shortcut: nil, enabled: s.canEdit && s.canStabilize, checked: s.canStabilize ? s.isStabilized : nil),
          MenuItemSpec(command: .autoReframe, title: "縦動画に自動リフレーム", shortcut: nil, enabled: s.canEdit && s.canAutoReframe, checked: nil),
          MenuItemSpec(command: .motionTrack, title: "動きに追従させる", shortcut: nil, enabled: s.canEdit && s.canMotionTrack, checked: nil),
@@ -838,7 +851,8 @@ enum AppMenuSpec {
     static func zoom(_ s: MenuState) -> [MenuItemSpec] {
         [MenuItemSpec(command: .zoomIn, title: "タイムラインを拡大", shortcut: cmd("+"), enabled: s.canEdit, checked: nil),
          MenuItemSpec(command: .zoomOut, title: "タイムラインを縮小", shortcut: cmd("-"), enabled: s.canEdit, checked: nil),
-         MenuItemSpec(command: .zoomFit, title: "全体表示", shortcut: cmd("0"), enabled: s.canEdit, checked: nil)]
+         MenuItemSpec(command: .zoomFit, title: "タイムラインを全体表示", shortcut: cmd("0"), enabled: s.canEdit, checked: nil),
+         MenuItemSpec(command: .zoomSelection, title: "選択クリップにズーム", shortcut: nil, enabled: s.canEdit && s.hasSelection, checked: nil)]
     }
 
     /// 解像度のラジオ(定番のサイズ)。今のサイズに ✓。
@@ -1077,6 +1091,7 @@ enum AppMenu {
             case .addAdjustment: m.addAdjustmentClip()
             case .addVisualizer: m.addVisualizerClip()
             case .addShape(let k): m.addShapeClip(kind: k)
+            case .addStamp(let e): m.addStampClip(emoji: e)
             case .addQRCode: m.openAddQRCode()
             case .addCharacter: m.addCharacter()
             case .makeVoices: Task { await m.generateVoicesFromScript() }
@@ -1087,6 +1102,9 @@ enum AppMenu {
             case .zoomIn: m.zoomTimeline(by: zoomStep)
             case .zoomOut: m.zoomTimeline(by: 1 / zoomStep)
             case .zoomFit: m.onFitTimeline()
+            case .zoomSelection: m.onZoomSelection()
+            case .nudgeEarlier: m.nudgeSelectedClips(frames: -1)
+            case .nudgeLater: m.nudgeSelectedClips(frames: 1)
             case .resolution(let key): m.selectResolution(key)
             case .swapResolution: m.swapResolution()
             case .fps(let f): m.setFps(f)

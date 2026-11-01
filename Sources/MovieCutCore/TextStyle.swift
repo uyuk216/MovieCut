@@ -112,9 +112,11 @@ public struct TextStyle: Codable, Equatable, Sendable {
     public var bold: Bool?
     /// 斜体(斜めに傾ける)。未設定 = しない。
     public var italic: Bool?
+    /// カラオケ字幕(話している部分の色つけ)。未設定 = しない。文字クリップの装飾の一部なので、保存したスタイルにも入る。
+    public var highlight: Highlight?
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["shadow", "box", "gradient", "letterSpacing", "lineHeight", "align", "bold", "italic"]
+    static let knownKeys: Set<String> = ["shadow", "box", "gradient", "letterSpacing", "lineHeight", "align", "bold", "italic", "highlight"]
     public static let defaultLineHeight = 1.2
 
     public init() {}
@@ -129,9 +131,10 @@ public struct TextStyle: Codable, Equatable, Sendable {
         shadow = l.value("shadow"); box = l.value("box"); gradient = l.value("gradient")
         letterSpacing = l.double("letterSpacing"); lineHeight = l.double("lineHeight"); align = l.string("align")
         bold = l.bool("bold"); italic = l.bool("italic")
+        highlight = l.value("highlight")
         extra = l.extra()
         // 読めなかった項目は捨てずに、そのまま書き戻す
-        for key in ["shadow", "box", "gradient", "letterSpacing", "lineHeight", "align", "bold", "italic"] {
+        for key in ["shadow", "box", "gradient", "letterSpacing", "lineHeight", "align", "bold", "italic", "highlight"] {
             guard let raw: JSONValue = l.value(key), raw != .null else { continue }
             let ok: Bool
             switch key {
@@ -142,6 +145,7 @@ public struct TextStyle: Codable, Equatable, Sendable {
             case "lineHeight": ok = lineHeight != nil
             case "align": ok = align != nil
             case "bold": ok = bold != nil
+            case "highlight": ok = highlight != nil
             default: ok = italic != nil
             }
             if !ok { extra[key] = raw }
@@ -159,11 +163,12 @@ public struct TextStyle: Codable, Equatable, Sendable {
         try c.encodeIfPresent(align, forKey: AnyKey("align"))
         try c.encodeIfPresent(bold, forKey: AnyKey("bold"))
         try c.encodeIfPresent(italic, forKey: AnyKey("italic"))
+        try c.encodeIfPresent(highlight, forKey: AnyKey("highlight"))
     }
 
     /// 何も設定していない(知らない項目も無い)。
     public var isEmpty: Bool {
-        shadow == nil && box == nil && gradient == nil && letterSpacing == nil && lineHeight == nil && align == nil && bold == nil && italic == nil && extra.isEmpty
+        shadow == nil && box == nil && gradient == nil && letterSpacing == nil && lineHeight == nil && align == nil && bold == nil && italic == nil && highlight == nil && extra.isEmpty
     }
 
     public var letterSpacingOrDefault: Double { Self.clamp(letterSpacing ?? 0, -50...200, 0) }
@@ -192,6 +197,7 @@ public struct TextStyle: Codable, Equatable, Sendable {
         if let v = letterSpacing { s.letterSpacing = Self.clamp(v, -50...200, 0) }
         if let v = lineHeight { s.lineHeight = Self.clamp(v, 0.6...3, Self.defaultLineHeight) }
         if let a = align, Align(rawValue: a) == nil { s.align = nil }
+        s.highlight = highlight?.normalized
         return s
     }
 

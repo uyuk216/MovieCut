@@ -43,19 +43,19 @@ final class MenuM7Tests: XCTestCase {
         let groups = AppMenuSpec.clipMenu(s)
         XCTAssertEqual(groups.map { $0.map(\.title) }, [
             ["テキストを追加", "ぼかし範囲を追加", "調整レイヤーを追加", "音声ビジュアライザを追加", "QRコードを追加…", "AIで画像を作る…"],
-            ["クリップを分割", "クリップを複製", "クリップを削除", "すき間を詰めて削除", "手ぶれ補正（映像を滑らかにする）", "縦動画に自動リフレーム", "動きに追従させる", "複合クリップにまとめる", "複合クリップを解除"],
+            ["クリップを分割", "クリップを複製", "クリップを削除", "すき間を詰めて削除", "1 コマ前へ動かす", "1 コマ後ろへ動かす", "手ぶれ補正（映像を滑らかにする）", "縦動画に自動リフレーム", "動きに追従させる", "複合クリップにまとめる", "複合クリップを解除"],
             ["再生位置より前を切り落とす", "再生位置より後ろを切り落とす"],
             ["前のクリップを選択", "次のクリップを選択", "選択クリップを上のレイヤーへ", "選択クリップを下のレイヤーへ"],
             ["レイヤーを追加", "選択クリップの音声を作り直す", "AIでセリフを直す…"],
         ])
         XCTAssertEqual(groups.map { $0.map(\.shortcut) }, [
             [sc("t", [.command, .shift]), sc("b", [.command, .shift]), nil, nil, nil, nil],
-            [nil, sc("d", .command), nil, sc(.delete, [.option, .command]), nil, nil, nil, nil, nil],
+            [nil, sc("d", .command), nil, sc(.delete, [.option, .command]), nil, nil, nil, nil, nil, nil, nil],
             [sc("[", [.option, .command]), sc("]", [.option, .command])],
             [sc("[", .command), sc("]", .command), sc("[", [.shift, .command]), sc("]", [.shift, .command])],
             [sc("l", [.command, .shift]), sc("r", [.command, .option]), nil],
         ])
-        XCTAssertEqual(groups[1].map(\.hint), ["S", nil, "⌫", nil, nil, nil, nil, nil, nil], "分割・削除は通常キー(KeyRouter)なのでヒントだけ")
+        XCTAssertEqual(groups[1].map(\.hint), ["S", nil, "⌫", nil, nil, nil, nil, nil, nil, nil, nil], "分割・削除は通常キー(KeyRouter)なのでヒントだけ")
     }
 
     func testMoveMenuLayoutAndAccelerators() {

@@ -177,6 +177,23 @@ struct TextStyleInspector: View {
             }
             .padding(.leading, 10)
         }
+        // カラオケ字幕(文字クリップだけ。話している部分の色を、クリップの時間で増やす)
+        if c.type == .text {
+            toggle("カラオケ字幕（話した部分の色を変える）", isOn: st.highlight != nil, name: "カラオケ字幕の変更") { $0.highlight = $1 ? Highlight() : nil }
+            if let h = st.highlight {
+                VStack(alignment: .leading, spacing: 6) {
+                    color("色", hex: h.colorOrDefault, name: "カラオケの色の変更") { $0.highlight?.color = $1 }
+                    InspectorField(label: "単位") {
+                        Picker("", selection: Binding(get: { h.isWordMode ? "word" : "char" }, set: { v in edit("カラオケの単位の変更") { $0.highlight?.mode = v } })) {
+                            Text("1 文字").tag("char"); Text("単語").tag("word")
+                        }
+                        .pickerStyle(.segmented).labelsHidden()
+                    }
+                }
+                .padding(.leading, 10)
+                .disabled(model.isLocked)
+            }
+        }
         // 箱
         toggle("文字の後ろに箱", isOn: st.box != nil, name: "箱の変更") { $0.box = $1 ? TextStyle.Box() : nil }
         if let b = st.box {

@@ -111,6 +111,23 @@ extension ProjectModel {
         return c.id
     }
 
+    /// クリップ ▸ 1 コマ前へ / 後ろへ動かす: 選んでいるクリップを動かす。1 回で元に戻せる。動かせなければ何もしない。
+    @discardableResult
+    func nudgeSelectedClips(frames: Int) -> Bool {
+        guard !isLocked, let p = ClipNudge.nudge(in: project, clipIds: selectedClipIDs, frames: frames) else { return false }
+        return edit(frames < 0 ? "1 コマ前へ動かす" : "1 コマ後ろへ動かす") { $0 = p }
+    }
+
+    /// 「スタンプを追加」(メニュー ▸ クリップ ▸ スタンプを追加): 一番上のレイヤーの再生ヘッド位置に 3 秒のスタンプを足して選択する。
+    @discardableResult
+    func addStampClip(emoji: String) -> String? {
+        guard !isLocked, StampCatalog.isStamp(emoji) else { return nil }
+        let c = ClipEditing.makeStampClip(emoji, at: currentTime)
+        edit("スタンプの追加") { ClipEditing.appendToTopLayer(c, in: &$0) }
+        selectedClipId = c.id
+        return c.id
+    }
+
     /// 「素材を追加」: ファイルを選ぶパネルを出して、選んだものを置く。
     func chooseAndAddMedia() {
         guard !isLocked else { return }
