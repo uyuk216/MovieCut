@@ -138,6 +138,10 @@ final class PlaybackController {
     /// ミックスを作り直した回数(検証用)。
     private(set) var rebuildCount = 0
     private(set) var lastMixError: String?
+    /// J/K/L シャトルの速度段。停止・通常再生(1 倍)以外のときは音を出さず、時刻だけを速さに合わせて進める。
+    private(set) var shuttleState = ShuttleState.stopped
+    private var shuttling = false
+    private var shuttleClock = 0.0
 
     private var startT = 0.0, clockStart = 0.0, lastT = 0.0
     private var scrubbing = false
@@ -181,6 +185,7 @@ final class PlaybackController {
     func play() {
         guard let model, !isPlaying, !isPreparing, !model.isLocked else { return }
         armed = true
+        shuttleState = .normal
         let end = model.project.endTime
         guard end > 0 else { return }
         if let r = model.activeLoopRange {
@@ -214,6 +219,39 @@ final class PlaybackController {
 
     /// ⏮: 先頭へ(鳴っていれば先頭から鳴らし直す)。
     func goToStart() { seek(to: 0) }
+
+    /// J(step -1)/ L(step 1): 速さを一段動かす。停止からの J は逆 1 倍、L は順 1 倍(音あり)。
+    func shuttle(by step: Int) {
+        guard let model, !isPreparing, !model.isLocked, model.project.endTime > 0 else { return }
+        applyShuttle(shuttleState.moved(by: step), model: model)
+    }
+
+    /// K: 停止。
+    func shuttleStop() { pause() }
+
+    private func applyShuttle(_ next: ShuttleState, model: ProjectModel) {
+        if next.isStopped { pause(); return }
+        if next.speed == 1 {
+            // 順 1 倍は通常の再生(音あり)
+            if isPlaying {
+                if shuttling { shuttling = false; shuttleState = .normal; restartAudio(at: model.currentTime) }
+            } else {
+                play()
+            }
+            return
+        }
+        // 2 倍以上・逆再生は音を止めて、時刻だけを進める
+        if isPlaying && !shuttling { backend.pause() }
+        if !isPlaying {
+            model.assets.beginExportMode()
+            isPlaying = true
+            scrubbing = false
+            startTicking()
+        }
+        shuttleState = next
+        shuttling = true
+        shuttleClock = clock.now()
+    }
 
     /// ←/→: 1 コマ(1/fps)ずつ。
     func step(frames: Int) {
@@ -299,6 +337,8 @@ final class PlaybackController {
         backend.pause()
         stopTicking()
         scrubbing = false
+        shuttling = false
+        shuttleState = .stopped
         isPlaying = false
         model?.assets.endExportMode()           // 止まったら正確なフレーム(generator)に戻す
         model?.previewEpoch += 1                // 止まった位置の絵を描き直させる
@@ -319,6 +359,7 @@ final class PlaybackController {
     func tick() {
         guard isPlaying, !scrubbing, let model else { return }
         tickCount += 1
+        if shuttling { tickShuttle(model: model); return }
         var t = backend.currentTime() ?? (startT + clock.now() - clockStart)
         t = max(t, lastT)                        // 巻き戻らない
         if let r = model.activeLoopRange, let back = ExportRangeLoop.wrap(t, range: r) {
@@ -334,6 +375,18 @@ final class PlaybackController {
             return
         }
         model.currentTime = t
+    }
+
+    /// シャトル中: 時計の経過 × 速さだけ進める。端に着いたら止まる。
+    private func tickShuttle(model: ProjectModel) {
+        let now = clock.now()
+        let dt = now - shuttleClock
+        shuttleClock = now
+        let end = model.project.endTime
+        let t = model.currentTime + shuttleState.speed * dt
+        if t <= 0 && shuttleState.speed < 0 { model.currentTime = 0; stopInternal(); return }
+        if t >= end { model.currentTime = end; stopInternal(); return }
+        model.currentTime = max(0, t)
     }
 
     private func startTicking() {

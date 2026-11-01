@@ -327,11 +327,13 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var textAnim: TextAnim? = nil
     /// 吹き出し(文字クリップ)。無いときはファイルに書かない(B-2)。
     public var bubble: Bubble? = nil
+    /// カウントダウン(文字クリップ)。無いときはファイルに書かない。`text` の後ろに残りの数を続ける。
+    public var counter: TextCounter? = nil
     /// BGM の自動ダッキング(音声クリップ。声があるときに下げる)。無いときはファイルに書かない。
     public var duck: Duck? = nil
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["id", "type", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "audioFx", "pan", "textStyle", "textAnim", "bubble", "duck"]
+    static let knownKeys: Set<String> = ["id", "type", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "duck"]
 
     public init() {}
 
@@ -452,6 +454,9 @@ public struct Clip: Codable, Equatable, Identifiable {
         if let raw: JSONValue = l.value("bubble") {
             if let v: Bubble = l.value("bubble") { bubble = v } else { extra["bubble"] = raw }
         }
+        if let raw: JSONValue = l.value("counter") {
+            if let v: TextCounter = l.value("counter") { counter = v } else { extra["counter"] = raw }
+        }
         if let raw: JSONValue = l.value("duck") {
             if let v: Duck = l.value("duck") { duck = v } else { extra["duck"] = raw }
         }
@@ -523,6 +528,7 @@ public struct Clip: Codable, Equatable, Identifiable {
         try c.encodeIfPresent(textStyle, forKey: AnyKey("textStyle"))
         try c.encodeIfPresent(textAnim, forKey: AnyKey("textAnim"))
         try c.encodeIfPresent(bubble, forKey: AnyKey("bubble"))
+        try c.encodeIfPresent(counter, forKey: AnyKey("counter"))
         try c.encodeIfPresent(duck, forKey: AnyKey("duck"))
     }
 }

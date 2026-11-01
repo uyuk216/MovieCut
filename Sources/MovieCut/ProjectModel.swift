@@ -347,6 +347,9 @@ final class ProjectModel: ObservableObject {
             .stepBack: { [weak self] in guard let m = self, !m.isLocked else { return false }; m.playback.step(frames: -1); return true },
             .stepForward: { [weak self] in guard let m = self, !m.isLocked else { return false }; m.playback.step(frames: 1); return true },
             .toStart: { [weak self] in guard let m = self, !m.isLocked else { return false }; m.playback.goToStart(); return true },
+            .shuttleBack: { [weak self] in guard let m = self, !m.isLocked else { return false }; m.playback.shuttle(by: -1); return true },
+            .shuttleStop: { [weak self] in guard let m = self, !m.isLocked else { return false }; m.playback.shuttleStop(); return true },
+            .shuttleForward: { [weak self] in guard let m = self, !m.isLocked else { return false }; m.playback.shuttle(by: 1); return true },
             .toEnd: { [weak self] in guard let m = self, !m.isLocked else { return false }; m.goToEnd(); return true },
             // 分割 / 削除 / 選択解除は、ドキュメントのウィンドウが前面のときだけ
             .split: { [weak self] in guard let m = self, !m.isLocked, m.isDocumentKeyWindow, m.canSplit else { return false }; return m.splitSelected() },

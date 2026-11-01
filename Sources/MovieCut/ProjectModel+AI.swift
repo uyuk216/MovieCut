@@ -91,6 +91,28 @@ extension ProjectModel {
         return true
     }
 
+    /// 出力 ▸ タイトル案をAIで作る…(字幕かマーカーがあれば作れる)。案はコピーする(プロジェクトは変えない)。
+    func openAITitles() { Task { await suggestAITitles() } }
+
+    @discardableResult
+    func suggestAITitles() async -> Bool {
+        let cues = SubtitleFile.cues(from: project)
+        let names = project.markers.map(\.name)
+        guard !cues.isEmpty || names.contains(where: { !$0.isEmpty }) else { statusText = "字幕かマーカーがありません"; return false }
+        let built = AITitlePrompt.build(cues: cues, markerNames: names)
+        guard let reply = await askAI(built.prompt) else { return false }
+        let titles: [String]
+        do { titles = try AITitlePrompt.parse(reply) } catch { report(error); return false }
+        let text = titles.joined(separator: "\n")
+        let note = built.truncated ? "字幕が長いので、前半だけを送りました。\n" : ""
+        guard let r = aiUI.review("AI のタイトル案", note + "\(titles.count) 件。コピーして使えます。", text, false,
+                                  ["コピーする", "キャンセル"]), r.button == 0 else { statusText = "タイトル案は使いませんでした"; return false }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        statusText = "タイトル案 \(titles.count) 件をコピーしました"
+        return true
+    }
+
     /// チャプターをマーカーとして足す。0.5 秒以内に同じマーカーがあれば足さない。Undo は 1 回。
     @discardableResult
     func applyAIChapters(_ chapters: [AIChapterPrompt.Chapter]) -> Bool {

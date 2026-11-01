@@ -265,3 +265,10 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
 - **テスト**: `MarkerColorTests`(Core: 既定は書かない・往復・古いファイル・未知の色の保持・色の変更と変化なし・パレットの重複なし)、`MarkerColorAppTests`(メニューの並び・チェック・無効・1 回の Undo・変化なしは履歴に載らない・描画の色)。`MarkerTests` の「未知のキーを残す」は `color` を既知の項目として読む形に直した。
 - **未対応**: 色の名前の変更・パレットのユーザー定義、マーカーの色でのチャプター出力、インスペクタからの色の変更(メニューだけ)。
 
+
+## 追加機能(2026-11-02)
+- **J/K/L シャトル**: 素のキー(`KeyRouter`: J=38・K=40・L=37。メニューのショートカットにはしない)。速さは `ShuttleState`(Core・純粋)の段 −4 / −2 / −1 / 停止 / 1 / 2 / 4 倍。J は一段遅く・逆へ、L は一段速く、K は停止。順 1 倍だけは音あり(通常の再生)。2 倍以上・逆再生は音を止めて、時計の経過 × 速さで再生位置を進める(`PlaybackController.shuttle(by:)` / `tickShuttle`)。端に着くと止まる。保存する項目は無い。
+- **ぴったり揃える(吸着先)**: `ClipEditing.snapCandidates` に、マーカーの時刻と範囲の in / out を足した(8 pt 以内)。ファイル形式は変わらない。
+- **タイトル案をAIで作る…**: 出力 ▸ (`AppMenuSpec.aiTitles`、ショートカットなし)→ `ProjectModel.suggestAITitles`。送る前に確認(`askAI`)→ 返事を `AITitlePrompt`(Core)で 5 件に → 確認シートで「コピーする」。プロジェクトは変えない(Undo なし)。字幕とマーカーの名前だけを送る。
+- **カウントダウン(文字クリップの任意項目 `counter`)**: `{from, to, format}`。`format` は `mm:ss`(既定)か `ss`。未設定のときはファイルに書かない。表示は `Clip.displayText(at:)` = `text` の後ろに残りの数(減る向きは切り上げ、増える向きは切り捨て)。`Renderer` の文字の経路が使う。**画面の入力欄はまだ無い**(モデルと描画だけ)。
+- **QR コード(画像クリップ)**: クリップ ▸ QRコードを追加…(ショートカットなし)→ `ProjectModel+QR.swift`。`QRCode.pngData`(Core・CIQRCodeGenerator、白地・既定 800 px)で作り、Application Support/MovieCut/QRCodes/<文字の FNV-1a>.png に保存して、画像クリップ(5 秒)として再生ヘッドに置く(Undo 1 回)。画像は外に置いたままなので、移動すると素材の再リンクが要る。

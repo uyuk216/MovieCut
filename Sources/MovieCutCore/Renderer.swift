@@ -290,12 +290,14 @@ public struct Renderer {
             let size = c.fontSize ?? 80
             let blurred = pose.blur > 0
             let style = c.textStyle
+            // カウントダウンの文字(無ければ text そのもの)
+            let shown = c.displayText(at: t)
             // 文字のアニメーション(頭の数秒だけ。終わったあとは静止した文字と同じ速い道)
             var pose = pose
             var visible: Int?
             var animating = false
             if let a = c.textAnim {
-                let st = TextAnimMath.state(a, text: c.text ?? "", rel: t - c.start, size: size)
+                let st = TextAnimMath.state(a, text: shown, rel: t - c.start, size: size)
                 if st.active {
                     animating = true
                     visible = st.visible
@@ -308,7 +310,7 @@ public struct Renderer {
             // 位置・拡大・回転が動く文字は、位置ごとにキャッシュしても使い回せないので直接描く
             let geometryAnimated = c.hasKeyframes && ["x", "y", "scale", "rotation"].contains { Animation.isAnimated($0, in: c) }
             if pose.isPlain(c) {
-                drawText(c.text ?? "", x: pose.x * W, y: pose.y * H, size: size, color: c.colorOrDefault, font: c.fontOrDefault, outline: c.outlineOrDefault, ctx: ctx,
+                drawText(shown, x: pose.x * W, y: pose.y * H, size: size, color: c.colorOrDefault, font: c.fontOrDefault, outline: c.outlineOrDefault, ctx: ctx,
                          cacheable: !geometryAnimated && !pose.transitionMoves && !animating && (pose.opacity >= 1 || blurred), style: style, visible: visible)
             } else {
                 ctx.saveGState()
@@ -316,13 +318,13 @@ public struct Renderer {
                 var ox = 0.0, oy = 0.0
                 if let crop = c.crop, !crop.isEmpty {
                     // 切り抜きは、描いた文字の枠(幅 = 一番長い行、高さ = 行数 × 行間)に対して
-                    let box = textBlockSize(c.text ?? "", size: size, font: c.fontOrDefault, style: style)
+                    let box = textBlockSize(shown, size: size, font: c.fontOrDefault, style: style)
                     let kw = box.width * crop.keptWidth, kh = box.height * crop.keptHeight
                     ctx.clip(to: CGRect(x: -kw / 2, y: -kh / 2, width: kw, height: kh))
                     ox = -(crop.l - crop.r) / 2 * box.width
                     oy = -(crop.t - crop.b) / 2 * box.height
                 }
-                drawText(c.text ?? "", x: ox, y: oy, size: size, color: c.colorOrDefault, font: c.fontOrDefault, outline: c.outlineOrDefault, ctx: ctx, cacheable: false, style: style, visible: visible)
+                drawText(shown, x: ox, y: oy, size: size, color: c.colorOrDefault, font: c.fontOrDefault, outline: c.outlineOrDefault, ctx: ctx, cacheable: false, style: style, visible: visible)
                 ctx.restoreGState()
             }
         default:

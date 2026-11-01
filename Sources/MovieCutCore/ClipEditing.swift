@@ -23,10 +23,13 @@ public enum ClipEditing {
 
     // MARK: 吸着
 
-    /// 吸着の候補: 0、再生ヘッド、`excluding` 以外の全クリップの頭と終わり。
+    /// 吸着の候補: 0、再生ヘッド、`excluding` 以外の全クリップの頭と終わり、マーカー、範囲の印(in / out)。
     static func snapCandidates(excluding id: String?, project: Project, playhead: Double) -> [Double] {
         var pts = [0, playhead]
         for c in project.allClips where c.id != id { pts.append(c.start); pts.append(c.start + c.duration) }
+        for m in project.markers { pts.append(m.time) }
+        if let r = project.rangeIn { pts.append(r) }
+        if let r = project.rangeOut { pts.append(r) }
         return pts
     }
 

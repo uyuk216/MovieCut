@@ -25,6 +25,9 @@ enum ShortcutList {
         ("クリップを分割", "S"),
         ("クリップを削除", "⌫"),
         ("選択を外す", "Esc"),
+        ("逆再生(J を押すたびに速く・遅く)", "J"),
+        ("停止", "K"),
+        ("速く再生(L を押すたびに 1・2・4 倍)", "L"),
     ]
 
     private static func numbered(_ pairs: [(String, String)]) -> [ShortcutRow] {

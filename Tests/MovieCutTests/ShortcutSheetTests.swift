@@ -46,6 +46,6 @@ final class ShortcutSheetTests: XCTestCase {
 
     func testPlainKeysAreListedSeparately() {
         let plain = ShortcutList.plainKeys.map(\.keys)
-        XCTAssertEqual(plain, ["Space", "←", "→", "Home", "End", "S", "⌫", "Esc"])
+        XCTAssertEqual(plain, ["Space", "←", "→", "Home", "End", "S", "⌫", "Esc", "J", "K", "L"])
     }
 }

@@ -15,7 +15,7 @@ enum MenuCommand: Hashable {
     case relinkMedia
     // 範囲ループ再生(再生メニュー)
     case toggleRangeLoop
-    case aiScript, aiChapters, aiRewrite, aiSettings
+    case aiScript, aiChapters, aiTitles, aiRewrite, aiSettings
     // 書き出し範囲(イン / アウト / 解除)と、静止画・連番画像の書き出し
     case rangeIn, rangeOut, rangeClear, exportStill, exportSequence
     // 出力 ▸ GIFとして書き出す…(ショートカットは持たない)
@@ -26,7 +26,7 @@ enum MenuCommand: Hashable {
     case saveTemplate, newFromTemplate(String)
     // A6: クリップのコピー / 切り取り / 貼り付け / 全選択(ショートカットは持たない: ⌘C ⌘X ⌘V ⌘A は responder chain が受ける)と、レイヤー
     case copyClips, cutClips, pasteClips, selectAllClips, layerLock, layerSolo, layerHeight(LayerHeight)
-    case split, delete, addText, addBlur, addCharacter, makeVoices
+    case split, delete, addText, addBlur, addQRCode, addCharacter, makeVoices
     // クリップ(M7)
     case duplicate, rippleDelete, trimBefore, trimAfter, prevClip, nextClip, moveLayerUp, moveLayerDown, addLayer, regenerateVoice
     case playPause, toStart, stepBack, stepForward
@@ -438,6 +438,9 @@ enum AppMenuSpec {
     static func aiChapters(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .aiChapters, title: "チャプター案をAIで作る…", shortcut: nil, enabled: s.canEdit && s.canExportSubtitles, checked: nil)
     }
+    static func aiTitles(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .aiTitles, title: "タイトル案をAIで作る…", shortcut: nil, enabled: s.canEdit && (s.canExportSubtitles || s.hasMarkers), checked: nil)
+    }
     static func aiRewrite(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .aiRewrite, title: "AIでセリフを直す…", shortcut: nil, enabled: s.canEdit && s.isVoiceSelected, checked: nil)
     }
@@ -480,9 +483,13 @@ enum AppMenuSpec {
     // MARK: クリップメニュー
 
     /// 追加(テキスト・ぼかし範囲)。
+    static func addQRCode(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .addQRCode, title: "QRコードを追加…", shortcut: nil, enabled: s.canEdit, checked: nil)
+    }
     static func clipAdd(_ s: MenuState) -> [MenuItemSpec] {
         [MenuItemSpec(command: .addText, title: "テキストを追加", shortcut: cmd("t", shift: true), enabled: s.canEdit, checked: nil),
-         MenuItemSpec(command: .addBlur, title: "ぼかし範囲を追加", shortcut: cmd("b", shift: true), enabled: s.canEdit, checked: nil)]
+         MenuItemSpec(command: .addBlur, title: "ぼかし範囲を追加", shortcut: cmd("b", shift: true), enabled: s.canEdit, checked: nil),
+         addQRCode(s)]
     }
 
     /// 分割・複製・削除(S / Delete は KeyRouter が受けるので、メニューにはキーを付けずヒントだけ添える)。
@@ -784,7 +791,7 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, settings(s), videoSettings(s)] + file(s) + [subtitleImport(s), mediaRelink(s), subtitleExport(s), subtitleGenerate(s), transcribeSubtitles(s), chapterCopy(s), aiScript(s), aiSettings(s), aiChapters(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s)] + exportPresets(s) + exportQueueItems(s) + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), lutLoadItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + layerHeightItems(s) + playback(s)
+        [about, settings(s), videoSettings(s)] + file(s) + [subtitleImport(s), mediaRelink(s), subtitleExport(s), subtitleGenerate(s), transcribeSubtitles(s), chapterCopy(s), aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s)] + exportPresets(s) + exportQueueItems(s) + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), lutLoadItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + layerHeightItems(s) + playback(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerColorItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + [fullScreen(s)] + help.flatMap { $0 }
@@ -829,6 +836,7 @@ enum AppMenu {
             case .copyChapters: m.copyChapters()
             case .aiScript: m.openAIScriptDialog()
             case .aiChapters: m.openAIChapters()
+            case .aiTitles: m.openAITitles()
             case .aiRewrite: m.openAIRewrite()
             case .aiSettings: AIDialogs.editSettings()
             case .rangeIn: m.setRangeInAtCurrent()
@@ -908,6 +916,7 @@ enum AppMenu {
             case .delete: m.deleteSelected()
             case .addText: m.addTextClip()
             case .addBlur: m.addBlurClip()
+            case .addQRCode: m.openAddQRCode()
             case .addCharacter: m.addCharacter()
             case .makeVoices: Task { await m.generateVoicesFromScript() }
             case .playPause: m.playback.togglePlay()

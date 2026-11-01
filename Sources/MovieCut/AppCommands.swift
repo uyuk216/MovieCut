@@ -204,6 +204,7 @@ struct AppCommands: Commands {
                 MenuItemView(spec: AppMenuSpec.transcribeSubtitles(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.chapterCopy(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.aiChapters(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.aiTitles(s), perform: run)
             }
         }
 

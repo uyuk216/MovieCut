@@ -7,6 +7,8 @@ enum KeyCommand: Hashable {
     case split, delete, deselect
     /// ⌘= (US 配列の「⌘+」の押し方)。メニューの ⌘+ とは別に、キーボードの = でも拡大できるようにする。
     case zoomIn
+    /// J = 逆へ(遅く)、K = 停止、L = 速く(順 1 倍 / 2 倍 / 4 倍)。素のキーで、メニューのショートカットにはしない。
+    case shuttleBack, shuttleStop, shuttleForward
 }
 
 @MainActor
@@ -22,6 +24,9 @@ final class KeyRouter {
         51: .delete,           // Delete(Backspace)
         117: .delete,          // Forward Delete
         53: .deselect,         // Escape
+        38: .shuttleBack,      // J
+        40: .shuttleStop,      // K
+        37: .shuttleForward,   // L
     ]
 
     /// テキスト入力中か(NSText / NSTextView / NSTextField のフィールドエディタ、NSTextInputClient)。
@@ -81,7 +86,7 @@ final class KeyRouter {
         guard let cmd = Self.command(keyCode: keyCode, modifiers: modifiers, firstResponder: firstResponder),
               let h = handlers[cmd] else { return false }
         // Space の長押しで再生/停止が連打されないようにする(矢印のコマ送りは長押しで続ける)
-        if isRepeat && (cmd == .playPause || cmd == .toStart || cmd == .toEnd) { return true }
+        if isRepeat && (cmd == .playPause || cmd == .toStart || cmd == .toEnd || cmd == .shuttleBack || cmd == .shuttleStop || cmd == .shuttleForward) { return true }
         return h()
     }
 }

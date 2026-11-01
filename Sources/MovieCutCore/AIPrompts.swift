@@ -152,6 +152,54 @@ public enum AIChapterPrompt {
     public static func markers(from chapters: [Chapter]) -> [Marker] { chapters.map { Marker(time: $0.time, name: $0.title) } }
 }
 
+// MARK: - d) タイトル案
+
+/// 動画全体のタイトル案(YouTube 向け)。字幕の文とマーカーの名前から作る。送る前に内容を見せる(呼び出し側)。
+public enum AITitlePrompt {
+    public static let maxInputCharacters = 6_000
+    public static let count = 5
+    public static let maxTitleLength = 40
+
+    /// 字幕(時刻なし)とマーカーの名前から。長すぎる分は末尾を切る(`truncated` で分かる)。
+    public static func build(cues: [SubtitleCue], markerNames: [String]) -> (prompt: String, truncated: Bool) {
+        var body = "", truncated = false
+        for c in cues {
+            let line = c.text.replacingOccurrences(of: "\n", with: " ") + "\n"
+            if body.count + line.count > maxInputCharacters { truncated = true; break }
+            body += line
+        }
+        let names = markerNames.filter { !$0.isEmpty }.map { "- \($0)" }.joined(separator: "\n")
+        let prompt = """
+        次は動画の内容です。YouTube 向けのタイトル案を \(count) 件作ってください。
+
+        書式のルール(厳守):
+        - 1 行に 1 つ。番号・記号・説明は付けず、タイトルだけを出力する。
+        - 各 \(maxTitleLength) 文字以内。
+        - 互いに言い回しや切り口を変える。
+
+        見出し候補(マーカー):
+        \(names.isEmpty ? "(なし)" : names)
+
+        字幕:
+        \(body.isEmpty ? "(なし)" : body)
+        """
+        return (prompt, truncated)
+    }
+
+    /// 返事の行をタイトルにする。空・重複は捨て、件数は `count` まで。1 件も無ければ例外。
+    public static func parse(_ response: String) throws -> [String] {
+        var out: [String] = []
+        for raw in AIText.stripFences(response).components(separatedBy: .newlines) {
+            let t = AIText.cleanLine(raw).trimmingCharacters(in: CharacterSet(charactersIn: "「」『』\"'"))
+            guard !t.isEmpty, !out.contains(t) else { continue }
+            out.append(t)
+        }
+        out = Array(out.prefix(count))
+        guard !out.isEmpty else { throw AIError.unparsable("タイトル案(1 行に 1 件)") }
+        return out
+    }
+}
+
 // MARK: - c) セリフの言い換え・短縮
 
 public enum AIRewritePrompt {
