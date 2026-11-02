@@ -46,6 +46,18 @@ public struct DockGroup: Equatable, Codable {
     }
 }
 
+/// 別ウインドウに出したパネルを戻す先(切り離したときの隣と、その割合)。`edge` が nil なら、隣のグループのタブとして戻す。
+/// 隣は `anchor`(そのパネルがいたグループ・部分木の一つ)。割合は `fraction`(新しく入る側の占める割合)。
+public struct DockHome: Codable, Equatable {
+    public var anchor: DockPanel
+    public var edge: DockEdge?
+    public var fraction: Double?
+
+    public init(anchor: DockPanel, edge: DockEdge?, fraction: Double?) {
+        self.anchor = anchor; self.edge = edge; self.fraction = fraction
+    }
+}
+
 public indirect enum DockNode: Equatable, Codable {
     case group(DockGroup)
     /// fraction = first が占める割合(0.1〜0.9)
@@ -159,6 +171,24 @@ public indirect enum DockNode: Equatable, Codable {
     }
 
     /// 比率を範囲内に直し、グループの active を直す。
+    /// `panel` を木から外したときに戻す先。同じグループの他のタブ、または兄弟(その部分木の一つ)と割合。
+    /// 木の中に `panel` が無い・ひとりだけの根なら nil。
+    func siblingHome(of panel: DockPanel) -> DockHome? {
+        switch self {
+        case .group(let g):
+            guard g.panels.contains(panel), let other = g.panels.first(where: { $0 != panel }) else { return nil }
+            return DockHome(anchor: other, edge: nil, fraction: nil)
+        case .split(let axis, let f, let a, let b):
+            if case .group(let ga) = a, ga.panels == [panel], let anchor = b.panels.first {
+                return DockHome(anchor: anchor, edge: axis == .horizontal ? .left : .top, fraction: f)
+            }
+            if case .group(let gb) = b, gb.panels == [panel], let anchor = a.panels.first {
+                return DockHome(anchor: anchor, edge: axis == .horizontal ? .right : .bottom, fraction: 1 - f)
+            }
+            return a.siblingHome(of: panel) ?? b.siblingHome(of: panel)
+        }
+    }
+
     func sanitized() -> DockNode {
         switch self {
         case .group(let g): return .group(DockGroup(panels: g.panels, active: g.active))
@@ -184,21 +214,34 @@ public struct DockLayout: Equatable, Codable {
     public var floating: [DockPanel]
     /// 閉じているパネル(表示 ▸ パネルで開き直せる)。
     public var closed: [DockPanel]
+    /// 別ウインドウに出したパネルの戻し先(`DockPanel.rawValue` → 戻し先)。無ければ nil(キーは書かない)。
+    /// 切り離したときに記録し、ドッキングへ戻すとき(再ドック・ウインドウを閉じた・起動時)に使う。
+    public var homes: [String: DockHome]?
 
-    public init(root: DockNode?, floating: [DockPanel] = [], closed: [DockPanel] = []) {
+    public init(root: DockNode?, floating: [DockPanel] = [], closed: [DockPanel] = [], homes: [String: DockHome]? = nil) {
         self.root = root; self.floating = floating; self.closed = closed
+        self.homes = homes?.isEmpty == true ? nil : homes
     }
 
     static func clamp(_ f: Double) -> Double {
         f.isFinite ? min(max(f, minFraction), maxFraction) : 0.5
     }
 
-    private enum CodingKeys: String, CodingKey { case root, floating, closed }
+    private enum CodingKeys: String, CodingKey { case root, floating, closed, homes }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         root = try c.decodeIfPresent(DockNode.self, forKey: .root)
         floating = try c.decodeIfPresent([DockPanel].self, forKey: .floating) ?? []
         closed = try c.decodeIfPresent([DockPanel].self, forKey: .closed) ?? []
+        let h = try c.decodeIfPresent([String: DockHome].self, forKey: .homes)
+        homes = h?.isEmpty == true ? nil : h
+    }
+
+    /// 戻し先の記録を書き換える(空になったら nil。キーごと書かない)。
+    mutating func setHome(_ h: DockHome?, for panel: DockPanel) {
+        var m = homes ?? [:]
+        m[panel.rawValue] = h
+        homes = m.isEmpty ? nil : m
     }
 
     // MARK: 初期配置とプリセット
@@ -262,7 +305,7 @@ public struct DockLayout: Equatable, Codable {
 
     /// 比率を範囲内に、active を所属内に直したもの。
     public func sanitized() -> DockLayout {
-        DockLayout(root: root?.sanitized(), floating: floating, closed: closed)
+        DockLayout(root: root?.sanitized(), floating: floating, closed: closed, homes: homes)
     }
 
     // MARK: 操作
@@ -357,9 +400,24 @@ public struct DockLayout: Equatable, Codable {
     @discardableResult
     public mutating func detach(_ panel: DockPanel) -> Bool {
         guard location(of: panel) == .docked else { return false }
+        let home = root?.siblingHome(of: panel)
         take(panel)
         floating.append(panel)
+        setHome(home, for: panel)
         return true
+    }
+
+    /// 別ウインドウ・閉じているパネルを、ドッキングへ戻す。`outer` があれば、ドック全体のその端へ(ドラッグで外の帯に落とした)。
+    /// 無ければ `attach`(戻し先の記録があれば、その隣へ。無ければ初期配置の隣)。ドッキング中なら何もしない。
+    @discardableResult
+    public mutating func redock(_ panel: DockPanel, outer edge: DockEdge?) -> Bool {
+        guard location(of: panel) != .docked else { return false }
+        if let edge, root != nil {
+            take(panel)
+            setHome(nil, for: panel)
+            return moveToRootEdge(panel, edge, fraction: DockDropTarget.outerFraction)
+        }
+        return attach(panel)
     }
 
     /// 閉じる(別ウインドウのものも閉じられる)。
@@ -376,6 +434,13 @@ public struct DockLayout: Equatable, Codable {
     public mutating func attach(_ panel: DockPanel) -> Bool {
         guard location(of: panel) != .docked else { return false }
         take(panel)
+        // 切り離したときの隣へ戻す(隣が今も木にあるとき)。戻せなければ下の初期配置の隣へ
+        let home = homes?[panel.rawValue]
+        setHome(nil, for: panel)
+        // 隣に分割で戻す記録だけ使う。タブへ戻す記録は、既定の配置(プロパティとキャラクターの同じグループ)の規則に任せる
+        if let h = home, let e = h.edge, root?.group(containing: h.anchor) != nil {
+            return moveToEdge(panel, e, ofGroupContaining: h.anchor, fraction: h.fraction ?? 0.5)
+        }
         guard root != nil else { root = Self.leaf(panel); return true }
         // プロパティとキャラクターは初期配置で同じタブグループ: 相方がドッキング中ならそのグループへ戻す
         if panel == .inspector || panel == .characters {

@@ -61,6 +61,28 @@ extension ProjectModel {
         return ids
     }
 
+    /// タイムラインへのドロップ(Finder・素材ブラウザ共通): 落とした時刻を吸着して、落とした行のレイヤーへ置く。
+    /// 置けないときは `ClipEditing.place` と同じく空いている最初のレイヤー(無ければ新しいレイヤー)へ。1 回の取り消し。
+    @discardableResult
+    func dropMedia(urls: [URL], dropTime: Double, rowIndex: Int?) async -> [String] {
+        guard !isLocked else { return [] }
+        let files = urls.filter { ClipEditing.isSupportedMedia(path: $0.path) }
+        guard !files.isEmpty else { return [] }
+        var media: [(path: String, kind: ClipType, duration: Double)] = []
+        for u in files {
+            let kind = ClipEditing.kindOf(path: u.path)
+            media.append((u.path, kind, await ClipEditing.probeDuration(url: u, kind: kind)))
+        }
+        let place = TimelineDrop.placement(dropTime: dropTime, duration: media[0].duration, rowIndex: rowIndex, project: project,
+                                           playhead: currentTime, pps: pps, snapEnabled: snapEnabled)
+        var ids: [String] = []
+        edit("素材のドロップ") { p in ids = ClipEditing.place(media: media, at: place.start, preferredTrack: place.track, in: &p) }
+        guard !ids.isEmpty else { return [] }
+        selectedClipId = ids.last
+        statusText = "\(ids.count) 個の素材を追加しました"
+        return ids
+    }
+
     /// 「テキスト」ボタン: 一番上のレイヤーの再生ヘッド位置に 3 秒の文字を足して選択する。
     @discardableResult
     func addTextClip() -> String? {

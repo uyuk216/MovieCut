@@ -1475,8 +1475,10 @@ final class TimelineCanvas: NSView {
         let urls = droppedMediaURLs(sender)
         guard !urls.isEmpty, let m = model else { return false }
         let p = convert(sender.draggingLocation, from: nil)
-        let t = dropTime(at: p)
-        Task { @MainActor in await m.addMedia(urls: urls, at: t) }
+        // 行の上なら、その時刻と行のレイヤー(吸着と置き先はモデルで決める)。外なら再生ヘッドの時刻・レイヤーは自動
+        let t = dropTime(at: p) ?? m.currentTime
+        let row = p.x >= TimelineLayout.headerWidth ? geometry.rowIndex(forY: p.y, rowCount: project.tracks.count) : nil
+        Task { @MainActor in await m.dropMedia(urls: urls, dropTime: t, rowIndex: row) }
         return true
     }
 

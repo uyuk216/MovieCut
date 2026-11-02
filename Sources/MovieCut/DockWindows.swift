@@ -22,13 +22,100 @@ final class DockPanelWindow: NSWindow {
 }
 
 /// 別ウインドウに出すパネルの中身(書類と同じ ProjectModel を見るので、編集もプレビューも同じ状態で動く)。
+/// 上に「ウインドウに戻す」(ドッキングへ戻す。戻し先は記録どおり)。
 struct DockPanelWindowRoot: View {
     @ObservedObject var model: ProjectModel
     let panel: DockPanel
+    let store: DockStore
     var body: some View {
-        DockPanelContent(panel: panel, model: model)
-            .background(Color(nsColor: .windowBackgroundColor))
-            .preferredColorScheme(.dark)
+        VStack(spacing: 0) {
+            HStack {
+                Spacer(minLength: 0)
+                Button("ウインドウに戻す") { store.attach(panel) }
+                    .controlSize(.small)
+                    .accessibilityIdentifier("dock-panel-restore")
+            }
+            .padding(.horizontal, 8).padding(.vertical, 4)
+            Divider()
+            DockPanelContent(panel: panel, model: model)
+        }
+        .background(Color(nsColor: .windowBackgroundColor))
+        .preferredColorScheme(.dark)
+    }
+}
+
+/// タブを掴んで書類のウインドウの外へ引き出す追跡(`DockTearOff` の状態機械を、マウスの位置で動かす)。
+/// ドラッグ中だけ 60 Hz で見る。離したら止める。切り離したウインドウはカーソルに付いてくる。
+@MainActor
+final class DockTearOffTracker {
+    private var machine = DockTearOff()
+    private var timer: Timer?
+    /// 切り離したウインドウの、カーソルからのずれ(左・上)。切り離した瞬間のまま保つ。
+    private let grab = NSPoint(x: 60, y: 14)
+    private let store: DockStore
+    private weak var model: ProjectModel?
+    private let place: (DockPanel, NSPoint) -> Void
+    private let tearOff: (DockPanel) -> Void
+
+    init(store: DockStore, model: ProjectModel, place: @escaping (DockPanel, NSPoint) -> Void, tearOff: @escaping (DockPanel) -> Void) {
+        self.store = store
+        self.model = model
+        self.place = place
+        self.tearOff = tearOff
+    }
+
+    func begin(_ p: DockPanel) {
+        guard timer == nil else { return }
+        machine = DockTearOff()
+        machine.press(p, docked: store.layout.location(of: p) == .docked)
+        let t = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.tick() }
+        }
+        RunLoop.main.add(t, forMode: .common)
+        timer = t
+    }
+
+    func cancel() {
+        timer?.invalidate()
+        timer = nil
+        machine = DockTearOff()
+    }
+
+    private func tick() {
+        guard let mainWindow = model?.window else { cancel(); return }
+        let cursor = NSEvent.mouseLocation
+        let down = NSEvent.pressedMouseButtons & 1 != 0
+        let overMain = mainWindow.frame.contains(cursor)
+        if down {
+            switch machine.drag(overMainWindow: overMain) {
+            case .none, .redock:
+                break
+            case .tearOff(let p):
+                tearOff(p)
+                place(p, NSPoint(x: cursor.x - grab.x, y: cursor.y + grab.y))
+            case .follow(let p):
+                place(p, NSPoint(x: cursor.x - grab.x, y: cursor.y + grab.y))
+            }
+        } else {
+            let outer = overMain ? Self.outerEdge(of: mainWindow, at: cursor) : nil
+            if case .redock(let p, let e) = machine.release(overMainWindow: overMain, outer: outer) {
+                store.redock(p, outer: e)
+            }
+            cancel()
+            DockDrag.current = nil
+        }
+    }
+
+    /// 書類のウインドウの中の、ドック全体の端の帯(`DockDropTarget` と同じ判定)。端でなければ nil。
+    static func outerEdge(of window: NSWindow, at screenPoint: NSPoint) -> DockEdge? {
+        guard let content = window.contentView else { return nil }
+        let inWindow = window.convertPoint(fromScreen: screenPoint)
+        let p = content.convert(inWindow, from: nil)
+        let w = Double(content.bounds.width), h = Double(content.bounds.height)
+        let y = content.isFlipped ? Double(p.y) : h - Double(p.y)
+        guard case .outer(let e) = DockDropTarget.resolve(x: Double(p.x), y: y, width: w, height: h,
+                                                         groupX: 0, groupY: 0, hostWidth: w, hostHeight: h) else { return nil }
+        return e
     }
 }
 
@@ -49,6 +136,16 @@ final class DockWindowManager {
         self.model = model
         self.store = store
         self.presents = presents
+        tearOffTracker = DockTearOffTracker(store: store, model: model,
+                                            place: { [weak self] p, origin in self?.windows[p]?.setFrameTopLeftPoint(origin) },
+                                            tearOff: { p in store.detach(p) })
+        dragObserver = NotificationCenter.default.addObserver(forName: DockDrag.didBegin, object: nil, queue: .main) { [weak self] note in
+            MainActor.assumeIsolated {
+                guard let self, self.model?.window?.isKeyWindow == true,
+                      let raw = note.userInfo?["panel"] as? String, let p = DockPanel(rawValue: raw) else { return }
+                self.tearOffTracker?.begin(p)
+            }
+        }
         sync(floating: store.layout.floating)
         // @Published は変更の直前に流れるので、渡された新しい値を使う
         cancellable = store.$layout.dropFirst().sink { [weak self] l in self?.sync(floating: l.floating) }
@@ -62,6 +159,10 @@ final class DockWindowManager {
         case .characters: return NSSize(width: 330, height: 640)
         }
     }
+
+    /// タブのドラッグを切り離しの追跡へつなぐ(書類のウインドウが key のときだけ)。
+    private var dragObserver: NSObjectProtocol?
+    private var tearOffTracker: DockTearOffTracker?
 
     /// キー入力を受けるウインドウ(KeyRouter に渡す)。
     var allWindows: [NSWindow?] { DockPanel.allCases.compactMap { windows[$0] } }
@@ -77,7 +178,7 @@ final class DockWindowManager {
         guard let model else { return }
         let w = DockPanelWindow(panel: p, model: model)
         w.title = "\(p.title) — \(model.window?.title ?? "Movie Cut")"
-        w.contentView = NSHostingView(rootView: DockPanelWindowRoot(model: model, panel: p))
+        w.contentView = NSHostingView(rootView: DockPanelWindowRoot(model: model, panel: p, store: store))
         if presents {
             w.setFrameAutosaveName("MovieCut.dock.\(p.rawValue)")
             if !w.setFrameUsingName(w.frameAutosaveName) { w.center() }
@@ -120,6 +221,10 @@ final class DockWindowManager {
     /// 書類を閉じるとき。ドッキングへは戻さない(配置はそのまま)。
     func closeAll() {
         cancellable = nil
+        tearOffTracker?.cancel()
+        tearOffTracker = nil
+        if let dragObserver { NotificationCenter.default.removeObserver(dragObserver) }
+        dragObserver = nil
         for p in Array(windows.keys) { close(p) }
     }
 }

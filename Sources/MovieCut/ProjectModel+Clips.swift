@@ -52,17 +52,26 @@ extension ProjectModel {
     /// 「選択クリップを再生ヘッドに揃える」: 選択の一番手前を再生ヘッドへ、残りは同じ量だけずらす。1 回の Undo。
     @discardableResult
     func alignSelectedToPlayhead() -> Bool {
-        let ids = selectionIdsForAlignment
-        guard !isLocked, let p = TimelineAlignment.alignToPlayhead(in: project, clipIds: ids, playhead: currentTime) else { return false }
-        return edit("選択クリップを再生ヘッドに揃える") { $0 = p }
+        guard !isLocked else { return false }
+        let o = TimelineAlignment.alignToPlayhead(in: project, clipIds: selectionIdsForAlignment, playhead: currentTime)
+        return applyAlignment(o, name: "選択クリップを再生ヘッドに揃える")
     }
 
     /// 「選択クリップをつなげて並べる」: 選択を開始順に、一番手前の開始から隙間なく並べ直す。1 回の Undo。
     @discardableResult
     func concatenateSelectedClips() -> Bool {
-        let ids = selectionIdsForAlignment
-        guard !isLocked, let p = TimelineAlignment.concatenate(in: project, clipIds: ids) else { return false }
-        return edit("選択クリップをつなげて並べる") { $0 = p }
+        guard !isLocked else { return false }
+        let o = TimelineAlignment.concatenate(in: project, clipIds: selectionIdsForAlignment)
+        return applyAlignment(o, name: "選択クリップをつなげて並べる")
+    }
+
+    /// 位置合わせの結果を反映する。重なるときは何も変えず、理由を状態欄に出す(1 回の取り消し)。
+    private func applyAlignment(_ o: TimelineAlignment.Outcome, name: String) -> Bool {
+        switch o {
+        case .changed(let p): return edit(name) { $0 = p }
+        case .unchanged: return false
+        case .blocked(let message): statusText = message; return false
+        }
     }
 
     /// 位置合わせの対象: 複数選択があればそれ、無ければ主のクリップ。

@@ -96,6 +96,35 @@ final class MediaBrowserAppTests: XCTestCase {
         XCTAssertEqual(m.project, before)
     }
 
+    /// ドロップ: 落とした時刻へ吸着し、落とした行のレイヤーに入る。1 回の Undo。
+    func testDropPlacesOnDroppedLayerSnappedAndUndoesOnce() async throws {
+        let m = ProjectModel(project: .new())
+        m.project.tracks = [Track(name: "A"), Track(name: "B")]
+        m.project.tracks[0].clips = [clip("edge", start: 0, duration: 4)]
+        m.currentTime = 20
+        m.snapEnabled = true
+        let before = m.project
+        let ids = await m.dropMedia(urls: [URL(fileURLWithPath: "/nonexistent/still.png")], dropTime: 4.03, rowIndex: 1)
+        XCTAssertEqual(ids.count, 1)
+        XCTAssertEqual(m.project.tracks[1].clips.map(\.id), ids, "落とした行(B)に入る")
+        XCTAssertEqual(m.clip(ids[0])?.start ?? -1, 4, accuracy: 1e-9, "既存クリップの終わりへ吸着")
+        assertNoLayerOverlaps(m.project)
+        m.effectiveUndoManager.undo()
+        XCTAssertEqual(m.project, before, "1 回の取り消しで戻る")
+    }
+
+    /// 重なるレイヤーに落としたら、空いている別のレイヤーへ回る(重ねない)。
+    func testDropOntoOccupiedLayerFallsBackWithoutOverlap() async {
+        let m = ProjectModel(project: .new())
+        m.project.tracks = [Track(name: "A")]
+        m.project.tracks[0].clips = [clip("x", start: 0, duration: 10)]
+        m.snapEnabled = false
+        let ids = await m.dropMedia(urls: [URL(fileURLWithPath: "/nonexistent/still.png")], dropTime: 2, rowIndex: 0)
+        XCTAssertEqual(ids.count, 1)
+        XCTAssertEqual(m.project.tracks[0].clips.map(\.id), ["x"])
+        assertNoLayerOverlaps(m.project)
+    }
+
     func testKindTextIsJapanese() {
         XCTAssertEqual(AudioLibrarySheet.kindText(.video), "動画")
         XCTAssertEqual(AudioLibrarySheet.kindText(.audio), "音声")

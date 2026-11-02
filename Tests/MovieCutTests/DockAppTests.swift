@@ -176,6 +176,36 @@ final class DockAppTests: XCTestCase {
         XCTAssertFalse(m.effectiveUndoManager.canUndo)
     }
 
+    /// 切り離し → ドッキングの端へ再ドック(外の帯で離した場合)と、「ウインドウに戻す」(戻し先の記録どおり)。
+    func testRedockToOuterEdgeAndRestoreGoHome() {
+        let m = makeModel()
+        let store = DockStore(defaults: nil)
+        m.installDock(store: store, presents: false)
+        let mgr = try! XCTUnwrap(m.dockWindows)
+
+        store.detach(.timeline)
+        XCTAssertNotNil(mgr.windows[.timeline], "切り離すとウインドウが出る")
+        store.redock(.timeline, outer: .bottom)
+        XCTAssertNil(mgr.windows[.timeline], "再ドックするとウインドウは消える")
+        XCTAssertEqual(store.layout.docked.last, .timeline, "ドック全体の下の端へ入る")
+        XCTAssertTrue(store.layout.isValid)
+
+        // 「ウインドウに戻す」: 切り離して、戻す。戻し先の記録(隣と割合)どおり
+        store.detach(.preview)
+        store.attach(.preview)
+        XCTAssertEqual(store.layout.location(of: .preview), .docked)
+        XCTAssertTrue(store.layout.isValid)
+        XCTAssertNil(store.layout.homes?["preview"], "戻したら記録は消える")
+    }
+
+    /// 端の帯の判定(書類のウインドウの左の帯は .left、中央は nil)。
+    func testOuterEdgeOfMainWindowFromScreenPoint() {
+        let w = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 800, height: 600), styleMask: [.titled], backing: .buffered, defer: false)
+        XCTAssertEqual(DockTearOffTracker.outerEdge(of: w, at: NSPoint(x: 105, y: 400)), .left)
+        XCTAssertEqual(DockTearOffTracker.outerEdge(of: w, at: NSPoint(x: 500, y: 400)), nil, "中央は端ではない")
+        XCTAssertEqual(DockTearOffTracker.outerEdge(of: w, at: NSPoint(x: 895, y: 400)), .right)
+    }
+
     func testDockWindowsJoinTheKeyRouterAndShutdownKeepsTheLayout() {
         let m = makeModel()
         let store = DockStore(defaults: nil)
@@ -253,7 +283,7 @@ final class DockAppTests: XCTestCase {
         let m = makeModel()
         _ = m.addTextClip()
         for p in [DockPanel.preview, .inspector, .characters] {
-            let host = NSHostingView(rootView: DockPanelWindowRoot(model: m, panel: p))
+            let host = NSHostingView(rootView: DockPanelWindowRoot(model: m, panel: p, store: DockStore(defaults: nil)))
             host.frame = NSRect(origin: .zero, size: DockWindowManager.defaultSize(of: p))
             let w = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: true)
             w.contentView = host

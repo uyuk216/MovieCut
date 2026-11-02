@@ -292,6 +292,13 @@ public enum ClipEditing {
         return c
     }
 
+    /// レイヤー `track` が [t, t+dur) で空いているか(存在し、ロックでもボイス入りでもなく、重なるクリップがない)。
+    static func isFree(_ project: Project, track: Int, start t: Double, duration dur: Double) -> Bool {
+        guard project.tracks.indices.contains(track) else { return false }
+        let tr = project.tracks[track]
+        return !tr.isLocked && tr.clips.allSatisfy { c in c.type != .voice && (c.start >= t + dur || c.start + c.duration <= t) }
+    }
+
     /// [t, t+dur) が空いている、ロックでもボイス入りでもない最初のレイヤー。無ければ nil(重ねない)。
     public static func freeTrack(in project: Project, start t: Double, duration dur: Double) -> Int? {
         project.tracks.firstIndex { tr in
@@ -303,13 +310,16 @@ public enum ClipEditing {
     /// 置き先は、その区間が空いている最初のレイヤー(ロック・ボイス入りは除く)。空きが無ければ新しいレイヤーを足す。
     /// 同じレイヤーのクリップは重ならない(2026-11-02 修正: 以前は全部 `start` に置いて、満杯だと 0 番に重ねていた)。
     /// 置いたクリップの id を順に返す。
-    public static func place(media: [(path: String, kind: ClipType, duration: Double)], at start: Double, in project: inout Project) -> [String] {
+    /// `preferredTrack` があり、その区間が空いていれば(ロック・ボイス入りでなければ)そのレイヤーを先に使う(ドロップ先のレイヤー)。
+    public static func place(media: [(path: String, kind: ClipType, duration: Double)], at start: Double, preferredTrack: Int? = nil, in project: inout Project) -> [String] {
         var ids: [String] = []
         if project.tracks.isEmpty { project.tracks.append(Track(name: "レイヤー1")) }
         var cursor = start
         for m in media {
             let ti: Int
-            if let f = freeTrack(in: project, start: cursor, duration: m.duration) {
+            if let pref = preferredTrack, isFree(project, track: pref, start: cursor, duration: m.duration) {
+                ti = pref
+            } else if let f = freeTrack(in: project, start: cursor, duration: m.duration) {
                 ti = f
             } else {
                 project.tracks.append(Track(name: "レイヤー\(project.tracks.count + 1)"))

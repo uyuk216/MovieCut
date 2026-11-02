@@ -229,6 +229,8 @@ final class ProjectModel: ObservableObject {
     var playback: PlaybackController!
     /// 別ウインドウに出したパネル(画面のドッキング)。
     var dockWindows: DockWindowManager?
+    /// 素材ブラウザの別ウインドウ(非モーダル。`showAudioLibrary` に合わせる)。
+    var mediaBrowserWindow: MediaBrowserWindow?
     /// 編集済みの通知の差し替え(テスト用)。nil なら NSDocument に伝える。
     var editedTimer: Timer?
     var documentChangeHook: ((NSDocument.ChangeType) -> Void)?
@@ -397,6 +399,7 @@ final class ProjectModel: ObservableObject {
         editedTimer?.invalidate(); editedTimer = nil
         keyRouter.uninstall()
         dockWindows?.closeAll(); dockWindows = nil
+        mediaBrowserWindow?.closeAll(); mediaBrowserWindow = nil
         playback.shutdown()
     }
 

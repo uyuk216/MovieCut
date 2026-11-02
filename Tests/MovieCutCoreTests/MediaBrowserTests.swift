@@ -54,3 +54,57 @@ final class MediaBrowserTests: XCTestCase {
         XCTAssertEqual(MediaBrowser.scan(folder: dir.appendingPathComponent("missing")), [])
     }
 }
+
+/// 並べ方・長さ・読めるかの確認(2026-11-02)。
+final class MediaBrowserSortAndProbeTests: XCTestCase {
+    private func item(_ name: String, modified: Date? = nil, unreadable: Bool = false) -> MediaBrowser.Item {
+        MediaBrowser.Item(url: URL(fileURLWithPath: "/x/\(name)"), name: name, kind: MediaBrowser.kind(forName: name) ?? .video,
+                          modified: modified, unreadable: unreadable)
+    }
+
+    func testSortByModifiedNewestFirstAndUndatedLast() {
+        let old = Date(timeIntervalSince1970: 1_000), new = Date(timeIntervalSince1970: 2_000)
+        let items = [item("a.mp4", modified: old), item("b.mp4", modified: new), item("c.mp4")]
+        XCTAssertEqual(MediaBrowser.sorted(items, by: .modified).map(\.name), ["b.mp4", "a.mp4", "c.mp4"])
+    }
+
+    func testSortByKindGroupsVideoAudioImage() {
+        let items = ["z.png", "m.wav", "a.mov", "b.mp3"].map { item($0) }
+        XCTAssertEqual(MediaBrowser.sorted(items, by: .kind).map(\.name), ["a.mov", "b.mp3", "m.wav", "z.png"], "動画・音声・画像の順、その中は名前順")
+    }
+
+    func testSortByNameMatchesDefault() {
+        let items = ["track10.wav", "Track2.wav", "a.mp3"].map { item($0) }
+        XCTAssertEqual(MediaBrowser.sorted(items, by: .name), MediaBrowser.sorted(items))
+    }
+
+    func testFilterAppliesSortKey() {
+        let old = Date(timeIntervalSince1970: 1), new = Date(timeIntervalSince1970: 9)
+        let items = [item("bgm-a.wav", modified: old), item("bgm-b.wav", modified: new), item("other.wav", modified: new)]
+        XCTAssertEqual(MediaBrowser.filter(items, kind: .all, query: "bgm", sort: .modified).map(\.name), ["bgm-b.wav", "bgm-a.wav"])
+    }
+
+    func testApplyingProbeResultKeepsIdentity() {
+        let i = item("clip.mp4")
+        let withLen = MediaBrowser.applying((duration: 3.5, unreadable: false), to: i)
+        XCTAssertEqual(withLen.duration, 3.5)
+        XCTAssertFalse(withLen.unreadable)
+        XCTAssertEqual(withLen.id, i.id)
+        XCTAssertTrue(MediaBrowser.applying((duration: nil, unreadable: true), to: i).unreadable)
+    }
+
+    func testProbeFlagsGarbageFilesAsUnreadable() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("probe-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let movie = dir.appendingPathComponent("broken.mp4"), picture = dir.appendingPathComponent("broken.png")
+        try Data(repeating: 0x42, count: 64).write(to: movie)
+        try Data(repeating: 0x42, count: 64).write(to: picture)
+        let m = await MediaBrowser.probe(url: movie, kind: .video)
+        XCTAssertTrue(m.unreadable, "中身が映像でないファイルは読めない扱い")
+        XCTAssertNil(m.duration)
+        let p = await MediaBrowser.probe(url: picture, kind: .image)
+        XCTAssertTrue(p.unreadable)
+        XCTAssertNil(p.duration, "画像は長さを持たない")
+    }
+}

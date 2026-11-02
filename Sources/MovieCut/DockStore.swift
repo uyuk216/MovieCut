@@ -45,6 +45,8 @@ final class DockStore: ObservableObject {
     func moveToRootEdge(_ p: DockPanel, _ e: DockEdge) { mutate { $0.moveToRootEdge(p, e, fraction: DockDropTarget.outerFraction) } }
     func detach(_ p: DockPanel) { mutate { $0.detach(p) } }
     func attach(_ p: DockPanel) { mutate { $0.attach(p) } }
+    /// 切り離したパネルをドッキングへ戻す(`outer` があれば、ドック全体のその端へ)。戻し先の記録は `DockLayout` が持つ。
+    func redock(_ p: DockPanel, outer: DockEdge?) { mutate { $0.redock(p, outer: outer) } }
     func close(_ p: DockPanel) { mutate { $0.close(p) } }
     func toggle(_ p: DockPanel) { mutate { $0.toggle(p); return true } }
     func apply(_ preset: DockPreset) { mutate { $0.apply(preset); return true } }
@@ -58,8 +60,12 @@ enum DockDrag {
     /// ドラッグの入れ物の型(Info.plist の UTExportedTypeDeclarations にも宣言する)。
     static let type = UTType(exportedAs: "jp.local.moviecut.dock-panel", conformingTo: .data)
 
+    /// タブのドラッグが始まった(切り離しの追跡を始めるため。`panel` は `userInfo["panel"]` に rawValue で入る)。
+    static let didBegin = Notification.Name("jp.local.moviecut.dock-drag-began")
+
     static func provider(for panel: DockPanel) -> NSItemProvider {
         current = panel
+        NotificationCenter.default.post(name: didBegin, object: nil, userInfo: ["panel": panel.rawValue])
         let p = NSItemProvider()
         p.registerDataRepresentation(forTypeIdentifier: type.identifier, visibility: .ownProcess) { done in
             done(panel.rawValue.data(using: .utf8), nil)

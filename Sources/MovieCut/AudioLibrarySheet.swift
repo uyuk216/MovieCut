@@ -61,10 +61,12 @@ struct AudioLibrarySheet: View {
     @State private var kind: MediaBrowser.KindFilter = .all
     @State private var query = ""
     @State private var gridMode = false
+    @State private var sort: MediaBrowser.SortKey = .name
     @State private var selectedId: String?
+    @State private var probeTask: Task<Void, Never>?
     @StateObject private var preview = AudioPreviewPlayer()
 
-    private var shown: [MediaBrowser.Item] { MediaBrowser.filter(items, kind: kind, query: query) }
+    private var shown: [MediaBrowser.Item] { MediaBrowser.filter(items, kind: kind, query: query, sort: sort) }
     private var selected: MediaBrowser.Item? { shown.first { $0.id == selectedId } }
 
     var body: some View {
@@ -89,6 +91,11 @@ struct AudioLibrarySheet: View {
                     }
                     .pickerStyle(.segmented).labelsHidden().frame(width: 260)
                     Spacer(minLength: 8)
+                    Picker("並べ方", selection: $sort) {
+                        ForEach(MediaBrowser.SortKey.allCases, id: \.self) { Text($0.title).tag($0) }
+                    }
+                    .labelsHidden().frame(width: 110)
+                    .accessibilityIdentifier("media-browser-sort")
                     Picker("表示", selection: $gridMode) {
                         Image(systemName: "list.bullet").tag(false)
                         Image(systemName: "square.grid.2x2").tag(true)
@@ -116,7 +123,7 @@ struct AudioLibrarySheet: View {
                 }
             }
             HStack {
-                Text("追加は再生ヘッド(\(String(format: "%.2f", model.currentTime)) 秒)の位置に。ダブルクリックか Return で追加し、1 回の取り消しで戻せます。")
+                Text("ダブルクリック・Return・ドラッグで追加。再生ヘッド(\(String(format: "%.2f", model.currentTime)) 秒)の位置か、ドロップした位置とレイヤーに置き、1 回の取り消しで戻せます。")
                     .font(.caption).foregroundStyle(.secondary)
                 Spacer(minLength: 8)
                 Button("閉じる") { preview.stop(); model.showAudioLibrary = false }
@@ -124,9 +131,9 @@ struct AudioLibrarySheet: View {
             }
         }
         .padding(20)
-        .frame(width: 680)
+        .frame(minWidth: 680, minHeight: 480)
         .task { reload() }
-        .onDisappear { preview.stop() }
+        .onDisappear { preview.stop(); probeTask?.cancel() }
     }
 
     @ViewBuilder
@@ -152,12 +159,13 @@ struct AudioLibrarySheet: View {
             MediaThumbnailView(item: e, width: 44, height: 30)
             VStack(alignment: .leading, spacing: 2) {
                 Text(e.name).lineLimit(1).truncationMode(.middle)
-                Text(Self.kindText(e.kind)).font(.caption).foregroundStyle(.secondary)
+                Text(Self.infoText(e)).font(.caption).foregroundStyle(e.unreadable ? .red : .secondary)
             }
             Spacer(minLength: 0)
         }
         .contentShape(Rectangle())
         .onTapGesture(count: 2) { add(e) }
+        .modifier(BrowserDragSource(item: e))
         .accessibilityIdentifier("audio-library-row")
     }
 
@@ -172,6 +180,7 @@ struct AudioLibrarySheet: View {
         .contentShape(Rectangle())
         .onTapGesture(count: 2) { add(e) }
         .onTapGesture { selectedId = e.id }
+        .modifier(BrowserDragSource(item: e))
         .accessibilityIdentifier("audio-library-cell")
     }
 
@@ -181,7 +190,7 @@ struct AudioLibrarySheet: View {
             if let s = selected {
                 MediaThumbnailView(item: s, width: 210, height: 118)
                 Text(s.name).font(.headline).lineLimit(2).truncationMode(.middle)
-                Text(Self.kindText(s.kind)).font(.caption).foregroundStyle(.secondary)
+                Text(Self.infoText(s)).font(.caption).foregroundStyle(s.unreadable ? .red : .secondary)
                 if s.kind == .audio {
                     Button {
                         preview.toggle(s.url)
@@ -191,7 +200,7 @@ struct AudioLibrarySheet: View {
                     }
                 }
                 Button("タイムラインに追加") { add(s) }
-                    .disabled(model.isLocked)
+                    .disabled(model.isLocked || s.unreadable)
             } else {
                 Text("素材を選ぶと、ここにプレビューが出ます。").font(.caption).foregroundStyle(.secondary)
             }
@@ -199,7 +208,7 @@ struct AudioLibrarySheet: View {
         }
         .onChange(of: selectedId) { _, _ in preview.stop() }
         .onKeyPress(.return) {
-            guard let s = selected, !model.isLocked else { return .ignored }
+            guard let s = selected, !model.isLocked, !s.unreadable else { return .ignored }
             add(s)
             return .handled
         }
@@ -211,19 +220,31 @@ struct AudioLibrarySheet: View {
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
         panel.title = "素材のフォルダを選ぶ"
-        let run: (NSApplication.ModalResponse) -> Void = { resp in
+        // 素材ブラウザは別ウインドウ(非モーダル)なので、フォルダ選びも独立したパネルで出す
+        panel.begin { resp in
             guard resp == .OK, let url = panel.url else { return }
             AudioLibraryStore.setFolder(url)
             folder = url
             reload()
         }
-        if let w = model.window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
     }
 
+    /// 一覧を読み直す。長さと読めるかは後から 1 件ずつ確かめて、確かめたものから行に反映する(読み込み中も操作できる)。
     private func reload() {
+        probeTask?.cancel()
         guard let f = folder else { items = []; return }
         items = MediaBrowser.scan(folder: f)
         selectedId = nil
+        let targets = items
+        probeTask = Task { @MainActor in
+            for target in targets {
+                if Task.isCancelled { return }
+                let probed = await MediaBrowser.probe(url: target.url, kind: target.kind)
+                if let i = items.firstIndex(where: { $0.id == target.id }) {
+                    items[i] = MediaBrowser.applying(probed, to: items[i])
+                }
+            }
+        }
     }
 
     /// 選んだ素材を再生ヘッドに置く(`addMedia` → `ClipEditing.place`。1 回の取り消し)。
@@ -256,5 +277,25 @@ struct AudioLibrarySheet: View {
     static func durationText(_ s: Double) -> String {
         let total = Int((s).rounded())
         return String(format: "%d:%02d", total / 60, total % 60)
+    }
+
+    /// 行の副題: 種類・長さ(分かったとき)・読めないときはその旨。
+    static func infoText(_ e: MediaBrowser.Item) -> String {
+        if e.unreadable { return "読めないファイル(壊れている・非対応の形式)" }
+        var parts = [kindText(e.kind)]
+        if let d = e.duration { parts.append(durationText(d)) }
+        return parts.joined(separator: " ・ ")
+    }
+}
+
+/// 読めるファイルは、タイムラインへドラッグできる(ファイル URL を渡す。Finder からのドロップと同じ経路)。
+private struct BrowserDragSource: ViewModifier {
+    let item: MediaBrowser.Item
+    func body(content: Content) -> some View {
+        if item.unreadable {
+            content
+        } else {
+            content.onDrag { NSItemProvider(contentsOf: item.url) ?? NSItemProvider() }
+        }
     }
 }
