@@ -131,4 +131,19 @@ public enum CharacterPartCheck {
     public static func missingExpressionTags(_ expressions: [String: String], exists: (String) -> Bool) -> [String] {
         expressions.filter { $0.value.isEmpty || !exists($0.value) }.map(\.key).sorted()
     }
+
+    /// 台本の各行で使われる表情タグのうち、その話すキャラの表情画像が欠けているもの(「キャラ名: 表情名」・重複なし・行の順)。
+    /// 話し手の決め方は台本の読み上げと同じ(`ScriptTimeline.parse`)。辞書に無いタグは通常の立ち絵に戻るので警告しない。
+    public static func missingInScript(_ text: String, characters: [Character], exists: (String) -> Bool) -> [String] {
+        var out: [String] = []
+        for raw in text.components(separatedBy: .newlines) {
+            guard let (who, body) = ScriptTimeline.parse(line: raw, characters: characters, selectedCharId: nil),
+                  let tag = ExpressionTag.split(body).tag,
+                  let path = who.expressions?[tag] else { continue }
+            guard path.isEmpty || !exists(path) else { continue }
+            let item = "\(who.name): \(tag)"
+            if !out.contains(item) { out.append(item) }
+        }
+        return out
+    }
 }

@@ -148,6 +148,11 @@ extension ProjectModel {
         pps = TimelineLayout.clampPps(pps * factor)
     }
 
+    /// 台本で使われている表情タグのうち、表情の画像が無いもの(「キャラ名: 表情名」)。台本欄の下に赤く出す。
+    var scriptMissingExpressions: [String] {
+        CharacterPartCheck.missingInScript(scriptText, characters: project.characters) { FileManager.default.fileExists(atPath: $0) }
+    }
+
     /// 「台本から音声を作る」: 左の台本欄の文字から作る。空なら案内だけ出す。
     func generateVoicesFromScript() async {
         guard !isLocked else { return }

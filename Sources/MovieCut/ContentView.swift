@@ -231,6 +231,13 @@ struct LeftPanel: View {
                 }
             }
             .frame(maxHeight: .infinity)
+            if !model.scriptMissingExpressions.isEmpty {
+                Text("表情の画像が無い行: " + model.scriptMissingExpressions.joined(separator: "、"))
+                    .font(.caption).foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 6)
+                    .help("表情の画像を差し替えるか、表情を消してください(キャラのパネルの「表情」)")
+            }
             Button {
                 Task { await model.generateVoicesFromScript() }
             } label: {

@@ -78,7 +78,7 @@ final class MenuUndoSweepTests: XCTestCase {
              .measureLoudness, .showScopes, .saveTemplate, .newFromTemplate, .makeProxies, .lutLoad, .autoWhiteBalance, .regenerateVoice,
              .makeVoices, .layerDelete, .copyChapters, .copyChaptersColor(.red), .jumpToTime, .renameMarker, .fpsCustom, .addQRCode, .aiImage, .generateSubtitles,
              .helpShortcuts, .helpVoicevox, .helpAquestalk, .helpLicense, .helpThirdParty, .previewBackground, .guide,
-             .dockPanel, .dockLayout, .previewProxyToggle, .fullScreen:
+             .dockPanel, .dockLayout, .previewProxyToggle, .fullScreen, .exportScript, .exportStoryboard:
             return true
         default:
             return false

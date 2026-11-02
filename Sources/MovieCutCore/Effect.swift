@@ -29,6 +29,8 @@ public enum EffectKind: String, CaseIterable, Sendable {
     case whiteBalance, colorWheels
     /// 光学ミスト: 明るい所だけをぼかして重ね、ふんわり光らせる(ハイライトのにじみ)。
     case opticalMist
+    /// ハイライト補正: 明るい部分だけを白の手前へなめらかに寄せる(フィルム風のトーンの肩)。
+    case highlightRolloff
 
     public var label: String {
         switch self {
@@ -54,6 +56,7 @@ public enum EffectKind: String, CaseIterable, Sendable {
         case .whiteBalance: return "ホワイトバランス"
         case .colorWheels: return "カラーホイール"
         case .opticalMist: return "光学ミスト"
+        case .highlightRolloff: return "ハイライト補正"
         }
     }
 
@@ -94,6 +97,7 @@ public enum EffectKind: String, CaseIterable, Sendable {
         ]
         case .opticalMist: return [Self.p("amount", "量", 0, 1, 0.5, 0.01, .percent), Self.p("threshold", "しきい値", 0, 1, 0.7, 0.01, .percent),
                                    Self.p("radius", "ぼかし半径（px）", 0, 100, 24, 1, .px)]
+        case .highlightRolloff: return [Self.p("knee", "圧縮の始まり", 0, 0.99, HighlightRolloff.defaultKnee, 0.01, .percent)]
         }
     }
 

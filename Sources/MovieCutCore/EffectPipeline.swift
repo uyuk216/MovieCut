@@ -45,6 +45,7 @@ public enum EffectPipeline {
         case .whiteBalance: return abs(v("temperature")) < eps && abs(v("tint")) < eps
         case .colorWheels: return v("liftAmount") < eps && v("gammaAmount") < eps && v("gainAmount") < eps
         case .opticalMist: return v("amount") < eps || v("radius") < eps
+        case .highlightRolloff: return false
         }
     }
 
@@ -204,6 +205,10 @@ public enum EffectPipeline {
                 .premultiplyingAlpha()
         case .opticalMist:
             return OpticalMist.apply(img, amount: e.v("amount"), threshold: e.v("threshold"), sigma: e.v("radius") * scale)
+        case .highlightRolloff:
+            return img.unpremultiplyingAlpha()
+                .applyingFilter("CIColorCube", parameters: ["inputCubeDimension": HighlightRolloff.cubeDimension, "inputCubeData": HighlightRolloff.cubeData(knee: e.v("knee"))])
+                .premultiplyingAlpha()
         case .lut:
             guard let p = e.path, let c = LUTCache.shared.cube(atPath: p) else { return img }
             return LUTApply.apply(img, lut: c.lut, dimension: c.dimension, data: c.data, intensity: e.v("intensity"))

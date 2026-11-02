@@ -453,6 +453,14 @@ struct ClipInspector: View {
                     num("開始（秒）", .start, step: 0.1, decimals: 3)
                     num("長さ（秒）", .duration, step: 0.1, decimals: 3)
                 }
+                if let usage = SourceUsage.label(of: c) {
+                    HStack(spacing: 8) {
+                        Text(usage).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                        Button("この区間へ") { model.showSourceUsage() }
+                            .controlSize(.small)
+                            .help("再生位置をクリップの頭へ移し、元素材の使用範囲を状態欄に出す")
+                    }
+                }
                 InspectorSection(title: "注記")
                 ClipNoteField(model: model, clipId: clipId, note: c.note ?? "").id(clipId)
                 if c.type == .voice { voiceSections(c) }
@@ -1103,6 +1111,13 @@ struct CharacterInspector: View {
                 }
                 Spacer(minLength: 0)
             }
+        }
+        let missing = CharacterPartCheck.missingExpressionTags(c.expressions ?? [:]) { FileManager.default.fileExists(atPath: $0) }
+        if !missing.isEmpty {
+            Text("画像が見つからない表情: " + missing.joined(separator: "、"))
+                .font(.system(size: 11, weight: .semibold)).foregroundStyle(.red)
+                .fixedSize(horizontal: false, vertical: true)
+                .help("画像のファイルが移動・削除されています。「差し替え…」で選び直してください")
         }
         Button { model.chooseImage(title: "表情の画像を選ぶ") { model.addExpression(charId: charId, url: $0) } } label: {
             Label("表情を追加…", systemImage: "plus.circle").frame(maxWidth: .infinity)

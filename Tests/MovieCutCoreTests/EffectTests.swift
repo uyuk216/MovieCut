@@ -273,7 +273,7 @@ final class EffectTests: XCTestCase {
         XCTAssertEqual(EffectKind.contrast.spec("amount")!.range, 0...3)
         XCTAssertEqual(EffectKind.outline.spec("width")!.range, 1...30)
         XCTAssertEqual(EffectKind.motionBlur.params.map(\.key), ["radius", "angle"])
-        XCTAssertEqual(EffectKind.allCases.count, 22)
+        XCTAssertEqual(EffectKind.allCases.count, 23)
         for k in EffectKind.allCases { for s in k.params { XCTAssertTrue(s.range.contains(s.defaultValue), "\(k) \(s.key)") } }
     }
 

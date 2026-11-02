@@ -43,6 +43,16 @@ extension ProjectModel {
         return true
     }
 
+    /// 選んだクリップの元素材の使用範囲: 状態欄に「ソースの使用範囲 00:00–00:00」を出し、再生位置をクリップの頭へ移す。
+    /// 素材の画面(ソースビューア)は無いので、選択と再生位置・状態欄で示す。範囲が無いクリップは false。
+    @discardableResult
+    func showSourceUsage() -> Bool {
+        guard let c = selectedClip, let text = SourceUsage.label(of: c) else { return false }
+        playback.seek(to: c.start)
+        statusText = text
+        return true
+    }
+
     /// 短いクリップ(既定 6 コマ未満)を全部選ぶ。無ければ false。
     @discardableResult
     func selectShortClips() -> Bool {

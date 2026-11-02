@@ -1,4 +1,5 @@
 import Foundation
+import CoreImage
 
 /// フィルム風のハイライト圧縮(明るい部分だけを、白に届かない手前へなめらかに寄せる純粋な計算)。
 /// 0〜`knee` は変えない。`knee` を越えると、残りの幅(1 − knee)を指数で詰める。接線は knee で連続し、出力は 1 未満。
@@ -25,5 +26,26 @@ public enum HighlightRolloff {
     public static func table(size: Int = 256, knee: Double = defaultKnee) -> [Double] {
         let n = max(2, size)
         return (0..<n).map { i in apply(Double(i) / Double(n - 1), knee: knee) }
+    }
+}
+
+extension HighlightRolloff {
+    /// CIColorCube 用の 1 辺の数(赤・緑・青は独立に変わるので、各軸を同じ変換表で引けば足りる)。
+    public static let cubeDimension = 17
+
+    /// 3D の色表(RGBA の Float × dimension³)。各チャンネルに同じ圧縮をかける(チャンネルは混ぜない)。
+    public static func cubeData(knee: Double = defaultKnee) -> Data {
+        let n = cubeDimension
+        let curve: [Float] = (0..<n).map { i in Float(apply(Double(i) / Double(n - 1), knee: knee)) }
+        var floats = [Float]()
+        floats.reserveCapacity(n * n * n * 4)
+        for b in 0..<n {
+            for g in 0..<n {
+                for r in 0..<n {
+                    floats.append(curve[r]); floats.append(curve[g]); floats.append(curve[b]); floats.append(1)
+                }
+            }
+        }
+        return floats.withUnsafeBufferPointer { Data(buffer: $0) }
     }
 }

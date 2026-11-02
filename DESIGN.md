@@ -481,3 +481,13 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
 - **レイヤーへの追加の重なり**: `ClipEditing.appendToTopLayer` は、一番上のレイヤーが [start, end) で空いていてロックでなければそこへ足す。塞がっている・ロックなら、新しいレイヤーを一番上に足して置く(同じレイヤーで重ならない不変条件。テスト `BugSweepRound4Tests`、`TimelineEditingTests.testAddTextAndBlurGoToTopLayerAndSelect` は新しい期待に直した)。
 - **背景抜きの残骸**: `CutoutCache.unreferenced(_:in:)` は、どのクリップの素材にもない PNG を返す。差し替えに失敗したとき `applyCutout` が、その PNG を消す。
 - **純粋な計算(画面は未接続)**: `HighlightRolloff`(膝より上を指数で詰める、接線連続・出力 1 未満)、`CharacterPartCheck.missingExpressionTags`(表情の画像が無い・空のもの)、`SourceUsage.range(of:)`(クリップが元素材で使う区間。フリーズ・画像・空は nil)。テストは `PartBRound4Tests`。
+
+## 2026-11-02 配線と候補(Part A・B)
+- **ハイライト補正**: `EffectKind.highlightRolloff`(引数 `knee` 0〜0.99・既定 0.8・パーセント表示)。`HighlightRolloff.apply` の曲線を 17³ の CIColorCube(赤・緑・青は独立)にして `EffectPipeline` で掛ける。プレビューと書き出しは同じ `Renderer` の経路。引数が無いときは何も書かない。
+- **立ち絵の欠落**: `CharacterPartCheck.missingExpressionTags`(表情の画像が無いもの)と `missingInScript`(台本の行の `[表情]` で、その話すキャラの画像が無いもの。話し手は `ScriptTimeline.parse` と同じ)。キャラのパネルの表情欄と台本欄の下に赤い文で出す。
+- **元素材の使用範囲**: `SourceUsage.label(of:)`(「ソースの使用範囲 00:00–00:03」、1 時間以上は 0:00:00)。クリップのタイミング欄に表示し、出力 ▸ 元素材の使用範囲を表示 で再生位置をクリップの頭へ移す。素材のビューアは無いので、「元の素材の画面で範囲を示す」は未実装。
+- **絵コンテ**(`Storyboard`): 全体を 12 等分した区間の中央のコマ(`Renderer`)を 4 列の格子で 1 枚の PNG にする。セルは縦横比を保ち、幅 480 px、高さは偶数に揃える。書き出しはメニューから(保存パネル)で同期実行(枚数分の描画の間は画面が止まる)。
+- **台本の書き出し**(`VoiceScriptExport`): 声のクリップを始まりの時刻の順に「キャラ名: セリフ」で書く。`ScriptTimeline.parse` で読み直せる。キャラが無い・セリフが空のものは書かず件数を状態欄に出す。
+- **音による同期**(`AudioSync`): 窓ごとの RMS(包絡)と、正規化相互相関によるずれ(サンプル数、正なら後ろへずれている)。`maxLag` の範囲だけを探す。メニューからの接続(2 つのクリップの音を読んで開始位置を動かす)は未実装。
+- メニューの追加: 出力 ▸ 台本を書き出す… / 絵コンテを書き出す… / 元素材の使用範囲を表示(いずれもショートカットなし。無効の理由あり)。
+
