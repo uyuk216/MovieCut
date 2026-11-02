@@ -62,11 +62,17 @@ extension ProjectModel {
         }
     }
 
-    /// フレームブレンドの on/off(動画だけ。1 回の Undo)。
+    /// フレームブレンドの on/off(動画だけ。1 回の Undo)。オンは「ブレンド」、オフは「なし」(オプティカルフローも外れる)。
     @discardableResult
     func setFrameBlend(_ on: Bool, clipId: String) -> Bool {
-        guard !isLocked, let c = clip(clipId), c.type == .video, !c.isFreeze, (c.frameBlend == true) != on else { return false }
-        setClipProperty({ $0.frameBlend = on ? true : nil }, name: "フレームブレンド", clipId: c.id)
+        setFrameInterpolation(on ? .blend : .none, clipId: clipId)
+    }
+
+    /// コマの補間の方式(なし / ブレンド / オプティカルフロー)。動画だけ・フリーズ以外。変わらなければ何もしない。1 回の Undo。
+    @discardableResult
+    func setFrameInterpolation(_ mode: FrameInterpolation, clipId: String) -> Bool {
+        guard !isLocked, let c = clip(clipId), c.type == .video, !c.isFreeze, c.frameInterpolation != mode else { return false }
+        setClipProperty({ $0.setFrameInterpolation(mode) }, name: mode == .flow ? "オプティカルフロー補間" : "フレームブレンド", clipId: c.id)
         return true
     }
 }

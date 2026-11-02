@@ -210,7 +210,7 @@ final class EffectAppTests: XCTestCase {
     func testMenuSpecTitlesCommandsAndEnabling() {
         let on = state { $0.canEffect = true; $0.hasEffects = true; $0.canPasteEffects = true }
         let kinds = AppMenuSpec.effectKindItems(on)
-        XCTAssertEqual(kinds.map(\.title), ["明るさ", "コントラスト", "彩度", "色相", "露出", "シャープ", "モノクロ", "セピア", "ビネット", "モザイク", "ガウスぼかし", "ズームぼかし", "モーションぼかし", "グロー", "ドロップシャドウ", "縁取り", "クロマキー", "LUT", "顔ぼかし", "ホワイトバランス", "カラーホイール", "光学ミスト", "ハイライト補正"])
+        XCTAssertEqual(kinds.map(\.title), ["明るさ", "コントラスト", "彩度", "色相", "露出", "シャープ", "モノクロ", "セピア", "ビネット", "モザイク", "ガウスぼかし", "ズームぼかし", "モーションぼかし", "グロー", "ドロップシャドウ", "縁取り", "クロマキー", "LUT", "顔ぼかし", "ホワイトバランス", "カラーホイール", "光学ミスト", "ハイライト補正", "絞りぼかし"])
         XCTAssertEqual(kinds.map(\.command), EffectKind.allCases.map { MenuCommand.effectAdd($0) })
         XCTAssertTrue(kinds.allSatisfy { $0.enabled && $0.shortcut == nil })
         XCTAssertEqual(AppMenuSpec.effectPresetItems(on).map(\.title), ["ビンテージ", "白黒映画", "夢のような", "強調", "モザイク全体"])

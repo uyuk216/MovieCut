@@ -4,7 +4,7 @@ import Foundation
 
 /// エフェクトの引数 1 つ分の仕様(範囲・既定値・インスペクタの刻み)。
 public struct EffectParamSpec: Equatable, Sendable {
-    public enum Unit: Sendable { case plain, percent, px, degrees, mode, toggle }
+    public enum Unit: Sendable { case plain, percent, px, degrees, mode, toggle, aperture }
     public let key: String
     public let label: String
     public let range: ClosedRange<Double>
@@ -31,6 +31,8 @@ public enum EffectKind: String, CaseIterable, Sendable {
     case opticalMist
     /// ハイライト補正: 明るい部分だけを白の手前へなめらかに寄せる(フィルム風のトーンの肩)。
     case highlightRolloff
+    /// 絞りぼかし: 円・多角形・星・ハートの形のボケ(明るい光が、その形の円盤になる)。
+    case bokehBlur
 
     public var label: String {
         switch self {
@@ -57,6 +59,7 @@ public enum EffectKind: String, CaseIterable, Sendable {
         case .colorWheels: return "カラーホイール"
         case .opticalMist: return "光学ミスト"
         case .highlightRolloff: return "ハイライト補正"
+        case .bokehBlur: return "絞りぼかし"
         }
     }
 
@@ -98,6 +101,8 @@ public enum EffectKind: String, CaseIterable, Sendable {
         case .opticalMist: return [Self.p("amount", "量", 0, 1, 0.5, 0.01, .percent), Self.p("threshold", "しきい値", 0, 1, 0.7, 0.01, .percent),
                                    Self.p("radius", "ぼかし半径（px）", 0, 100, 24, 1, .px)]
         case .highlightRolloff: return [Self.p("knee", "圧縮の始まり", 0, 0.99, HighlightRolloff.defaultKnee, 0.01, .percent)]
+        case .bokehBlur: return [Self.p("radius", "ボケの半径（px）", 0, 100, 20, 1, .px), Self.p("shape", "絞りの形", 0, Double(ApertureShape.allCases.count - 1), 0, 1, .aperture),
+                                 Self.p("highlight", "ハイライトの強調", 0, 1, 0.3, 0.01, .percent), Self.p("rotation", "形の向き（°）", -180, 180, 0, 1, .degrees)]
         }
     }
 

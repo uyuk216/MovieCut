@@ -10,6 +10,19 @@ public enum OpticalMist {
     public static func apply(_ image: CIImage, amount: Double, threshold: Double, sigma: Double) -> CIImage {
         let rect = image.extent
         guard amount > 1e-6, sigma > 1e-3, !rect.isInfinite, !rect.isEmpty else { return image }
+        let highlights = Self.highlights(of: image, threshold: threshold)
+        let blurred = highlights.clampedToExtent().applyingGaussianBlur(sigma: sigma).cropped(to: rect)
+        let a = amount
+        let weighted = blurred.applyingFilter("CIColorMatrix", parameters: [
+            "inputRVector": CIVector(x: a, y: 0, z: 0, w: 0), "inputGVector": CIVector(x: 0, y: a, z: 0, w: 0),
+            "inputBVector": CIVector(x: 0, y: 0, z: a, w: 0), "inputAVector": CIVector(x: 0, y: 0, z: 0, w: a),
+            "inputBiasVector": CIVector(x: 0, y: 0, z: 0, w: 0),
+        ])
+        return weighted.applyingFilter("CIScreenBlendMode", parameters: [kCIInputBackgroundImageKey: image]).cropped(to: rect)
+    }
+
+    /// 輝度がしきい値を超えた分だけを取り出した画像(元の色 × (輝度 − しきい値) / (1 − しきい値) を 0〜1 に収めたマスク)。光学ミストと絞りぼかしが使う。
+    static func highlights(of image: CIImage, threshold: Double) -> CIImage {
         let t = min(max(threshold, 0), 1)
         let k = 1 / max(1 - t, 1e-3)
         let kr = 0.2126 * k, kg = 0.7152 * k, kb = 0.0722 * k
@@ -22,14 +35,6 @@ public enum OpticalMist {
         ]).applyingFilter("CIColorClamp", parameters: [
             "inputMinComponents": CIVector(x: 0, y: 0, z: 0, w: 0), "inputMaxComponents": CIVector(x: 1, y: 1, z: 1, w: 1),
         ])
-        let highlights = image.applyingFilter("CIMultiplyCompositing", parameters: [kCIInputBackgroundImageKey: luma])
-        let blurred = highlights.clampedToExtent().applyingGaussianBlur(sigma: sigma).cropped(to: rect)
-        let a = amount
-        let weighted = blurred.applyingFilter("CIColorMatrix", parameters: [
-            "inputRVector": CIVector(x: a, y: 0, z: 0, w: 0), "inputGVector": CIVector(x: 0, y: a, z: 0, w: 0),
-            "inputBVector": CIVector(x: 0, y: 0, z: a, w: 0), "inputAVector": CIVector(x: 0, y: 0, z: 0, w: a),
-            "inputBiasVector": CIVector(x: 0, y: 0, z: 0, w: 0),
-        ])
-        return weighted.applyingFilter("CIScreenBlendMode", parameters: [kCIInputBackgroundImageKey: image]).cropped(to: rect)
+        return image.applyingFilter("CIMultiplyCompositing", parameters: [kCIInputBackgroundImageKey: luma])
     }
 }

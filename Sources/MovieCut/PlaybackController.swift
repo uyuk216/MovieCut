@@ -184,6 +184,7 @@ final class PlaybackController {
 
     func play() {
         guard let model, !isPlaying, !isPreparing, !model.isLocked else { return }
+        model.auditionPlayer.stop()                 // 試聴の短い音は止めて、全体を鳴らす(試聴のオンオフはそのまま)
         armed = true
         shuttleState = .normal
         let end = model.project.endTime
@@ -267,7 +268,10 @@ final class PlaybackController {
         guard let model else { return }
         let nt = max(0, t)
         model.currentTime = nt
-        guard isPlaying, !scrubbing else { return }
+        guard isPlaying, !scrubbing else {
+            if !isPlaying { model.auditionAtPlayhead() }   // 止まっているとき: 試聴がオンなら、その位置の対象の音だけを鳴らす
+            return
+        }
         restartAudio(at: nt)
     }
 

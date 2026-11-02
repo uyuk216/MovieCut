@@ -555,10 +555,17 @@ struct ClipInspector: View {
             }
             rampSection(c)
             if c.type == .video {
-                Toggle("フレームブレンド（速度が 1 未満のとき、隣り合うコマを混ぜる）", isOn: Binding(get: { c.frameBlend == true }, set: { model.setFrameBlend($0, clipId: clipId) }))
-                    .toggleStyle(.checkbox)
+                HStack(spacing: 6) {
+                    Text("コマの補間（速度が 1 未満のとき）").font(.system(size: 12)).foregroundStyle(.secondary)
+                    Spacer(minLength: 4)
+                    Picker("", selection: Binding(get: { c.frameInterpolation }, set: { model.setFrameInterpolation($0, clipId: clipId) })) {
+                        ForEach(FrameInterpolation.allCases, id: \.self) { Text($0.label).tag($0) }
+                    }
+                    .labelsHidden()
+                    .frame(maxWidth: 230)
                     .disabled(c.effectiveReverse)
-                    .help("スローモーションのコマ落ちを、前後のコマの重ね合わせで滑らかにします")
+                }
+                .help("スローモーションのコマ落ちを滑らかにします。ブレンドは前後のコマの重ね合わせ、オプティカルフローは動きを推定して動きに沿った中間のコマを作ります（重い処理なので、最初のコマは少し待ちます）")
             }
         }
     }
@@ -662,6 +669,7 @@ struct ClipInspector: View {
         case .degrees: return { "\(Int($0.rounded()))°" }
         case .mode: return { $0 >= 0.5 ? "ぼかし" : "モザイク" }
         case .toggle: return { $0 >= 0.5 ? "オン" : "オフ" }
+        case .aperture: return { ApertureShape(value: $0).label }
         case .plain: return { s.step >= 1 ? "\(Int($0.rounded()))" : String(format: "%.2f", $0) }
         }
     }
@@ -912,9 +920,19 @@ struct ClipInspector: View {
             Picker("", selection: Binding(get: { c.blurModeOrDefault }, set: { v in model.setClipProperty({ $0.blurMode = v == "blur" ? nil : v }, name: "ぼかしの方式の変更", clipId: clipId) })) {
                 Text("ぼかし").tag("blur")
                 Text("モザイク").tag("mosaic")
+                Text("絞り").tag("bokeh")
             }
             .pickerStyle(.segmented)
             .labelsHidden()
+        }
+        if c.blurModeOrDefault == "bokeh" {
+            InspectorField(label: "絞りの形") {
+                Picker("", selection: Binding(get: { c.bokehShapeOrDefault }, set: { v in model.setBokehShape(v, clipId: clipId) })) {
+                    ForEach(ApertureShape.allCases, id: \.self) { Text($0.label).tag($0) }
+                }
+                .labelsHidden()
+                .help("背景のボケが、この形の円盤になります（明るい光ほどはっきり見えます）")
+            }
         }
         if c.blurModeOrDefault == "mosaic" {
             slider("ブロックの大きさ（px）", .mosaicSize, step: 1, format: Self.px)

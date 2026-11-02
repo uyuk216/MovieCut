@@ -27,11 +27,13 @@ enum MenuCommand: Hashable {
     // トリム点 / 選択クリップの反復再生と、前後の幅(秒。0.5 / 1 / 2)
     case toggleTrimLoop, toggleClipLoop
     case trimLoopWidth(Double)
+    // 再生 ▸ 重なったクリップの音だけ試聴(オン/オフ)・次のクリップへ(ショートカットは持たない)
+    case toggleAudition, cycleAudition
     case aiScript, aiChapters, aiTitles, aiRewrite, aiSettings
     // 書き出し範囲(イン / アウト / 解除)と、静止画・連番画像の書き出し
     case rangeIn, rangeOut, rangeClear, exportStill, exportSequence
     // タイムラインの問い合わせ: 前後の空白(黒穴)へ・再生位置のクリップを選ぶ・短いクリップを選ぶ・選んだ範囲を書き出し範囲に
-    case prevGap, nextGap, selectClipAtPlayhead, selectShortClips, rangeFromSelection, speechShare
+    case prevGap, nextGap, selectClipAtPlayhead, cycleOverlapping, selectShortClips, rangeFromSelection, speechShare
     // 選んだクリップの元素材の使用範囲(ソースの使用範囲)を表示し、その頭へ移す
     case sourceUsage
     // 出力 ▸ 使用クリップ一覧…(表・TSV コピー・CSV 書き出し。ショートカットは持たない)
@@ -183,6 +185,9 @@ struct MenuState: Equatable {
     /// 反復再生中(トリム点 / 選択クリップ)と、設定の半幅(秒)
     var trimLoopActive = false
     var trimLoopHalfWidth = TrimLoop.defaultHalfWidth
+    /// 音だけの試聴がオン / 再生位置で鳴っているクリップの数
+    var auditionActive = false
+    var auditionCandidateCount = 0
     var hasSelection = false
     /// 文字クリップかボイスクリップがある(検索と置換の対象)
     var hasTextTargets = false
@@ -202,6 +207,8 @@ struct MenuState: Equatable {
     var hasMissingMedia = false
     var hasUnusedMedia = false
     var hasGaps = false
+    /// 再生位置に画面で重なって見えているクリップの数(巡回選択は 2 つ以上で使える)
+    var overlapCount = 0
     var hasShortClips = false
     /// 選んでいるクリップ 1 つが、元素材の使用範囲を持つ(動画・音声・画像で、フリーズでない)。
     var hasSourceUsage = false
@@ -345,6 +352,8 @@ struct MenuState: Equatable {
         rangeLoop = m.rangeLoop
         trimLoopActive = m.trimLoop != nil
         trimLoopHalfWidth = TrimLoopSettings.halfWidth
+        auditionActive = m.auditionOn
+        auditionCandidateCount = m.auditionCandidates.count
         hasSelection = m.selectedClip != nil
         hasTextTargets = m.project.allClips.contains { $0.type == .text || $0.type == .voice }
         hasTextClips = m.project.allClips.contains { $0.type == .text }
@@ -358,6 +367,7 @@ struct MenuState: Equatable {
         hasMissingMedia = !MissingMedia.find(in: m.project).isEmpty
         hasUnusedMedia = !UnusedMedia.find(in: m.project).isEmpty
         hasGaps = !TimelineQuery.gapStarts(in: m.project).isEmpty
+        overlapCount = PreviewPicking.stack(in: m.project, at: m.currentTime).count
         hasShortClips = !TimelineQuery.shortClipIds(in: m.project).isEmpty
         hasSourceUsage = m.selectedClip.flatMap { SourceUsage.range(of: $0) } != nil
         hasVoiceClips = m.project.allClips.contains { $0.type == .voice }
@@ -755,6 +765,7 @@ enum AppMenuSpec {
          MenuItemSpec(command: .moveLayerUp, title: "選択クリップを上のレイヤーへ", shortcut: MenuShortcut(key: "[", modifiers: [.shift, .command]), enabled: s.canEdit && s.canMoveUp, checked: nil),
          MenuItemSpec(command: .moveLayerDown, title: "選択クリップを下のレイヤーへ", shortcut: MenuShortcut(key: "]", modifiers: [.shift, .command]), enabled: s.canEdit && s.canMoveDown, checked: nil),
          MenuItemSpec(command: .selectClipAtPlayhead, title: "再生位置のクリップを選ぶ", shortcut: MenuShortcut(key: .upArrow, modifiers: [.control, .option]), enabled: s.canEdit && s.hasClips, checked: nil, hint: "手前のクリップ"),
+         MenuItemSpec(command: .cycleOverlapping, title: "重なったクリップを巡回選択", shortcut: nil, enabled: s.canEdit && s.overlapCount >= 2, checked: nil, hint: "プレビューを ⌥ クリックでも"),
          MenuItemSpec(command: .selectShortClips, title: "短いクリップを選ぶ", shortcut: nil, enabled: s.canEdit && s.hasShortClips, checked: nil, hint: "6 コマ未満"),
          MenuItemSpec(command: .sourceUsage, title: "元素材の使用範囲を表示", shortcut: nil, enabled: s.hasSourceUsage, checked: nil, hint: "選んだクリップが使う素材の区間")]
     }
@@ -818,7 +829,16 @@ enum AppMenuSpec {
          MenuItemSpec(command: .stepBack, title: "1コマ戻る", shortcut: nil, enabled: s.canEdit, checked: nil),
          MenuItemSpec(command: .stepForward, title: "1コマ進む", shortcut: nil, enabled: s.canEdit, checked: nil),
          MenuItemSpec(command: .toggleRangeLoop, title: "範囲をループ再生", shortcut: nil, enabled: s.canEdit && s.hasRange, checked: s.rangeLoop, hint: "書き出し範囲")]
-            + trimLoopItems(s)
+            + trimLoopItems(s) + auditionItems(s)
+    }
+
+    /// 再生 ▸ 重なったクリップの音だけ試聴(スクラブで対象だけが鳴る)・次の重なったクリップへ(ショートカットなし)。
+    static func auditionItems(_ s: MenuState) -> [MenuItemSpec] {
+        [MenuItemSpec(command: .toggleAudition, title: "重なったクリップの音だけ試聴", shortcut: nil,
+                      enabled: s.canEdit && (s.auditionActive || s.auditionCandidateCount >= 1), checked: s.auditionActive ? true : nil,
+                      hint: "再生位置を動かすと、選んだクリップだけが鳴る"),
+         MenuItemSpec(command: .cycleAudition, title: "次の重なったクリップを試聴", shortcut: nil,
+                      enabled: s.canEdit && s.auditionCandidateCount >= 2, checked: nil)]
     }
 
     /// 再生 ▸ トリム点 / 選択クリップの反復再生(ショートカットなし)。
@@ -1179,6 +1199,8 @@ enum AppMenu {
             case .toggleTrimLoop: m.toggleTrimLoop()
             case .toggleClipLoop: m.toggleClipLoop()
             case .trimLoopWidth(let w): TrimLoopSettings.halfWidth = w
+            case .toggleAudition: m.toggleAudition()
+            case .cycleAudition: m.cycleAuditionTarget()
             case .copyChapters: m.copyChapters()
             case .copyChaptersColor(let c): m.copyChapters(color: c)
             case .aiScript: m.openAIScriptDialog()
@@ -1193,6 +1215,7 @@ enum AppMenu {
             case .prevGap: m.seekGap(forward: false)
             case .nextGap: m.seekGap(forward: true)
             case .selectClipAtPlayhead: m.selectClipAtPlayhead()
+            case .cycleOverlapping: m.cycleOverlappingAtPlayhead()
             case .selectShortClips: m.selectShortClips()
             case .sourceUsage: m.showSourceUsage()
             case .speechShare: m.showSpeechShareStatus()

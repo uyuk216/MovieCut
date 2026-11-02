@@ -46,6 +46,7 @@ public enum EffectPipeline {
         case .colorWheels: return v("liftAmount") < eps && v("gammaAmount") < eps && v("gainAmount") < eps
         case .opticalMist: return v("amount") < eps || v("radius") < eps
         case .highlightRolloff: return false
+        case .bokehBlur: return v("radius") < 0.5
         }
     }
 
@@ -78,6 +79,7 @@ public enum EffectPipeline {
             case .motionBlur: m += e.v("radius") * scale
             case .glow: m += 3 * e.v("radius") * scale * 0.5
             case .opticalMist: m += 3 * e.v("radius") * scale
+            case .bokehBlur: m += e.v("radius") * scale * 1.1 + 4
             case .dropShadow: m += max(abs(e.v("dx")), abs(e.v("dy"))) * scale + 3 * e.v("blur") * scale * 0.5
             case .outline: m += e.v("width") * scale
             default: break
@@ -209,6 +211,8 @@ public enum EffectPipeline {
             return img.unpremultiplyingAlpha()
                 .applyingFilter("CIColorCube", parameters: ["inputCubeDimension": HighlightRolloff.cubeDimension, "inputCubeData": HighlightRolloff.cubeData(knee: e.v("knee"))])
                 .premultiplyingAlpha()
+        case .bokehBlur:
+            return Bokeh.apply(img, radius: e.v("radius") * scale, shape: ApertureShape(value: e.v("shape")), rotation: e.v("rotation"), highlight: e.v("highlight"))
         case .lut:
             guard let p = e.path, let c = LUTCache.shared.cube(atPath: p) else { return img }
             return LUTApply.apply(img, lut: c.lut, dimension: c.dimension, data: c.data, intensity: e.v("intensity"))

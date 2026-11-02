@@ -294,6 +294,9 @@ public struct Renderer {
             guard let a = assets.videoFrame(path: src, time: i0 / grid, reverse: false, exact: true) else { return nil }
             if w < 1e-6 { return a }
             guard let b = assets.videoFrame(path: src, time: (i0 + 1) / grid, reverse: false, exact: true) else { return a }
+            // オプティカルフロー補間: 動きに沿った中間のコマ。求められなければ従来のフレームブレンドへ戻す
+            if c.opticalFlowOn,
+               let f = OpticalFlowInterpolator.frame(a, b, weight: w, key: "\(src)|\(Int(i0))|\(grid)", cache: assets.flowCache) { return f }
             return FrameBlend.mix(a, b, weight: w) ?? a
         }
         let remap = c.hasTimeRemap
@@ -660,6 +663,7 @@ public struct Renderer {
         let bx = Animation.value(of: "x", in: c, at: r) * W, by = Animation.value(of: "y", in: c, at: r) * H
         let sigma = max(0, Animation.value(of: "strength", in: c, at: r))
         let mosaic = c.blurModeOrDefault == "mosaic"
+        let bokeh = c.blurModeOrDefault == "bokeh"
         let shapeRect = CGRect(x: bx - bw / 2, y: by - bh / 2, width: bw, height: bh)
         let canvas = CGRect(x: 0, y: 0, width: W, height: H)
         // 画素に揃えた取得範囲(キャンバス内)
@@ -676,6 +680,9 @@ public struct Renderer {
             blurred = CIImage(cgImage: snap).applyingFilter("CIPixellate", parameters: [
                 "inputCenter": CIVector(x: 0, y: 0), "inputScale": block,
             ])
+        } else if bokeh {
+            // 絞りぼかし: 強さ(σ 相当)から、同じ見えかたの円盤の半径(R ≈ 2σ)を決め、選んだ形でぼかす
+            blurred = Bokeh.apply(CIImage(cgImage: snap), radius: 2 * sigma, shape: c.bokehShapeOrDefault, highlight: Bokeh.regionHighlight)
         } else {
             blurred = CIImage(cgImage: snap).clampedToExtent().applyingGaussianBlur(sigma: sigma)
         }

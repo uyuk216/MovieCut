@@ -319,8 +319,10 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var h: Double? = nil
     public var strength: Double? = nil
     public var shape: String? = nil
-    /// ぼかし範囲の方式("blur" / "mosaic")。無いときは "blur"(ファイルには既定のときは書かない)。
+    /// ぼかし範囲の方式("blur" / "mosaic" / "bokeh")。無いときは "blur"(ファイルには既定のときは書かない)。
     public var blurMode: String? = nil
+    /// 絞りぼかし("bokeh")の形(`ApertureShape.name`: triangle / square / pentagon / hexagon / octagon / star / heart)。無いときは円(ファイルには円のときは書かない)。
+    public var bokehShape: String? = nil
     /// モザイクのブロックの大きさ(1080p 基準の px)。無いときは 12。モザイクのときだけ使う。
     public var mosaicSize: Double? = nil
     // 変形(画像・動画・文字)。どれも未設定が既定(0 度・反転なし・切り抜きなし)。ファイルには既定でないときだけ書く。
@@ -352,6 +354,9 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var speedRamp: [SpeedKey]? = nil
     /// フレームブレンド(動画だけ。速度が 1 未満のとき、隣り合う 2 コマを時間で混ぜる)。true のときだけ書く。
     public var frameBlend: Bool? = nil
+    /// オプティカルフロー補間(動画だけ。フレームブレンドの代わりに、隣り合う 2 コマの間の動きを推定して中間のコマを作る)。true のときだけ書く。
+    /// `frameBlend` とは同時に使わない(両方あれば、こちらを優先する)。
+    public var frameFlow: Bool? = nil
     /// 音声エフェクト(EQ・コンプレッサー・リバーブ・ノーマライズ。音声・ボイス・動画)。無いときはファイルに書かない。
     public var audioFx: AudioFx? = nil
     /// 左右の振り分け(−1〜1、等パワー)。未設定 = 中央。
@@ -382,7 +387,7 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var locked: Bool? = nil
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["id", "type", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "duck", "visualizer", "stabilize", "tracks", "mask", "figure", "note", "locked"]
+    static let knownKeys: Set<String> = ["id", "type", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "bokehShape", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "frameFlow", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "duck", "visualizer", "stabilize", "tracks", "mask", "figure", "note", "locked"]
 
     public init() {}
 
@@ -398,6 +403,8 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var strengthOrDefault: Double { strength ?? 24 }
     public var shapeOrDefault: String { shape ?? "rect" }
     public var blurModeOrDefault: String { blurMode ?? "blur" }
+    /// 絞りぼかしの形(知らない名前・無いときは円)。
+    public var bokehShapeOrDefault: ApertureShape { ApertureShape(name: bokehShape) }
     public var mosaicSizeOrDefault: Double { mosaicSize ?? 12 }
     public var fontOrDefault: String { font ?? defaultFonts[0] }
     public var colorOrDefault: String { color ?? "#ffffff" }
@@ -477,12 +484,12 @@ public struct Clip: Codable, Equatable, Identifiable {
         color = l.string("color"); outline = l.string("outline"); font = l.string("font")
         charId = l.string("charId"); subtitle = l.bool("subtitle")
         w = l.double("w"); h = l.double("h"); strength = l.double("strength"); shape = l.string("shape")
-        blurMode = l.string("blurMode"); mosaicSize = l.double("mosaicSize")
+        blurMode = l.string("blurMode"); bokehShape = l.string("bokehShape"); mosaicSize = l.double("mosaicSize")
         rotation = l.double("rotation"); flipH = l.bool("flipH"); flipV = l.bool("flipV")
         crop = l.value("crop")
         fadeIn = l.double("fadeIn"); fadeOut = l.double("fadeOut"); fadeCurve = l.string("fadeCurve")
         speed = l.double("speed"); reverse = l.bool("reverse"); keepPitch = l.bool("keepPitch"); freeze = l.bool("freeze")
-        speedRamp = l.value("speedRamp"); frameBlend = l.bool("frameBlend") == true ? true : nil
+        speedRamp = l.value("speedRamp"); frameBlend = l.bool("frameBlend") == true ? true : nil; frameFlow = l.bool("frameFlow") == true ? true : nil
         pan = l.double("pan"); audioFx = l.value("audioFx")
         extra = l.extra()
         // 速度まわりの項目が読めない型だったら、捨てずにそのまま書き戻す
@@ -584,6 +591,7 @@ public struct Clip: Codable, Equatable, Identifiable {
         try c.encodeIfPresent(strength, forKey: AnyKey("strength"))
         try c.encodeIfPresent(shape, forKey: AnyKey("shape"))
         try c.encodeIfPresent(blurMode, forKey: AnyKey("blurMode"))
+        try c.encodeIfPresent(bokehShape, forKey: AnyKey("bokehShape"))
         try c.encodeIfPresent(mosaicSize, forKey: AnyKey("mosaicSize"))
         try c.encodeIfPresent(rotation, forKey: AnyKey("rotation"))
         try c.encodeIfPresent(flipH, forKey: AnyKey("flipH"))
@@ -603,6 +611,7 @@ public struct Clip: Codable, Equatable, Identifiable {
         try c.encodeIfPresent(freeze, forKey: AnyKey("freeze"))
         try c.encodeIfPresent(speedRamp, forKey: AnyKey("speedRamp"))
         try c.encodeIfPresent(frameBlend == true ? true : nil, forKey: AnyKey("frameBlend"))
+        try c.encodeIfPresent(frameFlow == true ? true : nil, forKey: AnyKey("frameFlow"))
         if let fx = audioFx, !fx.isEmpty { try c.encode(fx, forKey: AnyKey("audioFx")) }
         try c.encodeIfPresent(pan, forKey: AnyKey("pan"))
         try c.encodeIfPresent(textStyle, forKey: AnyKey("textStyle"))

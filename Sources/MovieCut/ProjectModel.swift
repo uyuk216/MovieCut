@@ -197,6 +197,15 @@ final class ProjectModel: ObservableObject {
     @Published var rangeLoop = false
     /// トリム点・選択クリップの反復再生の範囲(表示の状態。保存せず Undo にも載せない。止まると nil に戻る)。
     @Published var trimLoop: ExportRange?
+    /// 重なったクリップの音だけの試聴(表示の状態。保存せず Undo にも載せない)。オンの間、止まっている再生位置を動かすと対象のクリップだけが短く鳴る。
+    @Published var auditionOn = false
+    /// 試聴している(solo にしている)クリップの id。
+    @Published var auditionClipId: String?
+    /// 試聴の音の出口(テストでは差し替える)と、鳴らす準備の仕事・通し番号・いま鳴らしている一時ファイル。
+    var auditionPlayer: AuditionPlaying = AVAuditionPlayer()
+    var auditionTask: Task<Void, Never>?
+    var auditionSeq = 0
+    var auditionFile: URL?
     /// 増やすと、同じ時刻でもプレビューを描き直す(再生を止めたとき)。
     @Published var previewEpoch = 0
 
@@ -407,6 +416,7 @@ final class ProjectModel: ObservableObject {
         keyRouter.uninstall()
         dockWindows?.closeAll(); dockWindows = nil
         mediaBrowserWindow?.closeAll(); mediaBrowserWindow = nil
+        stopAudition()
         playback.shutdown()
     }
 

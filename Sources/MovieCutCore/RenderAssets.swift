@@ -29,6 +29,9 @@ public final class RenderAssets {
     /// 今の順次読みがプレビューの再生か(書き出しの順次読みと区別する)。
     private var previewSession = false
 
+    /// オプティカルフロー補間のフロー(素材のコマの組ごと。プレビューと書き出しで同じ組を何度も描くので、求めた動きを覚えておく)。
+    public let flowCache = FlowCache()
+
     public init() {}
 
     /// プレビューのプロキシを使うか。`lookup` は元のパスからプロキシのパスを返す(無ければ nil)。

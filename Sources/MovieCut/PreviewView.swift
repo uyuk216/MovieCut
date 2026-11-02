@@ -302,7 +302,19 @@ final class PreviewCanvasView: NSView {
     override func mouseDown(with event: NSEvent) {
         // 入力欄にフォーカスが残っていると、Delete・Space がクリップに届かない。プレビューを押したら入力を終える
         if KeyRouter.isTextInput(window?.firstResponder) { window?.makeFirstResponder(nil) }
-        beginManipulation(atViewPoint: convert(event.locationInWindow, from: nil))
+        let v = convert(event.locationInWindow, from: nil)
+        // ⌥ クリック: その場所に重なったクリップを手前から奥へ巡回して選ぶ(ドラッグは始めない)
+        if event.modifierFlags.contains(.option), pickOverlapping(atViewPoint: v) { return }
+        beginManipulation(atViewPoint: v)
+    }
+
+    /// ⌥ クリック: 押した場所(映像の枠の中)に重なるクリップを巡回して選ぶ。選べたら true(重なりが無ければ false で、通常のクリックに戻る)。
+    @discardableResult
+    func pickOverlapping(atViewPoint v: CGPoint) -> Bool {
+        guard let m = model, !m.isLocked, frameLayer.frame.contains(v) else { return false }
+        let canvas = CGSize(width: m.project.width, height: m.project.height)
+        guard canvas.width > 0, canvas.height > 0 else { return false }
+        return m.pickPreviewClip(atCanvasPoint: canvasPoint(v, canvas: canvas))
     }
     override func mouseDragged(with event: NSEvent) { dragManipulation(toViewPoint: convert(event.locationInWindow, from: nil), snapRotation: event.modifierFlags.contains(.shift)) }
     override func mouseUp(with event: NSEvent) { endManipulation() }

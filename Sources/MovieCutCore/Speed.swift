@@ -28,8 +28,10 @@ public extension Clip {
     var hasTimeRemap: Bool { effectiveSpeed != 1 || effectiveReverse || isFreeze || rampPoints != nil }
     /// 音声の処理(伸び縮み・逆順・速度ランプ)が必要か。フリーズは無音なので含めない。
     var hasAudioRemap: Bool { !isFreeze && (effectiveSpeed != 1 || effectiveReverse || rampPoints != nil) }
-    /// フレームブレンドが設定されているか(動画・順再生・フリーズでない)。実際に効くのは速度が 1 未満のときだけ(`ClipTiming.blendsFrames`)。
-    var frameBlendOn: Bool { frameBlend == true && type == .video && !isFreeze && !effectiveReverse }
+    /// コマの補間(フレームブレンドかオプティカルフロー)が設定されているか(動画・順再生・フリーズでない)。実際に効くのは速度が 1 未満のときだけ(`ClipTiming.blendsFrames`)。
+    var frameBlendOn: Bool { (frameBlend == true || frameFlow == true) && type == .video && !isFreeze && !effectiveReverse }
+    /// 補間にオプティカルフローを使うか(`frameBlendOn` のうち、`frameFlow` が true のもの)。
+    var opticalFlowOn: Bool { frameFlow == true && frameBlendOn }
 }
 
 // MARK: - 時間の対応(タイムライン ⇄ 素材)

@@ -213,6 +213,9 @@ final class TimelineCanvas: NSView {
     private(set) var wedgeDrag: WedgeDrag?
     /// 吸着の案内線の時刻(ドラッグ中だけ)。
     private(set) var snapGuides: [Double] = []
+    /// 移動のドラッグ中に出す「移動先の前後のコマ」の帯(頭のつなぎ目 2 コマ・終わりのつなぎ目 2 コマ)。ドラッグの外では nil。
+    private(set) var neighborStrip: CGImage?
+    let neighborRenderer = NeighborStripRenderer()
     /// ポインタが左右の端 30pt 以内にあるときの自動スクロールの向き(-1 左 / 0 なし / 1 右)。
     private(set) var autoScrollDirection = 0
     private var autoScrollTimer: Timer?
@@ -679,6 +682,9 @@ final class TimelineCanvas: NSView {
             }
             ctx.restoreGState()
         }
+
+        // 移動先の前後のコマ(移動のドラッグ中だけ)
+        drawNeighborStrip(ctx: ctx)
 
         // 再生ヘッド(ルーラーからレイヤーの下端まで)
         let px = g.x(forTime: time)
@@ -1425,6 +1431,7 @@ final class TimelineCanvas: NSView {
         if !d.active, let id = d.collapseTo { model?.selectOnly(id) }   // 動かさずに離した: 複数選択の中の 1 つだけにする
         if d.active {
             snapGuides = []
+            clearNeighborStrip()
             let name: String
             switch d.mode {
             case .move: name = "クリップの移動"
@@ -1454,8 +1461,63 @@ final class TimelineCanvas: NSView {
         }
         snapGuides = result.guides
         m.updateGesture(result.project)
+        if d.mode == .move { requestNeighborStrip(clipId: d.clipId, in: result.project, model: m) }
         syncFromModel()
         needsDisplay = true
+    }
+
+    // MARK: 移動先の前後のコマ(ドラッグ中の帯)
+
+    /// 動かした先(動かした後のプロジェクト)で、動かしているクリップの前後のコマを描いて帯にする(背景で描き、できたら出す)。
+    private func requestNeighborStrip(clipId: String, in p: Project, model m: ProjectModel) {
+        guard let loc = ClipEditing.locate(clipId, in: p) else { return }
+        let c = p.tracks[loc.track].clips[loc.index]
+        guard let times = DragNeighborFrames.times(start: c.start, end: c.start + c.duration, rate: p.frameRate) else { clearNeighborStrip(); return }
+        neighborRenderer.onImage = { [weak self] img in
+            guard let self, self.drag?.active == true else { return }
+            self.neighborStrip = img
+            self.needsDisplay = true
+        }
+        neighborRenderer.request(project: p, times: times, assets: m.assets)
+    }
+
+    private func clearNeighborStrip() {
+        neighborRenderer.cancel()
+        if neighborStrip != nil { neighborStrip = nil; needsDisplay = true }
+    }
+
+    /// 帯をタイムラインの上に重ねて描く(ポインタが右半分にあるときは左上、そうでなければ右上。ラベルは 前 / 頭 ・ 終 / 後)。
+    private func drawNeighborStrip(ctx: CGContext) {
+        guard let img = neighborStrip, let d = drag, d.active, d.mode == .move else { return }
+        let hw = TimelineLayout.headerWidth, rh = TimelineLayout.rulerHeight
+        let availW = bounds.width - hw - 24
+        guard availW > 80 else { return }
+        let natural = CGSize(width: img.width, height: img.height)
+        let k = min(1, availW / natural.width)
+        let w = natural.width * k, h = natural.height * k
+        let left = d.lastPoint.x > bounds.width / 2
+        let x = left ? hw + 12 : bounds.width - w - 12
+        let rect = NSRect(x: x, y: rh + 8, width: w, height: h)
+        let back = NSBezierPath(roundedRect: rect.insetBy(dx: -6, dy: -6), xRadius: 8, yRadius: 8)
+        NSColor(white: 0, alpha: 0.78).setFill(); back.fill()
+        ctx.saveGState()
+        ctx.translateBy(x: rect.minX, y: rect.maxY)
+        ctx.scaleBy(x: 1, y: -1)                                  // このビューは y 下向き: 画像は上下を戻して描く
+        ctx.interpolationQuality = .medium
+        ctx.draw(img, in: CGRect(x: 0, y: 0, width: w, height: h))
+        ctx.restoreGState()
+        // 見出し(各コマの左上)
+        let cw = Double(DragNeighborFrames.cellWidth) * k
+        let gap = 3.0 * k, pairGap = 12.0 * k
+        let xs = [0.0, cw + gap, 2 * cw + gap + pairGap, 3 * cw + 2 * gap + pairGap]
+        let names = ["前", "頭", "終", "後"]
+        let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 10, weight: .semibold), .foregroundColor: NSColor.white]
+        for (i, n) in names.enumerated() {
+            let label = NSRect(x: rect.minX + xs[i] + 3, y: rect.minY + 3, width: 16, height: 14)
+            NSColor(white: 0, alpha: 0.6).setFill()
+            NSBezierPath(roundedRect: label, xRadius: 3, yRadius: 3).fill()
+            (n as NSString).draw(at: NSPoint(x: label.minX + 3, y: label.minY + 1), withAttributes: attrs)
+        }
     }
 
     // MARK: 自動スクロール(ドラッグ中にポインタが左右の端 30pt 以内)
