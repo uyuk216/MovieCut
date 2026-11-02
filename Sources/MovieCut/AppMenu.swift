@@ -27,6 +27,10 @@ enum MenuCommand: Hashable {
     case rangeIn, rangeOut, rangeClear, exportStill, exportSequence
     // タイムラインの問い合わせ: 前後の空白(黒穴)へ・再生位置のクリップを選ぶ・短いクリップを選ぶ・選んだ範囲を書き出し範囲に
     case prevGap, nextGap, selectClipAtPlayhead, selectShortClips, rangeFromSelection, speechShare
+    // 出力 ▸ 使用クリップ一覧…(表・TSV コピー・CSV 書き出し。ショートカットは持たない)
+    case clipList
+    // 出力 ▸ 注記一覧…(注記のあるクリップの表・テキストと CSV。ショートカットは持たない)
+    case noteList
     // 出力 ▸ サムネイル画像を書き出す…(1280×720。ショートカットは持たない)
     case exportThumbnail
     // 出力 ▸ GIFとして書き出す…(ショートカットは持たない)
@@ -175,6 +179,8 @@ struct MenuState: Equatable {
     var selectionCount = 0
     var canPasteClips = false
     var hasClips = false
+    /// 注記のあるクリップが 1 つ以上ある(注記一覧を押せる)。
+    var hasNotes = false
     /// B3: 書き出せる字幕がある / マーカーがある
     var canExportSubtitles = false
     var canGenerateSubtitles = false
@@ -324,6 +330,7 @@ struct MenuState: Equatable {
         selectionCount = m.selectedClipIDs.count
         canPasteClips = m.canPasteClips
         hasClips = !m.project.allClips.isEmpty
+        hasNotes = m.project.allClips.contains { $0.note != nil }
         canExportSubtitles = m.canExportSubtitles
         canGenerateSubtitles = SubtitleGeneration.hasTargets(m.project)
         hasMissingMedia = !MissingMedia.find(in: m.project).isEmpty
@@ -607,6 +614,15 @@ enum AppMenuSpec {
     /// 出力 ▸ 書き出しキューに追加… / 書き出しキューを表示…(ショートカットは持たない)。
     static func scopeItem(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .showScopes, title: "スコープ…", shortcut: nil, enabled: true, checked: nil, hint: "波形・ヒストグラム(今のコマ)")
+    }
+
+    /// 出力 ▸ 使用クリップ一覧…(クリップが 1 つ以上あるとき。ショートカットは持たない)。
+    static func noteListItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .noteList, title: "注記一覧…", shortcut: nil, enabled: s.hasNotes, checked: nil, hint: "クリップのメモの表")
+    }
+
+    static func clipListItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .clipList, title: "使用クリップ一覧…", shortcut: nil, enabled: s.hasClips, checked: nil, hint: "レイヤー・時間・素材の表")
     }
 
     static func loudnessItem(_ s: MenuState) -> MenuItemSpec {
@@ -1035,7 +1051,7 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s)] + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), makeProxies(s)] + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textCounterItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), beatMarkersItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s)
+        [about, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s)] + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), clipListItem(s), noteListItem(s), makeProxies(s)] + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textCounterItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), beatMarkersItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerColorItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + guideItems(s) + [previewProxy(s), fullScreen(s)] + help.flatMap { $0 }
@@ -1113,6 +1129,8 @@ enum AppMenu {
             case .selectClipAtPlayhead: m.selectClipAtPlayhead()
             case .selectShortClips: m.selectShortClips()
             case .speechShare: m.showSpeechShareStatus()
+            case .clipList: m.showClipListSheet = true
+            case .noteList: m.showNoteListSheet = true
             case .exportStill: m.chooseAndExportStill()
             case .exportThumbnail: m.chooseAndExportThumbnail()
             case .exportSequence: m.chooseAndExportSequence()

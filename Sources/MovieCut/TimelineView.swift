@@ -716,7 +716,19 @@ final class TimelineCanvas: NSView {
         let edge = NSBezierPath(roundedRect: r.insetBy(dx: 0.5, dy: 0.5), xRadius: 3.5, yRadius: 3.5)
         edge.lineWidth = 1
         NSColor(white: 1, alpha: 0.25).setStroke(); edge.stroke()
-        var textLeft = r.minX + 7
+        // 注記の印(左上の小さな「注」)。注記のあるクリップだけ。その分ラベルを右へずらす。狭いクリップには出さない
+        let hasNoteBadge = c.note != nil && r.width >= 40
+        if hasNoteBadge {
+            let box = NSRect(x: r.minX + 4, y: r.minY + 3, width: 13, height: 13)
+            ctx.saveGState()
+            ctx.clip(to: r.insetBy(dx: 1, dy: 1))
+            NSColor(calibratedRed: 1, green: 0.85, blue: 0.3, alpha: 0.95).setFill()
+            NSBezierPath(roundedRect: box, xRadius: 3, yRadius: 3).fill()
+            ("注" as NSString).draw(at: NSPoint(x: box.minX + 2, y: box.minY + 0.5),
+                                  withAttributes: [.font: NSFont.systemFont(ofSize: 9, weight: .bold), .foregroundColor: NSColor.black])
+            ctx.restoreGState()
+        }
+        var textLeft = r.minX + 7 + (hasNoteBadge ? 15 : 0)
         if let lb = leftBorder {
             // 左端の 3pt の線(キャラの色そのまま)
             ctx.saveGState()

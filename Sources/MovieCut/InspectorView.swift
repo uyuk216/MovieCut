@@ -453,6 +453,8 @@ struct ClipInspector: View {
                     num("開始（秒）", .start, step: 0.1, decimals: 3)
                     num("長さ（秒）", .duration, step: 0.1, decimals: 3)
                 }
+                InspectorSection(title: "注記")
+                ClipNoteField(model: model, clipId: clipId, note: c.note ?? "").id(clipId)
                 if c.type == .voice { voiceSections(c) }
                 if c.type == .text { textSections(c) }
                 if TextStyleEditing.supports(c.type) { TextStyleInspector(model: model, store: model.textStyles, clipId: clipId) }

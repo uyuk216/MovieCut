@@ -180,6 +180,10 @@ final class ProjectModel: ObservableObject {
     var transcriptEditClipId: String?
     /// 「検索と置換…」のシート(テロップとセリフの一括置換)。
     @Published var showFindSheet = false
+    /// 出力 ▸ 使用クリップ一覧…(表・TSV コピー・CSV 書き出し)のシート。
+    @Published var showClipListSheet = false
+    /// 出力 ▸ 注記一覧…(注記のあるクリップの表・テキストと CSV の書き出し)のシート。
+    @Published var showNoteListSheet = false
     /// 名前を変えているマーカー(シートを出す)。
     @Published var renamingMarkerId: String?
     /// 左の台本欄の文字(ツールバー・メニューの「台本から音声を作る」が読む)。

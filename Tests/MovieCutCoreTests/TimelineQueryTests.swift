@@ -179,3 +179,47 @@ final class TimelineQueryTests: XCTestCase {
         XCTAssertEqual(spoken?.1, "こんにちは")
     }
 }
+
+// MARK: - 使用クリップ一覧の書き出し(TSV / CSV)
+
+final class ClipListingExportTests: XCTestCase {
+    private func entry(_ label: String, layer: String = "上", start: Double = 1.5, duration: Double = 2, source: String? = nil) -> TimelineQuery.ListEntry {
+        TimelineQuery.ListEntry(clipId: "c", trackName: layer, type: .text, start: start, duration: duration, label: label, source: source)
+    }
+
+    func testTSVHasHeaderAndFixedDecimalTimes() {
+        let out = ClipListingExport.tsv([entry("あ", source: "/m/a.mov")])
+        XCTAssertEqual(out, "レイヤー\t名前\t開始(秒)\t長さ(秒)\t素材パス\n上\tあ\t1.500\t2.000\t/m/a.mov\n")
+    }
+
+    func testTSVReplacesTabsAndNewlinesInCells() {
+        let out = ClipListingExport.tsv([entry("a\tb\nc")])
+        let lines = out.split(separator: "\n")
+        XCTAssertEqual(lines.count, 2, "改行を含むセルがあっても行は増えない")
+        XCTAssertEqual(lines[1].split(separator: "\t", omittingEmptySubsequences: false).count, 5, "列数は 5 のまま")
+    }
+
+    func testCSVQuotesCommaQuoteAndNewline() {
+        let out = ClipListingExport.csv([entry("a,b"), entry("say \"hi\""), entry("x\ny")])
+        XCTAssertTrue(out.hasPrefix("\u{FEFF}"), "先頭は UTF-8 の BOM")
+        XCTAssertTrue(out.contains("\"a,b\""))
+        XCTAssertTrue(out.contains("\"say \"\"hi\"\"\""))
+        XCTAssertTrue(out.contains("\"x\ny\""))
+        XCTAssertFalse(out.contains("\"上\""), "引用符が要らないセルは囲まない")
+    }
+
+    func testEmptySourceIsEmptyCell() {
+        let out = ClipListingExport.csv([entry("t", source: nil)])
+        XCTAssertTrue(out.hasSuffix("上,t,1.500,2.000,\r\n"))
+    }
+
+    func testListingCarriesSourcePath() {
+        var p = Project()
+        p.fps = 30
+        var c = Clip()
+        c.id = "v"; c.type = .video; c.start = 0; c.duration = 1; c.src = "/m/v.mp4"
+        var tr = Track(name: "映像"); tr.clips = [c]
+        p.tracks = [tr]
+        XCTAssertEqual(TimelineQuery.clipListing(in: p).first?.source, "/m/v.mp4")
+    }
+}

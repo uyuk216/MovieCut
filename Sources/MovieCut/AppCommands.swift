@@ -229,6 +229,8 @@ struct AppCommands: Commands {
                 MenuItemView(spec: AppMenuSpec.gifExport(s), perform: run)
                 Divider()
                 MenuItemView(spec: AppMenuSpec.loudnessItem(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.clipListItem(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.noteListItem(s), perform: run)
                 Divider()
                 MenuItemView(spec: AppMenuSpec.fanMaxToggle(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.fanInstall(s), perform: run)

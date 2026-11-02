@@ -93,6 +93,8 @@ public enum TimelineQuery {
         public var duration: Double
         /// 表示用の名前(文字・セリフは本文、素材は file 名、それ以外は種類)。
         public var label: String
+        /// 素材のパス(文字・図形など素材の無いクリップは nil)。一覧の書き出しに使う。
+        public var source: String?
     }
 
     /// 全レイヤーのクリップを開始時刻順に並べる(同じ時刻はレイヤーの並び順)。
@@ -101,7 +103,7 @@ public enum TimelineQuery {
         var index = 0
         for tr in p.tracks {
             for c in tr.clips {
-                rows.append((index, ListEntry(clipId: c.id, trackName: tr.name, type: c.type, start: c.start, duration: c.duration, label: label(of: c))))
+                rows.append((index, ListEntry(clipId: c.id, trackName: tr.name, type: c.type, start: c.start, duration: c.duration, label: label(of: c), source: c.src)))
                 index += 1
             }
         }

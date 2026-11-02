@@ -55,6 +55,12 @@ extension ProjectModel {
     // MARK: クリップの項目(1 回の編集 / ドラッグ中 / まとめ)
 
     /// 1 回の編集として書き換える(変わらなければ何も登録しない)。`clipId` 省略で選択中のクリップ。
+    /// クリップの注記を書く(整形は `Clip.cleanNote`。空にすると消す)。変わらなければ Undo に積まない。
+    func setClipNote(_ raw: String, clipId: String? = nil) {
+        let note = Clip.cleanNote(raw)
+        setClipProperty(\.note, to: note, name: note == nil ? "注記を消す" : "注記を編集", clipId: clipId)
+    }
+
     func setClipProperty(_ change: (inout Clip) -> Void, name: String, clipId: String? = nil) {
         guard let id = clipId ?? selectedClipId, let p = projectChangingClip(id, change) else { return }
         flushCoalesced()

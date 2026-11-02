@@ -226,3 +226,72 @@ extension ProjectModel {
         return true
     }
 }
+
+// MARK: - 使用クリップ一覧(出力 ▸ 使用クリップ一覧…)
+
+extension ProjectModel {
+    /// 一覧の行(開始時刻順)。画面の表と書き出しで同じ並びを使う。
+    var clipListEntries: [TimelineQuery.ListEntry] { TimelineQuery.clipListing(in: project) }
+
+    /// 一覧を TSV でクリップボードへ。
+    func copyClipListTSV() {
+        let rows = clipListEntries
+        guard !rows.isEmpty else { statusText = "クリップがありません"; return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(ClipListingExport.tsv(rows), forType: .string)
+        statusText = "使用クリップ一覧(\(rows.count) 件)をコピーしました"
+    }
+
+    /// 一覧を CSV で保存する(保存パネルで場所を選ぶ)。
+    func chooseAndExportClipListCSV() {
+        let rows = clipListEntries
+        guard !rows.isEmpty else { statusText = "クリップがありません"; return }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.commaSeparatedText]
+        panel.nameFieldStringValue = documentName + "-使用クリップ.csv"
+        panel.canCreateDirectories = true
+        panel.title = "使用クリップ一覧を書き出す(CSV)"
+        let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
+            guard resp == .OK, let url = panel.url, let self else { return }
+            do {
+                try ClipListingExport.csv(rows).write(to: url, atomically: true, encoding: .utf8)
+                self.statusText = "使用クリップ一覧(\(rows.count) 件)を書き出しました: \(url.lastPathComponent)"
+            } catch {
+                self.errorTitle = "書き出せませんでした"
+                self.errorMessage = error.localizedDescription
+            }
+        }
+        if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
+    }
+
+    /// 一覧の行を選んだとき: そのクリップを選び、再生位置をクリップの頭へ移す(選択は 1 件だけ)。
+    func focusClipFromList(_ e: TimelineQuery.ListEntry) { focusClip(id: e.clipId, at: e.start) }
+
+    /// 一覧から 1 件を選ぶ(一覧の行・注記一覧の行で共通)。
+    func focusClip(id: String, at start: Double) {
+        setSelection(ClipSelection(ids: [id], primary: id))
+        playback.seek(to: start)
+    }
+
+    /// 注記の一覧を保存する(テキストまたは CSV)。
+    func chooseAndExportNotes(csv: Bool) {
+        let rows = NoteListing.entries(in: project)
+        guard !rows.isEmpty else { statusText = "注記がありません"; return }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [csv ? .commaSeparatedText : .plainText]
+        panel.nameFieldStringValue = documentName + (csv ? "-注記.csv" : "-注記.txt")
+        panel.canCreateDirectories = true
+        panel.title = csv ? "注記一覧を書き出す(CSV)" : "注記一覧を書き出す(テキスト)"
+        let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
+            guard resp == .OK, let url = panel.url, let self else { return }
+            do {
+                try (csv ? NoteListing.csv(rows) : NoteListing.text(rows)).write(to: url, atomically: true, encoding: .utf8)
+                self.statusText = "注記 \(rows.count) 件を書き出しました: \(url.lastPathComponent)"
+            } catch {
+                self.errorTitle = "書き出せませんでした"
+                self.errorMessage = error.localizedDescription
+            }
+        }
+        if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
+    }
+}

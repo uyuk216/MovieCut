@@ -460,3 +460,8 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
 - **クリップの注記**(`Clip.note`、任意): 書くのは空でないときだけ。`Clip.cleanNote` が前後の空白・改行・200 字を整える。既存のファイルは読めても変わらない(キーが無いので書かない)。画面からの入力欄は未実装。
 - **台本の非発話メモ**: 行頭の「※」の行は `ScriptTimeline.parse` が `nil` を返し、`add(lines:)` が無視する(読み上げも字幕も作らない)。
 - **未検証(画面)**: 空白へのジャンプ後のプレイヘッド位置、選択の見え方、状態欄の文言の長さ。欠けた素材の区間をプレビューで色づけする処理は Core のみ(プレビューへの接続は未了)。
+
+## 2026-11-02 追記(使用クリップ一覧・注記の画面)
+- **使用クリップ一覧**(`TimelineQuery.clipListing` + `ClipListingExport`): 列はレイヤー・名前・開始・長さ・素材パス。TSV はタブ・改行を空白にし、CSV は RFC 4180 の引用符と先頭の BOM。出力 ▸ 使用クリップ一覧… は `ClipListSheet`(行を選ぶとそのクリップへ移る)。
+- **注記**: インスペクタ「注記」欄(`ClipNoteField`、Return かフォーカスを離して確定)は `ProjectModel.setClipNote` を通る(1 回の Undo・変わらなければ積まない・空で消す)。タイムラインは注記のあるクリップの左上に「注」の印。注記一覧(`NoteListSheet`、`NoteListing`)はテキストと CSV で書き出す。
+- 未了: 注記のツールチップ(クリップ単位の矩形は未実装)。
