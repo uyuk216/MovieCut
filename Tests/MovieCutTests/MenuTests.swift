@@ -37,7 +37,7 @@ final class MenuTests: XCTestCase {
         XCTAssertEqual(file.map(\.shortcut), [sc("i", .command), nil, nil])
         XCTAssertEqual(AppMenuSpec.exportCurrent(s).title, "MP4 を書き出す…")
         XCTAssertEqual(AppMenuSpec.exportCurrent(s).shortcut, sc("e", .command))
-        XCTAssertEqual(AppMenuSpec.clipEdit(s).map(\.title), ["クリップを分割", "クリップを複製", "クリップを削除", "すき間を詰めて削除", "1 コマ前へ動かす", "1 コマ後ろへ動かす", "手ぶれ補正（映像を滑らかにする）", "縦動画に自動リフレーム", "動きに追従させる", "複合クリップにまとめる", "複合クリップを解除"])
+        XCTAssertEqual(AppMenuSpec.clipEdit(s).map(\.title), ["クリップを分割", "クリップを複製", "クリップを削除", "すき間を詰めて削除", "選択クリップを再生ヘッドに揃える", "選択クリップをつなげて並べる", "1 コマ前へ動かす", "1 コマ後ろへ動かす", "手ぶれ補正（映像を滑らかにする）", "縦動画に自動リフレーム", "動きに追従させる", "複合クリップにまとめる", "複合クリップを解除"])
         // 編集メニューに残るのはキャラクターと台本だけ。テキスト・ぼかし範囲はクリップメニューへ移った
         let add = AppMenuSpec.editAdd(s)
         XCTAssertEqual(add.map(\.title), ["キャラクターを追加", "台本から音声を作る"])

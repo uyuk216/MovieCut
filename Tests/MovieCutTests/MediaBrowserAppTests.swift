@@ -1,0 +1,104 @@
+import XCTest
+import MovieCutCore
+@testable import MovieCut
+
+/// 素材ブラウザ(App 側)と、クリップの位置合わせメニュー(再生ヘッドに揃える・つなげて並べる)。
+@MainActor
+final class MediaBrowserAppTests: XCTestCase {
+    private func clip(_ id: String, start: Double, duration: Double) -> Clip {
+        var c = Clip()
+        c.id = id; c.start = start; c.duration = duration
+        return c
+    }
+
+    private func model(_ clips: [Clip]) -> ProjectModel {
+        var p = Project.new()
+        p.tracks = [Track(name: "レイヤー1")]
+        p.tracks[0].clips = clips
+        return ProjectModel(project: p)
+    }
+
+    // MARK: メニュー
+
+    func testAlignmentItemsAreInClipMenuWithoutShortcuts() {
+        var s = MenuState(); s.hasDocument = true
+        let titles = AppMenuSpec.clipEdit(s).map(\.title)
+        XCTAssertTrue(titles.contains("選択クリップを再生ヘッドに揃える"))
+        XCTAssertTrue(titles.contains("選択クリップをつなげて並べる"))
+        XCTAssertTrue(AppMenuSpec.clipEdit(s).filter { [.alignToPlayhead, .concatenateClips].contains($0.command) }.allSatisfy { $0.shortcut == nil })
+    }
+
+    func testAlignmentItemsEnablement() {
+        var s = MenuState(); s.hasDocument = true
+        func item(_ c: MenuCommand) -> MenuItemSpec? { AppMenuSpec.clipEdit(s).first { $0.command == c } }
+        XCTAssertFalse(item(.alignToPlayhead)?.enabled ?? true, "選択が無いとき無効")
+        s.hasSelection = true; s.selectionCount = 1
+        XCTAssertTrue(item(.alignToPlayhead)?.enabled ?? false)
+        XCTAssertFalse(item(.concatenateClips)?.enabled ?? true, "1 つだけなら並べられない(無効)")
+        s.selectionCount = 2
+        XCTAssertTrue(item(.concatenateClips)?.enabled ?? false)
+        s.isLocked = true
+        XCTAssertFalse(item(.alignToPlayhead)?.enabled ?? true, "ロック中は無効")
+    }
+
+    // MARK: 操作(1 回の Undo・変わらないときは登録しない)
+
+    func testAlignSelectedToPlayheadIsOneUndoStep() {
+        let m = model([clip("a", start: 2, duration: 1), clip("b", start: 5, duration: 1)])
+        m.selectedClipIDs = ["a", "b"]; m.selectedClipId = "a"
+        m.currentTime = 10
+        let before = m.project
+        XCTAssertTrue(m.alignSelectedToPlayhead())
+        XCTAssertEqual(m.clip("a")?.start ?? -1, 10, accuracy: 1e-9)
+        XCTAssertEqual(m.clip("b")?.start ?? -1, 13, accuracy: 1e-9)
+        m.effectiveUndoManager.undo()
+        XCTAssertEqual(m.project, before, "取り消しは 1 回で元に戻る")
+    }
+
+    func testAlignNoChangeRegistersNothing() {
+        let m = model([clip("a", start: 4, duration: 1)])
+        m.selectedClipId = "a"; m.selectedClipIDs = ["a"]
+        m.currentTime = 4
+        XCTAssertFalse(m.alignSelectedToPlayhead())
+        XCTAssertFalse(m.effectiveUndoManager.canUndo, "変わらない位置合わせは履歴に載せない")
+    }
+
+    func testConcatenateSelectedIsOneUndoStep() {
+        let m = model([clip("a", start: 3, duration: 2), clip("b", start: 9, duration: 1)])
+        m.selectedClipIDs = ["a", "b"]; m.selectedClipId = "a"
+        let before = m.project
+        XCTAssertTrue(m.concatenateSelectedClips())
+        XCTAssertEqual(m.clip("a")?.start ?? -1, 3, accuracy: 1e-9)
+        XCTAssertEqual(m.clip("b")?.start ?? -1, 5, accuracy: 1e-9)
+        m.effectiveUndoManager.undo()
+        XCTAssertEqual(m.project, before)
+    }
+
+    func testMenuPerformRunsTheAlignment() {
+        let m = model([clip("a", start: 1, duration: 1)])
+        m.selectedClipId = "a"; m.selectedClipIDs = ["a"]
+        m.currentTime = 7
+        AppMenu.perform(.alignToPlayhead, model: m)
+        XCTAssertEqual(m.clip("a")?.start ?? -1, 7, accuracy: 1e-9)
+    }
+
+    // MARK: 素材ブラウザの追加(再生ヘッド・1 回の Undo)
+
+    func testBrowserAddPlacesAtPlayheadAndUndoesOnce() async throws {
+        let m = ProjectModel(project: .new())
+        m.currentTime = 6
+        let before = m.project
+        let url = URL(fileURLWithPath: "/nonexistent/still.png")
+        let ids = await AudioLibrarySheet.addToTimeline(url: url, model: m)
+        XCTAssertEqual(ids.count, 1)
+        XCTAssertEqual(m.clip(ids[0])?.start ?? -1, 6, accuracy: 1e-9)
+        m.effectiveUndoManager.undo()
+        XCTAssertEqual(m.project, before)
+    }
+
+    func testKindTextIsJapanese() {
+        XCTAssertEqual(AudioLibrarySheet.kindText(.video), "動画")
+        XCTAssertEqual(AudioLibrarySheet.kindText(.audio), "音声")
+        XCTAssertEqual(AudioLibrarySheet.kindText(.image), "画像")
+    }
+}

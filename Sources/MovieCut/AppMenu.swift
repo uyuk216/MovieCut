@@ -44,6 +44,8 @@ enum MenuCommand: Hashable {
     case addStamp(String)
     // クリップ(M7)
     case duplicate, rippleDelete, trimBefore, trimAfter, prevClip, nextClip, moveLayerUp, moveLayerDown, addLayer, regenerateVoice
+    // クリップ ▸ 選択クリップを再生ヘッドに揃える / つなげて並べる(ショートカットは持たない。1 回の Undo)
+    case alignToPlayhead, concatenateClips
     case playPause, toStart, stepBack, stepForward
     // 移動(M7)
     case goStart, goEnd, prevEdit, nextEdit, prevLine, nextLine, jumpToTime
@@ -662,6 +664,8 @@ enum AppMenuSpec {
          MenuItemSpec(command: .duplicate, title: "クリップを複製", shortcut: cmd("d"), enabled: s.canEdit && s.hasSelection, checked: nil),
          MenuItemSpec(command: .delete, title: "クリップを削除", shortcut: nil, enabled: s.canEdit && s.hasSelection, checked: nil, hint: "⌫"),
          MenuItemSpec(command: .rippleDelete, title: "すき間を詰めて削除", shortcut: MenuShortcut(key: .delete, modifiers: [.option, .command]), enabled: s.canEdit && s.hasSelection, checked: nil),
+         MenuItemSpec(command: .alignToPlayhead, title: "選択クリップを再生ヘッドに揃える", shortcut: nil, enabled: s.canEdit && s.hasSelection, checked: nil, hint: "一番手前の頭を再生ヘッドへ"),
+         MenuItemSpec(command: .concatenateClips, title: "選択クリップをつなげて並べる", shortcut: nil, enabled: s.canEdit && s.selectionCount >= 2, checked: nil, hint: "2 つ以上選ぶ"),
          MenuItemSpec(command: .nudgeEarlier, title: "1 コマ前へ動かす", shortcut: nil, enabled: s.canEdit && s.hasSelection, checked: nil),
          MenuItemSpec(command: .nudgeLater, title: "1 コマ後ろへ動かす", shortcut: nil, enabled: s.canEdit && s.hasSelection, checked: nil),
          MenuItemSpec(command: .stabilizeToggle, title: "手ぶれ補正（映像を滑らかにする）", shortcut: nil, enabled: s.canEdit && s.canStabilize, checked: s.canStabilize ? s.isStabilized : nil),
@@ -1104,6 +1108,8 @@ enum AppMenu {
             case .split: m.splitSelected()
             case .duplicate: m.duplicateSelected()
             case .rippleDelete: m.rippleDeleteSelected()
+            case .alignToPlayhead: m.alignSelectedToPlayhead()
+            case .concatenateClips: m.concatenateSelectedClips()
             case .copyClips: m.copySelection()
             case .cutClips: m.cutSelection()
             case .pasteClips: m.pasteClips()

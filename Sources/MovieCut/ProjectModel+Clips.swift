@@ -49,6 +49,29 @@ extension ProjectModel {
         return true
     }
 
+    /// 「選択クリップを再生ヘッドに揃える」: 選択の一番手前を再生ヘッドへ、残りは同じ量だけずらす。1 回の Undo。
+    @discardableResult
+    func alignSelectedToPlayhead() -> Bool {
+        let ids = selectionIdsForAlignment
+        guard !isLocked, let p = TimelineAlignment.alignToPlayhead(in: project, clipIds: ids, playhead: currentTime) else { return false }
+        return edit("選択クリップを再生ヘッドに揃える") { $0 = p }
+    }
+
+    /// 「選択クリップをつなげて並べる」: 選択を開始順に、一番手前の開始から隙間なく並べ直す。1 回の Undo。
+    @discardableResult
+    func concatenateSelectedClips() -> Bool {
+        let ids = selectionIdsForAlignment
+        guard !isLocked, let p = TimelineAlignment.concatenate(in: project, clipIds: ids) else { return false }
+        return edit("選択クリップをつなげて並べる") { $0 = p }
+    }
+
+    /// 位置合わせの対象: 複数選択があればそれ、無ければ主のクリップ。
+    private var selectionIdsForAlignment: Set<String> {
+        var ids = selectedClipIDs
+        if let id = selectedClipId { ids.insert(id) }
+        return ids
+    }
+
     /// 「前のクリップを選択」「次のクリップを選択」(開始時刻順・全レイヤー)。選んだら true。
     @discardableResult
     func selectAdjacentClip(forward: Bool) -> Bool {
