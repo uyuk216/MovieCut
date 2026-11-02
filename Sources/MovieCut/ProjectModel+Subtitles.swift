@@ -109,12 +109,12 @@ extension ProjectModel {
 
     /// 出力 ▸ チャプターをコピー: YouTube の説明欄に貼る行をクリップボードへ。注意があれば状態欄に出す。
     @discardableResult
-    func copyChapters() -> Bool {
-        let r = Chapters.make(from: project.markers)
+    func copyChapters(color: MarkerColor? = nil) -> Bool {
+        let r = Chapters.make(from: project.markers, color: color)
         guard r.count > 0 else { statusText = r.warnings.first ?? "マーカーがありません"; return false }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(r.text, forType: .string)
-        statusText = "チャプター \(r.count) 件をコピーしました" + (r.warnings.isEmpty ? "" : "。注意: " + r.warnings.joined(separator: " / "))
+        statusText = (color.map { "\($0.title)のマーカーから " } ?? "") + "チャプター \(r.count) 件をコピーしました" + (r.warnings.isEmpty ? "" : "。注意: " + r.warnings.joined(separator: " / "))
         return true
     }
 }

@@ -1,5 +1,6 @@
 import Foundation
 import CoreGraphics
+import MovieCutCore
 
 /// タイムラインの寸法と時間↔座標の計算(描画から切り離して試せるようにした純粋な部分)。
 /// style.css の .track(40pt)/ #ruler(22pt)/ .track-head(90pt)/ .clip(top 3, 高さ 34)と同じ値。
@@ -133,5 +134,20 @@ struct TimelineGeometry: Equatable {
 
     static func maxScrollY(rowCount: Int, viewHeight: CGFloat) -> CGFloat {
         max(0, CGFloat(rowCount) * TimelineLayout.rowHeight - (viewHeight - TimelineLayout.rulerHeight))
+    }
+}
+
+/// クリップ上のマウス操作の判定(描画から切り離した純粋な規則)。
+enum TimelineHit {
+    /// ダブルクリックで、プロパティ欄の文字入力へ移るクリップか(文字・セリフ)。
+    static func editsTextOnDoubleClick(_ type: ClipType) -> Bool { type == .text || type == .voice }
+
+    /// 押した位置が端(トリム)か中身(移動)か。端の幅は `zone` と幅の 1/3 の小さいほう。
+    enum Zone: Equatable { case left, right, body }
+    static func zone(x: CGFloat, minX: CGFloat, maxX: CGFloat, edgeZone: CGFloat) -> Zone {
+        let z = min(edgeZone, (maxX - minX) / 3)
+        if x - minX < z { return .left }
+        if maxX - x < z { return .right }
+        return .body
     }
 }

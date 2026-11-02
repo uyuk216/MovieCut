@@ -67,8 +67,8 @@ final class MenuUndoSweepTests: XCTestCase {
              .fanMaxToggle, .fanInstall, .fanUninstall, .importSubtitles, .exportSubtitles, .translateSubtitles,
              .transcribeSubtitles, .relinkMedia, .toggleRangeLoop, .aiScript, .aiChapters, .aiTitles, .aiRewrite, .aiSettings,
              .exportStill, .exportSequence, .exportThumbnail, .exportGIF, .queueExport, .showExportQueue, .audioLibrary,
-             .measureLoudness, .showScopes, .saveTemplate, .newFromTemplate, .makeProxies, .lutLoad, .regenerateVoice,
-             .makeVoices, .copyChapters, .jumpToTime, .renameMarker, .fpsCustom, .addQRCode, .aiImage, .generateSubtitles,
+             .measureLoudness, .showScopes, .saveTemplate, .newFromTemplate, .makeProxies, .lutLoad, .autoWhiteBalance, .regenerateVoice,
+             .makeVoices, .layerDelete, .copyChapters, .copyChaptersColor(.red), .jumpToTime, .renameMarker, .fpsCustom, .addQRCode, .aiImage, .generateSubtitles,
              .helpShortcuts, .helpVoicevox, .helpAquestalk, .helpLicense, .helpThirdParty, .previewBackground, .guide,
              .dockPanel, .dockLayout, .previewProxyToggle, .fullScreen:
             return true
@@ -108,8 +108,12 @@ final class MenuUndoSweepTests: XCTestCase {
                     let fresh = AppMenuSpec.all(MenuState(model: m)).first { $0.command == item.command }
                     guard fresh?.enabled == true else { continue }
                     let before = try m.project.encoded()
+                    let oldIds = Set(m.project.allClips.map(\.id))   // 手動の移動・微動は重なりを許す。新しく増えたクリップだけ、重ねない
                     ran += 1
                     AppMenu.perform(item.command, model: m)
+                    let fresh2 = Set(m.project.allClips.map(\.id)).subtracting(oldIds)
+                    let bad = layerOverlaps(m.project).filter { l in fresh2.contains { l.contains($0) } }
+                    if !bad.isEmpty { failures.append("新しいクリップがレイヤー内で重なった: \(label(item, selection: sel, time: time)) \(bad.prefix(2))") }
                     let after = try m.project.encoded()
                     guard after != before else { continue }
                     edited += 1

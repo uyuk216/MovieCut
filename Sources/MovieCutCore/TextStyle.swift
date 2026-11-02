@@ -258,7 +258,7 @@ public enum TextStyleEditing {
 // MARK: - 文字のアニメーション
 
 public enum TextAnimKind: String, CaseIterable, Sendable {
-    case none, typewriter, pop, shake, scrollUp, scrollLeft
+    case none, typewriter, pop, shake, scrollUp, scrollLeft, fadeIn
 
     public var label: String {
         switch self {
@@ -266,6 +266,7 @@ public enum TextAnimKind: String, CaseIterable, Sendable {
         case .typewriter: return "タイプライター"
         case .pop: return "ポップ"
         case .shake: return "シェイク"
+        case .fadeIn: return "フェードイン"
         case .scrollUp: return "スクロール（上へ）"
         case .scrollLeft: return "スクロール（左へ）"
         }
@@ -316,6 +317,8 @@ public struct TextAnimState: Equatable, Sendable {
     /// 見せる文字数(改行を除く)。nil = 全部。
     public var visible: Int?
     public var scale = 1.0
+    /// 文字全体の濃さ(フェードイン)。1 = そのまま。
+    public var alpha = 1.0
     public var dx = 0.0
     public var dy = 0.0
     /// スクロールによる位置のずれ(キャンバスの幅・高さに対する割合。基準の位置へ足す)。
@@ -380,6 +383,8 @@ public enum TextAnimMath {
             s.visible = visibleCount(total: text.filter { $0 != "\n" }.count, rel: rel, duration: d)
         case .pop:
             s.scale = popScale(rel: rel, duration: d)
+        case .fadeIn:
+            s.alpha = min(max(rel / d, 0), 1)
         case .shake:
             let o = shakeOffset(rel: rel, duration: d, amplitude: size * 0.08)
             s.dx = o.dx; s.dy = o.dy
@@ -400,13 +405,15 @@ public struct TextLook: Codable, Equatable, Sendable {
     public var style: TextStyle?
     /// 吹き出し(B-2)。無いときは吹き出しを外す(装飾と同じく丸ごと入れ替え)。
     public var bubble: Bubble?
-    public init(color: String? = nil, outline: String? = nil, font: String? = nil, style: TextStyle? = nil, bubble: Bubble? = nil) {
-        self.color = color; self.outline = outline; self.font = font; self.style = style; self.bubble = bubble
+    /// 登場アニメーション(フェードイン・タイプライター・ポップなど)。無いときは今のアニメーションを変えない。
+    public var anim: TextAnim?
+    public init(color: String? = nil, outline: String? = nil, font: String? = nil, style: TextStyle? = nil, bubble: Bubble? = nil, anim: TextAnim? = nil) {
+        self.color = color; self.outline = outline; self.font = font; self.style = style; self.bubble = bubble; self.anim = anim
     }
 
     /// クリップの、いまの見た目。
     public init(of c: Clip) {
-        self.init(color: c.color, outline: c.outline, font: c.font, style: c.textStyle, bubble: c.bubble)
+        self.init(color: c.color, outline: c.outline, font: c.font, style: c.textStyle, bubble: c.bubble, anim: c.textAnim)
     }
 
     /// クリップへ当てる(色・縁は上書き、書体は指定があるときだけ、装飾は丸ごと入れ替え)。変えたときだけ true。
@@ -419,6 +426,7 @@ public struct TextLook: Codable, Equatable, Sendable {
         let s = style?.normalized
         c.textStyle = (s?.isEmpty ?? true) ? nil : s
         c.bubble = bubble?.normalized
+        if let a = anim { c.textAnim = a }
         return c != before
     }
 }
@@ -431,7 +439,7 @@ public struct SavedTextStyle: Codable, Equatable, Identifiable, Sendable {
     public var isBuiltin: Bool { id.hasPrefix(TextStyleLibrary.builtinPrefix) }
 }
 
-/// アプリ全体の文字スタイル(組み込み 6 つ + 保存したもの)。保存先は UserDefaults(JSON)。壊れていたら空として扱う。
+/// アプリ全体の文字スタイル(組み込み 9 つ + 保存したもの)。保存先は UserDefaults(JSON)。壊れていたら空として扱う。
 public enum TextStyleLibrary {
     public static let defaultsKey = "textStyles.v1"
     public static let builtinPrefix = "builtin."
@@ -456,6 +464,9 @@ public enum TextStyleLibrary {
                 $0.bold = true
                 $0.shadow = .init(color: "#000000", dx: 3, dy: 3, blur: 5, opacity: 0.7)
             })),
+        SavedTextStyle(id: "builtin.fadein", name: "フェードイン", look: TextLook(anim: TextAnim(kind: TextAnimKind.fadeIn.rawValue, duration: 0.8))),
+        SavedTextStyle(id: "builtin.typewriter", name: "タイプライター", look: TextLook(anim: TextAnim(kind: TextAnimKind.typewriter.rawValue, duration: 1.5))),
+        SavedTextStyle(id: "builtin.pop", name: "ポップ", look: TextLook(anim: TextAnim(kind: TextAnimKind.pop.rawValue, duration: 0.5))),
     ]
 
     private static func style(_ f: (inout TextStyle) -> Void) -> TextStyle {

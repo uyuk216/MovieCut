@@ -103,4 +103,29 @@ public enum LayerEditing {
     public static func isLockedClip(_ id: String, in project: Project) -> Bool {
         project.tracks.contains { $0.isLocked && $0.clips.contains { $0.id == id } }
     }
+
+    // MARK: 削除
+
+    /// レイヤーを消せない理由(日本語)。消せるなら nil。最後の 1 つは消せない(タイムラインが空になるため)。
+    public static func deleteBlockedReason(in project: Project, index: Int) -> String? {
+        guard project.tracks.indices.contains(index) else { return "削除するレイヤーがありません" }
+        if project.tracks.count <= 1 { return "最後のレイヤーは削除できません" }
+        return nil
+    }
+
+    /// レイヤーを(中のクリップごと)消す。範囲外・最後の 1 つは nil。ほかのレイヤーの順番と中身は変えない。
+    /// ロックの確認は呼ぶ側(アプリ)で行う。この関数はロックされたレイヤーでも消す。
+    public static func delete(in project: Project, index: Int) -> Project? {
+        guard deleteBlockedReason(in: project, index: index) == nil else { return nil }
+        var p = project
+        p.tracks.remove(at: index)
+        return p
+    }
+
+    /// 確認ダイアログ用: そのレイヤーのクリップ数(複合の中は数えない)と、ロックか。
+    public static func deletionImpact(in project: Project, index: Int) -> (name: String, clipCount: Int, locked: Bool)? {
+        guard project.tracks.indices.contains(index) else { return nil }
+        let t = project.tracks[index]
+        return (t.name, t.clips.count, t.isLocked)
+    }
 }

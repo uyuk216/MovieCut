@@ -6,15 +6,20 @@ struct MenuItemView: View {
     let spec: MenuItemSpec
     let perform: (MenuCommand) -> Void
 
+    /// 使えないときの理由(ツールチップ)。有効なら nil。
+    private var reason: String? { AppMenuSpec.disabledReason(for: spec, state: ActiveDocument.shared.state) }
+
     var body: some View {
         if let checked = spec.checked {
             Toggle(spec.displayTitle, isOn: Binding(get: { checked }, set: { _ in perform(spec.command) }))
                 .keyboardShortcut(spec.shortcut?.keyboardShortcut)
                 .disabled(!spec.enabled)
+                .help(reason ?? "")
         } else {
             Button(spec.displayTitle) { perform(spec.command) }
                 .keyboardShortcut(spec.shortcut?.keyboardShortcut)
                 .disabled(!spec.enabled)
+                .help(reason ?? "")
         }
     }
 }
@@ -52,6 +57,17 @@ struct AppCommands: Commands {
                 items(AppMenuSpec.file(s), run)
                 MenuItemView(spec: AppMenuSpec.subtitleImport(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.mediaRelink(s), perform: run)
+                Divider()
+                Menu("最近使った項目") {
+                    if s.recentItems.isEmpty {
+                        Text("履歴はありません")
+                    } else {
+                        items(AppMenuSpec.recentItems(s), run)
+                    }
+                    Divider()
+                    MenuItemView(spec: AppMenuSpec.recentClear(s), perform: run)
+                }
+                MenuItemView(spec: AppMenuSpec.welcomeToggle(s), perform: run)
                 Divider()
                 MenuItemView(spec: AppMenuSpec.templateSave(s), perform: run)
                 Menu("テンプレートから新規作成") {
@@ -93,6 +109,7 @@ struct AppCommands: Commands {
                 Divider()
                 Menu("レイヤー") {
                     items(AppMenuSpec.layerItems(s), run)
+                    items([AppMenuSpec.layerDeleteItem(s)], run)
                     Divider()
                     items(AppMenuSpec.layerHeightItems(s), run)
                 }
@@ -137,6 +154,7 @@ struct AppCommands: Commands {
                     items(AppMenuSpec.effectActions(s), run)
                 }
                 MenuItemView(spec: AppMenuSpec.lutLoadItem(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.autoWhiteBalanceItem(s), perform: run)
             }
         }
 
@@ -220,6 +238,7 @@ struct AppCommands: Commands {
                 MenuItemView(spec: AppMenuSpec.subtitleGenerate(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.transcribeSubtitles(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.chapterCopy(s), perform: run)
+                Menu("チャプターを色でコピー") { items(AppMenuSpec.chapterColorItems(s), run) }
                 MenuItemView(spec: AppMenuSpec.aiChapters(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.aiTitles(s), perform: run)
             }

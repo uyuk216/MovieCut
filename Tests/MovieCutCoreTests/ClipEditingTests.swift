@@ -345,28 +345,27 @@ final class ClipEditingTests: XCTestCase {
         var p = Project()
         let ids = ClipEditing.place(media: [("/a.png", .image, 5), ("/b.mp3", .audio, 3.25), ("/c.mp4", .video, 12)], at: 2, in: &p)
         XCTAssertEqual(ids.count, 3)
-        // すべて start = 2。重なるので 1 つずつ別のレイヤーへ
-        XCTAssertEqual(p.tracks[0].clips.map(\.id), [ids[0]])
-        XCTAssertEqual(p.tracks[1].clips.map(\.id), [ids[1]])
-        XCTAssertEqual(p.tracks[2].clips.map(\.id), [ids[2]])
-        let img = p.tracks[0].clips[0], aud = p.tracks[1].clips[0], vid = p.tracks[2].clips[0]
+        // 順に置く: 2〜7、7〜10.25、10.25〜22.25。どれも空いているので 0 番
+        XCTAssertEqual(p.tracks[0].clips.map(\.id), ids)
+        XCTAssertEqual(p.tracks[0].clips.map(\.start), [2, 7, 10.25])
+        let img = p.tracks[0].clips[0], aud = p.tracks[0].clips[1], vid = p.tracks[0].clips[2]
         XCTAssertEqual(img.type, .image); XCTAssertNil(img.srcDuration); XCTAssertEqual(img.duration, 5)
         XCTAssertEqual(aud.type, .audio); XCTAssertEqual(aud.srcDuration, 3.25); XCTAssertEqual(aud.duration, 3.25)
         XCTAssertEqual(vid.srcDuration, 12)
         for c in [img, aud, vid] {
-            XCTAssertEqual(c.start, 2); XCTAssertEqual(c.offset, 0)
+            XCTAssertEqual(c.offset, 0)
             XCTAssertEqual(c.x, 0.5); XCTAssertEqual(c.y, 0.5); XCTAssertEqual(c.scale, 1); XCTAssertEqual(c.opacity, 1); XCTAssertEqual(c.volume, 1)
         }
         XCTAssertEqual(img.src, "/a.png")
     }
 
-    func testPlaceFallsBackToTrackZeroWhenFull() {
+    func testPlaceNeverOverlapsWhenMany() {
         var p = Project()
         let media = (0..<7).map { ("/\($0).png", ClipType.image, 5.0) }
         let ids = ClipEditing.place(media: media, at: 0, in: &p)
         XCTAssertEqual(ids.count, 7)
-        XCTAssertEqual(p.tracks[0].clips.count, 3)        // 5 レイヤー + あふれた 2 つが 0 番へ(最初の 1 つ + 2)
-        XCTAssertEqual(p.tracks[4].clips.count, 1)
+        XCTAssertEqual(p.tracks[0].clips.count, 7)
+        assertNoLayerOverlaps(p)
     }
 
     func testProbeDurationImageIsFiveAndMissingFileFallsBack() async {

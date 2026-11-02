@@ -30,6 +30,8 @@ extension ProjectModel {
     static let panUndoName = "パンの変更"
     static let denoiseUndoName = "ノイズ除去の変更"
     static let pitchUndoName = "音程の変更"
+    static let gateUndoName = "ノイズゲートの変更"
+    static let limiterUndoName = "リミッターの変更"
 
     // MARK: メニュー「クリップ ▸ 音声」
 

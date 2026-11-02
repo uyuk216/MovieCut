@@ -24,6 +24,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for delay in [0.3, 0.8, 1.6, 3.0] {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { Self.settleLaunchWindows(closeAllBlank: false) }
         }
+        // 起動時の画面(最近使ったプロジェクト)。状態の復元や渡された書類が届いたあとで 1 回だけ判断する
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            MainActor.assumeIsolated { WelcomeWindow.showAtLaunchIfNeeded(launchedWithDocuments: launchedWithDocuments) }
+        }
         DebugHooks.shared.appDidLaunch()
         // 異常終了で残った自動保存の写しがあれば、復元するかを聞く(静かな検証では聞かない)
         if !DebugHooks.isQuiet {

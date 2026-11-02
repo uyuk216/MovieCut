@@ -14,7 +14,7 @@ struct InspectorSection: View {
                 .foregroundStyle(.secondary)
             Rectangle().fill(Color(nsColor: .separatorColor)).frame(height: 1)
         }
-        .padding(.top, 8)
+        .padding(.top, 5)
     }
 }
 
@@ -122,7 +122,7 @@ struct NumField: View {
                 .multilineTextAlignment(.trailing)
                 .font(.system(size: 13).monospacedDigit())
                 .focused($focused)
-                .onSubmit(commit)
+                .onSubmit { commit(); focused = false }     // Return で確定したら入力を終える(Space・Delete がまた効く)
                 .onChange(of: focused) { _, now in if !now { commit() } }
             Stepper("", onIncrement: { onStep(value + step) }, onDecrement: { onStep(value - step) })
                 .labelsHidden()
@@ -178,6 +178,8 @@ struct MultilineField: View {
     let value: String
     var live = false
     var height: CGFloat = 72
+    /// 増えたらこの欄にフォーカスを移す(タイムラインのダブルクリック)。
+    var focusRequest = 0
     let onLive: (String) -> Void
     let onCommit: (String) -> Void
 
@@ -206,6 +208,7 @@ struct MultilineField: View {
         }
         .onAppear { draft = value }
         .onChange(of: value) { _, v in if !focused { draft = v } }
+        .onChange(of: focusRequest) { _, _ in focused = true }
     }
 }
 
@@ -263,10 +266,10 @@ struct InspectorView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("プロパティ").font(.headline).padding(.horizontal, 12).padding(.top, 12).padding(.bottom, 6)
+            Text("プロパティ").font(.headline).padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
             Divider()
             ScrollView(.vertical) {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 6) {
                     switch model.inspectorMode {
                     case .clip(let id):
                         ClipInspector(model: model, clipId: id).id(id)
@@ -280,7 +283,7 @@ struct InspectorView: View {
                     }
                 }
                 .padding(.horizontal, 12)
-                .padding(.vertical, 10)
+                .padding(.vertical, 6)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 .background(ScrollerStyler())
             }
@@ -483,7 +486,7 @@ struct ClipInspector: View {
             }
             .labelsHidden()
         }
-        MultilineField(label: "セリフ", value: c.text ?? "", onLive: { _ in }, onCommit: { t in Task { await model.setVoiceText(t, clipId: clipId) } })
+        MultilineField(label: "セリフ", value: c.text ?? "", focusRequest: model.textFocusRequest, onLive: { _ in }, onCommit: { t in Task { await model.setVoiceText(t, clipId: clipId) } })
         Text("入力欄を離れるか Cmd+Return で、音声を作り直します。")
             .font(.system(size: 11)).foregroundStyle(.secondary)
         InspectorSection(title: "字幕")
@@ -828,7 +831,7 @@ struct ClipInspector: View {
 
     @ViewBuilder private func textSections(_ c: Clip) -> some View {
         InspectorSection(title: "文字")
-        MultilineField(label: "文字", value: c.text ?? "", live: true,
+        MultilineField(label: "文字", value: c.text ?? "", live: true, focusRequest: model.textFocusRequest,
                        onLive: { t in model.coalescedClipProperty({ $0.text = t }, name: "文字の変更", clipId: clipId) },
                        onCommit: { t in model.flushCoalesced(); model.setClipProperty({ $0.text = t }, name: "文字の変更", clipId: clipId) })
         num("大きさ（px）", .fontSize, step: 1, decimals: 0)
@@ -1218,7 +1221,7 @@ struct NameField: View {
         TextField("", text: $text)
             .textFieldStyle(.roundedBorder)
             .focused($focused)
-            .onSubmit { onCommit(text) }
+            .onSubmit { onCommit(text); focused = false }
             .onChange(of: focused) { _, now in if !now { onCommit(text) } }
             .onAppear { text = value }
             .onChange(of: value) { _, v in if !focused { text = v } }

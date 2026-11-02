@@ -393,13 +393,14 @@ final class TimelineEditingTests: XCTestCase {
         XCTAssertEqual(model.selectedClipId, ids.last)
         let clips = ids.map { find($0) }
         XCTAssertEqual(clips.map(\.type), [.image, .audio, .video])
-        XCTAssertEqual(clips.map(\.start), [6, 6, 6])
+        XCTAssertEqual(clips.map(\.start), [6, 11, 13], "順に: 直前の終わりから")
         XCTAssertEqual(clips[0].duration, 5); XCTAssertNil(clips[0].srcDuration)
         XCTAssertEqual(clips[1].duration, 2, accuracy: 0.01); XCTAssertEqual(clips[1].srcDuration!, 2, accuracy: 0.01)
         XCTAssertEqual(clips[2].duration, 5)
         // 画像 [6,11) は T0 の b(8〜10) に重なる → T1(c は 6 で終わる)。音声 [6,8) は T0 に入る。動画 [6,11) は T0・T1 が埋まったので T2
         let tracks = ids.map { ClipEditing.locate($0, in: model.project)!.track }
-        XCTAssertEqual(tracks, [1, 0, 2])
+        XCTAssertEqual(tracks, [1, 0, 0])
+        assertNoLayerOverlaps(model.project)
         um.undo()
         XCTAssertEqual(model.project, before, "全体で 1 回の Undo")
         XCTAssertFalse(um.canUndo)

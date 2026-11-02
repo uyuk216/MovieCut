@@ -98,6 +98,7 @@ struct ContentView: View {
         .onAppear {
             model.undoManager = undoManager
             model.fileURL = fileURL
+            RecentProjectsController.shared.record(url: fileURL)
             model.installKeyboard()
             model.installDock(store: dock, presents: presentsDockWindows)
             if model.window?.isMainWindow == true { ActiveDocument.shared.activate(model) }
@@ -112,7 +113,7 @@ struct ContentView: View {
             if let w = note.object as? NSWindow, w === model.window { ActiveDocument.shared.activate(model) }
         }
         .onChange(of: undoManager) { _, new in model.undoManager = new }
-        .onChange(of: fileURL) { _, new in model.fileURL = new }
+        .onChange(of: fileURL) { _, new in model.fileURL = new; RecentProjectsController.shared.record(url: new) }
     }
 }
 
@@ -155,7 +156,7 @@ struct ToolbarBar: View {
                 .lineLimit(1)
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 7)
+        .padding(.vertical, 5)
         .background(Color(nsColor: .underPageBackgroundColor).opacity(0.5))
     }
 
@@ -273,9 +274,9 @@ struct CenterPanel: View {
     var body: some View {
         VStack(spacing: 0) {
             PreviewView(project: model.project, time: model.currentTime, assets: model.assets, model: model, epoch: model.previewEpoch)
-            .padding(10)
+            .padding(6)
             TransportBar(model: model)
-                .padding(.bottom, 10)
+                .padding(.bottom, 6)
         }
     }
 }
@@ -350,7 +351,7 @@ struct ExportSheet: View {
                     .keyboardShortcut(.cancelAction)
             }
         }
-        .padding(20)
+        .padding(16)
         .interactiveDismissDisabled()
     }
 }
@@ -386,7 +387,7 @@ struct JumpToTimeSheet: View {
                     .buttonStyle(.borderedProminent)
             }
         }
-        .padding(20)
+        .padding(16)
         .onAppear { text = timecode(model.currentTime); focused = true }
     }
 
@@ -415,7 +416,7 @@ struct RenameMarkerSheet: View {
                     .buttonStyle(.borderedProminent)
             }
         }
-        .padding(20)
+        .padding(16)
         .onAppear {
             name = model.project.markers.first { $0.id == model.renamingMarkerId }?.name ?? ""
             focused = true
@@ -551,7 +552,7 @@ struct SettingsSheet: View {
                     .disabled(!res.isValid || !fpsValid)
             }
         }
-        .padding(20)
+        .padding(16)
         .frame(width: 560)
         .onChange(of: draft.codec) { _, c in res.codec = c }
         .onChange(of: fpsText) { _, t in if case .success(let v) = FrameRateInput.parse(t) { res.fps = v } }

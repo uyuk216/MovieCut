@@ -8,7 +8,7 @@ enum MenuCommand: Hashable {
     // 出力 ▸ 書き出し中のファン最大化(設定と、ヘルパーのインストール / 削除)
     case fanMaxToggle, fanInstall, fanUninstall
     // 字幕(B3)とチャプター
-    case importSubtitles, exportSubtitles, generateSubtitles, copyChapters
+    case importSubtitles, exportSubtitles, generateSubtitles, copyChapters, copyChaptersColor(MarkerColor)
     // 字幕を AI で翻訳して SRT に書き出す(ショートカットは持たない)
     case translateSubtitles
     // 音声から字幕を作る(オンデバイスの音声認識。選んでいるクリップ)
@@ -31,7 +31,7 @@ enum MenuCommand: Hashable {
     // ファイル ▸ プロジェクトテンプレート(テンプレートとして保存 / テンプレートから新規作成。ショートカットは持たない)
     case saveTemplate, newFromTemplate(String)
     // A6: クリップのコピー / 切り取り / 貼り付け / 全選択(ショートカットは持たない: ⌘C ⌘X ⌘V ⌘A は responder chain が受ける)と、レイヤー
-    case copyClips, cutClips, pasteClips, selectAllClips, layerLock, layerSolo, layerHeight(LayerHeight)
+    case copyClips, cutClips, pasteClips, selectAllClips, layerLock, layerSolo, layerDelete, layerHeight(LayerHeight)
     case split, delete, addText, addBlur, addAdjustment, addVisualizer, addQRCode, addCharacter, makeVoices
     // 図形(クリップ ▸ 図形を追加 ▸ 種類。ショートカットは持たない)
     case addShape(FigureKind)
@@ -50,7 +50,7 @@ enum MenuCommand: Hashable {
     // トランジション(kind が nil = なし)
     case transitionIn(TransitionKind?), transitionOut(TransitionKind?), fadeBoth, clearTransitions, crossfade, fadeInOut
     // エフェクト
-    case effectAdd(EffectKind), effectPreset(EffectPreset), effectClear, effectCopy, effectPaste, lutLoad
+    case effectAdd(EffectKind), effectPreset(EffectPreset), effectClear, effectCopy, effectPaste, lutLoad, autoWhiteBalance
     // 文字(スタイルを適用 = id、文字アニメーション)
     case textStyleApply(String), textStyleApplyAll(String), textAnim(TextAnimKind), toggleCounter
     // 配置(ピクチャー・イン・ピクチャーの角)
@@ -88,6 +88,8 @@ enum MenuCommand: Hashable {
     case guide(PreviewGuide)
     // 画面のドッキング(パネルの表示と、配置のプリセット)
     case dockPanel(DockPanel), dockLayout(DockPreset)
+    // ファイル ▸ 最近使った項目 / 起動時の画面を表示(書類がなくても使える。ショートカットは持たない)
+    case openRecent(String), clearRecents, welcomeAtLaunchToggle
     case helpShortcuts, helpVoicevox, helpAquestalk, helpLicense, helpThirdParty
 }
 
@@ -171,12 +173,18 @@ struct MenuState: Equatable {
     var canTranscribe = false
     var hasMissingMedia = false
     var hasMarkers = false
+    var markerColorCounts: [MarkerColor: Int] = [:]   // 色ごとのマーカーの数(チャプターを色でコピー)
     /// ファイル ▸ テンプレートから新規作成 の一覧(保存されている名前・名前順)
     var templateNames: [String] = []
+    /// ファイル ▸ 最近使った項目(新しい順)と、起動時の画面を出す設定
+    var recentItems: [RecentMenuItem] = []
+    var welcomeAtLaunch = true
     /// A6: メニューの対象のレイヤー(選んだクリップのレイヤー、無ければヘッダーで選んだレイヤー)の状態
     var hasLayerTarget = false
     var layerLocked = false
     var layerSolo = false
+    /// 対象のレイヤーを消せない理由(消せるなら nil)。レイヤーがなければ nil で hasLayerTarget が false
+    var layerDeleteBlocked: String?
     var layerHeight = LayerHeight.normal
     var canSplit = false
     var resolutionKey = ""
@@ -224,6 +232,7 @@ struct MenuState: Equatable {
     var canEffect = false            // 映像のクリップ(画像・動画・文字)を選んでいる
     var hasEffects = false           // 選択クリップにエフェクトが 1 つでもある
     var canPasteEffects = false      // コピーしたエフェクトがある
+    var canAutoColor = false         // 画像か動画のクリップを選んでいる(自動ホワイトバランスの対象)
     // 文字
     var isTextClip = false           // 文字クリップを選んでいる
     var textAnimKind: TextAnimKind = .none
@@ -276,6 +285,9 @@ struct MenuState: Equatable {
         previewBackground = PreviewBackgroundStore.current
         previewGuides = PreviewGuideStore.current
         templateNames = ProjectTemplateLibrary.names
+        let rc = RecentProjectsController.shared
+        recentItems = rc.recents.entries.map { RecentMenuItem(path: $0.path, name: $0.name, missing: rc.isMissing($0)) }
+        welcomeAtLaunch = WelcomeSettings.showAtLaunch()
         let fan = AppServices.fan
         fanAvailable = fan.isAvailable
         fanEnabled = fan.enabled
@@ -302,10 +314,12 @@ struct MenuState: Equatable {
         canGenerateSubtitles = SubtitleGeneration.hasTargets(m.project)
         hasMissingMedia = !MissingMedia.find(in: m.project).isEmpty
         hasMarkers = !m.project.markers.isEmpty
+        markerColorCounts = Chapters.colorCounts(m.project.markers)
         if let li = m.targetLayerIndex, m.project.tracks.indices.contains(li) {
             hasLayerTarget = true
             layerLocked = m.project.tracks[li].isLocked
             layerSolo = m.project.tracks[li].isSolo
+            layerDeleteBlocked = LayerEditing.deleteBlockedReason(in: m.project, index: li)
             layerHeight = LayerHeight.of(m.project.tracks[li])
         }
         canSplit = m.canSplit
@@ -340,6 +354,7 @@ struct MenuState: Equatable {
             transitionOutKind = c.transitionOut?.kind
             canEffect = EffectEditing.supports(c.type)
             hasEffects = !c.effects.isEmpty
+            canAutoColor = c.type == .image || c.type == .video
             isTextClip = c.type == .text
             textAnimKind = c.textAnim?.known ?? .none
             hasCounter = c.counter != nil
@@ -475,6 +490,21 @@ enum AppMenuSpec {
         MenuItemSpec(command: .relinkMedia, title: "素材の場所を再指定…", shortcut: nil, enabled: s.canEdit && s.hasMissingMedia, checked: nil, hint: "欠けた素材")
     }
 
+    /// ファイル ▸ 最近使った項目 ▸ 各プロジェクト(見つからないものは無効)。
+    static func recentItems(_ s: MenuState) -> [MenuItemSpec] {
+        s.recentItems.map { MenuItemSpec(command: .openRecent($0.path), title: $0.name, shortcut: nil, enabled: !$0.missing, checked: nil, hint: $0.missing ? "見つかりません" : nil) }
+    }
+
+    /// ファイル ▸ 最近使った項目 ▸ メニューを消去(履歴があるときだけ有効)。
+    static func recentClear(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .clearRecents, title: "メニューを消去", shortcut: nil, enabled: !s.recentItems.isEmpty, checked: nil)
+    }
+
+    /// ファイル ▸ 起動時の画面を表示(✓ のとき、起動時に最近使ったプロジェクトの画面を出す。書類がなくても使える)。
+    static func welcomeToggle(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .welcomeAtLaunchToggle, title: "起動時の画面を表示", shortcut: nil, enabled: true, checked: s.welcomeAtLaunch)
+    }
+
     /// ファイル ▸ テンプレートとして保存…(クリップは含めない。ショートカットなし)。
     static func templateSave(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .saveTemplate, title: "テンプレートとして保存…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "クリップは含めない")
@@ -483,6 +513,14 @@ enum AppMenuSpec {
     /// ファイル ▸ テンプレートから新規作成 ▸ の各テンプレート(開くと無題の書類になる)。
     static func templateNewItems(_ s: MenuState) -> [MenuItemSpec] {
         s.templateNames.map { MenuItemSpec(command: .newFromTemplate($0), title: $0, shortcut: nil, enabled: true, checked: nil) }
+    }
+
+    /// 出力 ▸ チャプターを色でコピー ▸ ○○のマーカーだけ(その色のマーカーが 1 つ以上あるときだけ有効)。ショートカットなし。
+    static func chapterColorItems(_ s: MenuState) -> [MenuItemSpec] {
+        MarkerColor.allCases.map { c in
+            MenuItemSpec(command: .copyChaptersColor(c), title: "\(c.title)のマーカーだけ", shortcut: nil,
+                         enabled: s.canEdit && (s.markerColorCounts[c] ?? 0) > 0, checked: nil, hint: (s.markerColorCounts[c] ?? 0) > 0 ? "\(s.markerColorCounts[c] ?? 0) 件" : nil)
+        }
     }
 
     static func chapterCopy(_ s: MenuState) -> MenuItemSpec {
@@ -645,6 +683,12 @@ enum AppMenuSpec {
         let on = s.canEdit && s.hasLayerTarget
         return [MenuItemSpec(command: .layerLock, title: "レイヤーをロック", shortcut: nil, enabled: on, checked: on ? s.layerLocked : false),
                 MenuItemSpec(command: .layerSolo, title: "レイヤーをソロ", shortcut: nil, enabled: on, checked: on ? s.layerSolo : false)]
+    }
+
+    /// クリップメニュー ▸ レイヤー ▸ レイヤーを削除…(確認ダイアログが出る。ショートカットなし)。
+    static func layerDeleteItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .layerDelete, title: "レイヤーを削除…", shortcut: nil,
+                     enabled: s.canEdit && s.hasLayerTarget && s.layerDeleteBlocked == nil, checked: nil)
     }
 
     static func layerHeightItems(_ s: MenuState) -> [MenuItemSpec] {
@@ -827,6 +871,10 @@ enum AppMenuSpec {
 
     /// クリップ ▸ 無音をカット…(シートを開く)。
     /// クリップ ▸ LUT を読み込む…(.cube を選ぶ)。
+    static func autoWhiteBalanceItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .autoWhiteBalance, title: "自動ホワイトバランス", shortcut: nil, enabled: s.canEdit && s.canAutoColor, checked: nil)
+    }
+
     static func lutLoadItem(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .lutLoad, title: "LUT を読み込む…", shortcut: nil, enabled: s.canEdit && s.canEffect, checked: nil)
     }
@@ -938,7 +986,7 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, settings(s), videoSettings(s)] + file(s) + [subtitleImport(s), mediaRelink(s), subtitleExport(s), subtitleTranslate(s), subtitleGenerate(s), transcribeSubtitles(s), chapterCopy(s), aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s)] + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), makeProxies(s)] + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textCounterItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), beatMarkersItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + layerHeightItems(s) + playback(s)
+        [about, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + [subtitleImport(s), mediaRelink(s), subtitleExport(s), subtitleTranslate(s), subtitleGenerate(s), transcribeSubtitles(s), chapterCopy(s)] + chapterColorItems(s) + [ aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s)] + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), makeProxies(s)] + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textCounterItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), beatMarkersItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerColorItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + guideItems(s) + [previewProxy(s), fullScreen(s)] + help.flatMap { $0 }
@@ -957,6 +1005,11 @@ enum AppMenu {
         case .fanInstall: AppServices.fan.install()
         case .fanUninstall: AppServices.fan.uninstall()
         case .helpShortcuts: ShortcutSheet.show()
+        case .openRecent(let path): WelcomeActions.open(path: path)
+        case .clearRecents: RecentProjectsController.shared.clear()
+        case .welcomeAtLaunchToggle:
+            WelcomeSettings.setShowAtLaunch(!WelcomeSettings.showAtLaunch())
+            ActiveDocument.shared.refresh()
         case .newFromTemplate(let name): ProjectTemplateActions.newDocument(fromTemplate: name)
         case .helpVoicevox: openURL(DependencyStatus.voicevoxURL)
         case .helpAquestalk: openURL(DependencyStatus.aquestalkURL)
@@ -991,6 +1044,7 @@ enum AppMenu {
             case .relinkMedia: m.chooseAndRelinkMedia()
             case .toggleRangeLoop: m.rangeLoop.toggle()
             case .copyChapters: m.copyChapters()
+            case .copyChaptersColor(let c): m.copyChapters(color: c)
             case .aiScript: m.openAIScriptDialog()
             case .aiChapters: m.openAIChapters()
             case .aiTitles: m.openAITitles()
@@ -1020,6 +1074,7 @@ enum AppMenu {
             case .selectAllClips: m.selectAllClips()
             case .layerLock: if let i = m.targetLayerIndex { m.toggleLayerLock(i) }
             case .layerSolo: if let i = m.targetLayerIndex { m.toggleLayerSolo(i) }
+            case .layerDelete: if let i = m.targetLayerIndex { m.requestDeleteLayer(i) }
             case .layerHeight(let h): if let i = m.targetLayerIndex { m.setLayerHeight(i, h) }
             case .trimBefore: m.trimSelectedBeforePlayhead()
             case .trimAfter: m.trimSelectedAfterPlayhead()
@@ -1061,6 +1116,7 @@ enum AppMenu {
             case .effectCopy: m.copyEffectsSelected()
             case .effectPaste: m.pasteEffectsSelected()
             case .lutLoad: m.chooseAndLoadLUT()
+            case .autoWhiteBalance: m.autoWhiteBalanceSelected()
             case .textStyleApply(let id): m.applyTextStyleSelected(id)
             case .textStyleApplyAll(let id): m.applyTextStyleToAll(id: id)
             case .textAnim(let k): m.setTextAnim(k)

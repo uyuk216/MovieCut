@@ -179,6 +179,22 @@ public enum AudioFxEditing {
         return edit(&c) { fx in fx.pitch = x != 0 ? x : nil }
     }
 
+    // MARK: ノイズゲート・リミッター
+
+    /// ノイズゲートのしきい値(dBFS、−80〜−20、0.5 dB 刻み)。nil で外す(項目ごと消える)。変化があれば true。
+    @discardableResult
+    public static func setGate(_ c: inout Clip, _ db: Double?) -> Bool {
+        let x: Double? = db.flatMap { $0.isFinite ? ((min(max($0, AudioFx.gateRange.lowerBound), AudioFx.gateRange.upperBound)) * 2).rounded() / 2 : nil }
+        return edit(&c) { fx in fx.gate = x }
+    }
+
+    /// リミッターの天井(dBFS、−24〜0、0.5 dB 刻み)。nil で外す。変化があれば true。
+    @discardableResult
+    public static func setLimiter(_ c: inout Clip, _ db: Double?) -> Bool {
+        let x: Double? = db.flatMap { $0.isFinite ? ((min(max($0, AudioFx.limiterRange.lowerBound), AudioFx.limiterRange.upperBound)) * 2).rounded() / 2 : nil }
+        return edit(&c) { fx in fx.limiter = x }
+    }
+
     // MARK: パン
 
     /// −1〜1(小数 2 桁)。0 は未設定に戻す。

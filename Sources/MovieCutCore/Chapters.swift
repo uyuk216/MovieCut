@@ -29,7 +29,12 @@ public enum Chapters {
 
     /// マーカーからチャプターを作る。時刻順。最初が 0:00(1 秒未満)でなければ、先頭に「イントロ」を足す(足したことを注意に出す)。
     /// マーカーが無いときは text が空で、注意だけ返す。
-    public static func make(from markers: [Marker]) -> Result {
+    /// `color` を指定すると、その色のマーカーだけを使う(色が未設定・未知の値のマーカーは既定のティール)。
+    public static func make(from all: [Marker], color: MarkerColor? = nil) -> Result {
+        let markers = color.map { c in all.filter { MarkerColor.resolved($0.color) == c } } ?? all
+        if let color, markers.isEmpty {
+            return Result(text: "", count: 0, warnings: ["\(color.title)のマーカーがありません"])
+        }
         guard !markers.isEmpty else { return Result(text: "", count: 0, warnings: ["マーカーがありません。再生位置にマーカーを追加してください"]) }
         var items = MarkerEditing.sorted(markers).map { (time: $0.time, title: title($0.name)) }
         var warnings: [String] = []
@@ -45,5 +50,12 @@ public enum Chapters {
         if close > 0 { warnings.append("10 秒より近いチャプターが \(close) か所あります(YouTube は各チャプター 10 秒以上必要です)") }
         let text = items.map { "\(timecode($0.time)) \($0.title)" }.joined(separator: "\n")
         return Result(text: text, count: items.count, warnings: warnings)
+    }
+
+    /// 色ごとのマーカーの数(未設定・未知の値はティールに数える)。メニューの有効判定に使う。
+    public static func colorCounts(_ markers: [Marker]) -> [MarkerColor: Int] {
+        var out: [MarkerColor: Int] = [:]
+        for m in markers { out[MarkerColor.resolved(m.color), default: 0] += 1 }
+        return out
     }
 }

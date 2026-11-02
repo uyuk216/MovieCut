@@ -299,7 +299,11 @@ final class PreviewCanvasView: NSView {
     var frameForTest: CGRect { frameLayer.frame }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-    override func mouseDown(with event: NSEvent) { beginManipulation(atViewPoint: convert(event.locationInWindow, from: nil)) }
+    override func mouseDown(with event: NSEvent) {
+        // 入力欄にフォーカスが残っていると、Delete・Space がクリップに届かない。プレビューを押したら入力を終える
+        if KeyRouter.isTextInput(window?.firstResponder) { window?.makeFirstResponder(nil) }
+        beginManipulation(atViewPoint: convert(event.locationInWindow, from: nil))
+    }
     override func mouseDragged(with event: NSEvent) { dragManipulation(toViewPoint: convert(event.locationInWindow, from: nil), snapRotation: event.modifierFlags.contains(.shift)) }
     override func mouseUp(with event: NSEvent) { endManipulation() }
 

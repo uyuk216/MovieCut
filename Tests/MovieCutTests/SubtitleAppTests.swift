@@ -121,3 +121,48 @@ final class SubtitleAppTests: XCTestCase {
         XCTAssertEqual(used.count, Set(used).count)
     }
 }
+
+/// チャプターを色でコピー(出力メニュー)。
+@MainActor
+final class ChapterColorAppTests: XCTestCase {
+    private func makeModel() -> ProjectModel {
+        let m = ProjectModel(project: Project.new())
+        m.notices = OneTimeNotices()
+        var a = Marker(time: 0, name: "A"); a.color = "red"
+        var b = Marker(time: 30, name: "B")
+        var c = Marker(time: 60, name: "C"); c.color = "red"
+        var d = Marker(time: 90, name: "D"); d.color = "red"
+        m.project.markers = [a, b, c, d]
+        return m
+    }
+
+    func testCopyByColorPutsOnlyThatColorOnPasteboardWithoutUndo() {
+        let m = makeModel()
+        NSPasteboard.general.clearContents()
+        XCTAssertTrue(m.copyChapters(color: .red))
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "0:00 A\n1:00 C\n1:30 D")
+        XCTAssertTrue(m.statusText.contains("赤のマーカーから"))
+        XCTAssertFalse(m.effectiveUndoManager.canUndo, "コピーは編集ではない")
+        NSPasteboard.general.clearContents()
+        XCTAssertFalse(m.copyChapters(color: .blue), "その色が無ければコピーしない")
+        XCTAssertNil(NSPasteboard.general.string(forType: .string))
+        XCTAssertEqual(m.statusText, "青のマーカーがありません")
+    }
+
+    func testMenuItemsEnabledOnlyForColorsInUseWithReasonAndNoShortcut() {
+        let m = makeModel()
+        let s = MenuState(model: m)
+        let items = AppMenuSpec.chapterColorItems(s)
+        XCTAssertEqual(items.count, MarkerColor.allCases.count)
+        XCTAssertEqual(Set(items.filter(\.enabled).map(\.title)), ["ティールのマーカーだけ", "赤のマーカーだけ"])
+        XCTAssertTrue(items.allSatisfy { $0.shortcut == nil })
+        let blue = items.first { $0.command == .copyChaptersColor(.blue) }!
+        XCTAssertFalse(blue.enabled)
+        XCTAssertEqual(AppMenuSpec.disabledReason(for: blue, state: s), "その色のマーカーがありません")
+        let red = items.first { $0.command == .copyChaptersColor(.red) }!
+        XCTAssertEqual(red.hint, "3 件")
+        XCTAssertNil(AppMenuSpec.disabledReason(for: red, state: s))
+        AppMenu.perform(.copyChaptersColor(.red), model: m)
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "0:00 A\n1:00 C\n1:30 D")
+    }
+}

@@ -30,12 +30,17 @@ public enum SubtitleGeneration {
 
     /// 字幕(時刻と本文)を、字幕の自動生成と同じ見た目(`style`)の文字クリップにして「字幕」レイヤーへ足す。
     /// 音声認識の結果の配置に使う(台本のボイスは関係しない。元のクリップの字幕表示は変えない)。0 件なら nil。
-    public static func appendCues(_ cues: [SubtitleCue], to project: Project, style: TextLook?) -> Result? {
+    /// `highlightTimes` を渡すと、スタイルにカラオケ字幕があるクリップだけ、その字幕の単位ごとの開始秒(nil なら既存の字数比例)を入れる。
+    public static func appendCues(_ cues: [SubtitleCue], to project: Project, style: TextLook?,
+                                  highlightTimes: ((SubtitleCue, Highlight) -> [Double]?)? = nil) -> Result? {
         let valid = cues.filter { $0.end > $0.start && !SubtitleFile.cleanBody($0.text).isEmpty }.sorted { $0.start < $1.start }
         guard !valid.isEmpty else { return nil }
         let clips: [Clip] = valid.map { cue in
             var clip = SubtitleImport.makeClip(cue, project: project)
             if let style { style.apply(to: &clip) }
+            if let hl = clip.textStyle?.highlight, let times = highlightTimes?(cue, hl) {
+                clip.textStyle?.highlight?.times = Highlight(color: nil, mode: nil, times: times).normalized.times
+            }
             return clip
         }
         var p = project

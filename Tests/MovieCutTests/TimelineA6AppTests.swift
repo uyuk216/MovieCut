@@ -434,7 +434,7 @@ final class TimelineA6AppTests: XCTestCase {
         XCTAssertNil(model.selectedClipId)
         _ = hw
         let menu = canvas.layerContextMenu(row: 1)!
-        XCTAssertEqual(menu.items.map(\.title).filter { !$0.isEmpty }, ["名前を変更…", "ロック", "ソロ", "高さ: 小", "高さ: 標準", "高さ: 大"])
+        XCTAssertEqual(menu.items.map(\.title).filter { !$0.isEmpty }, ["名前を変更…", "ロック", "ソロ", "レイヤーを削除…", "高さ: 小", "高さ: 標準", "高さ: 大"])
         XCTAssertEqual(menu.items.first { $0.title == "ロック" }?.state, .on)
         XCTAssertEqual(menu.items.first { $0.title == "高さ: 標準" }?.state, .on)
         let large = menu.items.first { $0.title == "高さ: 大" }!

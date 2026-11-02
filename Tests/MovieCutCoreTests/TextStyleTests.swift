@@ -435,10 +435,10 @@ final class TextStyleTests: XCTestCase {
 
     // MARK: 保存したスタイル
 
-    func testBuiltinsAreSixAndWellFormed() {
+    func testBuiltinsAreNineAndWellFormed() {
         let b = TextStyleLibrary.builtins
-        XCTAssertEqual(b.map(\.name), ["標準", "ゆっくり風", "ニュース帯", "見出し", "吹き出し風", "注意"])
-        XCTAssertEqual(Set(b.map(\.id)).count, 6)
+        XCTAssertEqual(b.map(\.name), ["標準", "ゆっくり風", "ニュース帯", "見出し", "吹き出し風", "注意", "フェードイン", "タイプライター", "ポップ"])
+        XCTAssertEqual(Set(b.map(\.id)).count, 9)
         XCTAssertTrue(b.allSatisfy(\.isBuiltin))
         XCTAssertNil(b[0].look.style)
         XCTAssertNotNil(b[1].look.style?.shadow); XCTAssertNotNil(b[2].look.style?.box); XCTAssertNotNil(b[3].look.style?.gradient)

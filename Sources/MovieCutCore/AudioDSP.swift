@@ -265,17 +265,122 @@ final class DenoiseProcessor {
     }
 }
 
-// MARK: - 処理の連なり(ノイズ除去 → EQ → コンプレッサー → リバーブ)
+// MARK: - ノイズゲート(しきい値より小さい音を閉じる)
+
+/// 左右連動のノイズゲート。包絡は短い窓(5 ms の二乗平均)で測り、しきい値を超えたら開く。
+/// 閉じるのはしきい値より 3 dB 下がってから(ヒステリシス)で、開いたあと 100 ms は閉じない(ホールド)。
+/// 開く速さ 2 ms・閉じる速さ 60 ms の一次の滑らかさで、プチッという音を避ける。閉じたときの下げ幅は −60 dB。
+/// 最初は閉じた状態から始める。乱数を使わないので、同じ入力なら必ず同じ出力になる。
+final class GateProcessor {
+    static let floorGain = 0.001   // −60 dB
+    private let openThreshold: Double, closeThreshold: Double
+    private let holdSamples: Int
+    private var ms = 0.0
+    private var gain = GateProcessor.floorGain
+    private var isOpen = false
+    private var holdLeft = 0
+    private let msCoef: Double, openCoef: Double, closeCoef: Double
+
+    init(thresholdDb: Double, sr: Double) {
+        // 二乗平均(電力)で比べるので 10·log10 の逆変換
+        openThreshold = pow(10, thresholdDb / 10)
+        closeThreshold = pow(10, (thresholdDb - 3) / 10)
+        holdSamples = Int(0.100 * sr)
+        msCoef = 1 - exp(-1 / (0.005 * sr))
+        openCoef = 1 - exp(-1 / (0.002 * sr))
+        closeCoef = 1 - exp(-1 / (0.060 * sr))
+    }
+
+    func process(_ l: UnsafeMutablePointer<Float>, _ r: UnsafeMutablePointer<Float>, _ n: Int) {
+        for i in 0..<n {
+            let x = Double(l[i]), y = Double(r[i])
+            ms += ((x * x + y * y) * 0.5 - ms) * msCoef
+            if isOpen {
+                if ms >= closeThreshold { holdLeft = holdSamples }
+                else if holdLeft > 0 { holdLeft -= 1 }
+                else { isOpen = false }
+            } else if ms >= openThreshold {
+                isOpen = true; holdLeft = holdSamples
+            }
+            let target = isOpen ? 1.0 : Self.floorGain
+            gain += (target - gain) * (target > gain ? openCoef : closeCoef)
+            l[i] = Float(x * gain); r[i] = Float(y * gain)
+        }
+    }
+}
+
+// MARK: - リミッター(天井を超えないように抑える)
+
+/// 先読み 2 ms のピークリミッター。左右連動。
+/// 各サンプルの必要な倍率 `天井 / ピーク`(1 を超えない)について、先読み窓の最小値を取り、直前の窓幅ぶんで平均する。
+/// こうすると、ピークが来る時点の倍率は必ずそのピークに必要な倍率以下になる(遅延なしで天井を守る)。
+/// 戻りは 100 ms の一次の滑らかさ。塊の終わり・素材の頭では先読みが足りないので、最後に天井で切って保証する(安全策)。
+final class LimiterProcessor {
+    private let ceiling: Float
+    private let look: Int
+    private let relCoef: Double
+    private var prevM: [Float]      // 前の塊の最後の (look-1) 個の最小値
+    private var rel = 1.0
+
+    init(ceilingDb: Double, sr: Double) {
+        ceiling = Float(pow(10, ceilingDb / 20))
+        look = max(2, Int(0.002 * sr))
+        relCoef = 1 - exp(-1 / (0.100 * sr))
+        prevM = [Float](repeating: 1, count: look - 1)
+    }
+
+    func process(_ l: UnsafeMutablePointer<Float>, _ r: UnsafeMutablePointer<Float>, _ n: Int) {
+        guard n > 0 else { return }
+        let c = ceiling
+        var req = [Float](repeating: 1, count: n)
+        for i in 0..<n {
+            let p = max(abs(l[i]), abs(r[i]))
+            req[i] = p > c ? c / p : 1
+        }
+        // m[k] = req[k ..< k+look] の最小(窓は塊の終わりで切る)。後ろから走査する単調な両端キューで O(n)
+        var m = [Float](repeating: 1, count: n)
+        var dq = [Int](repeating: 0, count: n)
+        var head = 0, tail = 0
+        var k = n - 1
+        while k >= 0 {
+            while tail > head && req[dq[tail - 1]] >= req[k] { tail -= 1 }
+            dq[tail] = k; tail += 1
+            while dq[head] >= k + look { head += 1 }
+            m[k] = req[dq[head]]
+            k -= 1
+        }
+        // 前の塊の m を前に足した列 ext を、各位置で直前の look 個で平均する
+        let pad = look - 1
+        var sum = 0.0
+        for j in 0..<pad { sum += Double(prevM[j]) }
+        for i in 0..<n {
+            sum += Double(m[i])
+            let gd = sum / Double(look)
+            rel = gd < rel ? gd : rel + (1 - rel) * relCoef
+            let out = Float(min(gd, rel))
+            l[i] = max(min(l[i] * out, c), -c)
+            r[i] = max(min(r[i] * out, c), -c)
+            sum -= Double(i < pad ? prevM[i] : m[i - pad])
+        }
+        if n >= pad { prevM = Array(m[(n - pad)...]) } else { prevM = Array(prevM[n...]) + m }
+    }
+}
+
+// MARK: - 処理の連なり(ノイズ除去 → ゲート → EQ → コンプレッサー → リバーブ → リミッター)
 
 /// 1 つのクリップにかける ノイズ除去 → EQ → コンプレッサー → リバーブ。ブロックごとに `process` を呼ぶと、状態が続く。
 final class AudioFxChain {
     private let denoise: DenoiseProcessor?
+    private let gate: GateProcessor?
+    private let limiter: LimiterProcessor?
     private let eq: EQProcessor?
     private let comp: CompressorProcessor?
     private let reverb: ReverbProcessor?
 
     init(_ fx: AudioFx, sr: Double) {
         denoise = fx.denoiseStrength > 0 ? DenoiseProcessor(strength: fx.denoiseStrength, sr: sr) : nil
+        gate = fx.gateDb.map { GateProcessor(thresholdDb: $0, sr: sr) }
+        limiter = fx.limiterDb.map { LimiterProcessor(ceilingDb: $0, sr: sr) }
         eq = fx.eq.flatMap { $0.isActive ? EQProcessor($0, sr: sr) : nil }
         comp = fx.compressor.flatMap { $0.isActive ? CompressorProcessor($0, sr: sr) : nil }
         reverb = fx.reverb.flatMap { $0.isActive ? ReverbProcessor($0, sr: sr) : nil }
@@ -283,9 +388,11 @@ final class AudioFxChain {
 
     func process(_ l: UnsafeMutablePointer<Float>, _ r: UnsafeMutablePointer<Float>, _ n: Int) {
         denoise?.process(l, r, n)
+        gate?.process(l, r, n)
         eq?.process(l, r, n)
         comp?.process(l, r, n)
         reverb?.process(l, r, n)
+        limiter?.process(l, r, n)
     }
 }
 

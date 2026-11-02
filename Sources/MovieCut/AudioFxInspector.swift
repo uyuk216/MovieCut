@@ -55,6 +55,14 @@ struct AudioFxPanel: View {
                          format: { "\(Int(($0 * 100).rounded()))%" }, undo: ProjectModel.denoiseUndoName) {
                     _ = AudioFxEditing.setDenoise(&$0, $1)
                 }
+                fxSlider("ノイズゲート", value: c.audioFx?.gateDb ?? AudioFx.gateRange.lowerBound - 1, range: (AudioFx.gateRange.lowerBound - 1)...AudioFx.gateRange.upperBound, step: 1,
+                         format: { $0 < AudioFx.gateRange.lowerBound ? "なし" : String(format: "−%.0f dB 以下を消す", abs($0)) }, undo: ProjectModel.gateUndoName) {
+                    _ = AudioFxEditing.setGate(&$0, $1 < AudioFx.gateRange.lowerBound ? nil : $1)
+                }
+                fxSlider("リミッター", value: c.audioFx?.limiterDb ?? AudioFx.limiterRange.lowerBound - 1, range: (AudioFx.limiterRange.lowerBound - 1)...AudioFx.limiterRange.upperBound, step: 0.5,
+                         format: { $0 < AudioFx.limiterRange.lowerBound ? "なし" : "天井 " + Self.db($0) }, undo: ProjectModel.limiterUndoName) {
+                    _ = AudioFxEditing.setLimiter(&$0, $1 < AudioFx.limiterRange.lowerBound ? nil : $1)
+                }
                 eqGroup(c)
                 compressorGroup(c)
                 reverbGroup(c)

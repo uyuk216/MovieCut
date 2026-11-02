@@ -137,4 +137,35 @@ extension ProjectModel {
         setClipProperty({ _ = preset.apply(to: &$0) }, name: preset.undoName, clipId: c.id)
         return true
     }
+
+    // MARK: 自動ホワイトバランス
+
+    static let autoWhiteBalanceUndoName = "自動ホワイトバランス"
+
+    /// クリップ ▸ 自動ホワイトバランス。選んでいる画像・動画のクリップの、再生位置のコマ(エフェクトを外した絵)の平均色が
+    /// 灰色になるよう、ホワイトバランスのエフェクトを足す(あれば値を直す)。測るのは背景で行い、結果を 1 回の Undo で当てる。
+    /// 測っている間に編集された(クリップが消えた・ロック・書き出し中)ときは何もしない。
+    func autoWhiteBalanceSelected() {
+        guard let c = targetClip(nil), c.type == .image || c.type == .video,
+              let mp = AutoWhiteBalance.measurementProject(for: c, in: project) else { return }
+        let assets = self.assets, id = c.id
+        let end = max(c.start, c.start + c.duration - 1.0 / max(1, project.fps))
+        let t = min(max(currentTime, c.start), end)
+        statusText = "自動ホワイトバランス: 色を測っています…"
+        Task { @MainActor [weak self] in
+            let result = await Task.detached(priority: .userInitiated) { () -> AutoWhiteBalance.Result? in
+                guard let img = Renderer(project: mp, assets: assets).renderImage(t: t) else { return nil }
+                return AutoWhiteBalance.estimate(from: img)
+            }.value
+            guard let self, !self.isLocked, let now = self.clip(id) else { return }
+            guard let result else { self.statusText = "自動ホワイトバランス: このコマの色を読めませんでした"; return }
+            var probe = now
+            guard AutoWhiteBalance.apply(result, to: &probe) else {
+                self.statusText = "自動ホワイトバランス: すでにほぼ灰色なので、変えませんでした"
+                return
+            }
+            self.setClipProperty({ _ = AutoWhiteBalance.apply(result, to: &$0) }, name: Self.autoWhiteBalanceUndoName, clipId: id)
+            self.statusText = String(format: "自動ホワイトバランス: 色温度 %+.2f・ティント %+.2f を設定しました", result.temperature, result.tint)
+        }
+    }
 }

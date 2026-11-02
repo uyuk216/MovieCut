@@ -131,7 +131,7 @@ final class TextStyleAppTests: XCTestCase {
         // 壊れた保存データでも落ちずに空から始まる
         d.set(Data("garbage".utf8), forKey: TextStyleLibrary.defaultsKey)
         XCTAssertTrue(TextStyleStore(defaults: d).user.isEmpty)
-        XCTAssertEqual(TextStyleStore(defaults: d).all.count, 6)
+        XCTAssertEqual(TextStyleStore(defaults: d).all.count, 9)
         XCTAssertNil(TextStyleStore(defaults: nil).add(name: "", look: TextLook()))
     }
 
@@ -140,11 +140,11 @@ final class TextStyleAppTests: XCTestCase {
     func testMenuSpecAndPerform() {
         let on = state { $0.isTextClip = true; $0.textStyleChoices = TextStyleLibrary.builtins.map { .init(id: $0.id, name: $0.name, builtin: true) } + [.init(id: "user.1", name: "自分用", builtin: false)] }
         let items = AppMenuSpec.textStyleItems(on)
-        XCTAssertEqual(items.map(\.title), ["標準", "ゆっくり風", "ニュース帯", "見出し", "吹き出し風", "注意", "自分用"])
+        XCTAssertEqual(items.map(\.title), ["標準", "ゆっくり風", "ニュース帯", "見出し", "吹き出し風", "注意", "フェードイン", "タイプライター", "ポップ", "自分用"])
         XCTAssertEqual(items.map(\.command), (TextStyleLibrary.builtins.map(\.id) + ["user.1"]).map { MenuCommand.textStyleApply($0) })
         XCTAssertTrue(items.allSatisfy { $0.enabled && $0.shortcut == nil })
-        XCTAssertEqual(AppMenuSpec.textAnimItems(on).map(\.title), ["なし", "タイプライター", "ポップ", "シェイク", "スクロール（上へ）", "スクロール（左へ）"])
-        XCTAssertEqual(AppMenuSpec.textAnimItems(on).map(\.checked), [true, false, false, false, false, false])
+        XCTAssertEqual(AppMenuSpec.textAnimItems(on).map(\.title), ["なし", "タイプライター", "ポップ", "シェイク", "スクロール（上へ）", "スクロール（左へ）", "フェードイン"])
+        XCTAssertEqual(AppMenuSpec.textAnimItems(on).map(\.checked), [true, false, false, false, false, false, false])
         let off = state { $0.textStyleChoices = on.textStyleChoices }
         XCTAssertTrue(AppMenuSpec.textStyleItems(off).allSatisfy { !$0.enabled })
         XCTAssertTrue(AppMenuSpec.textAnimItems(off).allSatisfy { !$0.enabled })
@@ -154,13 +154,13 @@ final class TextStyleAppTests: XCTestCase {
         let m = makeModel()
         m.selectedClipId = "t"
         var s = MenuState(model: m)
-        XCTAssertTrue(s.isTextClip); XCTAssertEqual(s.textStyleChoices.count, 6)
+        XCTAssertTrue(s.isTextClip); XCTAssertEqual(s.textStyleChoices.count, 9)
         AppMenu.perform(.textStyleApply("builtin.warning"), model: m)
         XCTAssertEqual(m.clip("t")?.color, "#e53935")
         AppMenu.perform(.textAnim(.shake), model: m)
         s = MenuState(model: m)
         XCTAssertEqual(s.textAnimKind, .shake)
-        XCTAssertEqual(AppMenuSpec.textAnimItems(s).map(\.checked), [false, false, false, true, false, false])
+        XCTAssertEqual(AppMenuSpec.textAnimItems(s).map(\.checked), [false, false, false, true, false, false, false])
         // スクロールの速さ: 既定の値は書かない・Undo 1 回で戻る
         m.setTextAnim(.scrollUp, clipId: "t")
         XCTAssertNil(m.clip("t")?.textAnim?.speed)

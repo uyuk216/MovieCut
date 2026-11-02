@@ -351,12 +351,18 @@ public struct Renderer {
             var pose = pose
             var visible: Int?
             var animating = false
+            var restoreAlpha = false
+            defer { if restoreAlpha { ctx.restoreGState() } }
             if let a = c.textAnim {
                 let st = TextAnimMath.state(a, text: shown, rel: t - c.start, size: size)
                 if st.active {
                     animating = true
                     visible = st.visible
                     if st.scale != 1 { pose.scale *= st.scale }
+                    if st.alpha != 1 {
+                        // 文字全体の濃さ(フェードイン): 呼び出し側の濃さ(fadeAlpha)に掛ける
+                        ctx.saveGState(); ctx.setAlpha(CGFloat(fadeAlpha * st.alpha)); restoreAlpha = true
+                    }
                     if st.dx != 0 || st.dy != 0 { pose.x += st.dx / W; pose.y += st.dy / H }
                     if st.shiftX != 0 || st.shiftY != 0 { pose.x += st.shiftX; pose.y += st.shiftY }
                 }

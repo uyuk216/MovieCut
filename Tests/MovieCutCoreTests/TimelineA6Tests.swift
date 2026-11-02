@@ -172,8 +172,10 @@ final class TimelineA6Tests: XCTestCase {
         let nb = r.project.allClips.first { $0.id == r.newIds[0] }!, nd = r.project.allClips.first { $0.id == r.newIds[1] }!
         // 全体の終わりは b の 4。一番早い d(1)が 4 に来るので b は +3 → 5、d → 4
         XCTAssertEqual(nb.start, 5, accuracy: 1e-9); XCTAssertEqual(nd.start, 4, accuracy: 1e-9)
-        XCTAssertEqual(ClipEditing.locate(nb.id, in: r.project)!.track, 0)
-        XCTAssertEqual(ClipEditing.locate(nd.id, in: r.project)!.track, 1)
+        // 元の層に置くと c(5〜6)・e(3〜5)・互いに重なるので、重なる分は次の空き層へ送る(2026-11-02: 層内の重なり禁止)
+        XCTAssertGreaterThanOrEqual(ClipEditing.locate(nb.id, in: r.project)!.track, 0)
+        XCTAssertGreaterThanOrEqual(ClipEditing.locate(nd.id, in: r.project)!.track, 1)
+        assertNoLayerOverlaps(r.project)
         XCTAssertEqual(r.project.allClips.count, p.allClips.count + 2)
         XCTAssertNil(ClipEditing.duplicate(in: p, clipIds: ["none"]))
     }

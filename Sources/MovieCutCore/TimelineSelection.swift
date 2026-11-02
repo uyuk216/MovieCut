@@ -200,6 +200,19 @@ extension ClipEditing {
             let c0 = CompoundEditing.freshIds(item.clip)   // 複合の中の子にも新しい id
             var c = c0
             c.start = max(0, c.start + dt)
+            // 同じレイヤーのクリップと重なるなら、次の空きレイヤー(ロック除く)へ。無ければ末尾に足す
+            func overlaps(_ ti: Int) -> Bool {
+                p.tracks[ti].clips.contains { !($0.start >= c.start + c.duration || $0.start + $0.duration <= c.start) }
+            }
+            if overlaps(want) {
+                var w = want + 1
+                while true {
+                    if w >= p.tracks.count { p.tracks.append(Track(name: "レイヤー\(p.tracks.count + 1)")); break }
+                    if !p.tracks[w].isLocked && !overlaps(w) { break }
+                    w += 1
+                }
+                want = w
+            }
             p.tracks[want].clips.append(c)
             ids.append(c.id)
         }

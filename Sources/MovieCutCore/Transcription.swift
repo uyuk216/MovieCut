@@ -6,7 +6,14 @@ public struct TranscriptSegment: Equatable, Sendable {
     public var text: String
     public var start: Double
     public var end: Double
-    public init(text: String, start: Double, end: Double) { self.text = text; self.start = start; self.end = end }
+    /// 文にまとめた結果が持つ、元の単語ごとの時刻(カラオケ字幕用。単語そのものは空)。比較には使わない。
+    public var words: [TranscriptSegment] = []
+    public init(text: String, start: Double, end: Double, words: [TranscriptSegment] = []) {
+        self.text = text; self.start = start; self.end = end; self.words = words
+    }
+    public static func == (a: TranscriptSegment, b: TranscriptSegment) -> Bool {
+        a.text == b.text && a.start == b.start && a.end == b.end
+    }
 }
 
 /// 音声ファイルを文字にする(画面にも Undo にも依存しない)。本番は `SpeechFrameworkTranscriber`、テストは偽物。
@@ -81,17 +88,18 @@ public enum TranscriptGrouping {
             let t = w.text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !t.isEmpty, w.start.isFinite, w.end.isFinite else { continue }
             let end = max(w.start, w.end)
+            let one = TranscriptSegment(text: t, start: w.start, end: end)
             if let c = cur {
                 let gap = w.start - c.end
                 let endsSentence = c.text.last.map { sentenceEnders.contains($0) } ?? false
                 if gap > maxGap || endsSentence || c.text.count + t.count > maxChars {
                     out.append(c)
-                    cur = TranscriptSegment(text: t, start: w.start, end: end)
+                    cur = TranscriptSegment(text: t, start: w.start, end: end, words: [one])
                 } else {
-                    cur = TranscriptSegment(text: join(c.text, t), start: c.start, end: max(c.end, end))
+                    cur = TranscriptSegment(text: join(c.text, t), start: c.start, end: max(c.end, end), words: c.words + [one])
                 }
             } else {
-                cur = TranscriptSegment(text: t, start: w.start, end: end)
+                cur = TranscriptSegment(text: t, start: w.start, end: end, words: [one])
             }
         }
         if let c = cur { out.append(c) }
@@ -180,6 +188,12 @@ public enum SubtitleTranscription {
         let segments = try await transcriber.transcribe(audioURL: url, duration: clip.duration, onProgress: onProgress)
         try Task.checkCancellation()
         let cues = TranscriptSubtitles.cues(from: segments, clip: clip)
-        return SubtitleGeneration.appendCues(cues, to: project, style: style)
+        // 単語の時刻があるときだけ、カラオケ字幕の単位ごとの開始秒を入れる(スタイルにカラオケが無ければ何もしない)
+        let words = segments.flatMap(\.words)
+        let clipStart = clip.start
+        return SubtitleGeneration.appendCues(cues, to: project, style: style) { cue, highlight in
+            KaraokeTiming.times(text: cue.text, words: words, windowStart: cue.start - clipStart,
+                                duration: cue.end - cue.start, wordMode: highlight.isWordMode)
+        }
     }
 }

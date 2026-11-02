@@ -89,6 +89,7 @@ final class BugSweepTests: XCTestCase {
         let id = try? XCTUnwrap(ids.first)
         XCTAssertEqual(p.tracks[0].clips.count, 0, "ロックされたレイヤーには置かない")
         XCTAssertEqual(p.allClips.filter { $0.id == id }.count, 1, "別のレイヤーに 1 つ置く")
+        assertNoLayerOverlaps(p)
     }
 }
 

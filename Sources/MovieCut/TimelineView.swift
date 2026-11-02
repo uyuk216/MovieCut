@@ -68,7 +68,7 @@ struct TimelineSection: View {
                     .help("クリップを動かすとき、ほかのクリップの端・再生ヘッド・0秒に自動で揃えます")
                 Spacer()
             }
-            .padding(.horizontal, 10).padding(.vertical, 6)
+            .padding(.horizontal, 10).padding(.vertical, 4)
             Divider()
             TimelineRepresentable(model: model)
                 .overlay {
@@ -1158,8 +1158,9 @@ final class TimelineCanvas: NSView {
             guard !m.isLocked, let loc = ClipEditing.locate(id, in: project), !project.tracks[loc.track].isLocked else { return }   // ロックされたレイヤーのクリップは動かさない
             let c = project.tracks[loc.track].clips[loc.index]
             let r = geometry.clipRect(start: c.start, duration: c.duration, track: loc.track)
-            let z = min(Self.edgeZone, r.width / 3)
-            let mode: DragMode = p.x - r.minX < z ? .trimLeft : (r.maxX - p.x < z ? .trimRight : .move)
+            let zone = TimelineHit.zone(x: p.x, minX: r.minX, maxX: r.maxX, edgeZone: Self.edgeZone)
+            let mode: DragMode = zone == .left ? .trimLeft : (zone == .right ? .trimRight : .move)
+            if clickCount >= 2, zone == .body, TimelineHit.editsTextOnDoubleClick(c.type) { m.textFocusRequest += 1 }   // ダブルクリック: 文字の入力欄へ
             if mode != .move && collapse != nil { m.selectOnly(id); collapse = nil }     // 端のトリムは 1 つのクリップだけ
             drag = ClipDrag(clipId: id, mode: mode, downPoint: p, downTime: geometry.time(forX: p.x), lastTarget: loc.track, lastPoint: p,
                             ids: m.selectedClipIDs, collapseTo: collapse)
@@ -1589,11 +1590,12 @@ final class TimelineCanvas: NSView {
         guard let m = model, m.project.tracks.indices.contains(i) else { return nil }
         let tr = m.project.tracks[i]
         let menu = NSMenu()
-        func add(_ title: String, checked: Bool = false, _ run: @escaping () -> Void) {
+        func add(_ title: String, checked: Bool = false, enabled: Bool = true, _ run: @escaping () -> Void) {
             let item = NSMenuItem(title: title, action: #selector(MenuAction.run), keyEquivalent: "")
             let a = MenuAction(run)
             item.target = a
             item.representedObject = a      // メニューが生きている間、実行する側を保つ
+            item.isEnabled = enabled
             item.state = checked ? .on : .off
             menu.addItem(item)
         }
@@ -1601,6 +1603,8 @@ final class TimelineCanvas: NSView {
         menu.addItem(.separator())
         add("ロック", checked: tr.isLocked) { m.toggleLayerLock(i) }
         add("ソロ", checked: tr.isSolo) { m.toggleLayerSolo(i) }
+        menu.addItem(.separator())
+        add("レイヤーを削除…", enabled: LayerEditing.deleteBlockedReason(in: m.project, index: i) == nil) { m.requestDeleteLayer(i) }
         menu.addItem(.separator())
         for h in LayerHeight.allCases { add("高さ: \(h.title)", checked: LayerHeight.of(tr) == h) { m.setLayerHeight(i, h) } }
         return menu
@@ -1622,6 +1626,7 @@ final class TimelineCanvas: NSView {
         add("切り取り", enabled: !m.selectedClipIDs.isEmpty) { m.cutSelection() }
         add("貼り付け", enabled: m.canPasteClips) { m.pasteClips() }
         menu.addItem(.separator())
+        add("再生位置で分割", enabled: m.canSplit) { m.splitSelected() }
         add("複製", enabled: !m.selectedClipIDs.isEmpty) { m.duplicateSelected() }
         add("削除", enabled: !m.selectedClipIDs.isEmpty) { m.deleteSelected() }
         add("すき間を詰めて削除", enabled: !m.selectedClipIDs.isEmpty) { m.rippleDeleteSelected() }

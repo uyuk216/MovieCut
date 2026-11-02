@@ -128,6 +128,8 @@ final class ProjectModel: ObservableObject {
     }
     /// A6: 選んでいるクリップの全部(主を含む)。単一選択のときは主だけ。主が nil なら空。
     @Published var selectedClipIDs: Set<String> = []
+    /// クリップのダブルクリックで増える。プロパティ欄の文字入力が、増えたらフォーカスを取る。
+    @Published var textFocusRequest = 0
     /// A6: ヘッダーを押して選んだレイヤー(貼り付けの行き先)。クリップを選ぶと外れる。
     @Published var selectedLayerIndex: Int?
     /// A6: コピーしたクリップ(アプリ内。一般のペーストボードにも JSON で書く)。
@@ -306,6 +308,11 @@ final class ProjectModel: ObservableObject {
         } else if selectedClipIDs.count > 1 {
             let s = TimelineSelection.pruned(selection, in: new)
             if s != selection { setSelection(s) }
+        }
+        // レイヤーの選択(行番号)は、その行が別のレイヤーになったら外す(削除とその Undo)
+        if let li = selectedLayerIndex,
+           !(old.tracks.indices.contains(li) && new.tracks.indices.contains(li) && old.tracks[li].id == new.tracks[li].id) {
+            selectedLayerIndex = nil
         }
         playback?.projectDidChange()   // 編集したら再生は止める
         let um = effectiveUndoManager

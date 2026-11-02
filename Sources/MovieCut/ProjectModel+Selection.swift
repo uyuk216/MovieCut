@@ -156,4 +156,41 @@ extension ProjectModel {
         edit("レイヤーの高さ") { $0 = p }
         return true
     }
+
+    // MARK: レイヤーの削除
+
+    /// 削除の確認(クリップがあるとき、またはロックされているときだけ聞く)。true なら消す。テストでは差し替える。
+    static var confirmLayerDelete: @MainActor (_ name: String, _ clipCount: Int, _ locked: Bool) -> Bool = { name, count, locked in
+        let a = NSAlert()
+        a.messageText = "レイヤー「\(name)」を削除しますか?"
+        var lines: [String] = []
+        if locked { lines.append("このレイヤーはロックされています。") }
+        if count > 0 { lines.append("中の \(count) 個のクリップもいっしょに消えます。") }
+        lines.append("「編集 ▸ 取り消し」で元に戻せます。")
+        a.informativeText = lines.joined(separator: "\n")
+        a.alertStyle = .warning
+        a.addButton(withTitle: "削除")
+        a.addButton(withTitle: "キャンセル")
+        return a.runModal() == .alertFirstButtonReturn
+    }
+
+    /// メニュー・右クリックからの削除。クリップがあるか、ロックされているときは確認する(ロックされていても確認のうえ消せる)。
+    @discardableResult
+    func requestDeleteLayer(_ index: Int) -> Bool {
+        guard !isLocked, let info = LayerEditing.deletionImpact(in: project, index: index),
+              LayerEditing.deleteBlockedReason(in: project, index: index) == nil else { return false }
+        if info.clipCount > 0 || info.locked {
+            guard Self.confirmLayerDelete(info.name, info.clipCount, info.locked) else { return false }
+        }
+        return deleteLayer(index)
+    }
+
+    /// 確認なしで消す(Undo は 1 回)。ロックの確認は呼ぶ側。選択は消えたクリップの分だけ外れ、レイヤーの選択は外す。
+    @discardableResult
+    func deleteLayer(_ index: Int) -> Bool {
+        guard !isLocked, let p = LayerEditing.delete(in: project, index: index) else { return false }
+        let ok = edit("レイヤーの削除", enforcesLock: false) { $0 = p }
+        if ok { selectedLayerIndex = nil }
+        return ok
+    }
 }
