@@ -340,6 +340,7 @@ final class PlaybackController {
         shuttling = false
         shuttleState = .stopped
         isPlaying = false
+        model?.trimLoop = nil                   // 反復再生は止めたら終わり(Space でも止まる)
         model?.assets.endExportMode()           // 止まったら正確なフレーム(generator)に戻す
         model?.previewEpoch += 1                // 止まった位置の絵を描き直させる
     }

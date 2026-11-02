@@ -112,3 +112,17 @@ extension ProjectModel {
         if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
     }
 }
+
+/// 未使用の素材の整理(ロジックは Core の `UnusedMedia`)。ディスクのファイルは消さない。
+extension ProjectModel {
+    /// `paths` を素材リストから外す。nil なら未使用をすべて外す(一括削除)。どちらも Undo は 1 回。
+    @discardableResult
+    func removeUnusedMedia(_ paths: Set<String>?) -> Bool {
+        guard !isLocked else { return false }
+        let ok = edit(paths == nil ? "未使用の素材の一括削除" : "未使用の素材の削除") { p in
+            if let paths { UnusedMedia.remove(paths, from: &p) } else { UnusedMedia.removeAll(from: &p) }
+        }
+        if ok { statusText = "未使用の素材を素材リストから外しました(ディスクのファイルは消えません)" }
+        return ok
+    }
+}

@@ -82,14 +82,18 @@ public struct Renderer {
     public let onStabilized: (() -> Void)?
     /// 複合クリップの中身を描くとき(`compoundFrame`)の状態。通常の描画では既定のまま。
     /// 祖先の複合クリップの id(循環を描かないため)・背景を塗るか・人物の立ち絵を描くか(中身では描かない)。
+    /// プレビュー用。素材が見つからない画像・動画を、黙って飛ばさず「メディアが見つかりません」の札で描く。
+    /// 既定 false(書き出しは従来どおり。書き出し前の確認で止める)。
+    public var missingMediaPlaceholder = false
     var compoundStack: [String] = []
     var drawsBackground = true
     var drawsPortraits = true
 
-    public init(project: Project, assets: RenderAssets, onStabilized: (() -> Void)? = nil) {
+    public init(project: Project, assets: RenderAssets, onStabilized: (() -> Void)? = nil, missingMediaPlaceholder: Bool = false) {
         self.project = project
         self.assets = assets
         self.onStabilized = onStabilized
+        self.missingMediaPlaceholder = missingMediaPlaceholder
     }
 
     public func renderImage(t: Double) -> CGImage? {
@@ -323,7 +327,13 @@ public struct Renderer {
             if c.type == .video, c.stabilizeStrength > 0, let src = c.src, let raw = img {
                 img = stabilized(c, src: src, frame: raw, t: t)
             }
-            guard var im = img, im.width > 0, im.height > 0 else { return }
+            guard var im = img, im.width > 0, im.height > 0 else {
+                // 画像が取れなかったとき、素材ファイルが無ければ札を出す(プレビューのみ。存在確認はここでだけ)
+                if missingMediaPlaceholder, c.type != .compound, MissingMediaPlaceholder.isMissing(c) {
+                    drawMissingPlaceholder(c, pose: pose, ctx: ctx, W: W, H: H)
+                }
+                return
+            }
             let w0 = Double(im.width), h0 = Double(im.height)
             let fit = min(W / w0, H / h0) * pose.scale
             if let crop = c.crop, !crop.isEmpty, let cut = Renderer.cropped(im, crop) { im = cut }
@@ -403,6 +413,18 @@ public struct Renderer {
         default:
             break
         }
+    }
+
+    /// 素材が見つからないクリップの札(暗い赤の角丸 + タイトル + ファイル名)。
+    func drawMissingPlaceholder(_ c: Clip, pose: ClipPose, ctx: CGContext, W: Double, H: Double) {
+        let name = ((c.src ?? "") as NSString).lastPathComponent
+        let l = MissingMediaPlaceholder.layout(canvasWidth: W, canvasHeight: H, fileName: name, centerX: pose.x, centerY: pose.y)
+        MissingMediaPlaceholder.drawCard(l, in: ctx)
+        let cx = l.card.midX
+        drawText(MissingMediaPlaceholder.title, x: cx, y: l.titleY, size: l.titleSize, color: MissingMediaPlaceholder.textHex,
+                 font: c.fontOrDefault, outline: "#000000", ctx: ctx, cacheable: false)
+        drawText(l.nameText, x: cx, y: l.nameY, size: l.nameSize, color: "#ffd0d0",
+                 font: c.fontOrDefault, outline: "#000000", ctx: ctx, cacheable: false)
     }
 
     /// カラオケの色つけの重ね描き用の装飾。字形と字間に関わる項目だけ残し、影・箱・グラデーションは最初の描きに任せる(二重に濃くしない)。
@@ -540,7 +562,7 @@ public struct Renderer {
         guard let kids = c.tracks, !kids.isEmpty, !compoundStack.contains(c.id), compoundStack.count < CompoundEditing.maxDepth else { return nil }
         var sub = project
         sub.tracks = kids
-        var child = Renderer(project: sub, assets: assets, onStabilized: onStabilized)
+        var child = Renderer(project: sub, assets: assets, onStabilized: onStabilized, missingMediaPlaceholder: missingMediaPlaceholder)
         child.compoundStack = compoundStack + [c.id]
         child.drawsBackground = false
         child.drawsPortraits = false

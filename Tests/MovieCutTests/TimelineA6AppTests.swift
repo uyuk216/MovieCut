@@ -503,3 +503,45 @@ final class TimelineA6AppTests: XCTestCase {
         XCTAssertEqual(MultiSelectionInspector.Title.all, ["複製", "削除", "すき間を詰めて削除", "コピー"])
     }
 }
+
+// MARK: クリップ単位のロック
+extension TimelineA6AppTests {
+    func testClipLockMenuToggleUndoAndRefusals() {
+        let original = model.project
+        model.selectOnly("a")
+        var s = MenuState(model: model)
+        XCTAssertEqual(AppMenuSpec.clipLockItem(s).title, "クリップをロック")
+        XCTAssertTrue(AppMenuSpec.clipLockItem(s).enabled)
+        AppMenu.perform(.clipLock, model: model)
+        XCTAssertEqual(model.project.allClips.first { $0.id == "a" }?.locked, true)
+        s = MenuState(model: model)
+        XCTAssertEqual(AppMenuSpec.clipLockItem(s).title, "クリップのロックを解除")
+        let locked = model.project
+        // 分割・削除・プロパティ編集は断る
+        model.playback.seek(to: 2)
+        XCTAssertFalse(model.splitSelected())
+        XCTAssertFalse(model.deleteSelected())
+        XCTAssertEqual(model.statusText, ProjectModel.lockedNotice)
+        XCTAssertFalse(model.edit("x") { $0.tracks[0].clips[0].start = 9 })
+        XCTAssertEqual(model.project, locked)
+        // 選択はできる
+        model.selectOnly("b"); model.selectOnly("a")
+        XCTAssertEqual(model.selectedClipId, "a")
+        // 解除は 1 回の Undo 単位、Undo で戻る
+        AppMenu.perform(.clipLock, model: model)
+        XCTAssertNil(model.project.allClips.first { $0.id == "a" }?.locked)
+        XCTAssertEqual(um.undoActionName, "クリップのロック解除")
+        um.undo()
+        XCTAssertEqual(model.project, locked)
+        um.undo()
+        XCTAssertEqual(model.project, original, "ロックは 1 回の Undo で戻る")
+    }
+
+    func testClipLockDisabledWithoutSelectionHasReason() {
+        model.setSelection(.empty)
+        let s = MenuState(model: model)
+        let spec = AppMenuSpec.clipLockItem(s)
+        XCTAssertFalse(spec.enabled)
+        XCTAssertEqual(AppMenuSpec.disabledReason(for: spec, state: s), "クリップを選んでください")
+    }
+}

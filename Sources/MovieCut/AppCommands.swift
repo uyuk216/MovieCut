@@ -57,6 +57,7 @@ struct AppCommands: Commands {
                 items(AppMenuSpec.file(s), run)
                 MenuItemView(spec: AppMenuSpec.subtitleImport(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.mediaRelink(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.unusedMediaItem(s), perform: run)
                 Divider()
                 Menu("最近使った項目") {
                     if s.recentItems.isEmpty {
@@ -159,7 +160,10 @@ struct AppCommands: Commands {
         }
 
         CommandMenu("再生") {
-            MenuSection { s, run in items(AppMenuSpec.playback(s), run) }
+            MenuSection { s, run in
+                items(AppMenuSpec.playback(s), run)
+                Menu("反復再生の幅") { items(AppMenuSpec.trimLoopWidthItems(s), run) }
+            }
         }
 
         CommandMenu("移動") {

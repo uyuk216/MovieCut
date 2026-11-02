@@ -151,6 +151,16 @@ extension ProjectModel {
         return true
     }
 
+    /// クリップ ▸ クリップをロック / ロックを解除。選んだクリップが全部ロック済みなら解除、そうでなければ全部ロック。1 回の Undo。
+    /// ロック・解除そのものは(クリップ単位のロックには)断られない。ロックされたレイヤーの中では断る。
+    @discardableResult
+    func toggleClipLockSelected() -> Bool {
+        guard !isLocked, !selectedClipIDs.isEmpty else { return false }
+        let on = !LayerEditing.allClipsLocked(selectedClipIDs, in: project)
+        guard let p = LayerEditing.setClipsLocked(in: project, ids: selectedClipIDs, on) else { return false }
+        return edit(on ? "クリップのロック" : "クリップのロック解除") { $0 = p }
+    }
+
     @discardableResult
     func toggleLayerLock(_ index: Int) -> Bool {
         guard !isLocked, project.tracks.indices.contains(index),

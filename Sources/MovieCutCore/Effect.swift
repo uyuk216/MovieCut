@@ -27,6 +27,8 @@ public enum EffectKind: String, CaseIterable, Sendable {
     case chromaKey, lut, faceBlur
     /// 色温度・ティント(ホワイトバランス)と、持ち上げ・ガンマ・ゲインのカラーホイール。
     case whiteBalance, colorWheels
+    /// 光学ミスト: 明るい所だけをぼかして重ね、ふんわり光らせる(ハイライトのにじみ)。
+    case opticalMist
 
     public var label: String {
         switch self {
@@ -51,6 +53,7 @@ public enum EffectKind: String, CaseIterable, Sendable {
         case .faceBlur: return "顔ぼかし"
         case .whiteBalance: return "ホワイトバランス"
         case .colorWheels: return "カラーホイール"
+        case .opticalMist: return "光学ミスト"
         }
     }
 
@@ -89,6 +92,8 @@ public enum EffectKind: String, CaseIterable, Sendable {
             Self.p("gammaAngle", "ガンマ・色相（°）", -180, 180, 0, 1, .degrees), Self.p("gammaAmount", "ガンマ・強さ", 0, 1, 0, 0.01, .percent),
             Self.p("gainAngle", "ゲイン・色相（°）", -180, 180, 0, 1, .degrees), Self.p("gainAmount", "ゲイン・強さ", 0, 1, 0, 0.01, .percent),
         ]
+        case .opticalMist: return [Self.p("amount", "量", 0, 1, 0.5, 0.01, .percent), Self.p("threshold", "しきい値", 0, 1, 0.7, 0.01, .percent),
+                                   Self.p("radius", "ぼかし半径（px）", 0, 100, 24, 1, .px)]
         }
     }
 

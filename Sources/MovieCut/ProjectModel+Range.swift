@@ -38,7 +38,30 @@ extension ProjectModel {
     }
 
     /// ループ再生が効いている範囲(ループがオフ・範囲が無いときは nil)。
-    var activeLoopRange: ExportRange? { rangeLoop ? project.exportRange : nil }
+    var activeLoopRange: ExportRange? { trimLoop ?? (rangeLoop ? project.exportRange : nil) }
+
+    // MARK: トリム点・選択クリップの反復再生(範囲ループの仕組みをそのまま使う)
+
+    /// 再生ヘッドの前後 `TrimLoopSettings.halfWidth` 秒を反復再生する。反復中なら止める。
+    func toggleTrimLoop() { toggleTransientLoop { TrimLoop.loopRange(playhead: self.currentTime, halfWidth: TrimLoopSettings.halfWidth, duration: self.project.endTime, clipRange: nil) } }
+
+    /// 選択クリップの範囲を反復再生する。反復中なら止める。
+    func toggleClipLoop() {
+        toggleTransientLoop {
+            guard let c = self.selectedClip else { return nil }
+            return TrimLoop.loopRange(playhead: self.currentTime, halfWidth: TrimLoopSettings.halfWidth, duration: self.project.endTime,
+                                      clipRange: ExportRange(start: c.start, end: c.start + c.duration))
+        }
+    }
+
+    private func toggleTransientLoop(_ make: () -> ExportRange?) {
+        if trimLoop != nil { playback.pause(); trimLoop = nil; return }   // 同じ項目でオフ
+        guard !isLocked, let r = make() else { statusText = "反復再生できる範囲がありません"; return }
+        if playback.isPlaying { playback.pause() }
+        trimLoop = r
+        currentTime = r.start
+        playback.play()
+    }
 
     private func applyRange(_ name: String, _ new: Project?, refusal: String) -> Bool {
         guard canMarkRange else { return false }

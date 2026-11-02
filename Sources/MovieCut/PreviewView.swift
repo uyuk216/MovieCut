@@ -95,7 +95,7 @@ final class PreviewCoordinator {
             let img = Renderer(project: job.project, assets: job.assets, onStabilized: { [weak self] in
                 // 解析は背景で終わる: 再描画は主スレッドで
                 DispatchQueue.main.async { self?.redrawAfterStabilization() }
-            }).renderImage(t: job.time)
+            }, missingMediaPlaceholder: true).renderImage(t: job.time)
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
                 if let img { self.view?.show(image: img) }

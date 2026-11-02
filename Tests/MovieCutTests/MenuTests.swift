@@ -37,7 +37,7 @@ final class MenuTests: XCTestCase {
         XCTAssertEqual(file.map(\.shortcut), [sc("i", .command), nil, nil])
         XCTAssertEqual(AppMenuSpec.exportCurrent(s).title, "MP4 を書き出す…")
         XCTAssertEqual(AppMenuSpec.exportCurrent(s).shortcut, sc("e", .command))
-        XCTAssertEqual(AppMenuSpec.clipEdit(s).map(\.title), ["クリップを分割", "クリップを複製", "クリップを削除", "すき間を詰めて削除", "選択クリップを再生ヘッドに揃える", "選択クリップをつなげて並べる", "1 コマ前へ動かす", "1 コマ後ろへ動かす", "手ぶれ補正（映像を滑らかにする）", "縦動画に自動リフレーム", "動きに追従させる", "複合クリップにまとめる", "複合クリップを解除"])
+        XCTAssertEqual(AppMenuSpec.clipEdit(s).map(\.title), ["クリップを分割", "クリップを複製", "クリップをロック", "クリップを削除", "すき間を詰めて削除", "選択クリップを再生ヘッドに揃える", "選択クリップをつなげて並べる", "1 コマ前へ動かす", "1 コマ後ろへ動かす", "手ぶれ補正（映像を滑らかにする）", "縦動画に自動リフレーム", "動きに追従させる", "複合クリップにまとめる", "複合クリップを解除"])
         // 編集メニューに残るのはキャラクターと台本だけ。テキスト・ぼかし範囲はクリップメニューへ移った
         let add = AppMenuSpec.editAdd(s)
         XCTAssertEqual(add.map(\.title), ["キャラクターを追加", "台本から音声を作る"])
@@ -45,7 +45,7 @@ final class MenuTests: XCTestCase {
         let clipAdd = AppMenuSpec.clipAdd(s)
         XCTAssertEqual(clipAdd.map(\.title), ["テキストを追加", "ぼかし範囲を追加", "調整レイヤーを追加", "音声ビジュアライザを追加", "QRコードを追加…", "AIで画像を作る…"])
         XCTAssertEqual(clipAdd.map(\.shortcut), [sc("t", [.command, .shift]), sc("b", [.command, .shift]), nil, nil, nil, nil])
-        XCTAssertEqual(AppMenuSpec.playback(s).map(\.title), ["再生 / 停止", "先頭へ戻る", "1コマ戻る", "1コマ進む", "範囲をループ再生"])
+        XCTAssertEqual(AppMenuSpec.playback(s).map(\.title), ["再生 / 停止", "先頭へ戻る", "1コマ戻る", "1コマ進む", "範囲をループ再生", "トリム点を反復再生", "選択クリップを反復再生"])
         let zoom = AppMenuSpec.zoom(s)
         XCTAssertEqual(zoom.map(\.title), ["タイムラインを拡大", "タイムラインを縮小", "タイムラインを全体表示", "選択クリップにズーム"])
         XCTAssertEqual(zoom.map(\.shortcut), [sc("+", .command), sc("-", .command), sc("0", .command), nil])
@@ -116,7 +116,9 @@ final class MenuTests: XCTestCase {
         XCTAssertFalse(item(AppMenuSpec.clipEdit(s), .delete)!.enabled)
         XCTAssertTrue(AppMenuSpec.editAdd(s).allSatisfy(\.enabled))
         XCTAssertTrue(AppMenuSpec.clipAdd(s).allSatisfy(\.enabled))
-        XCTAssertTrue(AppMenuSpec.playback(s).filter { $0.command != .toggleRangeLoop }.allSatisfy(\.enabled))
+        XCTAssertTrue(AppMenuSpec.playback(s).filter { $0.command != .toggleRangeLoop && $0.command != .toggleTrimLoop && $0.command != .toggleClipLoop }.allSatisfy(\.enabled))
+        XCTAssertFalse(item(AppMenuSpec.playback(s), .toggleTrimLoop)!.enabled, "空のタイムラインでは反復再生できない")
+        XCTAssertFalse(item(AppMenuSpec.playback(s), .toggleClipLoop)!.enabled)
         XCTAssertFalse(item(AppMenuSpec.playback(s), .toggleRangeLoop)!.enabled, "範囲が無いとループ再生は使えない")
     }
 

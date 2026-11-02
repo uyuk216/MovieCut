@@ -32,10 +32,12 @@ public struct Project: Codable, Equatable {
     public var rangeOut: Double? = nil
     /// 素材の探し直し用の目印(キーは元の素材のパス)。パッケージ保存のときだけ入る。空のときは書かない。
     public var mediaHints: [String: MediaHint] = [:]
+    /// 取り込んだ素材のパス(順番どおり)。クリップを消しても残り、「未使用の素材」で整理する。空のときは書かない。
+    public var mediaPool: [String] = []
     /// 知らないキー(保持して書き戻す)
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["width", "height", "fps", "bg", "codec", "voicevoxUrl", "aquestalkCommand", "characters", "tracks", "markers", "rangeIn", "rangeOut", "mediaHints"]
+    static let knownKeys: Set<String> = ["width", "height", "fps", "bg", "codec", "voicevoxUrl", "aquestalkCommand", "characters", "tracks", "markers", "rangeIn", "rangeOut", "mediaHints", "mediaPool"]
 
     public init() {}
 
@@ -57,6 +59,7 @@ public struct Project: Codable, Equatable {
         markers = l.value("markers") ?? []
         rangeIn = l.value("rangeIn"); rangeOut = l.value("rangeOut")
         mediaHints = l.value("mediaHints") ?? [:]
+        mediaPool = l.value("mediaPool") ?? []
         extra = l.extra()
     }
 
@@ -78,6 +81,7 @@ public struct Project: Codable, Equatable {
         try c.encodeIfPresent(rangeIn, forKey: AnyKey("rangeIn"))
         try c.encodeIfPresent(rangeOut, forKey: AnyKey("rangeOut"))
         if !mediaHints.isEmpty { try c.encode(mediaHints, forKey: AnyKey("mediaHints")) }
+        if !mediaPool.isEmpty { try c.encode(mediaPool, forKey: AnyKey("mediaPool")) }
     }
 
     /// fps を Int / Double / "29.97" / "30000/1001" のどれからでも読む。読めない・欠けているときは 60、範囲外は 1〜240 に収める。
@@ -374,9 +378,11 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var figure: Figure? = nil
     /// 作業メモ(クリップの注記)。書き出しには出ない。空・未設定のときは書かない。
     public var note: String? = nil
+    /// クリップ単位のロック。true のときだけファイルに書く(移動・トリム・分割・削除・プロパティ編集を断る。`LayerEditing`)。
+    public var locked: Bool? = nil
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["id", "type", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "duck", "visualizer", "stabilize", "tracks", "mask", "figure", "note"]
+    static let knownKeys: Set<String> = ["id", "type", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "duck", "visualizer", "stabilize", "tracks", "mask", "figure", "note", "locked"]
 
     public init() {}
 
@@ -405,6 +411,8 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var cropOrDefault: Crop { crop ?? Crop() }
     /// キーが 1 つでもあるか(描画の速い道の判定)。
     public var hasKeyframes: Bool { !keyframes.isEmpty }
+    /// このクリップ自身がロックされているか(レイヤーのロックとは別)。
+    public var isClipLocked: Bool { locked == true }
     /// トランジションが 1 つでもあるか(描画の速い道の判定)。
     public var hasTransition: Bool { transitionIn != nil || transitionOut != nil }
     public var fadeInOrDefault: Double { max(0, fadeIn ?? 0) }
@@ -519,6 +527,9 @@ public struct Clip: Codable, Equatable, Identifiable {
             if let v: [Track] = l.value("tracks") { tracks = v } else { extra["tracks"] = raw }
         }
         note = l.string("note").flatMap { Clip.cleanNote($0) }
+        if let raw: JSONValue = l.value("locked") {
+            if l.bool("locked") == true { locked = true } else { extra["locked"] = raw }   // true 以外は捨てずに書き戻す
+        }
         if let raw: JSONValue = l.value("figure") {
             if let v: Figure = l.value("figure") { figure = v } else { extra["figure"] = raw }
         }
@@ -602,6 +613,7 @@ public struct Clip: Codable, Equatable, Identifiable {
         try c.encodeIfPresent(visualizer, forKey: AnyKey("visualizer"))
         if let f = figure?.normalized { try c.encode(f, forKey: AnyKey("figure")) }
         if let n = note, !n.isEmpty { try c.encode(n, forKey: AnyKey("note")) }
+        if locked == true { try c.encode(true, forKey: AnyKey("locked")) }
         if let t = tracks { try c.encode(t, forKey: AnyKey("tracks")) }
         try c.encodeIfPresent(mask, forKey: AnyKey("mask"))
         if let s = stabilize, s > 0 { try c.encode(min(s, 1), forKey: AnyKey("stabilize")) }

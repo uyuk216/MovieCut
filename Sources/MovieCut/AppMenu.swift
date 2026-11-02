@@ -15,6 +15,8 @@ enum MenuCommand: Hashable {
     case transcribeSubtitles
     // 素材(欠落の再指定)
     case relinkMedia
+    // ファイル ▸ 未使用の素材…(ショートカットは持たない)
+    case unusedMedia
     case packageSave
     case addFont
     case addSubtitle
@@ -22,6 +24,9 @@ enum MenuCommand: Hashable {
     case imageChroma
     // 範囲ループ再生(再生メニュー)
     case toggleRangeLoop
+    // トリム点 / 選択クリップの反復再生と、前後の幅(秒。0.5 / 1 / 2)
+    case toggleTrimLoop, toggleClipLoop
+    case trimLoopWidth(Double)
     case aiScript, aiChapters, aiTitles, aiRewrite, aiSettings
     // 書き出し範囲(イン / アウト / 解除)と、静止画・連番画像の書き出し
     case rangeIn, rangeOut, rangeClear, exportStill, exportSequence
@@ -43,6 +48,7 @@ enum MenuCommand: Hashable {
     case saveTemplate, newFromTemplate(String)
     // A6: クリップのコピー / 切り取り / 貼り付け / 全選択(ショートカットは持たない: ⌘C ⌘X ⌘V ⌘A は responder chain が受ける)と、レイヤー
     case copyClips, cutClips, pasteClips, selectAllClips, layerLock, layerSolo, layerDelete, layerHeight(LayerHeight)
+    case clipLock
     case split, delete, addText, addBlur, addAdjustment, addVisualizer, addQRCode, addCharacter, makeVoices
     // 図形(クリップ ▸ 図形を追加 ▸ 種類。ショートカットは持たない)
     case addShape(FigureKind)
@@ -170,6 +176,9 @@ struct MenuState: Equatable {
     var canMarkRange = false
     var hasRange = false
     var rangeLoop = false
+    /// 反復再生中(トリム点 / 選択クリップ)と、設定の半幅(秒)
+    var trimLoopActive = false
+    var trimLoopHalfWidth = TrimLoop.defaultHalfWidth
     var hasSelection = false
     /// 文字クリップかボイスクリップがある(検索と置換の対象)
     var hasTextTargets = false
@@ -187,6 +196,7 @@ struct MenuState: Equatable {
     /// 選んでいるクリップが音声認識の対象(音のある素材で、速度・逆再生なし)
     var canTranscribe = false
     var hasMissingMedia = false
+    var hasUnusedMedia = false
     var hasGaps = false
     var hasShortClips = false
     var hasSelectionSpan = false
@@ -202,6 +212,8 @@ struct MenuState: Equatable {
     /// A6: メニューの対象のレイヤー(選んだクリップのレイヤー、無ければヘッダーで選んだレイヤー)の状態
     var hasLayerTarget = false
     var layerLocked = false
+    /// 選んだクリップが全部ロック済み(メニューは「ロックを解除」になる)
+    var clipsLocked = false
     var layerSolo = false
     /// 対象のレイヤーを消せない理由(消せるなら nil)。レイヤーがなければ nil で hasLayerTarget が false
     var layerDeleteBlocked: String?
@@ -323,6 +335,8 @@ struct MenuState: Equatable {
         canMarkRange = m.canMarkRange
         hasRange = m.hasRangeMarks
         rangeLoop = m.rangeLoop
+        trimLoopActive = m.trimLoop != nil
+        trimLoopHalfWidth = TrimLoopSettings.halfWidth
         hasSelection = m.selectedClip != nil
         hasTextTargets = m.project.allClips.contains { $0.type == .text || $0.type == .voice }
         hasTextClips = m.project.allClips.contains { $0.type == .text }
@@ -334,6 +348,7 @@ struct MenuState: Equatable {
         canExportSubtitles = m.canExportSubtitles
         canGenerateSubtitles = SubtitleGeneration.hasTargets(m.project)
         hasMissingMedia = !MissingMedia.find(in: m.project).isEmpty
+        hasUnusedMedia = !UnusedMedia.find(in: m.project).isEmpty
         hasGaps = !TimelineQuery.gapStarts(in: m.project).isEmpty
         hasShortClips = !TimelineQuery.shortClipIds(in: m.project).isEmpty
         hasSelectionSpan = TimelineQuery.span(ofClipIds: m.selectedClipIDs, in: m.project) != nil
@@ -347,6 +362,7 @@ struct MenuState: Equatable {
             layerDeleteBlocked = LayerEditing.deleteBlockedReason(in: m.project, index: li)
             layerHeight = LayerHeight.of(m.project.tracks[li])
         }
+        clipsLocked = LayerEditing.allClipsLocked(m.selectedClipIDs, in: m.project)
         canSplit = m.canSplit
         resolutionKey = m.resolutionKey
         fps = m.project.fps
@@ -514,6 +530,11 @@ enum AppMenuSpec {
     /// ファイル ▸ 素材の場所を再指定…(欠けている素材があるときだけ。フォルダを選んで探し直す)。
     static func mediaRelink(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .relinkMedia, title: "素材の場所を再指定…", shortcut: nil, enabled: s.canEdit && s.hasMissingMedia, checked: nil, hint: "欠けた素材")
+    }
+
+    /// ファイル ▸ 未使用の素材…(どのクリップにも使われていない取り込み済みの素材を整理する。ショートカットなし)。
+    static func unusedMediaItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .unusedMedia, title: "未使用の素材…", shortcut: nil, enabled: s.canEdit && s.hasUnusedMedia, checked: nil, hint: "使っていない素材を整理")
     }
 
     /// 静止画の背景抜き(Vision)と、色で抜く(クロマキー)。どちらも静止画のクリップを選んでいるときだけ使える。
@@ -687,6 +708,7 @@ enum AppMenuSpec {
     static func clipEdit(_ s: MenuState) -> [MenuItemSpec] {
         [MenuItemSpec(command: .split, title: "クリップを分割", shortcut: nil, enabled: s.canEdit && s.canSplit, checked: nil, hint: "S"),
          MenuItemSpec(command: .duplicate, title: "クリップを複製", shortcut: cmd("d"), enabled: s.canEdit && s.hasSelection, checked: nil),
+         clipLockItem(s),
          MenuItemSpec(command: .delete, title: "クリップを削除", shortcut: nil, enabled: s.canEdit && s.hasSelection, checked: nil, hint: "⌫"),
          MenuItemSpec(command: .rippleDelete, title: "すき間を詰めて削除", shortcut: MenuShortcut(key: .delete, modifiers: [.option, .command]), enabled: s.canEdit && s.hasSelection, checked: nil),
          MenuItemSpec(command: .alignToPlayhead, title: "選択クリップを再生ヘッドに揃える", shortcut: nil, enabled: s.canEdit && s.hasSelection, checked: nil, hint: "一番手前の頭を再生ヘッドへ"),
@@ -698,6 +720,12 @@ enum AppMenuSpec {
          MenuItemSpec(command: .motionTrack, title: "動きに追従させる", shortcut: nil, enabled: s.canEdit && s.canMotionTrack, checked: nil),
          MenuItemSpec(command: .compoundGroup, title: "複合クリップにまとめる", shortcut: nil, enabled: s.canEdit && s.canCompoundGroup, checked: nil),
          MenuItemSpec(command: .compoundUngroup, title: "複合クリップを解除", shortcut: nil, enabled: s.canEdit && s.canCompoundUngroup, checked: nil)]
+    }
+
+    /// クリップ ▸ クリップをロック / ロックを解除(選択の状態でラベルが変わる。ショートカットなし)。
+    static func clipLockItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .clipLock, title: s.clipsLocked ? "クリップのロックを解除" : "クリップをロック", shortcut: nil,
+                     enabled: s.canEdit && s.hasSelection, checked: nil, hint: "移動・トリム・分割・削除を防ぐ")
     }
 
     static func clipTrim(_ s: MenuState) -> [MenuItemSpec] {
@@ -773,6 +801,23 @@ enum AppMenuSpec {
          MenuItemSpec(command: .stepBack, title: "1コマ戻る", shortcut: nil, enabled: s.canEdit, checked: nil),
          MenuItemSpec(command: .stepForward, title: "1コマ進む", shortcut: nil, enabled: s.canEdit, checked: nil),
          MenuItemSpec(command: .toggleRangeLoop, title: "範囲をループ再生", shortcut: nil, enabled: s.canEdit && s.hasRange, checked: s.rangeLoop, hint: "書き出し範囲")]
+            + trimLoopItems(s)
+    }
+
+    /// 再生 ▸ トリム点 / 選択クリップの反復再生(ショートカットなし)。
+    static func trimLoopItems(_ s: MenuState) -> [MenuItemSpec] {
+        let w = TrimLoop.normalizedHalfWidth(s.trimLoopHalfWidth)
+        let wl = w == 0.5 ? "0.5" : String(Int(w))
+        return [MenuItemSpec(command: .toggleTrimLoop, title: "トリム点を反復再生", shortcut: nil, enabled: s.canEdit && s.hasClips, checked: s.trimLoopActive ? true : nil, hint: "再生位置の前後 \(wl) 秒"),
+                MenuItemSpec(command: .toggleClipLoop, title: "選択クリップを反復再生", shortcut: nil, enabled: s.canEdit && s.hasSelection, checked: nil)]
+    }
+
+    /// 再生 ▸ 反復再生の幅(前後 0.5 / 1 / 2 秒。現在の選択にチェック)。
+    static func trimLoopWidthItems(_ s: MenuState) -> [MenuItemSpec] {
+        let cur = TrimLoop.normalizedHalfWidth(s.trimLoopHalfWidth)
+        return TrimLoop.halfWidthChoices.map { w in
+            MenuItemSpec(command: .trimLoopWidth(w), title: "前後 \(w == 0.5 ? "0.5" : String(Int(w))) 秒", shortcut: nil, enabled: s.canEdit, checked: w == cur)
+        }
     }
 
     // MARK: 移動メニュー
@@ -1045,13 +1090,13 @@ enum AppMenuSpec {
 
     /// 字幕と素材の項目(ファイル ▸ 字幕・素材のまとまり。式が長すぎて型検査が遅くなるので分けてある)。
     static func mediaSubtitleItems(_ s: MenuState) -> [MenuItemSpec] {
-        [subtitleImport(s), mediaRelink(s), packageSave(s), addSubtitle(s), subtitleExport(s), subtitleTranslate(s), subtitleGenerate(s), transcribeSubtitles(s), chapterCopy(s)]
+        [subtitleImport(s), mediaRelink(s), unusedMediaItem(s), packageSave(s), addSubtitle(s), subtitleExport(s), subtitleTranslate(s), subtitleGenerate(s), transcribeSubtitles(s), chapterCopy(s)]
             + cutoutItems(s)
     }
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s)] + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), clipListItem(s), noteListItem(s), makeProxies(s)] + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textCounterItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), beatMarkersItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s)
+        [about, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s)] + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), clipListItem(s), noteListItem(s), makeProxies(s)] + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textCounterItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), beatMarkersItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerColorItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + guideItems(s) + [previewProxy(s), fullScreen(s)] + help.flatMap { $0 }
@@ -1107,12 +1152,16 @@ enum AppMenu {
             case .generateSubtitles: m.generateSubtitlesFromScript()
             case .transcribeSubtitles: Task { await m.transcribeSelectedToSubtitles() }
             case .relinkMedia: m.chooseAndRelinkMedia()
+            case .unusedMedia: m.showUnusedMediaSheet = true
             case .packageSave: m.saveAsPackage()
             case .addFont: m.chooseAndAddFonts()
             case .addSubtitle: m.openSubtitleSheet()
             case .removeBackground: m.removeBackgroundSelected()
             case .imageChroma: m.addEffectSelected(.chromaKey)
             case .toggleRangeLoop: m.rangeLoop.toggle()
+            case .toggleTrimLoop: m.toggleTrimLoop()
+            case .toggleClipLoop: m.toggleClipLoop()
+            case .trimLoopWidth(let w): TrimLoopSettings.halfWidth = w
             case .copyChapters: m.copyChapters()
             case .copyChaptersColor(let c): m.copyChapters(color: c)
             case .aiScript: m.openAIScriptDialog()
@@ -1152,6 +1201,7 @@ enum AppMenu {
             case .cutClips: m.cutSelection()
             case .pasteClips: m.pasteClips()
             case .selectAllClips: m.selectAllClips()
+            case .clipLock: m.toggleClipLockSelected()
             case .layerLock: if let i = m.targetLayerIndex { m.toggleLayerLock(i) }
             case .layerSolo: if let i = m.targetLayerIndex { m.toggleLayerSolo(i) }
             case .layerDelete: if let i = m.targetLayerIndex { m.requestDeleteLayer(i) }

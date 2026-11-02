@@ -55,7 +55,7 @@ extension ProjectModel {
         }
         let t = max(0, time ?? currentTime)
         var ids: [String] = []
-        edit("素材の追加") { p in ids = ClipEditing.place(media: media, at: t, in: &p) }
+        edit("素材の追加") { p in ids = ClipEditing.place(media: media, at: t, in: &p); UnusedMedia.register(media.map(\.path), in: &p) }
         selectedClipId = ids.last
         statusText = "\(ids.count) 個の素材を追加しました"
         return ids
@@ -76,7 +76,7 @@ extension ProjectModel {
         let place = TimelineDrop.placement(dropTime: dropTime, duration: media[0].duration, rowIndex: rowIndex, project: project,
                                            playhead: currentTime, pps: pps, snapEnabled: snapEnabled)
         var ids: [String] = []
-        edit("素材のドロップ") { p in ids = ClipEditing.place(media: media, at: place.start, preferredTrack: place.track, in: &p) }
+        edit("素材のドロップ") { p in ids = ClipEditing.place(media: media, at: place.start, preferredTrack: place.track, in: &p); UnusedMedia.register(media.map(\.path), in: &p) }
         guard !ids.isEmpty else { return [] }
         selectedClipId = ids.last
         statusText = "\(ids.count) 個の素材を追加しました"

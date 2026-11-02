@@ -80,28 +80,57 @@ public enum LayerEditing {
         project.tracks.map { LayerHeight.of($0).points }
     }
 
-    /// 編集(`new`)が、`old` でロックされていたレイヤーのクリップに触れているか。
-    /// ロックの切り替えや名前・高さ・ソロ・隠す・消音はクリップに触れないので対象外。
+    /// 編集(`new`)が、`old` でロックされていたレイヤーのクリップ、またはロックされたクリップ自身に触れているか。
+    /// レイヤーのロック・クリップのロックの切り替えや、名前・高さ・ソロ・隠す・消音はクリップに触れないので対象外。
+    /// クリップのロックは「ロックの印以外が同じ・同じレイヤーのまま」なら触れていないとみなす(ロックの解除は通る)。
     public static func violatesLock(old: Project, new: Project) -> Bool {
-        for tr in old.tracks where tr.isLocked {
-            guard let n = new.tracks.first(where: { $0.id == tr.id }) else { return true }
-            if n.clips != tr.clips { return true }
+        for tr in old.tracks {
+            if tr.isLocked {
+                guard let n = new.tracks.first(where: { $0.id == tr.id }) else { return true }
+                if n.clips != tr.clips { return true }
+                continue
+            }
+            for c in tr.clips where c.isClipLocked {
+                guard let n = new.tracks.first(where: { $0.id == tr.id })?.clips.first(where: { $0.id == c.id }) else { return true }
+                if withoutClipLock(n) != withoutClipLock(c) { return true }
+            }
         }
         return false
     }
 
-    /// 編集してよいクリップだけに絞る(ロックされたレイヤーのクリップを除く)。
+    private static func withoutClipLock(_ c: Clip) -> Clip { var x = c; x.locked = nil; return x }
+
+    /// 編集してよいクリップだけに絞る(ロックされたレイヤーのクリップと、ロックされたクリップを除く)。
     public static func editableIds(_ ids: Set<String>, in project: Project) -> Set<String> {
         var out = Set<String>()
         for tr in project.tracks where !tr.isLocked {
-            for c in tr.clips where ids.contains(c.id) { out.insert(c.id) }
+            for c in tr.clips where ids.contains(c.id) && !c.isClipLocked { out.insert(c.id) }
         }
         return out
     }
 
-    /// そのクリップがロックされたレイヤーにあるか。
+    /// そのクリップがロックされたレイヤーにあるか、クリップ自身がロックされているか。
     public static func isLockedClip(_ id: String, in project: Project) -> Bool {
         project.tracks.contains { $0.isLocked && $0.clips.contains { $0.id == id } }
+            || project.tracks.contains { $0.clips.contains { $0.id == id && $0.isClipLocked } }
+    }
+
+    /// クリップ単位のロックを切り替える(`ids` の最上位のクリップだけ)。変わらなければ nil。ファイルには true のときだけ書く。
+    public static func setClipsLocked(in project: Project, ids: Set<String>, _ on: Bool) -> Project? {
+        var p = project
+        for ti in p.tracks.indices {
+            for ci in p.tracks[ti].clips.indices where ids.contains(p.tracks[ti].clips[ci].id) {
+                p.tracks[ti].clips[ci].locked = on ? true : nil
+                p.tracks[ti].clips[ci].extra["locked"] = nil
+            }
+        }
+        return p == project ? nil : p
+    }
+
+    /// 選んだクリップ(最上位)が全部ロック済みか。メニューの表示用(全部ロック済みなら「解除」、そうでなければ「ロック」)。
+    public static func allClipsLocked(_ ids: Set<String>, in project: Project) -> Bool {
+        let found = project.tracks.flatMap(\.clips).filter { ids.contains($0.id) }
+        return !found.isEmpty && found.allSatisfy(\.isClipLocked)
     }
 
     // MARK: 削除

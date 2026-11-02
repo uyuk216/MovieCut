@@ -184,6 +184,7 @@ final class ProjectModel: ObservableObject {
     @Published var showClipListSheet = false
     /// 出力 ▸ 注記一覧…(注記のあるクリップの表・テキストと CSV の書き出し)のシート。
     @Published var showNoteListSheet = false
+    @Published var showUnusedMediaSheet = false
     /// 名前を変えているマーカー(シートを出す)。
     @Published var renamingMarkerId: String?
     /// 左の台本欄の文字(ツールバー・メニューの「台本から音声を作る」が読む)。
@@ -194,6 +195,8 @@ final class ProjectModel: ObservableObject {
     @Published var isPlaying = false
     /// 書き出し範囲だけをループ再生する(表示の状態。プロジェクトには保存せず、Undo にも載せない)。
     @Published var rangeLoop = false
+    /// トリム点・選択クリップの反復再生の範囲(表示の状態。保存せず Undo にも載せない。止まると nil に戻る)。
+    @Published var trimLoop: ExportRange?
     /// 増やすと、同じ時刻でもプレビューを描き直す(再生を止めたとき)。
     @Published var previewEpoch = 0
 
@@ -307,7 +310,7 @@ final class ProjectModel: ObservableObject {
         return true
     }
 
-    static let lockedNotice = "ロックされたレイヤーのクリップは編集できません"
+    static let lockedNotice = "ロックされたレイヤー・クリップは編集できません"
 
     private func replace(with new: Project, name: String) {
         let old = project

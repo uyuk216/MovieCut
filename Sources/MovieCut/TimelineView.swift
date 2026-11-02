@@ -357,13 +357,53 @@ final class TimelineCanvas: NSView {
     override func layout() {
         super.layout()
         removeAllToolTips()
-        addToolTip(NSRect(x: TimelineLayout.headerWidth, y: 0, width: max(0, bounds.width - TimelineLayout.headerWidth), height: TimelineLayout.rulerHeight), owner: self, userData: nil)
+        addToolTip(NSRect(x: TimelineLayout.headerWidth, y: 0, width: max(0, bounds.width - TimelineLayout.headerWidth), height: max(0, bounds.height)), owner: self, userData: nil)
+    }
+
+    /// 素材の有無の覚え(描画のたびに stat しない。3 秒ごとに見直す)。
+    private var existsCache: [String: (exists: Bool, checked: CFTimeInterval)] = [:]
+    private func mediaExists(_ path: String) -> Bool {
+        let now = CACurrentMediaTime()
+        if let e = existsCache[path], now - e.checked < 3 { return e.exists }
+        if existsCache.count > 4000 { existsCache.removeAll() }
+        let ok = FileManager.default.fileExists(atPath: path)
+        existsCache[path] = (ok, now)
+        return ok
+    }
+
+    /// 素材が見つからないクリップの印(判断は Core の `MissingMediaPlaceholder.timelineMark`)。
+    func missingMark(for c: Clip, width: Double) -> MissingMediaPlaceholder.TimelineMark? {
+        guard c.src != nil else { return nil }
+        return MissingMediaPlaceholder.timelineMark(for: c, width: width, exists: mediaExists)
+    }
+
+    /// 赤い斜線と ⚠(クリップの形に切り抜く)。
+    private func drawMissingHatch(rect r: CGRect, path: NSBezierPath, badge: Bool, ctx: CGContext) {
+        ctx.saveGState()
+        path.addClip()
+        NSColor(calibratedRed: 0.55, green: 0.05, blue: 0.05, alpha: 0.45).setFill()
+        r.fill()
+        NSColor(calibratedRed: 1, green: 0.3, blue: 0.3, alpha: 0.8).setStroke()
+        let hatch = NSBezierPath()
+        hatch.lineWidth = 1.5
+        var x = r.minX - r.height
+        while x < r.maxX {
+            hatch.move(to: NSPoint(x: x, y: r.maxY)); hatch.line(to: NSPoint(x: x + r.height, y: r.minY))
+            x += 8
+        }
+        hatch.stroke()
+        if badge {
+            ("⚠" as NSString).draw(at: NSPoint(x: r.maxX - 18, y: r.maxY - 17),
+                                 withAttributes: [.font: NSFont.systemFont(ofSize: 12, weight: .bold), .foregroundColor: NSColor(calibratedRed: 1, green: 0.85, blue: 0.2, alpha: 1)])
+        }
+        ctx.restoreGState()
     }
 
     /// 旗の上にポインタがあるとき、名前と時刻を出す。
     @objc func view(_ view: NSView, stringForToolTip tag: NSView.ToolTipTag, point: NSPoint, userData data: UnsafeMutableRawPointer?) -> String {
-        guard let m = markerHit(at: point) else { return "" }
-        return "\(m.name)  \(timecode(m.time))"
+        if let m = markerHit(at: point) { return "\(m.name)  \(timecode(m.time))" }
+        if let id = clipId(at: point), let c = project.allClips.first(where: { $0.id == id }), let mk = missingMark(for: c, width: 100) { return mk.help }
+        return ""
     }
     required init?(coder: NSCoder) { fatalError() }
 
@@ -681,6 +721,21 @@ final class TimelineCanvas: NSView {
         TimelinePalette.accent.withAlphaComponent(0.9).setStroke(); b.stroke()
     }
 
+    /// 小さな錠前(本体の四角と、つるの弧)。
+    private func drawLockGlyph(in b: NSRect, ctx: CGContext) {
+        ctx.saveGState()
+        NSColor(white: 0, alpha: 0.45).setFill()
+        NSBezierPath(roundedRect: b.insetBy(dx: -2, dy: -2), xRadius: 4, yRadius: 4).fill()
+        NSColor.white.setFill(); NSColor.white.setStroke()
+        let body = NSRect(x: b.minX + 1, y: b.minY + b.height * 0.45, width: b.width - 2, height: b.height * 0.55)
+        NSBezierPath(roundedRect: body, xRadius: 1.5, yRadius: 1.5).fill()
+        let shackle = NSBezierPath()
+        shackle.lineWidth = 1.4
+        shackle.appendArc(withCenter: NSPoint(x: b.midX, y: body.minY), radius: (b.width - 5) / 2, startAngle: 0, endAngle: 180, clockwise: true)
+        shackle.stroke()
+        ctx.restoreGState()
+    }
+
     private func drawClip(_ c: Clip, rect r: CGRect, track: Track, selected: Bool, secondary: Bool = false, ctx: CGContext) {
         var fill: NSColor
         var leftBorder: NSColor?
@@ -728,6 +783,8 @@ final class TimelineCanvas: NSView {
                                   withAttributes: [.font: NSFont.systemFont(ofSize: 9, weight: .bold), .foregroundColor: NSColor.black])
             ctx.restoreGState()
         }
+        // ロックの印(右上の小さな錠前)。ロックされたクリップだけ。狭いクリップには出さない
+        if c.isClipLocked && r.width >= 24 { drawLockGlyph(in: NSRect(x: r.maxX - 15, y: r.minY + 3, width: 11, height: 11), ctx: ctx) }
         var textLeft = r.minX + 7 + (hasNoteBadge ? 15 : 0)
         if let lb = leftBorder {
             // 左端の 3pt の線(キャラの色そのまま)
@@ -739,6 +796,8 @@ final class TimelineCanvas: NSView {
             textLeft += 3
         }
         let hasMedia = drawMedia(c, rect: r, path: path, ctx: ctx)
+        let missingMark = missingMark(for: c, width: Double(r.width))
+        if let mk = missingMark, mk.hatch { drawMissingHatch(rect: r, path: path, badge: mk.showsBadge, ctx: ctx) }
         drawTransitionWedges(c, rect: r, selected: selected, path: path, ctx: ctx)
         if secondary {
             // 複数選択の主でないクリップ: 枠線だけ(つまみや光彩は主のものだけ)
@@ -1649,6 +1708,9 @@ final class TimelineCanvas: NSView {
             item.isEnabled = enabled
             menu.addItem(item)
         }
+        let allLocked = LayerEditing.allClipsLocked(m.selectedClipIDs, in: m.project)
+        add(allLocked ? "クリップのロックを解除" : "クリップをロック", enabled: !m.selectedClipIDs.isEmpty) { m.toggleClipLockSelected() }
+        menu.addItem(.separator())
         add("コピー", enabled: !m.selectedClipIDs.isEmpty) { m.copySelection() }
         add("切り取り", enabled: !m.selectedClipIDs.isEmpty) { m.cutSelection() }
         add("貼り付け", enabled: m.canPasteClips) { m.pasteClips() }

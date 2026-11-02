@@ -44,6 +44,7 @@ public enum EffectPipeline {
         case .faceBlur: return v("strength") < eps
         case .whiteBalance: return abs(v("temperature")) < eps && abs(v("tint")) < eps
         case .colorWheels: return v("liftAmount") < eps && v("gammaAmount") < eps && v("gainAmount") < eps
+        case .opticalMist: return v("amount") < eps || v("radius") < eps
         }
     }
 
@@ -75,6 +76,7 @@ public enum EffectPipeline {
             case .gaussianBlur: m += 3 * e.v("radius") * scale
             case .motionBlur: m += e.v("radius") * scale
             case .glow: m += 3 * e.v("radius") * scale * 0.5
+            case .opticalMist: m += 3 * e.v("radius") * scale
             case .dropShadow: m += max(abs(e.v("dx")), abs(e.v("dy"))) * scale + 3 * e.v("blur") * scale * 0.5
             case .outline: m += e.v("width") * scale
             default: break
@@ -200,6 +202,8 @@ public enum EffectPipeline {
             return img.unpremultiplyingAlpha()
                 .applyingFilter("CIColorCube", parameters: ["inputCubeDimension": ColorWheels.dimension, "inputCubeData": data])
                 .premultiplyingAlpha()
+        case .opticalMist:
+            return OpticalMist.apply(img, amount: e.v("amount"), threshold: e.v("threshold"), sigma: e.v("radius") * scale)
         case .lut:
             guard let p = e.path, let c = LUTCache.shared.cube(atPath: p) else { return img }
             return LUTApply.apply(img, lut: c.lut, dimension: c.dimension, data: c.data, intensity: e.v("intensity"))
