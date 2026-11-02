@@ -399,11 +399,19 @@ public enum ClipEditing {
         return c
     }
 
-    /// 一番上のレイヤー(配列の最後)の末尾にクリップを足す。レイヤーが 1 つもなければ作る。
+    /// 一番上のレイヤー(配列の最後)の末尾に足す。ただし [start, end) が一番上で空いていて、ロックされていないときだけ。
+    /// 塞がっている・ロックされているときは、ロックされていない新しいレイヤーを一番上に足して、そこへ置く(レイヤーが無ければ作る)。
+    /// 同じレイヤーで重ならない(2026-11-02 修正: 以前は重なりを見ずに末尾へ足していた)。
     public static func appendToTopLayer(_ clip: Clip, in project: inout Project) {
         if project.tracks.isEmpty { project.tracks.append(Track(name: "レイヤー1")) }
-        // 一番上がロックされていれば、ロックされていない新しいレイヤーを足して、そこへ置く
-        if project.tracks[project.tracks.count - 1].isLocked { project.tracks.append(Track(name: "レイヤー\(project.tracks.count + 1)")) }
+        let end = clip.start + clip.duration
+        let top = project.tracks.count - 1
+        let free = !project.tracks[top].isLocked && project.tracks[top].clips.allSatisfy { c in
+            c.start >= end - timeEpsilon || c.start + c.duration <= clip.start + timeEpsilon
+        }
+        if !free {
+            project.tracks.append(Track(name: "レイヤー\(project.tracks.count + 1)"))
+        }
         project.tracks[project.tracks.count - 1].clips.append(clip)
     }
 }

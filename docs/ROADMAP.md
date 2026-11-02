@@ -178,3 +178,5 @@
 - Dock の書き出し進捗は既に接続済み(直接の書き出し `ProjectModel.runJob` と書き出しキュー `ExportQueueController.withExportHooks` の両方が `DockProgressController` を使う)。
 
 - クリップのロック(実装済み): `Clip.locked`(true のときだけ書く)、クリップ ▸ クリップをロック / 解除と右クリック、タイムラインの錠前の印。レイヤーのロックと同じガード(`LayerEditing.violatesLock`)。画面での確認は未了。
+
+- 2026-11-02 バグ掃除 4 回目: 上のレイヤーへの追加の重なりを直した(空きが無ければ新しいレイヤー)。背景抜きの残骸を消す。候補 18・20・21 は純粋な計算だけ(`HighlightRolloff`・`CharacterPartCheck`・`SourceUsage`)。メニュー・インスペクタへの接続、候補 19・22〜30 は未了。`swift test` Core 1254(1 スキップ)・App 550、失敗 0。画面操作は未確認。

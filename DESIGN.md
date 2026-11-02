@@ -476,3 +476,8 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
 - `Renderer.missingMediaPlaceholder`(既定 false)。true のとき、`drawClipContent` で画像が取れず `MissingMediaPlaceholder.isMissing`(ファイルなし)の画像・動画に、暗い赤の札(`layout` / `drawCard`、文字は `drawText`)を描く。存在確認は画像が nil のときだけ(素材がある通常経路の性能は変わらない)。プレビュー(`PreviewView`)だけ true、書き出し・サムネイル等は false のまま。複合の中身にも引き継ぐ。
 - タイムライン: 印の判断は Core の `MissingMediaPlaceholder.timelineMark`(斜線・⚠・ヘルプ文)。`TimelineCanvas` は存在確認を 3 秒だけ覚え、ツールチップはクリップの上で返す。ファイル形式の変更なし。
 - テスト: `MissingMediaPlaceholderTests`(画素・配置・印の判断)。
+
+## 2026-11-02 追記(バグ掃除 4 回目・候補 18/20/21)
+- **レイヤーへの追加の重なり**: `ClipEditing.appendToTopLayer` は、一番上のレイヤーが [start, end) で空いていてロックでなければそこへ足す。塞がっている・ロックなら、新しいレイヤーを一番上に足して置く(同じレイヤーで重ならない不変条件。テスト `BugSweepRound4Tests`、`TimelineEditingTests.testAddTextAndBlurGoToTopLayerAndSelect` は新しい期待に直した)。
+- **背景抜きの残骸**: `CutoutCache.unreferenced(_:in:)` は、どのクリップの素材にもない PNG を返す。差し替えに失敗したとき `applyCutout` が、その PNG を消す。
+- **純粋な計算(画面は未接続)**: `HighlightRolloff`(膝より上を指数で詰める、接線連続・出力 1 未満)、`CharacterPartCheck.missingExpressionTags`(表情の画像が無い・空のもの)、`SourceUsage.range(of:)`(クリップが元素材で使う区間。フリーズ・画像・空は nil)。テストは `PartBRound4Tests`。

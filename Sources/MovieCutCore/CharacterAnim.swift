@@ -122,3 +122,13 @@ public enum ExpressionTag {
         return expressions[tag]
     }
 }
+
+// MARK: - 立ち絵の表情パーツの欠落
+
+public enum CharacterPartCheck {
+    /// 表情名 → 画像のパスの辞書で、画像が無いもの(表情名の並び順)。空のパスも欠落とみなす。
+    /// 立ち絵の画像を差し替えたあと、赤く表示する一覧に使う。
+    public static func missingExpressionTags(_ expressions: [String: String], exists: (String) -> Bool) -> [String] {
+        expressions.filter { $0.value.isEmpty || !exists($0.value) }.map(\.key).sorted()
+    }
+}

@@ -40,6 +40,12 @@ extension ProjectModel {
                 }
             }
         }
+        // 差し替えられなかったら、書いた PNG は誰も使わないので消す(残骸を溜めない)
+        if !found {
+            for orphan in CutoutCache.unreferenced([path], in: project) {
+                try? FileManager.default.removeItem(atPath: orphan)
+            }
+        }
         statusText = found ? "背景を抜きました" : "クリップが見つからないため、差し替えませんでした"
     }
 }

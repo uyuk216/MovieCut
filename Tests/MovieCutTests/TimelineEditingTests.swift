@@ -342,16 +342,19 @@ final class TimelineEditingTests: XCTestCase {
         XCTAssertEqual(model.project.tracks.last!.clips.last!.id, tid)
         XCTAssertEqual(model.selectedClipId, tid)
         XCTAssertEqual(find(tid).start, 1.25); XCTAssertEqual(find(tid).fontSize, 96)
+        // 同じ時刻の一番上は塞がっているので、ぼかしは新しいレイヤーへ(同じレイヤーで重ならない)
         let bid = model.addBlurClip()!
-        XCTAssertEqual(model.project.tracks.last!.clips.map(\.id), [tid, bid])
+        XCTAssertEqual(model.project.tracks.last!.clips.map(\.id), [bid])
+        XCTAssertEqual(model.project.tracks[model.project.tracks.count - 2].clips.map(\.id), [tid])
         XCTAssertEqual(model.selectedClipId, bid)
         XCTAssertEqual(find(bid).strength, 24)
-        um.undo()      // ぼかしだけが消える(1 操作 = 1 Undo)
+        um.undo()      // ぼかしだけが消える(新しいレイヤーも戻る・1 操作 = 1 Undo)
         XCTAssertEqual(model.project.tracks.last!.clips.map(\.id), [tid])
         um.undo()
         XCTAssertTrue(model.project.tracks.last!.clips.isEmpty)
         um.redo(); um.redo()
-        XCTAssertEqual(model.project.tracks.last!.clips.map(\.id), [tid, bid])
+        XCTAssertEqual(model.project.tracks.last!.clips.map(\.id), [bid])
+        XCTAssertEqual(model.project.tracks[model.project.tracks.count - 2].clips.map(\.id), [tid])
     }
 
     func testTextAndBlurAt4KAndPortrait() {
