@@ -190,7 +190,13 @@ extension ProjectModel {
     func deleteLayer(_ index: Int) -> Bool {
         guard !isLocked, let p = LayerEditing.delete(in: project, index: index) else { return false }
         let ok = edit("レイヤーの削除", enforcesLock: false) { $0 = p }
-        if ok { selectedLayerIndex = nil }
+        if ok {
+            // 消えたクリップの選択を外す(残っているクリップの選択はそのまま)
+            let alive = Set(project.allClips.map(\.id))
+            selectedClipIDs = selectedClipIDs.filter { alive.contains($0) }
+            if let id = selectedClipId, !alive.contains(id) { selectedClipId = nil }
+            selectedLayerIndex = nil
+        }
         return ok
     }
 }
