@@ -205,11 +205,11 @@ public struct DockLayout: Equatable, Codable {
 
     private static func leaf(_ p: DockPanel) -> DockNode { .group(DockGroup(panels: [p])) }
 
-    /// 初期配置 = YMM4 の初期画面に倣う: 左の列(約66%)= 上にプレビュー(再生バーつき・列の約62%)/ 下にタイムライン、
+    /// 初期配置 = YMM4 の初期画面に倣う: 左の列(約66%)= 上にプレビュー(再生バーつき・列の約60%)/ 下にタイムライン(約40%)、
     /// 右の列(約34%)= プロパティとキャラクターを同じグループのタブに(プロパティが前)。
     public static let `default` = DockLayout(root:
         .split(axis: .horizontal, fraction: 0.66,
-               first: .split(axis: .vertical, fraction: 0.62, first: leaf(.preview), second: leaf(.timeline)),
+               first: .split(axis: .vertical, fraction: 0.6, first: leaf(.preview), second: leaf(.timeline)),
                second: .group(DockGroup(panels: [.inspector, .characters], active: .inspector))))
 
     public static func preset(_ p: DockPreset) -> DockLayout {
@@ -393,8 +393,8 @@ public struct DockLayout: Equatable, Codable {
         let anchors: [DockPanel], edge: DockEdge, fraction: Double
         switch panel {
         case .characters, .inspector: (anchors, edge, fraction) = ([.preview, .timeline], .right, 0.34)
-        case .timeline: (anchors, edge, fraction) = ([.preview], .bottom, 0.38)
-        case .preview: (anchors, edge, fraction) = ([.timeline], .top, 0.62)
+        case .timeline: (anchors, edge, fraction) = ([.preview], .bottom, 0.4)
+        case .preview: (anchors, edge, fraction) = ([.timeline], .top, 0.6)
         }
         // ドッキング中の隣だけで数える。1 つもいなければ全体の端に置く
         var near = Set(anchors.filter { root?.group(containing: $0) != nil })

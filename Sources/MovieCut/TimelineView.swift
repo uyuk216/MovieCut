@@ -875,6 +875,18 @@ final class TimelineCanvas: NSView {
         let chips = TimelineLayout.chipRects(rowTop: top, rowHeight: rowH)
         drawChip("隠す", rect: chips.hide, on: tr.isHidden)
         drawChip("消音", rect: chips.mute, on: tr.isMuted)
+        drawDeleteButton(rect: TimelineLayout.deleteRect(rowTop: top, rowHeight: rowH))
+    }
+
+    /// レイヤーを削除する × (控えめな灰色。押すと確認のうえ消す。メニューと同じ経路)。
+    private func drawDeleteButton(rect r: CGRect) {
+        let c = r.insetBy(dx: 4.5, dy: 4.5)
+        let x = NSBezierPath()
+        x.move(to: NSPoint(x: c.minX, y: c.minY)); x.line(to: NSPoint(x: c.maxX, y: c.maxY))
+        x.move(to: NSPoint(x: c.minX, y: c.maxY)); x.line(to: NSPoint(x: c.maxX, y: c.minY))
+        x.lineWidth = 1.4
+        NSColor(white: 1, alpha: 0.5).setStroke()
+        x.stroke()
     }
 
     /// ロックの錠前(オンは赤の塗りつぶしで掛け金が閉じ、オフは薄い輪郭で掛け金が開く)。パスで描く(描画のたびに画像を作らない)。
@@ -1126,6 +1138,7 @@ final class TimelineCanvas: NSView {
                 else if chips.mute.contains(p) { model?.toggleTrack(i, .muted) }
                 else if TimelineLayout.lockRect(rowTop: top).contains(p) { model?.toggleLayerLock(i) }
                 else if TimelineLayout.soloRect(rowTop: top).contains(p) { model?.toggleLayerSolo(i) }
+                else if TimelineLayout.deleteRect(rowTop: top, rowHeight: geometry.rowHeight(i)).contains(p) { model?.requestDeleteLayer(i) }   // ×: 確認のうえ削除
                 else if clickCount >= 2 { beginRenameLayer(i) }       // 名前のダブルクリック: その場で名前を変える
                 else { model?.selectLayer(i) }                        // ヘッダー: レイヤーを選ぶ(貼り付けの行き先)
             }

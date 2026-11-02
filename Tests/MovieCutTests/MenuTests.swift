@@ -140,7 +140,9 @@ final class MenuTests: XCTestCase {
 
     func testMenuStateFromModelFollowsSelectionAndExport() {
         let m = makeModel()
-        XCTAssertEqual(MenuState(model: nil), MenuState())
+        var noModel = MenuState()
+        noModel.welcomeAtLaunch = WelcomeSettings.showAtLaunch()   // 起動時の画面の設定は本人の環境の値を読む
+        XCTAssertEqual(MenuState(model: nil), noModel)
         var s = MenuState(model: m)
         XCTAssertTrue(s.hasDocument); XCTAssertFalse(s.canExport); XCTAssertFalse(s.hasSelection)
         let id = m.addTextClip()

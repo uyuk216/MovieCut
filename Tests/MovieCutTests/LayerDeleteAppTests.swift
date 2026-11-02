@@ -127,4 +127,67 @@ final class LayerDeleteAppTests: XCTestCase {
         XCTAssertEqual(m.project.tracks.count, 4)
         XCTAssertEqual(asked.first?.1, 1)
     }
+
+    // MARK: ヘッダー(選択・×)
+
+    private func headerCanvas(_ m: ProjectModel) -> TimelineCanvas {
+        let canvas = TimelineCanvas(frame: NSRect(x: 0, y: 0, width: 800, height: 400))
+        canvas.model = m
+        canvas.syncFromModel()
+        return canvas
+    }
+
+    func testHeaderClickSelectsLayerAndEnablesMenuWithoutClips() {
+        var p = Project.new()
+        p.tracks = [Track(name: "レイヤー1"), Track(name: "レイヤー2")]
+        let m = ProjectModel(project: p)
+        let canvas = headerCanvas(m)
+        XCTAssertFalse(AppMenuSpec.layerDeleteItem(state(m)).enabled, "選んでいなければ無効")
+        canvas.mouseDown(at: NSPoint(x: 20, y: canvas.geometry.rowTop(1) + 10), clickCount: 1)
+        XCTAssertEqual(m.selectedLayerIndex, 1)
+        XCTAssertTrue(AppMenuSpec.layerDeleteItem(state(m)).enabled, "クリップがなくても、選んだレイヤーなら削除できる")
+    }
+
+    func testHeaderXButtonDeletesWithoutAskingWhenEmpty() {
+        var p = Project.new()
+        p.tracks = [Track(name: "a"), Track(name: "b")]
+        let m = ProjectModel(project: p)
+        let canvas = headerCanvas(m)
+        let r = TimelineLayout.deleteRect(rowTop: canvas.geometry.rowTop(0), rowHeight: canvas.geometry.rowHeight(0))
+        canvas.mouseDown(at: NSPoint(x: r.midX, y: r.midY), clickCount: 1)
+        XCTAssertEqual(m.project.tracks.map(\.name), ["b"])
+        XCTAssertTrue(asked.isEmpty)
+        XCTAssertNil(m.selectedLayerIndex)
+        XCTAssertEqual(m.effectiveUndoManager.undoActionName, "レイヤーの削除")
+    }
+
+    func testHeaderXButtonAsksWhenLayerHasClipsAndCancelKeepsIt() {
+        let m = makeModel(); let before = m.project
+        answer = false
+        let canvas = headerCanvas(m)
+        let r = TimelineLayout.deleteRect(rowTop: canvas.geometry.rowTop(0), rowHeight: canvas.geometry.rowHeight(0))
+        canvas.mouseDown(at: NSPoint(x: r.midX, y: r.midY), clickCount: 1)
+        XCTAssertEqual(asked.count, 1)
+        XCTAssertEqual(m.project, before)
+        XCTAssertFalse(m.effectiveUndoManager.canUndo, "取り消したら何も登録しない")
+    }
+
+    func testLastLayerXButtonIsRefused() {
+        var p = Project.new()
+        p.tracks = [Track(name: "only")]
+        let m = ProjectModel(project: p)
+        let canvas = headerCanvas(m)
+        let r = TimelineLayout.deleteRect(rowTop: canvas.geometry.rowTop(0), rowHeight: canvas.geometry.rowHeight(0))
+        canvas.mouseDown(at: NSPoint(x: r.midX, y: r.midY), clickCount: 1)
+        XCTAssertEqual(m.project.tracks.count, 1)
+        XCTAssertFalse(m.effectiveUndoManager.canUndo)
+    }
+
+    func testDeleteRectDoesNotOverlapChipsOrSolo() {
+        let r = TimelineLayout.deleteRect(rowTop: 0)
+        XCTAssertFalse(r.intersects(TimelineLayout.soloRect(rowTop: 0)))
+        let chips = TimelineLayout.chipRects(rowTop: 0)
+        XCTAssertFalse(r.intersects(chips.mute))
+        XCTAssertLessThanOrEqual(r.maxX, TimelineLayout.headerWidth)
+    }
 }
