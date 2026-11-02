@@ -372,9 +372,11 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var mask: ClipMask? = nil
     /// 図形の見た目(shape クリップ)。無いときは既定。設定した項目だけ書く。
     public var figure: Figure? = nil
+    /// 作業メモ(クリップの注記)。書き出しには出ない。空・未設定のときは書かない。
+    public var note: String? = nil
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["id", "type", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "duck", "visualizer", "stabilize", "tracks", "mask", "figure"]
+    static let knownKeys: Set<String> = ["id", "type", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "duck", "visualizer", "stabilize", "tracks", "mask", "figure", "note"]
 
     public init() {}
 
@@ -516,6 +518,7 @@ public struct Clip: Codable, Equatable, Identifiable {
         if let raw: JSONValue = l.value("tracks") {
             if let v: [Track] = l.value("tracks") { tracks = v } else { extra["tracks"] = raw }
         }
+        note = l.string("note").flatMap { Clip.cleanNote($0) }
         if let raw: JSONValue = l.value("figure") {
             if let v: Figure = l.value("figure") { figure = v } else { extra["figure"] = raw }
         }
@@ -598,6 +601,7 @@ public struct Clip: Codable, Equatable, Identifiable {
         try c.encodeIfPresent(duck, forKey: AnyKey("duck"))
         try c.encodeIfPresent(visualizer, forKey: AnyKey("visualizer"))
         if let f = figure?.normalized { try c.encode(f, forKey: AnyKey("figure")) }
+        if let n = note, !n.isEmpty { try c.encode(n, forKey: AnyKey("note")) }
         if let t = tracks { try c.encode(t, forKey: AnyKey("tracks")) }
         try c.encodeIfPresent(mask, forKey: AnyKey("mask"))
         if let s = stabilize, s > 0 { try c.encode(min(s, 1), forKey: AnyKey("stabilize")) }

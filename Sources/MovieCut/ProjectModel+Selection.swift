@@ -35,6 +35,23 @@ extension ProjectModel {
         setSelection(TimelineSelection.pruned(ClipSelection(ids: rest, primary: selectedClipId.flatMap { rest.contains($0) ? $0 : nil }), in: project))
     }
 
+    /// 再生位置にあるクリップのうち手前のもの(描画の後ろ・レイヤーの上)を単一選択する。何も無ければ false。
+    @discardableResult
+    func selectClipAtPlayhead() -> Bool {
+        guard let id = TimelineQuery.clipIds(at: currentTime, in: project).last else { return false }
+        selectOnly(id)
+        return true
+    }
+
+    /// 短いクリップ(既定 6 コマ未満)を全部選ぶ。無ければ false。
+    @discardableResult
+    func selectShortClips() -> Bool {
+        let ids = Set(TimelineQuery.shortClipIds(in: project))
+        guard !ids.isEmpty else { return false }
+        setSelection(ClipSelection(ids: ids, primary: nil))
+        return true
+    }
+
     /// 「すべてのクリップを選択」(⌘A はタイムラインにフォーカスがあるとき、responder chain の selectAll: から)。
     @discardableResult
     func selectAllClips() -> Bool {

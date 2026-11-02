@@ -7,11 +7,16 @@ public enum ScriptTimeline {
         (Double(p.width) * Double(p.height) / (1920.0 * 1080.0)).squareRoot()
     }
 
+    /// 非発話メモ: 行頭が「※」の行は作業メモ。読み上げも字幕も作らない(台本の中の指示や覚え書き用)。
+    public static func isNote(line: String) -> Bool {
+        line.trimmingCharacters(in: .whitespaces).hasPrefix("※")
+    }
+
     /// 1 行を (話すキャラ, セリフ) に分ける。最初の ":" か "：" で区切り、名前が既知のキャラならその声、
     /// 不明なら selectedCharId のキャラ(無ければ先頭)で行全体がセリフ(renderer.js scriptToTimeline と同じ)。
     public static func parse(line rawLine: String, characters: [Character], selectedCharId: String?) -> (Character, String)? {
         let line = rawLine.trimmingCharacters(in: .whitespaces)
-        guard !line.isEmpty else { return nil }
+        guard !line.isEmpty, !isNote(line: line) else { return nil }
         if let sep = line.firstIndex(where: { $0 == ":" || $0 == "：" }), sep != line.startIndex {
             let name = line[line.startIndex..<sep].trimmingCharacters(in: .whitespaces)
             let rest = line[line.index(after: sep)...].trimmingCharacters(in: .whitespaces)
@@ -26,7 +31,7 @@ public enum ScriptTimeline {
     /// - Returns: 追加したクリップ
     @discardableResult
     public static func add(lines rawLines: [String], to project: inout Project, voice: VoiceProvider, directory: URL, selectedCharId: String? = nil) async throws -> [Clip] {
-        let lines = rawLines.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        let lines = rawLines.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty && !isNote(line: $0) }
         guard !lines.isEmpty else { return [] }
         var ti = project.tracks.firstIndex { $0.clips.allSatisfy { $0.type == .voice } }
         if ti == nil {

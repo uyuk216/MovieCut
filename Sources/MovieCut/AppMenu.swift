@@ -25,6 +25,8 @@ enum MenuCommand: Hashable {
     case aiScript, aiChapters, aiTitles, aiRewrite, aiSettings
     // 書き出し範囲(イン / アウト / 解除)と、静止画・連番画像の書き出し
     case rangeIn, rangeOut, rangeClear, exportStill, exportSequence
+    // タイムラインの問い合わせ: 前後の空白(黒穴)へ・再生位置のクリップを選ぶ・短いクリップを選ぶ・選んだ範囲を書き出し範囲に
+    case prevGap, nextGap, selectClipAtPlayhead, selectShortClips, rangeFromSelection, speechShare
     // 出力 ▸ サムネイル画像を書き出す…(1280×720。ショートカットは持たない)
     case exportThumbnail
     // 出力 ▸ GIFとして書き出す…(ショートカットは持たない)
@@ -179,6 +181,9 @@ struct MenuState: Equatable {
     /// 選んでいるクリップが音声認識の対象(音のある素材で、速度・逆再生なし)
     var canTranscribe = false
     var hasMissingMedia = false
+    var hasGaps = false
+    var hasShortClips = false
+    var hasSelectionSpan = false
     /// 選んでいるのが src のある静止画(背景抜き・クロマキーに使える)。
     var selectedIsStill = false
     var hasMarkers = false
@@ -322,6 +327,9 @@ struct MenuState: Equatable {
         canExportSubtitles = m.canExportSubtitles
         canGenerateSubtitles = SubtitleGeneration.hasTargets(m.project)
         hasMissingMedia = !MissingMedia.find(in: m.project).isEmpty
+        hasGaps = !TimelineQuery.gapStarts(in: m.project).isEmpty
+        hasShortClips = !TimelineQuery.shortClipIds(in: m.project).isEmpty
+        hasSelectionSpan = TimelineQuery.span(ofClipIds: m.selectedClipIDs, in: m.project) != nil
         selectedIsStill = m.selectedClip.map { $0.type == .image && $0.src != nil } ?? false
         hasMarkers = !m.project.markers.isEmpty
         markerColorCounts = Chapters.colorCounts(m.project.markers)
@@ -580,7 +588,8 @@ enum AppMenuSpec {
     static func rangeItems(_ s: MenuState) -> [MenuItemSpec] {
         [MenuItemSpec(command: .rangeIn, title: "書き出し開始を現在位置に", shortcut: nil, enabled: s.canEdit && s.canMarkRange, checked: nil),
          MenuItemSpec(command: .rangeOut, title: "書き出し終了を現在位置に", shortcut: nil, enabled: s.canEdit && s.canMarkRange, checked: nil),
-         MenuItemSpec(command: .rangeClear, title: "範囲を解除", shortcut: nil, enabled: s.canEdit && s.canMarkRange && s.hasRange, checked: nil)]
+         MenuItemSpec(command: .rangeClear, title: "範囲を解除", shortcut: nil, enabled: s.canEdit && s.canMarkRange && s.hasRange, checked: nil),
+         MenuItemSpec(command: .rangeFromSelection, title: "選択クリップの範囲を書き出し範囲に", shortcut: nil, enabled: s.canEdit && s.canMarkRange && s.hasSelectionSpan, checked: nil, hint: "頭から終わりまで")]
     }
 
     /// 出力 ▸ 現在のフレームを画像で書き出す… / 連番画像を書き出す…
@@ -684,13 +693,16 @@ enum AppMenuSpec {
         [MenuItemSpec(command: .prevClip, title: "前のクリップを選択", shortcut: MenuShortcut(key: "[", modifiers: .command), enabled: s.canEdit && s.hasPrevClip, checked: nil),
          MenuItemSpec(command: .nextClip, title: "次のクリップを選択", shortcut: MenuShortcut(key: "]", modifiers: .command), enabled: s.canEdit && s.hasNextClip, checked: nil),
          MenuItemSpec(command: .moveLayerUp, title: "選択クリップを上のレイヤーへ", shortcut: MenuShortcut(key: "[", modifiers: [.shift, .command]), enabled: s.canEdit && s.canMoveUp, checked: nil),
-         MenuItemSpec(command: .moveLayerDown, title: "選択クリップを下のレイヤーへ", shortcut: MenuShortcut(key: "]", modifiers: [.shift, .command]), enabled: s.canEdit && s.canMoveDown, checked: nil)]
+         MenuItemSpec(command: .moveLayerDown, title: "選択クリップを下のレイヤーへ", shortcut: MenuShortcut(key: "]", modifiers: [.shift, .command]), enabled: s.canEdit && s.canMoveDown, checked: nil),
+         MenuItemSpec(command: .selectClipAtPlayhead, title: "再生位置のクリップを選ぶ", shortcut: MenuShortcut(key: .upArrow, modifiers: [.control, .option]), enabled: s.canEdit && s.hasClips, checked: nil, hint: "手前のクリップ"),
+         MenuItemSpec(command: .selectShortClips, title: "短いクリップを選ぶ", shortcut: nil, enabled: s.canEdit && s.hasShortClips, checked: nil, hint: "6 コマ未満")]
     }
 
     static func clipLayerAndVoice(_ s: MenuState) -> [MenuItemSpec] {
         [MenuItemSpec(command: .addLayer, title: "レイヤーを追加", shortcut: cmd("l", shift: true), enabled: s.canEdit, checked: nil),
          MenuItemSpec(command: .regenerateVoice, title: "選択クリップの音声を作り直す", shortcut: MenuShortcut(key: "r", modifiers: [.command, .option]), enabled: s.canEdit && s.isVoiceSelected, checked: nil),
-         aiRewrite(s)]
+         aiRewrite(s),
+         MenuItemSpec(command: .speechShare, title: "話者ごとの発話時間を表示", shortcut: nil, enabled: s.canEdit && s.hasClips, checked: nil, hint: "セリフの長さから")]
     }
 
     /// クリップメニューの全項目(区切りごとのグループ)。
@@ -762,6 +774,8 @@ enum AppMenuSpec {
     static func gotoNeighbours(_ s: MenuState) -> [MenuItemSpec] {
         [MenuItemSpec(command: .prevEdit, title: "前のクリップの境目へ", shortcut: opt(.leftArrow, command: true), enabled: s.canEdit && s.hasPrevEdit, checked: nil),
          MenuItemSpec(command: .nextEdit, title: "次のクリップの境目へ", shortcut: opt(.rightArrow, command: true), enabled: s.canEdit && s.hasNextEdit, checked: nil),
+         MenuItemSpec(command: .prevGap, title: "前の空白へ", shortcut: MenuShortcut(key: .leftArrow, modifiers: [.control, .option]), enabled: s.canEdit && s.hasGaps, checked: nil, hint: "何も映らない区間"),
+         MenuItemSpec(command: .nextGap, title: "次の空白へ", shortcut: MenuShortcut(key: .rightArrow, modifiers: [.control, .option]), enabled: s.canEdit && s.hasGaps, checked: nil, hint: "何も映らない区間"),
          MenuItemSpec(command: .prevLine, title: "前のセリフへ", shortcut: MenuShortcut(key: .leftArrow, modifiers: [.control, .command]), enabled: s.canEdit && s.hasPrevLine, checked: nil),
          MenuItemSpec(command: .nextLine, title: "次のセリフへ", shortcut: MenuShortcut(key: .rightArrow, modifiers: [.control, .command]), enabled: s.canEdit && s.hasNextLine, checked: nil)]
     }
@@ -1093,6 +1107,12 @@ enum AppMenu {
             case .rangeIn: m.setRangeInAtCurrent()
             case .rangeOut: m.setRangeOutAtCurrent()
             case .rangeClear: m.clearExportRange()
+            case .rangeFromSelection: m.setRangeFromSelection()
+            case .prevGap: m.seekGap(forward: false)
+            case .nextGap: m.seekGap(forward: true)
+            case .selectClipAtPlayhead: m.selectClipAtPlayhead()
+            case .selectShortClips: m.selectShortClips()
+            case .speechShare: m.showSpeechShareStatus()
             case .exportStill: m.chooseAndExportStill()
             case .exportThumbnail: m.chooseAndExportThumbnail()
             case .exportSequence: m.chooseAndExportSequence()

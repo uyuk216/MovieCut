@@ -116,6 +116,23 @@ extension ProjectModel {
         return true
     }
 
+    /// 前後の空白(黒穴。何も映らない区間の始まり)へ。動いたら true。
+    @discardableResult
+    func seekGap(forward: Bool) -> Bool {
+        let t = forward ? TimelineQuery.nextGapStart(after: currentTime, in: project) : TimelineQuery.previousGapStart(before: currentTime, in: project)
+        guard let t else { return false }
+        playback.seek(to: t)
+        return true
+    }
+
+    /// 話者ごとの発話時間(ボイスクリップの長さ)を状態欄に出す。
+    func showSpeechShareStatus() {
+        let rows = TimelineQuery.speechShare(in: project)
+        statusText = rows.isEmpty
+            ? "セリフ(声のクリップ)がありません"
+            : "発話時間: " + rows.map { "\($0.name) \(Int(($0.ratio * 100).rounded()))%(\(String(format: "%.1f", $0.seconds)) 秒)" }.joined(separator: "、")
+    }
+
     /// 前後のセリフ(ボイスクリップの頭)へ。
     @discardableResult
     func seekVoiceLine(forward: Bool) -> Bool {

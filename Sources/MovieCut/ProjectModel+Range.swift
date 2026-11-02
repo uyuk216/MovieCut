@@ -19,6 +19,17 @@ extension ProjectModel {
     @discardableResult
     func setRangeOutAtCurrent() -> Bool { applyRange("書き出し終了の設定", ExportRangeEditing.settingOut(project, at: currentTime), refusal: "終了はイン点より後にしてください") }
 
+    /// 出力 ▸ 選んだクリップの頭から終わりまでを書き出し範囲にする(イン・アウトを一度に。1 回の Undo で戻る)。
+    @discardableResult
+    func setRangeFromSelection() -> Bool {
+        guard let r = TimelineQuery.span(ofClipIds: selectedClipIDs, in: project) else { statusText = "クリップを選んでください"; return false }
+        var p = project
+        p.rangeIn = r.start
+        p.rangeOut = r.end
+        guard p != project else { return false }
+        return applyRange("選択範囲を書き出し範囲に", p, refusal: "書き出し範囲を設定できません")
+    }
+
     /// 出力 ▸ 範囲を解除。
     @discardableResult
     func clearExportRange() -> Bool {

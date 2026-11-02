@@ -449,3 +449,14 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
   - AppKit(`DockWindows.swift`): `DockTearOffTracker` は、タブのドラッグ開始の通知(`DockDrag.didBegin`)で動き、マウスの押下と位置を 60 Hz で見る(`NSEvent.pressedMouseButtons`・`NSEvent.mouseLocation`)。切り離したウインドウは、掴んだときのずれ(左 60pt・上 14pt)を保ってカーソルに付いてくる。離したら止める。`DockPanelWindowRoot` の上の「ウインドウに戻す」は `store.attach`。配置は `DockStore` の `commit` で保存される(ウインドウの位置は `setFrameAutosaveName`)。
   - 未検証(画面): 実際のマウスでの引き剥がし・付いてくる動き・端の帯のハイライト(帯の判定は試験済み)・離した位置の再ドック。ドラッグ中のタイマーが DnD の追跡中に回るかどうかも、実機で確認が要る。
 
+## 2026-11-02 追記(Codex 候補の第 1 弾: タイムラインの問い合わせ・注記・台本の ※ メモ)
+
+- **Core `TimelineQuery`**(`Sources/MovieCutCore/TimelineQuery.swift`): 表示中(非表示でない)レイヤーのクリップから、覆われた区間・空白の始まり(`gapStarts`)・再生位置のクリップ(`clipIds(at:)`。描画の後ろほど手前なので、選ぶのは末尾)・指定コマ数未満のクリップ・欠けた素材の区間(`missingSpans`)・時刻順の一覧(`clipListing`)・選んだクリップの範囲(`span(ofClipIds:)` → `ExportRange`)・話者ごとの発話時間(`speechShare`。登録のないキャラのセリフは合計にも入れない)を計算する。どれも Project を読むだけ。
+- **空白へ飛ぶ**: 最後のクリップの後ろは空白に数えない。`ProjectModel.seekGap(forward:)`、メニュー「前の空白へ / 次の空白へ」(⌃⌥← / ⌃⌥→)。
+- **再生位置のクリップを選ぶ**(⌃⌥↑): `selectClipAtPlayhead()`。手前のもの(末尾)を単一選択。
+- **短いクリップを選ぶ**: `selectShortClips()`(既定 6 コマ未満)。ショートカットなし。
+- **選択クリップの範囲を書き出し範囲に**: `setRangeFromSelection()`(イン・アウトを 1 回の編集で。同じ範囲なら履歴に載せない)。出力 ▸ 範囲のグループ。
+- **話者ごとの発話時間を表示**: `showSpeechShareStatus()` が状態欄に出す(クリップ ▸ レイヤー・ボイスの並び)。
+- **クリップの注記**(`Clip.note`、任意): 書くのは空でないときだけ。`Clip.cleanNote` が前後の空白・改行・200 字を整える。既存のファイルは読めても変わらない(キーが無いので書かない)。画面からの入力欄は未実装。
+- **台本の非発話メモ**: 行頭の「※」の行は `ScriptTimeline.parse` が `nil` を返し、`add(lines:)` が無視する(読み上げも字幕も作らない)。
+- **未検証(画面)**: 空白へのジャンプ後のプレイヘッド位置、選択の見え方、状態欄の文言の長さ。欠けた素材の区間をプレビューで色づけする処理は Core のみ(プレビューへの接続は未了)。
