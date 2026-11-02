@@ -18,7 +18,7 @@ public enum TextStyleBulk {
             for ci in project.tracks[ti].clips.indices {
                 let c = project.tracks[ti].clips[ci]
                 guard c.type == .text, scope?.contains(c.id) ?? true else { continue }
-                if project.tracks[ti].isLocked { locked += 1; continue }
+                if project.tracks[ti].isLocked || c.isClipLocked { locked += 1; continue }
                 var n = c
                 guard look.apply(to: &n) else { continue }
                 p.tracks[ti].clips[ci] = n

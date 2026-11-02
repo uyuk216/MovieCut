@@ -19,7 +19,7 @@ extension ClipEditing {
     /// その時刻に空きがある最初のレイヤーへ。どのレイヤーも空いていなければ、一番下に新しいレイヤーを足す。
     /// 新しい id。複製は元のすぐ後ろ(配列の中でも)に入れる。長さ 0 のクリップは重ならないので同じレイヤー。
     public static func duplicate(in project: Project, clipId: String) -> (project: Project, newId: String)? {
-        guard let loc = locate(clipId, in: project) else { return nil }
+        guard let loc = locate(clipId, in: project), !project.tracks[loc.track].isLocked else { return nil }   // ロックされたレイヤーの複製は作らない
         var p = project
         let src = p.tracks[loc.track].clips[loc.index]
         var copy = CompoundEditing.freshIds(src)   // 複合の中の子にも新しい id

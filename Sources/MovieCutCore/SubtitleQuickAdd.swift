@@ -55,6 +55,8 @@ public enum SubtitleQuickAdd {
         var p = project
         for ti in p.tracks.indices {
             guard let ci = p.tracks[ti].clips.firstIndex(where: { $0.id == clipId }) else { continue }
+            // ロックされたレイヤー・クリップの字幕は直さない
+            guard !p.tracks[ti].isLocked, !p.tracks[ti].clips[ci].isClipLocked else { return nil }
             p.tracks[ti].clips[ci].text = body
             if let d = duration { p.tracks[ti].clips[ci].duration = clampDuration(d) }
             return p

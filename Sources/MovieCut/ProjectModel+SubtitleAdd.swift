@@ -2,10 +2,10 @@ import MovieCutCore
 
 /// 「字幕を追加…」: 再生位置に字幕を足す(または選んだ文字クリップの文を直す)。1 回の Undo。ロジックは Core の `SubtitleQuickAdd`。
 extension ProjectModel {
-    /// メニューから開く。ロック中は開かない。文字クリップを選んでいれば、その文を直す対象にする。
+    /// メニューから開く。ロック中は開かない。文字クリップを選んでいても、そのレイヤー・クリップがロックされていれば直す対象にしない(新しく足す)。
     func openSubtitleSheet() {
         guard !isLocked else { return }
-        if let c = selectedClip, c.type == .text {
+        if let c = selectedClip, c.type == .text, !LayerEditing.isLockedClip(c.id, in: project) {
             subtitleSheetTargetId = c.id
         } else {
             subtitleSheetTargetId = nil

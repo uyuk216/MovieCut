@@ -51,7 +51,7 @@ public enum CompoundEditing {
             for (ci, c) in tr.clips.enumerated() where wanted.contains(c.id) { found.append((ti, ci)) }
         }
         guard found.count == wanted.count else { return nil }
-        guard !found.contains(where: { p.tracks[$0.ti].isLocked }) else { return nil }
+        guard !found.contains(where: { p.tracks[$0.ti].isLocked || p.tracks[$0.ti].clips[$0.ci].isClipLocked }) else { return nil }
         let picked = found.map { p.tracks[$0.ti].clips[$0.ci] }
         guard picked.allSatisfy({ !hasCycle($0) }), 1 + (picked.map { depth(of: $0) }.max() ?? 0) <= maxDepth else { return nil }
 
@@ -86,7 +86,7 @@ public enum CompoundEditing {
     public static func ungroup(_ p: Project, clipId: String) -> (project: Project, clipIds: [String])? {
         guard let loc = ClipEditing.locate(clipId, in: p) else { return nil }
         let comp = p.tracks[loc.track].clips[loc.index]
-        guard comp.type == .compound, !p.tracks[loc.track].isLocked else { return nil }
+        guard comp.type == .compound, !p.tracks[loc.track].isLocked, !comp.isClipLocked else { return nil }
         let kids = comp.tracks ?? []
         let targets = kids.map { kt in p.tracks.firstIndex { $0.id == kt.id } ?? loc.track }
         guard !targets.contains(where: { p.tracks[$0].isLocked }) else { return nil }

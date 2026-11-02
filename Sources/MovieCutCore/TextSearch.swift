@@ -86,7 +86,7 @@ public enum TextSearch {
                 let text = c.text ?? ""
                 let rs = ranges(of: query, in: text, options: options)
                 guard !rs.isEmpty else { continue }
-                if project.tracks[ti].isLocked { locked += rs.count; continue }
+                if project.tracks[ti].isLocked || c.isClipLocked { locked += rs.count; continue }
                 // 一致を左から組み直す(数えたのと同じ並び)
                 var new = ""
                 var last = text.startIndex

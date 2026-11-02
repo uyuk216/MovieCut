@@ -402,6 +402,8 @@ public enum ClipEditing {
     /// 一番上のレイヤー(配列の最後)の末尾にクリップを足す。レイヤーが 1 つもなければ作る。
     public static func appendToTopLayer(_ clip: Clip, in project: inout Project) {
         if project.tracks.isEmpty { project.tracks.append(Track(name: "レイヤー1")) }
+        // 一番上がロックされていれば、ロックされていない新しいレイヤーを足して、そこへ置く
+        if project.tracks[project.tracks.count - 1].isLocked { project.tracks.append(Track(name: "レイヤー\(project.tracks.count + 1)")) }
         project.tracks[project.tracks.count - 1].clips.append(clip)
     }
 }

@@ -42,7 +42,15 @@ final class MenuUndoSweepTests: XCTestCase {
         voice.text = "こんにちは"
         let audio = clip("audio", .audio, start: 1.5, dur: 4, src: "/nonexistent/sweep-f.wav")
         let locked = clip("locked", .image, start: 0, dur: 2, src: "/nonexistent/sweep-g.png")
-        var t0 = Track(name: "映像"); t0.clips = [video, image, text, shape, adj, vis, comp]
+        // 追加分: 光学ミスト・メモ・クリップ単位のロック・モザイク(+追従なし)・未使用の素材
+        video.effects.append(Effect(.opticalMist))
+        image.note = "メモ(掃除)"
+        var clocked = clip("clocked", .image, start: 20, dur: 2, src: "/nonexistent/sweep-h.png")
+        clocked.locked = true
+        var mosaic = clip("mosaic", .blur, start: 22, dur: 2)
+        mosaic.blurMode = "mosaic"; mosaic.mosaicSize = 16
+        p.mediaPool = ["/nonexistent/sweep-a.mov", "/nonexistent/unused-sweep.png"]
+        var t0 = Track(name: "映像"); t0.clips = [video, image, text, shape, adj, vis, comp, clocked, mosaic]
         var t1 = Track(name: "音声"); t1.clips = [voice, audio]
         var t2 = Track(name: "ロック"); t2.clips = [locked]; t2.locked = true
         p.tracks = [t0, t1, t2]

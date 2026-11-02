@@ -219,8 +219,37 @@ final class KitchenSinkTests: XCTestCase {
         var compTrack = Track(name: "複合")
         compTrack.clips = [compound]
 
+        // 光学ミスト(ハイライトのにじみ)を映像に、クリップのメモを 1 つに付ける
+        videoTrack.clips[0].effects.append(Effect(.opticalMist))   // ramp は videoTrack へ値渡し済みなので、入れた先を直す
+        videoTrack.clips[0].note = "速度ランプの確認(メモ)"
+
+        // モザイク + 顔の追従: 種類 blur・モザイク方式・動く枠(FaceTrack の x/y キーフレーム)
+        var mosaic = Clip()
+        mosaic.type = .blur; mosaic.start = 1; mosaic.duration = 6; mosaic.x = 0.3; mosaic.y = 0.4; mosaic.w = 0.2; mosaic.h = 0.2
+        mosaic.blurMode = "mosaic"; mosaic.mosaicSize = 16
+        let faceSamples: [CGRect?] = (0..<6).map { i in CGRect(x: 0.3 + 0.01 * Double(i), y: 0.4, width: 0.2, height: 0.2) }
+        _ = MotionTrack.apply(samples: faceSamples, to: &mosaic)
+        var mosaicTrack = Track(name: "モザイク")
+        mosaicTrack.clips = [mosaic]
+
+        // 欠けた素材(存在しない画像)・ロックされたレイヤーとクリップ(中身は変えられない)
+        var missing = Clip()
+        missing.type = .image; missing.start = 0; missing.duration = 10; missing.src = assetDir.appendingPathComponent("no-such-file.png").path
+        missing.x = 0.5; missing.y = 0.5; missing.scale = 1
+        var missingTrack = Track(name: "欠け")
+        missingTrack.clips = [missing]
+        var lockedText = text("ロック中の文字", start: 0, dur: 10, x: 0.5, y: 0.93)
+        lockedText.locked = true
+        lockedText.note = "ロックされたクリップ"
+        var lockedTrack = Track(name: "ロック")
+        lockedTrack.locked = true
+        lockedTrack.clips = [lockedText]
+
         p.tracks.append(bgmTrack)
         p.tracks.append(videoTrack)
+        p.tracks.append(mosaicTrack)
+        p.tracks.append(missingTrack)
+        p.tracks.append(lockedTrack)
         p.tracks.append(shapesTrack)
         p.tracks.append(textTrack)
         p.tracks.append(adjTrack)
@@ -249,6 +278,33 @@ final class KitchenSinkTests: XCTestCase {
                           space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
         c.draw(img, in: CGRect(x: 0, y: 0, width: img.width, height: img.height))
         return Pixels(w: img.width, h: img.height, d: d)
+    }
+
+    /// 追加した項目(ロック・メモ・光学ミスト・モザイク+追従・欠けた素材・未使用の素材)が、保存と読み直しで残ること。
+    /// 欠けた素材は描画で落ちないこと(プレビュー相当の 1 コマ)。
+    func testNewFieldsSurviveSaveReloadAndDoNotCrashRender() async throws {
+        var p = try await kitchenSink(dir: tmp.appendingPathComponent("new-fields"))
+        let spare = assetDir.appendingPathComponent("spare-unused.png").path
+        let missingSrc = try XCTUnwrap(p.allClips.first { $0.src?.hasSuffix("no-such-file.png") == true }?.src)
+        UnusedMedia.register([spare, missingSrc], in: &p)
+        XCTAssertEqual(UnusedMedia.find(in: p).map(\.path), [spare], "使われている欠けた素材は未使用に出ない・未使用の素材は出る")
+
+        let data = try p.encoded()
+        let q = try Project.decode(from: data)
+        let locked = try XCTUnwrap(q.allClips.first { $0.note == "ロックされたクリップ" })
+        XCTAssertEqual(locked.locked, true, "クリップのロックが読み直しで消えた")
+        XCTAssertEqual(q.tracks.first { $0.clips.contains { $0.id == locked.id } }?.locked, true, "レイヤーのロックが消えた")
+        let ramp = try XCTUnwrap(q.allClips.first { $0.note == "速度ランプの確認(メモ)" })
+        XCTAssertTrue(ramp.effects.contains { $0.known == .opticalMist }, "光学ミストが消えた")
+        let mosaic = try XCTUnwrap(q.allClips.first { $0.blurModeOrDefault == "mosaic" })
+        XCTAssertEqual(mosaic.mosaicSizeOrDefault, 16)
+        XCTAssertFalse((mosaic.keyframes["x"] ?? []).isEmpty, "顔の追従のキーフレームが消えた")
+        XCTAssertEqual(UnusedMedia.find(in: q).map(\.path), [spare], "読み直した後の未使用の素材が変わった")
+        XCTAssertEqual(try q.encoded(), data, "保存・読み直しで中身が変わった")
+
+        // 欠けた素材を含む 1 コマ(プレビュー相当)が描ける
+        let renderer = Renderer(project: q, assets: RenderAssets())
+        XCTAssertNotNil(renderer.renderImage(t: 2), "欠けた素材を含むコマが描けなかった")
     }
 
     /// (a) 5 コマを Renderer で描く。落ちない・正しい大きさ・真っ黒でない・隣り合うコマが同じでない(動いているのに同じになっていないか)。
