@@ -512,7 +512,7 @@ enum AppMenuSpec {
 
     /// ファイル ▸ パッケージとして保存…(プロジェクトと使っている素材を 1 つのフォルダへ)。
     static func packageSave(_ s: MenuState) -> MenuItemSpec {
-        MenuItemSpec(command: .packageSave, title: "パッケージとして保存…", shortcut: nil, enabled: s.hasDocument, checked: nil, hint: "素材ごとフォルダへ")
+        MenuItemSpec(command: .packageSave, title: "パッケージとして保存…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "素材ごとフォルダへ")
     }
 
     /// ファイル ▸ 最近使った項目 ▸ 各プロジェクト(見つからないものは無効)。

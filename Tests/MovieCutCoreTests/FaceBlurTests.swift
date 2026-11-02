@@ -178,3 +178,16 @@ final class FaceBlurTests: XCTestCase {
         XCTAssertLessThan(mosaic, 1000)
     }
 }
+
+extension FaceBlurTests {
+    /// モザイクの大きさ(size)が強さより優先される。size が無い古い設定は、強さから決めた大きさのまま。
+    func testMosaicSizeOverridesStrengthOnlyWhenPresent() {
+        let src = textured(64, 64)
+        let f = [CGRect(x: 0, y: 0, width: 1, height: 1)]
+        let a = rgba(render(FaceBlur.apply(CIImage(cgImage: src), faces: f, mode: .mosaic, strength: 0.6, scale: 1)))
+        let b = rgba(render(FaceBlur.apply(CIImage(cgImage: src), faces: f, mode: .mosaic, strength: 0.6, scale: 1, blockPx: 2)))
+        XCTAssertNotEqual(a, b)
+        let c = rgba(render(FaceBlur.apply(CIImage(cgImage: src), faces: f, mode: .mosaic, strength: 0.6, scale: 1, blockPx: nil)))
+        XCTAssertEqual(a, c)
+    }
+}

@@ -315,6 +315,10 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var h: Double? = nil
     public var strength: Double? = nil
     public var shape: String? = nil
+    /// ぼかし範囲の方式("blur" / "mosaic")。無いときは "blur"(ファイルには既定のときは書かない)。
+    public var blurMode: String? = nil
+    /// モザイクのブロックの大きさ(1080p 基準の px)。無いときは 12。モザイクのときだけ使う。
+    public var mosaicSize: Double? = nil
     // 変形(画像・動画・文字)。どれも未設定が既定(0 度・反転なし・切り抜きなし)。ファイルには既定でないときだけ書く。
     public var rotation: Double? = nil
     public var flipH: Bool? = nil
@@ -370,7 +374,7 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var figure: Figure? = nil
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["id", "type", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "duck", "visualizer", "stabilize", "tracks", "mask", "figure"]
+    static let knownKeys: Set<String> = ["id", "type", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "duck", "visualizer", "stabilize", "tracks", "mask", "figure"]
 
     public init() {}
 
@@ -385,6 +389,8 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var hOrDefault: Double { h ?? 0.3 }
     public var strengthOrDefault: Double { strength ?? 24 }
     public var shapeOrDefault: String { shape ?? "rect" }
+    public var blurModeOrDefault: String { blurMode ?? "blur" }
+    public var mosaicSizeOrDefault: Double { mosaicSize ?? 12 }
     public var fontOrDefault: String { font ?? defaultFonts[0] }
     public var colorOrDefault: String { color ?? "#ffffff" }
     public var outlineOrDefault: String { outline ?? "#000000" }
@@ -461,6 +467,7 @@ public struct Clip: Codable, Equatable, Identifiable {
         color = l.string("color"); outline = l.string("outline"); font = l.string("font")
         charId = l.string("charId"); subtitle = l.bool("subtitle")
         w = l.double("w"); h = l.double("h"); strength = l.double("strength"); shape = l.string("shape")
+        blurMode = l.string("blurMode"); mosaicSize = l.double("mosaicSize")
         rotation = l.double("rotation"); flipH = l.bool("flipH"); flipV = l.bool("flipV")
         crop = l.value("crop")
         fadeIn = l.double("fadeIn"); fadeOut = l.double("fadeOut"); fadeCurve = l.string("fadeCurve")
@@ -562,6 +569,8 @@ public struct Clip: Codable, Equatable, Identifiable {
         try c.encodeIfPresent(h, forKey: AnyKey("h"))
         try c.encodeIfPresent(strength, forKey: AnyKey("strength"))
         try c.encodeIfPresent(shape, forKey: AnyKey("shape"))
+        try c.encodeIfPresent(blurMode, forKey: AnyKey("blurMode"))
+        try c.encodeIfPresent(mosaicSize, forKey: AnyKey("mosaicSize"))
         try c.encodeIfPresent(rotation, forKey: AnyKey("rotation"))
         try c.encodeIfPresent(flipH, forKey: AnyKey("flipH"))
         try c.encodeIfPresent(flipV, forKey: AnyKey("flipV"))

@@ -54,6 +54,8 @@ public enum EffectPipeline {
             guard e.enabled, let kind = e.known else { continue }
             var vals: [String: Double] = [:]
             for s in kind.params {
+                // 顔ぼかしの「モザイクの大きさ」は、書かれていない古い設定では強さから決める(描き方を変えない)
+                if kind == .faceBlur, s.key == "size", e.params["size"] == nil, c.keyframes[EffectKey.make(i, s.key)] == nil { continue }
                 var v = e.value(s.key)
                 if !c.keyframes.isEmpty, let ks = c.keyframes[EffectKey.make(i, s.key)], let kv = Animation.interpolate(ks, at: r) { v = s.clamp(kv) }
                 vals[s.key] = v
@@ -185,7 +187,7 @@ public enum EffectPipeline {
         case .chromaKey:
             return ChromaKey.apply(img, key: e.color, similarity: e.v("similarity"), smoothness: e.v("smoothness"), spill: e.v("spill"))
         case .faceBlur:
-            return FaceBlur.apply(img, faces: faces, mode: FaceBlur.Mode(e.v("mode")), strength: e.v("strength"), scale: scale)
+            return FaceBlur.apply(img, faces: faces, mode: FaceBlur.Mode(e.v("mode")), strength: e.v("strength"), scale: scale, blockPx: e.values["size"])
         case .whiteBalance:
             // 色温度を上げると「入力の白は青すぎた」と見なして、橙寄りに直す。ティントは緑↔紫(正で紫)
             let neutral = CIVector(x: 6500 + 2500 * e.v("temperature"), y: 100 * e.v("tint"))

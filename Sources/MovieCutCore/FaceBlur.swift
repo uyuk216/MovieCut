@@ -42,7 +42,8 @@ public struct VisionFaceDetector: FaceDetecting {
 /// 検出結果のキャッシュ(キーは「クリップ・時刻・配置・素材」の文字列)。同じ時刻の再描画(プレビューの戻し・書き出しの再試行)で検出を繰り返さない。
 /// 件数が上限を超えたら全部捨てる(単純・メモリを抑える)。
 public final class FaceDetectionCache: @unchecked Sendable {
-    public static let shared = FaceDetectionCache()
+    /// テストでは検出器を差し替える(本番の既定は変えない)。
+    public static var shared = FaceDetectionCache()
     public static let capacity = 600
 
     private let lock = NSLock()
@@ -51,10 +52,14 @@ public final class FaceDetectionCache: @unchecked Sendable {
 
     public init(detector: FaceDetecting = VisionFaceDetector()) { self.detector = detector }
 
-    public func rects(key: String, image: CGImage) -> [CGRect] {
+    public func rects(key: String, image: CGImage) -> [CGRect] { rects(key: key) { image } }
+
+    /// 鍵が無いときだけ `make` で画像を作って検出する(作るのも検出も鍵の外。作れなければ空)。
+    public func rects(key: String, make: () -> CGImage?) -> [CGRect] {
         lock.lock()
         if let v = store[key] { lock.unlock(); return v }
         lock.unlock()
+        guard let image = make() else { return [] }
         let v = detector.faces(in: image)   // 検出は鍵の外で(他のスレッドを待たせない)
         lock.lock()
         if store.count >= Self.capacity { store.removeAll(keepingCapacity: true) }
@@ -100,7 +105,8 @@ public enum FaceBlur {
     }
 
     /// 顔の枠だけを、モザイクまたはぼかしにした画像。`strength` が 0 か、枠が無ければ入力のまま。
-    public static func apply(_ img: CIImage, faces: [CGRect], mode: Mode, strength: Double, scale: Double) -> CIImage {
+    /// `blockPx` は 1080p 基準のモザイクの大きさ(無ければ強さから決める)。
+    public static func apply(_ img: CIImage, faces: [CGRect], mode: Mode, strength: Double, scale: Double, blockPx: Double? = nil) -> CIImage {
         let extent = img.extent
         let s = min(max(strength, 0), 1)
         let rects = pixelRects(faces, in: extent)
@@ -109,7 +115,7 @@ public enum FaceBlur {
         switch mode {
         case .mosaic:
             effect = img.applyingFilter("CIPixellate", parameters: [
-                "inputCenter": CIVector(x: extent.minX, y: extent.minY), "inputScale": max(2, blockSize(strength: s, scale: scale)),
+                "inputCenter": CIVector(x: extent.minX, y: extent.minY), "inputScale": max(2, blockPx.map { $0 * scale } ?? blockSize(strength: s, scale: scale)),
             ]).cropped(to: extent)
         case .blur:
             effect = img.clampedToExtent().applyingGaussianBlur(sigma: sigma(strength: s, scale: scale)).cropped(to: extent)

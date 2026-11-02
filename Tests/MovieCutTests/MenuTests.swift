@@ -33,8 +33,8 @@ final class MenuTests: XCTestCase {
         XCTAssertEqual(AppMenuSpec.settings(s).title, "設定…")
         XCTAssertEqual(AppMenuSpec.settings(s).shortcut, sc(",", .command))
         let file = AppMenuSpec.file(s)
-        XCTAssertEqual(file.map(\.title), ["素材を追加…", "素材ブラウザを開く…"])
-        XCTAssertEqual(file.map(\.shortcut), [sc("i", .command), nil])
+        XCTAssertEqual(file.map(\.title), ["素材を追加…", "素材ブラウザを開く…", "フォントを追加…"])
+        XCTAssertEqual(file.map(\.shortcut), [sc("i", .command), nil, nil])
         XCTAssertEqual(AppMenuSpec.exportCurrent(s).title, "MP4 を書き出す…")
         XCTAssertEqual(AppMenuSpec.exportCurrent(s).shortcut, sc("e", .command))
         XCTAssertEqual(AppMenuSpec.clipEdit(s).map(\.title), ["クリップを分割", "クリップを複製", "クリップを削除", "すき間を詰めて削除", "1 コマ前へ動かす", "1 コマ後ろへ動かす", "手ぶれ補正（映像を滑らかにする）", "縦動画に自動リフレーム", "動きに追従させる", "複合クリップにまとめる", "複合クリップを解除"])
@@ -100,7 +100,7 @@ final class MenuTests: XCTestCase {
         XCTAssertFalse(s.hasDocument)
         for spec in AppMenuSpec.all(s) {
             switch spec.command {
-            case .about, .welcomeAtLaunchToggle, .helpShortcuts, .helpVoicevox, .helpAquestalk, .helpLicense, .helpThirdParty, .previewBackground, .previewProxyToggle, .guide: XCTAssertTrue(spec.enabled, "\(spec.title)")
+            case .about, .welcomeAtLaunchToggle, .helpShortcuts, .helpVoicevox, .helpAquestalk, .helpLicense, .helpThirdParty, .previewBackground, .previewProxyToggle, .guide, .addFont: XCTAssertTrue(spec.enabled, "\(spec.title)")
             default: XCTAssertFalse(spec.enabled, "\(spec.title) が有効です")
             }
         }
@@ -132,7 +132,7 @@ final class MenuTests: XCTestCase {
         let s = state { $0.isLocked = true; $0.hasSelection = true; $0.canSplit = true }
         for spec in AppMenuSpec.all(s) {
             switch spec.command {
-            case .about, .welcomeAtLaunchToggle, .helpShortcuts, .helpVoicevox, .helpAquestalk, .helpLicense, .helpThirdParty, .fullScreen, .previewBackground, .previewProxyToggle, .guide: XCTAssertTrue(spec.enabled, "\(spec.title)")
+            case .about, .welcomeAtLaunchToggle, .helpShortcuts, .helpVoicevox, .helpAquestalk, .helpLicense, .helpThirdParty, .fullScreen, .previewBackground, .previewProxyToggle, .guide, .addFont: XCTAssertTrue(spec.enabled, "\(spec.title)")
             default: XCTAssertFalse(spec.enabled, "\(spec.title) が書き出し中も有効です")
             }
         }

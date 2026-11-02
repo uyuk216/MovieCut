@@ -4,7 +4,7 @@ import Foundation
 
 /// エフェクトの引数 1 つ分の仕様(範囲・既定値・インスペクタの刻み)。
 public struct EffectParamSpec: Equatable, Sendable {
-    public enum Unit: Sendable { case plain, percent, px, degrees, mode }
+    public enum Unit: Sendable { case plain, percent, px, degrees, mode, toggle }
     public let key: String
     public let label: String
     public let range: ClosedRange<Double>
@@ -81,7 +81,8 @@ public enum EffectKind: String, CaseIterable, Sendable {
         case .chromaKey: return [Self.p("similarity", "色の許容", 0, 1, 0.4, 0.01, .percent), Self.p("smoothness", "なめらかさ", 0, 1, 0.1, 0.01, .percent),
                                  Self.p("spill", "色かぶりの除去", 0, 1, 0.5, 0.01, .percent)]
         case .lut: return [Self.p("intensity", "強さ", 0, 1, 1, 0.01, .percent)]
-        case .faceBlur: return [Self.p("strength", "強さ", 0, 1, 0.6, 0.01, .percent), Self.p("mode", "方式", 0, 1, 0, 1, .mode)]
+        case .faceBlur: return [Self.p("strength", "強さ", 0, 1, 0.6, 0.01, .percent), Self.p("mode", "方式", 0, 1, 0, 1, .mode),
+                                Self.p("size", "モザイクの大きさ（px）", 2, 100, 38, 1, .px), Self.p("track", "顔に追従", 0, 1, 0, 1, .toggle)]
         case .whiteBalance: return [Self.p("temperature", "色温度（青↔橙）", -1, 1, 0, 0.01), Self.p("tint", "ティント（緑↔紫）", -1, 1, 0, 0.01)]
         case .colorWheels: return [
             Self.p("liftAngle", "持ち上げ・色相（°）", -180, 180, 0, 1, .degrees), Self.p("liftAmount", "持ち上げ・強さ", 0, 1, 0, 0.01, .percent),

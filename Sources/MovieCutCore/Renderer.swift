@@ -506,7 +506,18 @@ public struct Renderer {
         let localBounds = CGRect(x: bounds.minX - work.minX, y: Double(wh) - (bounds.minY - work.minY) - bounds.height, width: bounds.width, height: bounds.height)
         let rect = CGRect(x: 0, y: 0, width: ww, height: wh)
         // 顔ぼかし: 作業範囲の画像から顔の枠を求める(同じ時刻・配置は検出を再利用)。調整レイヤーには効かない
-        let faces = fx.contains { $0.kind == .faceBlur } ? faceRects(for: c, t: t, pose: pose, image: snap) : []
+        // 追従(track)がオンの顔ぼかしがあれば、時間方向に平滑化した枠を使う(その時刻に枠が無ければ何もぼかさない)
+        let tracking = fx.contains { $0.kind == .faceBlur && ($0.values["track"] ?? 0) >= 0.5 }
+        var faces: [CGRect] = []
+        if tracking {
+            if let canvasRect = trackedFaceRect(c, t: t, W: W, H: H), work.width > 0, work.height > 0 {
+                // キャンバスの画素(左上原点)→ 作業範囲の正規化(左上原点・0〜1)
+                faces = [CGRect(x: (canvasRect.minX - work.minX) / work.width, y: (canvasRect.minY - work.minY) / work.height,
+                                width: canvasRect.width / work.width, height: canvasRect.height / work.height)]
+            }
+        } else if fx.contains(where: { $0.kind == .faceBlur }) {
+            faces = faceRects(for: c, t: t, pose: pose, image: snap)
+        }
         var ci = EffectPipeline.apply(CIImage(cgImage: snap), effects: fx, bounds: localBounds, scale: resScale, faces: faces)
         if blurSigma > 0 { ci = ci.applyingGaussianBlur(sigma: blurSigma) }
         if let m = c.mask { ci = ShapeMask.apply(ci, mask: m, canvasWidth: W, canvasHeight: H, originX: work.minX, originY: work.minY) }
@@ -562,6 +573,28 @@ public struct Renderer {
         return FaceDetectionCache.shared.rects(key: key, image: image)
     }
 
+    /// 顔の追従: クリップの中の一定間隔(`FaceTrack.interval`)で顔を検出し(結果はキャッシュ)、いまの時刻の枠を返す。
+    /// 枠はキャンバスの画素・左上原点。検出が途切れていれば nil。検出の間隔ごとに、その時刻の全画面の絵を 1 枚ずつ描く(初回だけ重い)。
+    func trackedFaceRect(_ c: Clip, t: Double, W: Double, H: Double) -> CGRect? {
+        let rel = t - c.start
+        let dets: [(time: Double, faces: [CGRect])] = FaceTrack.sampleTimes(duration: c.duration).map { s in
+            let at = c.start + s
+            let pose = ClipPose(c, at: at)
+            let key = "track|\(c.id)|\(c.src ?? "")|\(Int((s * 1000).rounded()))|\(pose)|\(Int(W))x\(Int(H))"
+            let normalized = FaceDetectionCache.shared.rects(key: key) { () -> CGImage? in
+                guard let ctx = Renderer.makeContext(width: Int(W), height: Int(H)) else { return nil }
+                ctx.translateBy(x: 0, y: CGFloat(H))
+                ctx.scaleBy(x: 1, y: -1)
+                drawClipContent(c, pose: pose, t: at, ctx: ctx, W: W, H: H)
+                return ctx.makeImage()
+            }
+            // 検出は正規化(0〜1・左上原点)なので、キャンバスの画素に直す
+            return (s, normalized.map { CGRect(x: $0.minX * W, y: $0.minY * H, width: $0.width * W, height: $0.height * H) })
+        }
+        let track = FaceTrack.build(detections: dets)
+        return FaceTrack.rect(at: rel, in: track)
+    }
+
     /// 調整レイヤー: いまキャンバスに描いてある全部(背景と、それより前のレイヤー・クリップ)の合成結果に、
     /// クリップのエフェクトを一度かける。不透明度は元の絵との混ぜ具合(0 で何もしない)。プレビューと書き出しで同じ道。
     func applyAdjustment(_ c: Clip, t: Double, ctx: CGContext, W: Double, H: Double) {
@@ -604,15 +637,26 @@ public struct Renderer {
         let bw = Animation.value(of: "w", in: c, at: r) * W, bh = Animation.value(of: "h", in: c, at: r) * H
         let bx = Animation.value(of: "x", in: c, at: r) * W, by = Animation.value(of: "y", in: c, at: r) * H
         let sigma = max(0, Animation.value(of: "strength", in: c, at: r))
+        let mosaic = c.blurModeOrDefault == "mosaic"
         let shapeRect = CGRect(x: bx - bw / 2, y: by - bh / 2, width: bw, height: bh)
         let canvas = CGRect(x: 0, y: 0, width: W, height: H)
         // 画素に揃えた取得範囲(キャンバス内)
         let area = shapeRect.integral.intersection(canvas)
-        guard sigma > 0, !area.isNull, area.width >= 1, area.height >= 1,
+        // モザイクは強さ(σ)を使わず、ブロックの大きさ(mosaicSize・1080p 基準)で決まる
+        guard mosaic || sigma > 0, !area.isNull, area.width >= 1, area.height >= 1,
               let snap = ctx.makeImage() else { return }
         // CoreImage は左下原点
         let ciRect = CGRect(x: area.minX, y: H - area.maxY, width: area.width, height: area.height)
-        let blurred = CIImage(cgImage: snap).clampedToExtent().applyingGaussianBlur(sigma: sigma)
+        let blurred: CIImage
+        if mosaic {
+            let resScale = (W * H / (1920.0 * 1080.0)).squareRoot()
+            let block = max(2, c.mosaicSizeOrDefault * resScale)
+            blurred = CIImage(cgImage: snap).applyingFilter("CIPixellate", parameters: [
+                "inputCenter": CIVector(x: 0, y: 0), "inputScale": block,
+            ])
+        } else {
+            blurred = CIImage(cgImage: snap).clampedToExtent().applyingGaussianBlur(sigma: sigma)
+        }
         guard let out = ciContext.createCGImage(blurred, from: ciRect, format: .BGRA8, colorSpace: sRGB) else { return }
         ctx.saveGState()
         if c.shapeOrDefault == "ellipse" { ctx.addEllipse(in: shapeRect) } else { ctx.addRect(shapeRect) }

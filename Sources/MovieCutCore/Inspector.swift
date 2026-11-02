@@ -16,7 +16,7 @@ public enum FontChoices {
 
 /// プロパティ欄で数値として編集する、クリップの項目。範囲の丸め(clamp)と読み書きをここに集める(UI にも Undo にも依存しない)。
 public enum ClipField: CaseIterable {
-    case start, duration, x, y, scale, opacity, volume, blur, fontSize, w, h, strength
+    case start, duration, x, y, scale, opacity, volume, blur, fontSize, w, h, strength, mosaicSize
 
     /// 値の範囲。
     public var range: ClosedRange<Double> {
@@ -28,6 +28,7 @@ public enum ClipField: CaseIterable {
         case .opacity: return 0...1
         case .volume: return 0...2
         case .blur, .strength: return 0...300
+        case .mosaicSize: return 2...100
         case .fontSize: return 8...1000
         }
     }
@@ -55,6 +56,7 @@ public enum ClipField: CaseIterable {
         case .w: return c.wOrDefault
         case .h: return c.hOrDefault
         case .strength: return c.strengthOrDefault
+        case .mosaicSize: return c.mosaicSizeOrDefault
         }
     }
 
@@ -74,6 +76,7 @@ public enum ClipField: CaseIterable {
         case .w: c.w = x
         case .h: c.h = x
         case .strength: c.strength = x
+        case .mosaicSize: c.mosaicSize = x
         }
     }
 
@@ -106,6 +109,7 @@ public enum ClipField: CaseIterable {
         case .fontSize: return "文字の大きさの変更"
         case .w, .h: return "ぼかし範囲の大きさの変更"
         case .strength: return "ぼかしの強さの変更"
+        case .mosaicSize: return "モザイクの大きさの変更"
         }
     }
 }

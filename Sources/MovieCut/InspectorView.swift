@@ -651,6 +651,7 @@ struct ClipInspector: View {
         case .px: return { "\(Int($0.rounded()))px" }
         case .degrees: return { "\(Int($0.rounded()))°" }
         case .mode: return { $0 >= 0.5 ? "ぼかし" : "モザイク" }
+        case .toggle: return { $0 >= 0.5 ? "オン" : "オフ" }
         case .plain: return { s.step >= 1 ? "\(Int($0.rounded()))" : String(format: "%.2f", $0) }
         }
     }
@@ -897,7 +898,19 @@ struct ClipInspector: View {
             .labelsHidden()
         }
         InspectorSection(title: "見た目")
-        slider("強さ（px）", .strength, step: 1, format: Self.px)
+        InspectorField(label: "方式") {
+            Picker("", selection: Binding(get: { c.blurModeOrDefault }, set: { v in model.setClipProperty({ $0.blurMode = v == "blur" ? nil : v }, name: "ぼかしの方式の変更", clipId: clipId) })) {
+                Text("ぼかし").tag("blur")
+                Text("モザイク").tag("mosaic")
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+        }
+        if c.blurModeOrDefault == "mosaic" {
+            slider("ブロックの大きさ（px）", .mosaicSize, step: 1, format: Self.px)
+        } else {
+            slider("強さ（px）", .strength, step: 1, format: Self.px)
+        }
     }
 }
 
