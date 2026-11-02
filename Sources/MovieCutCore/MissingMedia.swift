@@ -1,12 +1,19 @@
 import Foundation
 
-/// 欠けている素材(画像・動画・音声・ボイスの元ファイル)の検出と、場所の再指定(C-2 の一部。画面に依存しない)。
+/// 欠けている素材(画像・動画・音声・ボイスの元ファイル)の検出と、場所の再指定(画面に依存しない)。
 public enum MissingMedia {
     public struct Item: Equatable {
         public var clipId: String
         public var trackName: String
         public var path: String
         public var fileName: String { (path as NSString).lastPathComponent }
+    }
+
+    /// 探し直しの候補(フォルダの中の 1 ファイル)。サイズは読めたときだけ入る。
+    public struct Candidate: Equatable {
+        public var path: String
+        public var size: Int64?
+        public init(path: String, size: Int64? = nil) { self.path = path; self.size = size }
     }
 
     /// `src` を持つクリップのうち、ファイルが無いもの(トラック順・クリップ順)。`src` が空のものは数えない。
@@ -29,9 +36,25 @@ public enum MissingMedia {
         return msg
     }
 
-    /// 欠けた素材を、`index`(ファイル名 → 新しいパス)で探し直して差し替える。見つかった数と、まだ欠けている数を返す。
-    /// 何も変わらなければ `project` はそのまま(`changed` が false)。
-    public static func relink(_ project: Project, index: [String: String], exists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) })
+    /// フォルダを再帰的に調べ、ファイル名 → 候補(パスとサイズ)の表を作る。隠しファイルは除く。候補はパス順。
+    public static func index(root: URL, fileManager: FileManager = .default) -> [String: [Candidate]] {
+        var out: [String: [Candidate]] = [:]
+        guard let e = fileManager.enumerator(at: root, includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],
+                                             options: [.skipsHiddenFiles]) else { return out }
+        for case let u as URL in e {
+            guard let v = try? u.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]), v.isRegularFile == true else { continue }
+            let size = v.fileSize.map { Int64($0) }
+            out[u.lastPathComponent, default: []].append(Candidate(path: u.path, size: size))
+        }
+        for k in out.keys { out[k]?.sort { $0.path < $1.path } }
+        return out
+    }
+
+    /// 欠けた素材を探し直して差し替える。順に試す: (1) 目印の相対パス(`projectDir` 基準)、(2) 同じファイル名の候補。
+    /// (2) は目印にサイズがあれば、サイズも一致するものだけ使う(同名の別ファイルを誤って選ばない)。
+    /// 見つかった数と、まだ欠けている数を返す。何も変わらなければ `project` はそのまま。
+    public static func relink(_ project: Project, candidates: [String: [Candidate]], projectDir: String? = nil,
+                              exists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) })
         -> (project: Project, relinked: Int, stillMissing: Int) {
         var p = project
         var relinked = 0
@@ -39,8 +62,8 @@ public enum MissingMedia {
         for ti in p.tracks.indices {
             for ci in p.tracks[ti].clips.indices {
                 guard let src = p.tracks[ti].clips[ci].src, !src.isEmpty, !exists(src) else { continue }
-                let name = (src as NSString).lastPathComponent
-                if let new = index[name], new != src, exists(new) {
+                if let new = findReplacement(for: src, hint: project.mediaHints[src], candidates: candidates,
+                                             projectDir: projectDir, exists: exists) {
                     p.tracks[ti].clips[ci].src = new
                     relinked += 1
                 } else {
@@ -49,5 +72,32 @@ public enum MissingMedia {
             }
         }
         return (p, relinked, still)
+    }
+
+    /// 後方互換: ファイル名 → 1 つのパスの表で探し直す(サイズは見ない)。
+    public static func relink(_ project: Project, index: [String: String], exists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) })
+        -> (project: Project, relinked: Int, stillMissing: Int) {
+        relink(project, candidates: index.mapValues { [Candidate(path: $0)] }, exists: exists)
+    }
+
+    /// 1 件分の探し直し先。見つからなければ nil。
+    static func findReplacement(for src: String, hint: MediaHint?, candidates: [String: [Candidate]],
+                                projectDir: String?, exists: (String) -> Bool) -> String? {
+        // パッケージの中の参照(相対の src)は、プロジェクトのフォルダ基準で読む
+        if !src.hasPrefix("/"), let dir = projectDir {
+            let p = (dir as NSString).appendingPathComponent(src)
+            if exists(p) { return p }
+        }
+        if let rel = hint?.relative, let dir = projectDir, !rel.isEmpty {
+            let p = (dir as NSString).appendingPathComponent(rel)
+            if p != src, exists(p) { return p }
+        }
+        let name = (src as NSString).lastPathComponent
+        for c in candidates[name] ?? [] where c.path != src && exists(c.path) {
+            if let want = hint?.size, let got = c.size, want != got { continue }
+            if let want = hint?.size, c.size == nil { continue }
+            return c.path
+        }
+        return nil
     }
 }

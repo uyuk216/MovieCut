@@ -168,6 +168,9 @@ final class ProjectModel: ObservableObject {
     @Published var showAudioLibrary = false
     /// 「時間を指定して移動…」のシート。
     @Published var showJumpSheet = false
+    /// 「字幕を追加…」のシート。直すときは対象の文字クリップの id を入れる(新規なら nil)。
+    @Published var showSubtitleSheet = false
+    var subtitleSheetTargetId: String?
     /// 「無音をカット…」のシートと、その対象のクリップ。
     @Published var showSilenceSheet = false
     var silenceClipId: String?
@@ -192,6 +195,8 @@ final class ProjectModel: ObservableObject {
 
     /// 保存先(ドキュメントから渡される。無題なら nil)。
     var fileURL: URL?
+    /// 開いたときの「欠けた素材」案内を出したか(書類ごとに 1 回だけ)。
+    var offeredMissingMediaOnOpen = false
     weak var window: NSWindow?
     /// ドキュメントウィンドウの UndoManager(ビューが渡す)。無ければ自前のもの(テスト用)。
     var undoManager: UndoManager?

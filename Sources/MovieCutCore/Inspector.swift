@@ -2,7 +2,11 @@ import Foundation
 
 /// フォントの選択肢(プロパティ欄のフォント Picker)。
 public enum FontChoices {
-    public static let all = defaultFonts
+    /// 利用者が追加したフォント(`FontLibrary` の登録後に入れる)。既定の一覧の後ろに続く。
+    public static var userFamilies: [String] = []
+    public static var all: [String] {
+        defaultFonts + userFamilies.filter { !defaultFonts.contains($0) }
+    }
     /// 現在の値が一覧に無いとき(別の PC のフォントなど)も選べるよう、先頭に足した一覧を返す。
     public static func options(including current: String?) -> [String] {
         guard let c = current, !c.isEmpty, !all.contains(c) else { return all }

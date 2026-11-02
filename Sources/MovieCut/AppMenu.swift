@@ -15,6 +15,11 @@ enum MenuCommand: Hashable {
     case transcribeSubtitles
     // 素材(欠落の再指定)
     case relinkMedia
+    case packageSave
+    case addFont
+    case addSubtitle
+    case removeBackground
+    case imageChroma
     // 範囲ループ再生(再生メニュー)
     case toggleRangeLoop
     case aiScript, aiChapters, aiTitles, aiRewrite, aiSettings
@@ -172,6 +177,8 @@ struct MenuState: Equatable {
     /// 選んでいるクリップが音声認識の対象(音のある素材で、速度・逆再生なし)
     var canTranscribe = false
     var hasMissingMedia = false
+    /// 選んでいるのが src のある静止画(背景抜き・クロマキーに使える)。
+    var selectedIsStill = false
     var hasMarkers = false
     var markerColorCounts: [MarkerColor: Int] = [:]   // 色ごとのマーカーの数(チャプターを色でコピー)
     /// ファイル ▸ テンプレートから新規作成 の一覧(保存されている名前・名前順)
@@ -313,6 +320,7 @@ struct MenuState: Equatable {
         canExportSubtitles = m.canExportSubtitles
         canGenerateSubtitles = SubtitleGeneration.hasTargets(m.project)
         hasMissingMedia = !MissingMedia.find(in: m.project).isEmpty
+        selectedIsStill = m.selectedClip.map { $0.type == .image && $0.src != nil } ?? false
         hasMarkers = !m.project.markers.isEmpty
         markerColorCounts = Chapters.colorCounts(m.project.markers)
         if let li = m.targetLayerIndex, m.project.tracks.indices.contains(li) {
@@ -457,7 +465,8 @@ enum AppMenuSpec {
 
     static func file(_ s: MenuState) -> [MenuItemSpec] {
         [MenuItemSpec(command: .addMedia, title: "素材を追加…", shortcut: cmd("i"), enabled: s.canEdit, checked: nil),
-         MenuItemSpec(command: .audioLibrary, title: "素材ブラウザを開く…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "BGM・効果音のフォルダ")]
+         MenuItemSpec(command: .audioLibrary, title: "素材ブラウザを開く…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "BGM・効果音のフォルダ"),
+         MenuItemSpec(command: .addFont, title: "フォントを追加…", shortcut: nil, enabled: true, checked: nil, hint: "テキストで使えるようにする")]
     }
 
     /// ファイル ▸ 字幕を読み込む…(ショートカットは持たない)。
@@ -488,6 +497,22 @@ enum AppMenuSpec {
     /// ファイル ▸ 素材の場所を再指定…(欠けている素材があるときだけ。フォルダを選んで探し直す)。
     static func mediaRelink(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .relinkMedia, title: "素材の場所を再指定…", shortcut: nil, enabled: s.canEdit && s.hasMissingMedia, checked: nil, hint: "欠けた素材")
+    }
+
+    /// 静止画の背景抜き(Vision)と、色で抜く(クロマキー)。どちらも静止画のクリップを選んでいるときだけ使える。
+    static func cutoutItems(_ s: MenuState) -> [MenuItemSpec] {
+        [MenuItemSpec(command: .removeBackground, title: "静止画の背景を抜く", shortcut: nil, enabled: s.canEdit && s.selectedIsStill, checked: nil, hint: "人物などを自動で切り抜く"),
+         MenuItemSpec(command: .imageChroma, title: "静止画の背景を色で抜く(クロマキー)", shortcut: nil, enabled: s.canEdit && s.selectedIsStill, checked: nil, hint: "緑などの背景を透明に")]
+    }
+
+    /// 字幕 ▸ 字幕を追加…(再生位置に字幕を足す。選んだ文字クリップがあれば、その文を直す)。
+    static func addSubtitle(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .addSubtitle, title: "字幕を追加…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "再生位置に字幕")
+    }
+
+    /// ファイル ▸ パッケージとして保存…(プロジェクトと使っている素材を 1 つのフォルダへ)。
+    static func packageSave(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .packageSave, title: "パッケージとして保存…", shortcut: nil, enabled: s.hasDocument, checked: nil, hint: "素材ごとフォルダへ")
     }
 
     /// ファイル ▸ 最近使った項目 ▸ 各プロジェクト(見つからないものは無効)。
@@ -984,9 +1009,15 @@ enum AppMenuSpec {
           MenuItemSpec(command: .helpThirdParty, title: "第三者の規約", shortcut: nil, enabled: true, checked: nil)]]
     }
 
+    /// 字幕と素材の項目(ファイル ▸ 字幕・素材のまとまり。式が長すぎて型検査が遅くなるので分けてある)。
+    static func mediaSubtitleItems(_ s: MenuState) -> [MenuItemSpec] {
+        [subtitleImport(s), mediaRelink(s), packageSave(s), addSubtitle(s), subtitleExport(s), subtitleTranslate(s), subtitleGenerate(s), transcribeSubtitles(s), chapterCopy(s)]
+            + cutoutItems(s)
+    }
+
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + [subtitleImport(s), mediaRelink(s), subtitleExport(s), subtitleTranslate(s), subtitleGenerate(s), transcribeSubtitles(s), chapterCopy(s)] + chapterColorItems(s) + [ aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s)] + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), makeProxies(s)] + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textCounterItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), beatMarkersItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s)
+        [about, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s)] + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), makeProxies(s)] + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textCounterItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), beatMarkersItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerColorItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + guideItems(s) + [previewProxy(s), fullScreen(s)] + help.flatMap { $0 }
@@ -1042,6 +1073,11 @@ enum AppMenu {
             case .generateSubtitles: m.generateSubtitlesFromScript()
             case .transcribeSubtitles: Task { await m.transcribeSelectedToSubtitles() }
             case .relinkMedia: m.chooseAndRelinkMedia()
+            case .packageSave: m.saveAsPackage()
+            case .addFont: m.chooseAndAddFonts()
+            case .addSubtitle: m.openSubtitleSheet()
+            case .removeBackground: m.removeBackgroundSelected()
+            case .imageChroma: m.addEffectSelected(.chromaKey)
             case .toggleRangeLoop: m.rangeLoop.toggle()
             case .copyChapters: m.copyChapters()
             case .copyChaptersColor(let c): m.copyChapters(color: c)

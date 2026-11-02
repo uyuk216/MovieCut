@@ -65,7 +65,7 @@ final class MenuUndoSweepTests: XCTestCase {
         switch c {
         case .about, .settings, .videoSettings, .addMedia, .export, .exportPreset, .exportCustomPreset, .saveCustomPreset,
              .fanMaxToggle, .fanInstall, .fanUninstall, .importSubtitles, .exportSubtitles, .translateSubtitles,
-             .transcribeSubtitles, .relinkMedia, .toggleRangeLoop, .aiScript, .aiChapters, .aiTitles, .aiRewrite, .aiSettings,
+             .transcribeSubtitles, .relinkMedia, .packageSave, .addFont, .addSubtitle, .removeBackground, .toggleRangeLoop, .aiScript, .aiChapters, .aiTitles, .aiRewrite, .aiSettings,
              .exportStill, .exportSequence, .exportThumbnail, .exportGIF, .queueExport, .showExportQueue, .audioLibrary,
              .measureLoudness, .showScopes, .saveTemplate, .newFromTemplate, .makeProxies, .lutLoad, .autoWhiteBalance, .regenerateVoice,
              .makeVoices, .layerDelete, .copyChapters, .copyChaptersColor(.red), .jumpToTime, .renameMarker, .fpsCustom, .addQRCode, .aiImage, .generateSubtitles,

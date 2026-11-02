@@ -5,6 +5,13 @@ public let defaultFonts = ["Hiragino Maru Gothic ProN", "Hiragino Sans", "Hiragi
 
 // MARK: - Project
 
+/// 素材の目印: プロジェクトのフォルダからの相対パス(あれば)と、保存時のファイルサイズ(あれば)。
+public struct MediaHint: Codable, Equatable {
+    public var relative: String?
+    public var size: Int64?
+    public init(relative: String? = nil, size: Int64? = nil) { self.relative = relative; self.size = size }
+}
+
 public struct Project: Codable, Equatable {
     public var width: Int = 1920
     public var height: Int = 1080
@@ -23,10 +30,12 @@ public struct Project: Codable, Equatable {
     /// 書き出し範囲のイン点 / アウト点(秒)。設定したときだけファイルに書く。
     public var rangeIn: Double? = nil
     public var rangeOut: Double? = nil
+    /// 素材の探し直し用の目印(キーは元の素材のパス)。パッケージ保存のときだけ入る。空のときは書かない。
+    public var mediaHints: [String: MediaHint] = [:]
     /// 知らないキー(保持して書き戻す)
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["width", "height", "fps", "bg", "codec", "voicevoxUrl", "aquestalkCommand", "characters", "tracks", "markers", "rangeIn", "rangeOut"]
+    static let knownKeys: Set<String> = ["width", "height", "fps", "bg", "codec", "voicevoxUrl", "aquestalkCommand", "characters", "tracks", "markers", "rangeIn", "rangeOut", "mediaHints"]
 
     public init() {}
 
@@ -47,6 +56,7 @@ public struct Project: Codable, Equatable {
         if let v: [Track] = l.value("tracks"), !v.isEmpty { tracks = v }
         markers = l.value("markers") ?? []
         rangeIn = l.value("rangeIn"); rangeOut = l.value("rangeOut")
+        mediaHints = l.value("mediaHints") ?? [:]
         extra = l.extra()
     }
 
@@ -67,6 +77,7 @@ public struct Project: Codable, Equatable {
         if !markers.isEmpty { try c.encode(markers, forKey: AnyKey("markers")) }
         try c.encodeIfPresent(rangeIn, forKey: AnyKey("rangeIn"))
         try c.encodeIfPresent(rangeOut, forKey: AnyKey("rangeOut"))
+        if !mediaHints.isEmpty { try c.encode(mediaHints, forKey: AnyKey("mediaHints")) }
     }
 
     /// fps を Int / Double / "29.97" / "30000/1001" のどれからでも読む。読めない・欠けているときは 60、範囲外は 1〜240 に収める。

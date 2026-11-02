@@ -26,6 +26,7 @@ extension AppMenuSpec {
         case .generateSubtitles: return "字幕にできるセリフがありません"
         case .transcribeSubtitles: return "音のあるクリップを選んでください"
         case .relinkMedia: return "見つからない素材はありません"
+        case .removeBackground, .imageChroma: return "静止画のクリップを選んでください"
         case .findReplace: return "文字・セリフのクリップがありません"
         case .textStyleApplyAll: return "文字クリップがありません"
         case .copyClips, .cutClips: return "クリップを選んでから実行します"

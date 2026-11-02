@@ -112,6 +112,10 @@ struct MovieCutApp: App {
     init() {
         AppWindowPolicy.disableTabbing()
         DebugHooks.suppressStateRestorationIfDebugging()
+        // 利用者が追加したフォントを登録し、テキストのフォント一覧に出す(Application Support/MovieCut/Fonts)
+        let fontDir = FontLibrary.defaultDirectory()
+        FontLibrary.registerAll(in: fontDir)
+        FontChoices.userFamilies = FontLibrary.families(in: fontDir)
     }
 
     var body: some Scene {

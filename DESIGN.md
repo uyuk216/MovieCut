@@ -427,3 +427,12 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
 ## 余白の詰め(2026-11-02)
 - 1100×700 でも一度に見える量を増やすため、余白だけを詰めた(構造・操作は変えていない)。インスペクタの見出し・スクロール内の縦余白(12/10→8/6)と項目間隔(8→6)、小見出しの上余白(8→5)、上のツールバー(縦 7→5)、プレビューまわり(10→6)、タイムライン上部の操作行(縦 6→4)、ContentView のシート(余白 20→16)。クリックできる部品の高さは変えていない(22pt 以上)。タイムラインの行の高さ・ヘッダー幅は描画と当たり判定に関わるため触っていない。
 - 確認は `LayoutQASnapshotTests`(画面外・1100×700 / 1456×840)の画像のみ。実機のウインドウでは未確認。
+
+## 素材の探し直し・パッケージ・フォント・字幕の追加・背景抜き(2026-11-02 第8弾)
+- **目印 `mediaHints`**(プロジェクトの任意項目): キーは元の素材のパス、値は `MediaHint { relative, size }`。パッケージ保存のときだけ入り、空なら書かない(古いファイルの再保存はバイト一致のまま)。`MissingMedia.relink(_:candidates:projectDir:)` の順: (1) 目印の相対パス(プロジェクトのフォルダ基準)、(2) 同じファイル名の候補のうち、目印にサイズがあればサイズも一致するもの。`MissingMedia.index(root:)` はフォルダを再帰的に調べ、隠しファイルは除く。後方互換の `relink(_:index:)` は残す。
+- **パッケージ** (`Core/MediaPackage.swift`): `plan` は同じ元のパスを 1 回だけコピーし、同名の別ファイルは `名前-2.ext` にする。参照は `media/...` の相対パス。`write` はフォルダを作り、素材をコピーし、`<書類名>.mcpjc` を書く。メニューは `AppMenuSpec.packageSave`、`ProjectModel+Media.saveAsPackage`。
+- **フォント** (`Core/FontLibrary.swift`): 検査は `CTFontManagerCreateFontDescriptorsFromURL` でファミリー名が取れるかで行う。保存先は `Application Support/MovieCut/Fonts`(同じ中身があれば写さない、同名で中身が違えば `名前 2.ttf`)。登録は `CTFontManagerRegisterFontsForURL(.process)`、起動時(`MovieCutApp.init`)と追加時。`FontChoices.userFamilies` が既定の一覧の後ろに足される。ドロップは `ContentView` の onDrop で `FontLibrary.isFontFile` により振り分ける。
+- **字幕の追加** (`Core/SubtitleQuickAdd.swift`): 置き場所は、ロックされていない「字幕」レイヤーで、その時間に重なりが無いもの。無ければ「字幕 2」…を末尾に作る。見た目は字幕の自動生成と同じ(`SubtitleImport.makeClip` + `builtin.classic`)。`updateText` は同じ id の文と長さを直す。シートは `SubtitleQuickSheet`、Undo は 1 回。
+- **背景抜き** (`Core/ForegroundCutout.swift`): `ForegroundMaskDetecting` を注入する。実装は `VisionForegroundDetector`(`VNGenerateForegroundInstanceMaskRequest`)。`cutout` はマスクを画像の大きさに引き伸ばし、`CIBlendWithMask` で透明にする。テストは固定マスクを使う。`ProjectModel+Cutout` は検出を `Task.detached` で行い、結果の PNG を `edit("背景を抜く")` でクリップの `src` に入れる。
+- **クロマキー(静止画)**: 既存のエフェクト(`EffectKind.chromaKey`)は画像にも使える。メニュー「静止画の背景を色で抜く」は `addEffectSelected(.chromaKey)` を呼ぶだけ。
+- **未確認**: Vision の結果の質(実写の画像での見え方)、フォントを追加した後のテキストのフォント一覧の見た目、パッケージを開いたときの相対参照の扱い(開いた後に保存すると絶対パスに戻る)。

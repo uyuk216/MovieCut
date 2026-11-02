@@ -73,6 +73,7 @@ struct ContentView: View {
         .sheet(isPresented: $model.showLoudnessSheet) { LoudnessSheet(model: model) }
         .sheet(isPresented: $model.showScopeSheet) { ScopeSheet(model: model) }
         .sheet(isPresented: $model.showJumpSheet) { JumpToTimeSheet(model: model) }
+        .sheet(isPresented: $model.showSubtitleSheet) { SubtitleQuickSheet(model: model) }
         .sheet(isPresented: $model.showSilenceSheet) { SilenceCutSheet(model: model) }
         .sheet(isPresented: $model.showFillerSheet) { FillerCutSheet(model: model) }
         .sheet(isPresented: $model.showTranscriptEditSheet) { TranscriptEditSheet(model: model) }
@@ -92,13 +93,18 @@ struct ContentView: View {
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
             // タイムライン以外にドロップされたとき: 再生ヘッドの位置に置く(タイムライン上は TimelineCanvas が受ける)
             DropLoader.loadFileURLs(providers) { urls in
-                Task { @MainActor in await model.addMedia(urls: urls) }
+                // フォント(.ttf/.otf/.ttc)は取り込んで登録する。それ以外は素材として扱う
+                let fonts = urls.filter(FontLibrary.isFontFile)
+                if !fonts.isEmpty { model.addFonts(urls: fonts) }
+                let media = urls.filter { !FontLibrary.isFontFile($0) }
+                if !media.isEmpty { Task { @MainActor in _ = await model.addMedia(urls: media) } }
             }
         }
         .onAppear {
             model.undoManager = undoManager
             model.fileURL = fileURL
             RecentProjectsController.shared.record(url: fileURL)
+            model.offerMissingMediaOnOpen()
             model.installKeyboard()
             model.installDock(store: dock, presents: presentsDockWindows)
             if model.window?.isMainWindow == true { ActiveDocument.shared.activate(model) }
