@@ -252,7 +252,7 @@ public struct DockLayout: Equatable, Codable {
     /// 右の列(約34%)= プロパティとキャラクターを同じグループのタブに(プロパティが前)。
     public static let `default` = DockLayout(root:
         .split(axis: .horizontal, fraction: 0.66,
-               first: .split(axis: .vertical, fraction: 0.6, first: leaf(.preview), second: leaf(.timeline)),
+               first: .split(axis: .vertical, fraction: 0.5, first: leaf(.preview), second: leaf(.timeline)),
                second: .group(DockGroup(panels: [.inspector, .characters], active: .inspector))))
 
     public static func preset(_ p: DockPreset) -> DockLayout {

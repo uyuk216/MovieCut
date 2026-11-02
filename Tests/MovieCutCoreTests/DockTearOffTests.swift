@@ -73,7 +73,7 @@ final class DockTearOffTests: XCTestCase {
         XCTAssertTrue(l.detach(.timeline))
         XCTAssertEqual(l.homes?["timeline"]?.anchor, .preview)
         XCTAssertEqual(l.homes?["timeline"]?.edge, .bottom)
-        XCTAssertEqual(l.homes?["timeline"]?.fraction ?? -1, 0.4, accuracy: 1e-9)
+        XCTAssertEqual(l.homes?["timeline"]?.fraction ?? -1, 0.5, accuracy: 1e-9)
         XCTAssertTrue(l.attach(.timeline))
         XCTAssertEqual(l.root, DockLayout.default.root, "割合を含めて元に戻る")
         XCTAssertNil(l.homes, "戻したら記録は消える(キーごと書かない)")
