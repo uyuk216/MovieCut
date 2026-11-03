@@ -100,9 +100,10 @@ public enum ProxyStore {
         instr.layerInstructions = [layer]
         comp.instructions = [instr]
 
-        guard let session = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetHighestQuality) else {
+        guard let session0 = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetHighestQuality) else {
             throw ProxyError.exportFailed("書き出しの設定を作れませんでした")
         }
+        nonisolated(unsafe) let session = session0
         session.videoComposition = comp
         session.outputURL = part
         session.outputFileType = .mp4

@@ -46,7 +46,10 @@ enum MenuOrder {
 
     /// 並べ直す。変えたら true。項目そのもの(サブメニューごと)を移すだけで作り直さない。
     @MainActor @discardableResult
-    static func fix(_ menu: NSMenu, windowsMenu: NSMenu? = NSApp?.windowsMenu, helpMenu: NSMenu? = NSApp?.helpMenu) -> Bool {
+    static func fix(_ menu: NSMenu) -> Bool { fix(menu, windowsMenu: NSApp?.windowsMenu, helpMenu: NSApp?.helpMenu) }
+
+    @MainActor @discardableResult
+    static func fix(_ menu: NSMenu, windowsMenu: NSMenu?, helpMenu: NSMenu?) -> Bool {
         let items = menu.items
         let keys = items.map { key(of: $0, windowsMenu: windowsMenu, helpMenu: helpMenu) }
         let want = ordered(keys)

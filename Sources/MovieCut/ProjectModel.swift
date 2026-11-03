@@ -290,8 +290,8 @@ final class ProjectModel: ObservableObject {
         OpenProjects.register(self)
         // プロキシ編集の設定(アプリ全体)を、この書類の素材キャッシュへ。設定が変わったら付け直す。
         assets.setPreviewProxies(ProxySettings.enabled(), lookup: ProjectModel.previewProxyPath)
-        let a = assets
-        NotificationCenter.default.addObserver(forName: ProxySettings.didChange, object: nil, queue: .main) { [weak a] _ in
+        nonisolated(unsafe) weak let a: RenderAssets? = assets
+        NotificationCenter.default.addObserver(forName: ProxySettings.didChange, object: nil, queue: .main) { _ in
             a?.setPreviewProxies(ProxySettings.enabled(), lookup: ProjectModel.previewProxyPath)
         }
     }
@@ -320,6 +320,7 @@ final class ProjectModel: ObservableObject {
         var p = project
         body(&p)
         guard p != project else { return false }
+        UnusedMedia.adoptRemoved(from: project, into: &p)
         if enforcesLock, LayerEditing.violatesLock(old: project, new: p) {
             statusText = Self.lockedNotice
             return false

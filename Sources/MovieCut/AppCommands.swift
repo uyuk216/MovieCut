@@ -136,6 +136,7 @@ struct AppCommands: Commands {
                 Divider()
                 Menu("音声") { items(AppMenuSpec.audioItems(s), run) }
                 MenuItemView(spec: AppMenuSpec.silenceCutItem(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.audioAutoSyncItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.beatMarkersItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.fillerCutItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.transcriptEditItem(s), perform: run)

@@ -97,7 +97,7 @@ enum MenuCommand: Hashable {
     // 音声(ノーマライズ・音量の段階・ボイス向けプリセット・エフェクトを外す)
     case audioNormalize, audioVolumeUp, audioVolumeDown, audioVoicePreset, audioClear
     // 無音カット(シートを開く)と、BGM の自動ダッキングの切り替え
-    case silenceCut, fillerCut, transcriptEdit, audioDuckToggle
+    case silenceCut, fillerCut, transcriptEdit, audioDuckToggle, audioAutoSync
     // ビートにマーカーを打つ(選んでいる音のクリップ。ショートカットは持たない)
     case beatMarkers
     // 手ぶれ補正の切り替え(映像クリップ。ショートカットは持たない)
@@ -316,6 +316,7 @@ struct MenuState: Equatable {
     var canAudioFx = false           // 音声・ボイス・動画(フリーズ以外)のクリップを選んでいる
     var hasAudioFx = false           // 選択クリップに音声エフェクトかパンがある
     var canSilenceCut = false        // 無音カットできるクリップ(音のある素材。速度・逆再生なし)を選んでいる
+    var canAudioAutoSync = false     // 動画 1 つと音声 1 つを選んでいる(音で自動同期できる)
     var canBeatMarkers = false       // ビートを測れるクリップ(無音カットと同じ条件)を選んでいる
     var canDuck = false              // BGM(音声クリップ)を選んでいる
     var isDucking = false            // 選択クリップの自動ダッキングがオン
@@ -462,6 +463,7 @@ struct MenuState: Equatable {
             canCompoundUngroup = CompoundEditing.supports(c)
         }
         canCompoundGroup = m.selectedClipIDs.count >= 2
+        canAudioAutoSync = AudioSyncEditing.isAvailable(in: p, ids: m.selectedClipIDs)
         canPasteEffects = !m.effectClipboard.isEmpty
         textStyleChoices = m.textStyles.all.map { TextStyleChoice(id: $0.id, name: $0.name, builtin: $0.isBuiltin) }
         hasPrevClip = ClipEditing.hasAdjacentClip(in: p, from: m.selectedClipId, forward: false, playhead: t)
@@ -1063,6 +1065,10 @@ enum AppMenuSpec {
     static func transcriptEditItem(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .transcriptEdit, title: "文字起こしで編集…", shortcut: nil, enabled: s.canEdit && s.canTranscribe, checked: nil)
     }
+    /// クリップ ▸ 音声で映像と音声を自動同期(動画 1 つ + 音声 1 つを選んでいるとき。1 回の Undo。ショートカットなし)。
+    static func audioAutoSyncItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .audioAutoSync, title: "音声で映像と音声を自動同期", shortcut: nil, enabled: s.canEdit && s.canAudioAutoSync, checked: nil)
+    }
     static func silenceCutItem(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .silenceCut, title: "無音をカット…", shortcut: nil, enabled: s.canEdit && s.canSilenceCut, checked: nil)
     }
@@ -1167,7 +1173,7 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s)] + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), clipListItem(s), noteListItem(s)] + scriptStoryboardItems(s) + [makeProxies(s)] + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textCounterItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), beatMarkersItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
+        [about, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s)] + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), clipListItem(s), noteListItem(s)] + scriptStoryboardItems(s) + [makeProxies(s)] + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textCounterItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), audioAutoSyncItem(s), beatMarkersItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerColorItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + guideItems(s) + [previewProxy(s), fullScreen(s)] + help.flatMap { $0 }
@@ -1350,6 +1356,7 @@ enum AppMenu {
             case .compoundGroup: m.groupSelectedCompound()
             case .compoundUngroup: m.ungroupSelectedCompound()
             case .silenceCut: m.openSilenceSheet()
+            case .audioAutoSync: m.autoSyncSelectedClips()
             case .beatMarkers: m.addBeatMarkersToSelectedClip()
             case .fillerCut: m.openFillerSheet()
             case .transcriptEdit: m.openTranscriptEditSheet()

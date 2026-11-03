@@ -3,7 +3,7 @@ import MovieCutCore
 
 /// 形のマスク(インスペクタの「形のマスク」)。値は `Clip.mask`(省くと nil)。つまみのドラッグは 1 回の Undo。
 extension ProjectModel {
-    static let maskUndoName = "マスクの変更"
+    nonisolated static let maskUndoName = "マスクの変更"
 
     /// オン(既定のマスク)・オフ(nil に戻す)・形や反転などの離散的な変更。1 回の Undo。
     func setClipMask(_ mask: ClipMask?, clipId: String? = nil, name: String = ProjectModel.maskUndoName) {

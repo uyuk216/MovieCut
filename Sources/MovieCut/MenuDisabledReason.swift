@@ -1,4 +1,5 @@
 import Foundation
+import MovieCutCore
 
 /// 使えないメニュー項目の理由(日本語)。項目表(AppMenuSpec)の enabled と対で使い、
 /// 有効なら nil。メニュー項目の .help(ツールチップ)に出す。新しい無効条件は作らず、今ある条件を言葉にするだけ。
@@ -75,6 +76,7 @@ extension AppMenuSpec {
         case .clearTransitions: return "トランジションがありません"
         case .fadeInOut: return "映像か音のクリップを選んでください"
         case .effectAdd, .effectPreset, .lutLoad: return "エフェクトを付けられるクリップを選んでください"
+        case .audioAutoSync: return AudioSyncEditing.selectionHint
         case .autoWhiteBalance: return "画像か動画のクリップを選んでください"
         case .copyChaptersColor: return "その色のマーカーがありません"
         case .effectClear, .effectCopy: return "エフェクトがありません"

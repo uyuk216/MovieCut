@@ -65,3 +65,53 @@ final class AudioSyncTests: XCTestCase {
         XCTAssertEqual(AudioSync.seconds(lag: 5, sampleRate: 0), 0)
     }
 }
+
+/// 自動同期の編集(包絡 → ずれ → 開始位置)。
+final class AudioSyncEditingTests: XCTestCase {
+    private func clip(_ id: String, _ type: ClipType, start: Double, dur: Double = 10) -> Clip {
+        var c = Clip(); c.id = id; c.type = type; c.src = "/tmp/x.wav"; c.start = start; c.duration = dur
+        return c
+    }
+    private func project(_ clips: [[Clip]]) -> Project {
+        var p = Project.new()
+        p.tracks = clips.map { var t = Track(); t.clips = $0; return t }
+        return p
+    }
+
+    func testPairNeedsExactlyOneVideoAndOneAudio() {
+        let p = project([[clip("v", .video, start: 0)], [clip("a", .audio, start: 1)], [clip("a2", .audio, start: 2)]])
+        XCTAssertNotNil(AudioSyncEditing.pair(in: p, ids: ["v", "a"]))
+        XCTAssertNil(AudioSyncEditing.pair(in: p, ids: ["v"]))
+        XCTAssertNil(AudioSyncEditing.pair(in: p, ids: ["a", "a2"]))
+        XCTAssertNil(AudioSyncEditing.pair(in: p, ids: ["v", "a", "a2"]))
+        XCTAssertNil(AudioSyncEditing.disabledReason(in: p, ids: ["v", "a"]))
+        XCTAssertEqual(AudioSyncEditing.disabledReason(in: p, ids: ["v"]), AudioSyncEditing.selectionHint)
+    }
+
+    func testLagSecondsFromEnvelopes() throws {
+        // 10 ms ごとの包絡。音声は映像より 37 窓(0.37 秒)後ろ
+        var s: UInt64 = 5
+        let v: [Float] = (0..<800).map { _ in s = s &* 6364136223846793005 &+ 1442695040888963407; return Float(s >> 40) / Float(1 << 24) }
+        let a: [Float] = (0..<800).map { $0 >= 37 ? v[$0 - 37] : 0 }
+        XCTAssertEqual(try XCTUnwrap(AudioSyncEditing.lagSeconds(video: v, audio: a)), 0.37, accuracy: 1e-9)
+        XCTAssertNil(AudioSyncEditing.lagSeconds(video: v, audio: [Float](repeating: 0, count: 800)), "無音は合わせられない")
+    }
+
+    func testApplyMovesAudioStartAndNothingElse() throws {
+        let p = project([[clip("v", .video, start: 5)], [clip("a", .audio, start: 3), clip("b", .audio, start: 20)]])
+        guard case .moved(let q, let s) = AudioSyncEditing.apply(to: p, videoId: "v", audioId: "a", lag: 0.37) else { return XCTFail() }
+        XCTAssertEqual(s, 4.63, accuracy: 1e-9)
+        XCTAssertEqual(q.allClips.first { $0.id == "a" }!.start, 4.63, accuracy: 1e-9)
+        XCTAssertEqual(q.allClips.first { $0.id == "b" }!.start, 20)
+        XCTAssertEqual(q.allClips.first { $0.id == "v" }!.start, 5)
+    }
+
+    func testApplyEdgeCases() {
+        let p = project([[clip("v", .video, start: 5)], [clip("a", .audio, start: 4.63)]])
+        XCTAssertEqual(AudioSyncEditing.apply(to: p, videoId: "v", audioId: "a", lag: 0.37), .alreadySynced)
+        if case .beforeZero = AudioSyncEditing.apply(to: p, videoId: "v", audioId: "a", lag: 6) {} else { XCTFail() }
+        var locked = p; locked.tracks[1].clips[0].locked = true
+        XCTAssertEqual(AudioSyncEditing.apply(to: locked, videoId: "v", audioId: "a", lag: 1), .locked)
+        XCTAssertEqual(AudioSyncEditing.apply(to: p, videoId: "v", audioId: "zz", lag: 1), .invalid)
+    }
+}

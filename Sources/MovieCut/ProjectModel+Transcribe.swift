@@ -18,7 +18,7 @@ extension ProjectModel {
         let snapshot = project
         let style = TextStyleLibrary.builtins.first { $0.id == "builtin.classic" }?.look
         busyMessage = "音声を文字にしています…"
-        let job = Task {
+        let job = Task { [weak self] in
             try await SubtitleTranscription.run(clip: c, project: snapshot, transcriber: transcriber, style: style,
                                                 onProgress: { [weak self] p in
                                                     Task { @MainActor in self?.busyMessage = "音声を文字にしています \(Int(p * 100))%" }

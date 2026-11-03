@@ -95,7 +95,7 @@ public enum MissingMedia {
         let name = (src as NSString).lastPathComponent
         for c in candidates[name] ?? [] where c.path != src && exists(c.path) {
             if let want = hint?.size, let got = c.size, want != got { continue }
-            if let want = hint?.size, c.size == nil { continue }
+            if hint?.size != nil, c.size == nil { continue }
             return c.path
         }
         return nil

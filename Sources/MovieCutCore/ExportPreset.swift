@@ -196,9 +196,9 @@ public enum AudioExporter {
         progress?(0.05)
 
         try? FileManager.default.removeItem(at: url)
-        let writer: AVAssetWriter
+        nonisolated(unsafe) let writer: AVAssetWriter
         do { writer = try AVAssetWriter(outputURL: url, fileType: .m4a) } catch { throw ExportError.cannotCreateWriter(error) }
-        let ai = AVAssetWriterInput(mediaType: .audio, outputSettings: [
+        nonisolated(unsafe) let ai = AVAssetWriterInput(mediaType: .audio, outputSettings: [
             AVFormatIDKey: kAudioFormatMPEG4AAC,
             AVSampleRateKey: 48000,
             AVNumberOfChannelsKey: 2,
@@ -210,8 +210,9 @@ public enum AudioExporter {
 
         let mixAsset = AVURLAsset(url: mixURL)
         guard let track = try await mixAsset.loadTracks(withMediaType: .audio).first,
-              let reader = try? AVAssetReader(asset: mixAsset) else { throw ExportError.audioReadFailed(nil) }
-        let out = AVAssetReaderTrackOutput(track: track, outputSettings: [
+              let reader0 = try? AVAssetReader(asset: mixAsset) else { throw ExportError.audioReadFailed(nil) }
+        nonisolated(unsafe) let reader = reader0
+        nonisolated(unsafe) let out = AVAssetReaderTrackOutput(track: track, outputSettings: [
             AVFormatIDKey: kAudioFormatLinearPCM,
             AVLinearPCMBitDepthKey: 32,
             AVLinearPCMIsFloatKey: true,

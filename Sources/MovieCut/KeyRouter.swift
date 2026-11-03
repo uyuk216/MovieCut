@@ -62,7 +62,9 @@ final class KeyRouter {
         guard monitor == nil else { return }
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
-            return MainActor.assumeIsolated { self.handle(event) ? nil : event }
+            nonisolated(unsafe) let e = event
+            let consumed = MainActor.assumeIsolated { self.handle(e) }
+            return consumed ? nil : event
         }
     }
 

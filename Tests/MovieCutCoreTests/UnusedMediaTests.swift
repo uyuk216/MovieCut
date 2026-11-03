@@ -66,3 +66,41 @@ final class UnusedMediaTests: XCTestCase {
         XCTAssertEqual(back.mediaPool, ["/m/a.mp4"])
     }
 }
+
+/// 編集で使われなくなった素材を素材リストに覚える(mediaPool ができる前の書類で消したクリップの続き)。
+final class UnusedMediaAdoptTests: XCTestCase {
+    private func clip(_ id: String, _ type: ClipType, _ src: String?) -> Clip {
+        var c = Clip(); c.id = id; c.type = type; c.src = src; c.duration = 1
+        return c
+    }
+    private func project(_ clips: [Clip]) -> Project { var p = Project.new(); p.tracks[0].clips = clips; return p }
+
+    func testRemovedClipSourceBecomesUnused() {
+        let old = project([clip("a", .video, "/m/a.mp4"), clip("b", .image, "/m/b.png")])
+        var new = old; new.tracks[0].clips.removeAll { $0.id == "a" }
+        XCTAssertTrue(old.mediaPool.isEmpty)
+        UnusedMedia.adoptRemoved(from: old, into: &new)
+        XCTAssertEqual(UnusedMedia.find(in: new).map(\.path), ["/m/a.mp4"])
+    }
+
+    func testStillUsedVoiceTextAndNoChangeAddNothing() {
+        let old = project([clip("a", .video, "/m/a.mp4"), clip("a2", .video, "/m/a.mp4"), clip("v", .voice, "/cache/v.wav"), clip("t", .text, nil)])
+        var new = old; new.tracks[0].clips.removeAll { $0.id == "a" || $0.id == "v" || $0.id == "t" }
+        UnusedMedia.adoptRemoved(from: old, into: &new)
+        XCTAssertTrue(new.mediaPool.isEmpty, "同じ素材を使う別のクリップが残り、声と文字は対象外")
+        var same = old
+        UnusedMedia.adoptRemoved(from: old, into: &same)
+        XCTAssertEqual(same, old)
+    }
+
+    func testAlreadyPooledIsNotDuplicatedAndOldFilesStayByteIdentical() throws {
+        var old = project([clip("a", .audio, "/m/a.wav")]); old.mediaPool = ["/m/a.wav"]
+        var new = old; new.tracks[0].clips = []
+        UnusedMedia.adoptRemoved(from: old, into: &new)
+        XCTAssertEqual(new.mediaPool, ["/m/a.wav"])
+        // 何も消さなければ、書き出した JSON に mediaPool は出ない(任意項目は既定値のとき書かない)
+        let plain = project([clip("a", .audio, "/m/a.wav")])
+        var same = plain; UnusedMedia.adoptRemoved(from: plain, into: &same)
+        XCTAssertFalse(String(decoding: try same.encoded(), as: UTF8.self).contains("mediaPool"))
+    }
+}

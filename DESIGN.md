@@ -203,7 +203,7 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
 - **字幕の自動生成** (`Core/SubtitleGeneration.swift`、`ProjectModel+Subtitles`): 字幕オンのボイス(本文あり・長さ > 0・非表示・ロックでないレイヤー)ごとに、同じ時刻の文字クリップを「字幕」「字幕 2」…の新しいレイヤーに作る。見た目は組み込みの「ゆっくり風」(`TextLook.apply`)。元のボイスは `subtitle = false`(ファイルに書かれる任意項目。描画の二重表示を防ぐ)。対象が無ければ何もしない(冪等)。1 回の Undo(「字幕の自動生成」)。メニュー: 出力 ▸ 字幕を自動生成。
 - **自動保存と復元** (`Core/AutosaveRecovery.swift`、`ProjectModel+Recovery`): 編集済みで版が変わったときだけ、30 秒ごとに `~/Library/Application Support/MovieCut/Recovery/<セッション番号>.mcrecover`(JSON: 名前・元のパス・保存時刻・プロジェクトの JSON)に書く。利用者のファイルは書かない。保存済み・閉じたときは写しを消す。起動時に残りを確認(復元 / 捨てる / あとで)。復元は `RecoveryInbox` で新しい書類に渡し、すぐ写しを残す。復元の書類は保存するまで編集済み扱い。DebugHooks の静かな起動では動かさない。
 - **素材チェック** (`Core/MissingMedia.swift`、`ProjectModel+Media`): `src` を持つクリップ(画像・動画・音声・ボイス)でファイルが無いものを列挙。書き出しは保存パネルの前と `runExport` の両方で止め、先頭 5 件の名前を出す。ファイル ▸ 素材の場所を再指定…: フォルダ(中のフォルダも)から同じファイル名を探して差し替える。1 回の Undo。ロックされたレイヤーのクリップは `edit` の規則で変えられない。
-- **未使用の素材** (`Core/UnusedMedia.swift`、`UnusedMediaSheet`): 任意項目 `Project.mediaPool`(取り込んだ素材のパス。空なら書かない)のうち、クリップ(複合の子を再帰)・エフェクトの LUT・キャラクター画像のどれにも使われないものを列挙。`remove` / `removeAll` は使用中を外さない。ファイル ▸ 未使用の素材…(`AppMenuSpec.unusedMediaItem`、ショートカットなし、無効理由あり)。削除は素材リストから外すだけでディスクは触らず、1 操作 = 1 Undo。素材の追加・ドロップで `mediaPool` に登録(それ以前の書類は空で、使用中でない素材は出ない)。
+- **未使用の素材** (`Core/UnusedMedia.swift`、`UnusedMediaSheet`): 任意項目 `Project.mediaPool`(取り込んだ素材のパス。空なら書かない)のうち、クリップ(複合の子を再帰)・エフェクトの LUT・キャラクター画像のどれにも使われないものを列挙。`remove` / `removeAll` は使用中を外さない。ファイル ▸ 未使用の素材…(`AppMenuSpec.unusedMediaItem`、ショートカットなし、無効理由あり)。削除は素材リストから外すだけでディスクは触らず、1 操作 = 1 Undo。素材の追加・ドロップで `mediaPool` に登録(それ以前の書類は空で、使用中でない素材は出ない)。さらに `ProjectModel.edit` が `UnusedMedia.adoptRemoved` を呼び、その編集でどのクリップからも使われなくなった動画・音声・画像(声は除く)を `mediaPool` に足す(Undo で一緒に戻る)。**mediaPool ができる前に消えたクリップの素材は書類のどこにも記録が無く、取り戻せない**(`mediaHints` はパッケージ化のときだけ作られる)。
 - **範囲のドラッグと範囲ループ** (`TimelineView` の `RangeDrag`、`Core/ExportRange.swift` の `ExportRangeLoop`): ルーラー上で書き出し範囲の印(5pt 以内)を掴んで動かす。離したときに「書き出し範囲の移動」(1 回の Undo)。再生 ▸ 範囲をループ再生は `ProjectModel.rangeLoop`(保存しない・Undo に載せない)。ループ中は範囲の終わりで頭に戻して音を鳴らし直す(`PlaybackController.tick`)。
 
 ## 音声から字幕を作る(D-1 の最小版、2026-11-02)
@@ -495,7 +495,7 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
 - **元素材の使用範囲**: `SourceUsage.label(of:)`(「ソースの使用範囲 00:00–00:03」、1 時間以上は 0:00:00)。クリップのタイミング欄に表示し、出力 ▸ 元素材の使用範囲を表示 で再生位置をクリップの頭へ移す。素材のビューアは無いので、「元の素材の画面で範囲を示す」は未実装。
 - **絵コンテ**(`Storyboard`): 全体を 12 等分した区間の中央のコマ(`Renderer`)を 4 列の格子で 1 枚の PNG にする。セルは縦横比を保ち、幅 480 px、高さは偶数に揃える。書き出しはメニューから(保存パネル)で同期実行(枚数分の描画の間は画面が止まる)。
 - **台本の書き出し**(`VoiceScriptExport`): 声のクリップを始まりの時刻の順に「キャラ名: セリフ」で書く。`ScriptTimeline.parse` で読み直せる。キャラが無い・セリフが空のものは書かず件数を状態欄に出す。
-- **音による同期**(`AudioSync`): 窓ごとの RMS(包絡)と、正規化相互相関によるずれ(サンプル数、正なら後ろへずれている)。`maxLag` の範囲だけを探す。メニューからの接続(2 つのクリップの音を読んで開始位置を動かす)は未実装。
+- **音による同期**(`AudioSync`): 窓ごとの RMS(包絡)と、正規化相互相関によるずれ(サンプル数、正なら後ろへずれている)。`maxLag` の範囲だけを探す。メニューは クリップ ▸ 音声で映像と音声を自動同期(`AppMenuSpec.audioAutoSyncItem`、ショートカットなし、無効理由あり)。`AudioSyncEditing`(Core)が、動画 1 + 音声 1 の選択判定、10 ms の包絡(先頭 60 秒)の相関(±10 秒、短いほうの半分以上を重ねる範囲だけ。一致度 0.2 未満は失敗)、音声の新しい開始 = 映像の開始 − ずれ(0 未満・すでに合っている・ロック中は動かさない)を担当。`ProjectModel.autoSyncSelectedClips` が音を別タスクで読み、`applyAudioSync` が 1 回の Undo で反映する。映像の長さ・速度は変えない。実機の録音での精度は未確認。
 - メニューの追加: 出力 ▸ 台本を書き出す… / 絵コンテを書き出す… / 元素材の使用範囲を表示(いずれもショートカットなし。無効の理由あり)。
 
 ## 候補 30〜32・34〜38(2026-11-03)

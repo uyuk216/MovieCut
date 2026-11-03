@@ -35,6 +35,29 @@ public enum UnusedMedia {
         return p.mediaPool.filter { !used.contains($0) }.map { Item(path: $0) }
     }
 
+    /// 動画・音声・画像のクリップが参照するファイル(出てきた順、複合の中身も含む)。声(生成した音声のキャッシュ)は含めない。
+    static func mediaSources(_ clips: [Clip]) -> [String] {
+        var out: [String] = []
+        for c in clips {
+            if [ClipType.video, .audio, .image].contains(c.type), let s = c.src, !s.isEmpty, !out.contains(s) { out.append(s) }
+            for tr in c.tracks ?? [] { for s in mediaSources(tr.clips) where !out.contains(s) { out.append(s) } }
+        }
+        return out
+    }
+
+    /// 編集で、どのクリップからも使われなくなった素材(動画・音声・画像)を素材リストに覚える。
+    /// `mediaPool` ができる前の書類で消したクリップ、素材リストに入っていなかったクリップも、これ以降は「未使用の素材」に出る。
+    /// (すでに消えたクリップの素材は、書類に記録が無いので取り戻せない。)何も使われなくならなければ何も変えない。
+    public static func adoptRemoved(from old: Project, into new: inout Project) {
+        let before = mediaSources(old.tracks.flatMap(\.clips))
+        guard !before.isEmpty else { return }
+        let after = Set(mediaSources(new.tracks.flatMap(\.clips)))
+        let gone = before.filter { !after.contains($0) }
+        guard !gone.isEmpty else { return }
+        let used = usedPaths(in: new)
+        register(gone.filter { !used.contains($0) }, in: &new)
+    }
+
     /// 取り込んだ素材として覚える(重複は足さない)。
     public static func register(_ paths: [String], in p: inout Project) {
         for s in paths where !s.isEmpty && !p.mediaPool.contains(s) { p.mediaPool.append(s) }

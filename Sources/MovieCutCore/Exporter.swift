@@ -41,7 +41,7 @@ public enum ExportError: LocalizedError {
 // MARK: - 内部状態
 
 /// 書き出し中の共有状態(キャンセル・失敗・進み具合)。複数のキューから触るので NSLock で守る。
-private final class ExportControl {
+private final class ExportControl: @unchecked Sendable {
     private let lock = NSLock()
     private var _cancelled = false
     private var _failure: Error?
@@ -117,7 +117,8 @@ public final class Exporter {
         }
         var rp = project
         rp.width = ew; rp.height = eh
-        let renderer = Renderer(project: rp, assets: assets)
+        // 専用キューの中だけで使う(AVFoundation の部品は Sendable でないので、安全は呼び出し側の約束)
+        nonisolated(unsafe) let renderer = Renderer(project: rp, assets: assets)
 
         // 先に音声をミックスする(一時ファイル)
         let mixURL = FileManager.default.temporaryDirectory.appendingPathComponent("moviecut-mix-\(UUID().uuidString).caf")
@@ -134,7 +135,7 @@ public final class Exporter {
         let hasAudio = mix.sourceCount > 0
 
         try? FileManager.default.removeItem(at: url)
-        let writer: AVAssetWriter
+        nonisolated(unsafe) let writer: AVAssetWriter
         do { writer = try AVAssetWriter(outputURL: url, fileType: .mp4) }
         catch { throw ExportError.cannotCreateWriter(error) }
         writer.shouldOptimizeForNetworkUse = true
@@ -163,11 +164,11 @@ public final class Exporter {
                 AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_709_2,
             ],
         ]
-        let vInput = AVAssetWriterInput(mediaType: .video, outputSettings: vSettings)
+        nonisolated(unsafe) let vInput = AVAssetWriterInput(mediaType: .video, outputSettings: vSettings)
         vInput.expectsMediaDataInRealTime = false
         // トラックの時間の目盛りをコマの長さの整数倍にする(既定の 1/600 だと 29.97 などの時刻が丸められて、コマの間隔がそろわない)
         vInput.mediaTimeScale = CMTimeScale(rate.num * max(1, (600 + rate.num - 1) / rate.num))
-        let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: vInput, sourcePixelBufferAttributes: [
+        nonisolated(unsafe) let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: vInput, sourcePixelBufferAttributes: [
             kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
             kCVPixelBufferWidthKey as String: ew,
             kCVPixelBufferHeightKey as String: eh,
@@ -222,7 +223,7 @@ public final class Exporter {
         var vDone = false          // vQueue からだけ触る
         var nextFrame = 0          // 同上
         var lastReported = -1.0    // 同上
-        var pixelPool: CVPixelBufferPool?  // 同上(毎コマ adaptor から取ると VideoToolbox のロックを待つので 1 回だけ)
+        nonisolated(unsafe) var pixelPool: CVPixelBufferPool?  // 同上(毎コマ adaptor から取ると VideoToolbox のロックを待つので 1 回だけ)
         group.enter()
         vInput.requestMediaDataWhenReady(on: vQueue) {
             if vDone { return }
@@ -254,7 +255,8 @@ public final class Exporter {
             }
         }
 
-        if let ai = aInput, let ao = aOutput, let ar = aReader {
+        if let ai0 = aInput, let ao0 = aOutput, let ar0 = aReader {
+            nonisolated(unsafe) let ai = ai0, ao = ao0, ar = ar0
             var aDone = false
             group.enter()
             ai.requestMediaDataWhenReady(on: aQueue) {

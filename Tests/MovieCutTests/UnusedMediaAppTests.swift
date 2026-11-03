@@ -44,3 +44,19 @@ final class UnusedMediaAppTests: XCTestCase {
         XCTAssertEqual(AppMenuSpec.disabledReason(for: spec, state: s), "未使用の素材はありません")
     }
 }
+
+@MainActor
+final class UnusedMediaAdoptAppTests: XCTestCase {
+    func testDeletingClipFromOldProjectMakesItsMediaUnusedAndUndoRestores() {
+        var c = Clip(); c.id = "a"; c.type = .image; c.src = "/m/old.png"; c.duration = 2
+        var p = Project.new(); p.tracks[0].clips = [c]
+        let m = ProjectModel(project: p)
+        m.selectedClipId = "a"
+        XCTAssertTrue(m.project.mediaPool.isEmpty)
+        XCTAssertTrue(m.deleteSelected())
+        XCTAssertEqual(UnusedMedia.find(in: m.project).map(\.path), ["/m/old.png"])
+        m.effectiveUndoManager.undo()
+        XCTAssertTrue(m.project.mediaPool.isEmpty)
+        XCTAssertNotNil(m.clip("a"))
+    }
+}
