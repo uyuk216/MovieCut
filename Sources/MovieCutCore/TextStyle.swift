@@ -439,7 +439,7 @@ public struct SavedTextStyle: Codable, Equatable, Identifiable, Sendable {
     public var isBuiltin: Bool { id.hasPrefix(TextStyleLibrary.builtinPrefix) }
 }
 
-/// アプリ全体の文字スタイル(組み込み 9 つ + 保存したもの)。保存先は UserDefaults(JSON)。壊れていたら空として扱う。
+/// アプリ全体の文字スタイル(組み込み 16 つ(うちアニメ付きタイトル 7 つ) + 保存したもの)。保存先は UserDefaults(JSON)。壊れていたら空として扱う。
 public enum TextStyleLibrary {
     public static let defaultsKey = "textStyles.v1"
     public static let builtinPrefix = "builtin."
@@ -467,6 +467,37 @@ public enum TextStyleLibrary {
         SavedTextStyle(id: "builtin.fadein", name: "フェードイン", look: TextLook(anim: TextAnim(kind: TextAnimKind.fadeIn.rawValue, duration: 0.8))),
         SavedTextStyle(id: "builtin.typewriter", name: "タイプライター", look: TextLook(anim: TextAnim(kind: TextAnimKind.typewriter.rawValue, duration: 1.5))),
         SavedTextStyle(id: "builtin.pop", name: "ポップ", look: TextLook(anim: TextAnim(kind: TextAnimKind.pop.rawValue, duration: 0.5))),
+    ] + animatedTitles
+
+    /// アニメ付きタイトルのテンプレート(見た目 + 登場アニメーションの組)。id は `builtin.title.` で始まる。
+    public static let titlePrefix = "builtin.title."
+    public static let animatedTitles: [SavedTextStyle] = [
+        SavedTextStyle(id: titlePrefix + "pop", name: "タイトル・ポップ", look: TextLook(
+            color: "#ffffff", outline: "#3e2723", style: style {
+                $0.gradient = .init(color1: "#fff176", color2: "#ff7043", angle: 90)
+                $0.shadow = .init(color: "#000000", dx: 3, dy: 5, blur: 6, opacity: 0.6)
+            }, anim: TextAnim(kind: TextAnimKind.pop.rawValue, duration: 0.5))),
+        SavedTextStyle(id: titlePrefix + "typewriter", name: "タイトル・タイプライター", look: TextLook(
+            color: "#ffffff", outline: "#0d2a6b", style: style { $0.box = .init(color: "#0d2a6b", opacity: 0.92, paddingX: 48, paddingY: 14, cornerRadius: 0) },
+            anim: TextAnim(kind: TextAnimKind.typewriter.rawValue, duration: 1.5))),
+        SavedTextStyle(id: titlePrefix + "fade", name: "タイトル・フェード", look: TextLook(
+            color: "#ffffff", outline: "#000000", style: style { $0.shadow = .init(color: "#000000", dx: 2, dy: 3, blur: 8, opacity: 0.7) },
+            anim: TextAnim(kind: TextAnimKind.fadeIn.rawValue, duration: 1.2))),
+        SavedTextStyle(id: titlePrefix + "shake", name: "タイトル・シェイク", look: TextLook(
+            color: "#e53935", outline: "#ffffff", style: style {
+                $0.bold = true
+                $0.shadow = .init(color: "#000000", dx: 3, dy: 3, blur: 5, opacity: 0.7)
+            }, anim: TextAnim(kind: TextAnimKind.shake.rawValue, duration: 1.0))),
+        SavedTextStyle(id: titlePrefix + "credits", name: "タイトル・エンドロール", look: TextLook(
+            color: "#ffffff", outline: "#000000", style: style { $0.shadow = .init(color: "#000000", dx: 2, dy: 2, blur: 4, opacity: 0.8) },
+            anim: TextAnim(kind: TextAnimKind.scrollUp.rawValue, speed: 0.08))),
+        SavedTextStyle(id: titlePrefix + "ticker", name: "タイトル・ニュース速報", look: TextLook(
+            color: "#ffffff", outline: "#8b0000", style: style { $0.box = .init(color: "#b71c1c", opacity: 0.92, paddingX: 40, paddingY: 12, cornerRadius: 0) },
+            anim: TextAnim(kind: TextAnimKind.scrollLeft.rawValue, speed: 0.12))),
+        SavedTextStyle(id: titlePrefix + "bubblepop", name: "タイトル・吹き出しポップ", look: TextLook(
+            color: "#222222", outline: "#ffffff", style: nil,
+            bubble: Bubble(shape: "rounded", fill: "#ffffff", stroke: "#222222", strokeWidth: 4, tail: true, tailX: 0.5, tailY: 0.92),
+            anim: TextAnim(kind: TextAnimKind.pop.rawValue, duration: 0.5))),
     ]
 
     private static func style(_ f: (inout TextStyle) -> Void) -> TextStyle {

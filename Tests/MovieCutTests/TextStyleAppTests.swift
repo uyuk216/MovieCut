@@ -131,7 +131,7 @@ final class TextStyleAppTests: XCTestCase {
         // 壊れた保存データでも落ちずに空から始まる
         d.set(Data("garbage".utf8), forKey: TextStyleLibrary.defaultsKey)
         XCTAssertTrue(TextStyleStore(defaults: d).user.isEmpty)
-        XCTAssertEqual(TextStyleStore(defaults: d).all.count, 9)
+        XCTAssertEqual(TextStyleStore(defaults: d).all.count, 16)
         XCTAssertNil(TextStyleStore(defaults: nil).add(name: "", look: TextLook()))
     }
 
@@ -140,7 +140,7 @@ final class TextStyleAppTests: XCTestCase {
     func testMenuSpecAndPerform() {
         let on = state { $0.isTextClip = true; $0.textStyleChoices = TextStyleLibrary.builtins.map { .init(id: $0.id, name: $0.name, builtin: true) } + [.init(id: "user.1", name: "自分用", builtin: false)] }
         let items = AppMenuSpec.textStyleItems(on)
-        XCTAssertEqual(items.map(\.title), ["標準", "ゆっくり風", "ニュース帯", "見出し", "吹き出し風", "注意", "フェードイン", "タイプライター", "ポップ", "自分用"])
+        XCTAssertEqual(items.map(\.title), ["標準", "ゆっくり風", "ニュース帯", "見出し", "吹き出し風", "注意", "フェードイン", "タイプライター", "ポップ"] + TextStyleLibrary.animatedTitles.map(\.name) + ["自分用"])
         XCTAssertEqual(items.map(\.command), (TextStyleLibrary.builtins.map(\.id) + ["user.1"]).map { MenuCommand.textStyleApply($0) })
         XCTAssertTrue(items.allSatisfy { $0.enabled && $0.shortcut == nil })
         XCTAssertEqual(AppMenuSpec.textAnimItems(on).map(\.title), ["なし", "タイプライター", "ポップ", "シェイク", "スクロール（上へ）", "スクロール（左へ）", "フェードイン"])
@@ -154,7 +154,7 @@ final class TextStyleAppTests: XCTestCase {
         let m = makeModel()
         m.selectedClipId = "t"
         var s = MenuState(model: m)
-        XCTAssertTrue(s.isTextClip); XCTAssertEqual(s.textStyleChoices.count, 9)
+        XCTAssertTrue(s.isTextClip); XCTAssertEqual(s.textStyleChoices.count, 16)
         AppMenu.perform(.textStyleApply("builtin.warning"), model: m)
         XCTAssertEqual(m.clip("t")?.color, "#e53935")
         AppMenu.perform(.textAnim(.shake), model: m)

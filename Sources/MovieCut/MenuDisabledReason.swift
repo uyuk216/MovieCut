@@ -19,7 +19,7 @@ extension AppMenuSpec {
         if s.isLocked { return "書き出し中・音声生成中は使えません" }
         switch spec.command {
         case .export, .exportPreset, .exportCustomPreset, .saveCustomPreset, .exportStill, .exportSequence,
-             .exportThumbnail, .exportGIF, .queueExport, .measureLoudness:
+             .exportThumbnail, .exportThumbnailCandidates, .exportGIF, .queueExport, .measureLoudness:
             return "書き出せるクリップがありません"
         case .rangeIn, .rangeOut: return "書き出し範囲を指定できる状態ではありません"
         case .rangeClear: return "書き出し範囲が指定されていません"

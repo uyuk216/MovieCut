@@ -18,7 +18,7 @@ final class AnimatedPresetTests: XCTestCase {
         XCTAssertEqual(try preset("builtin.fadein").name, "フェードイン")
         XCTAssertEqual(try preset("builtin.typewriter").name, "タイプライター")
         XCTAssertEqual(try preset("builtin.pop").name, "ポップ")
-        XCTAssertEqual(TextStyleLibrary.builtins.count, 9)
+        XCTAssertEqual(TextStyleLibrary.builtins.count, 16)
         XCTAssertTrue(TextStyleLibrary.builtins.allSatisfy(\.isBuiltin))
     }
 
@@ -36,6 +36,27 @@ final class AnimatedPresetTests: XCTestCase {
         _ = TextStyleEditing.setAnim(&c, kind: .shake)
         _ = TextStyleLibrary.builtins[1].look.apply(to: &c)
         XCTAssertEqual(c.textAnim?.known, .shake)
+    }
+
+    func testAnimatedTitleTemplates() throws {
+        let titles = TextStyleLibrary.animatedTitles
+        XCTAssertGreaterThanOrEqual(titles.count, 6)
+        XCTAssertEqual(Set(titles.map(\.id)).count, titles.count)
+        XCTAssertTrue(titles.allSatisfy { $0.id.hasPrefix(TextStyleLibrary.titlePrefix) && $0.isBuiltin })
+        XCTAssertEqual(Set(titles.compactMap { $0.look.anim?.known }).count, 6, "6 種類のアニメーションを使う")
+        for t in titles {
+            let anim = try XCTUnwrap(t.look.anim, t.name)
+            XCTAssertNotNil(anim.known, t.name)
+            XCTAssertEqual(t.look.style?.normalized, t.look.style)
+            var c = textClip()
+            XCTAssertTrue(t.look.apply(to: &c), t.name)
+            XCTAssertEqual(c.textAnim, anim)
+            XCTAssertFalse(t.look.apply(to: &c), "もう一度は変更なし")
+            // 保存して読み直しても同じ(スクロールの速さ・時間は任意項目)
+            let back = try JSONDecoder().decode(Clip.self, from: JSONEncoder().encode(c))
+            XCTAssertEqual(back.textAnim, c.textAnim)
+        }
+        XCTAssertNil(try XCTUnwrap(titles.first { $0.id.hasSuffix("credits") }).look.anim?.duration)
     }
 
     func testRoundTripAndOldFixtureUnchanged() throws {

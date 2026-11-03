@@ -74,7 +74,7 @@ final class MenuUndoSweepTests: XCTestCase {
         case .about, .settings, .videoSettings, .addMedia, .export, .exportPreset, .exportCustomPreset, .saveCustomPreset,
              .fanMaxToggle, .fanInstall, .fanUninstall, .importSubtitles, .exportSubtitles, .translateSubtitles,
              .transcribeSubtitles, .relinkMedia, .packageSave, .addFont, .addSubtitle, .removeBackground, .toggleRangeLoop, .toggleTrimLoop, .toggleClipLoop, .toggleAudition, .cycleAudition, .toggleVoiceRipple, .transferClips, .subclipBatch, .trimLoopWidth(0.5), .trimLoopWidth(1), .trimLoopWidth(2), .aiScript, .aiChapters, .aiTitles, .aiRewrite, .aiSettings,
-             .exportStill, .exportSequence, .exportThumbnail, .exportGIF, .queueExport, .showExportQueue, .audioLibrary,
+             .exportStill, .exportSequence, .exportThumbnail, .exportThumbnailCandidates, .exportGIF, .queueExport, .showExportQueue, .audioLibrary,
              .measureLoudness, .showScopes, .saveTemplate, .newFromTemplate, .makeProxies, .lutLoad, .autoWhiteBalance, .regenerateVoice,
              .makeVoices, .layerDelete, .copyChapters, .copyChaptersColor(.red), .jumpToTime, .renameMarker, .fpsCustom, .addQRCode, .aiImage, .generateSubtitles,
              .helpShortcuts, .helpVoicevox, .helpAquestalk, .helpLicense, .helpThirdParty, .previewBackground, .guide,

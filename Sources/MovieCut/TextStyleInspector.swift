@@ -99,7 +99,11 @@ struct TextStyleInspector: View {
         InspectorSection(title: "スタイル")
         HStack(spacing: 8) {
             Menu {
-                ForEach(TextStyleLibrary.builtins) { s in Button(s.name) { model.applyTextStyle(id: s.id, clipId: clipId) } }
+                ForEach(TextStyleLibrary.builtins.filter { !$0.id.hasPrefix(TextStyleLibrary.titlePrefix) }) { s in Button(s.name) { model.applyTextStyle(id: s.id, clipId: clipId) } }
+                Divider()
+                Menu("アニメ付きタイトル") {
+                    ForEach(TextStyleLibrary.animatedTitles) { s in Button(s.name) { model.applyTextStyle(id: s.id, clipId: clipId) } }
+                }
                 if !store.user.isEmpty {
                     Divider()
                     ForEach(store.user) { s in Button(s.name) { model.applyTextStyle(id: s.id, clipId: clipId) } }

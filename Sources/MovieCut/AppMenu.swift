@@ -46,6 +46,8 @@ enum MenuCommand: Hashable {
     case noteList
     // 出力 ▸ サムネイル画像を書き出す…(1280×720。ショートカットは持たない)
     case exportThumbnail
+    // 出力 ▸ サムネイル候補を書き出す…(点数の高いコマを 5 枚。ショートカットは持たない)
+    case exportThumbnailCandidates
     // 出力 ▸ GIFとして書き出す…(ショートカットは持たない)
     case exportGIF
     // 出力 ▸ 書き出しキュー(今の設定の MP4 を積む / キューを表示)と、ファイル ▸ 素材ブラウザ(ショートカットは持たない)
@@ -670,7 +672,8 @@ enum AppMenuSpec {
     static func imageExportItems(_ s: MenuState) -> [MenuItemSpec] {
         [MenuItemSpec(command: .exportStill, title: "現在のフレームを画像で書き出す…", shortcut: nil, enabled: s.canEdit && s.canExport, checked: nil, hint: "PNG / JPEG"),
          MenuItemSpec(command: .exportSequence, title: "連番画像を書き出す…", shortcut: nil, enabled: s.canEdit && s.canExport, checked: nil, hint: "name_00001.png"),
-         MenuItemSpec(command: .exportThumbnail, title: "サムネイル画像を書き出す…", shortcut: nil, enabled: s.canEdit && s.canExport, checked: nil, hint: "1280×720")]
+         MenuItemSpec(command: .exportThumbnail, title: "サムネイル画像を書き出す…", shortcut: nil, enabled: s.canEdit && s.canExport, checked: nil, hint: "1280×720"),
+         MenuItemSpec(command: .exportThumbnailCandidates, title: "サムネイル候補を書き出す…", shortcut: nil, enabled: s.canEdit && s.canExport, checked: nil, hint: "自動で 5 枚")]
     }
 
     /// 出力 ▸ GIFとして書き出す…(保存パネルで fps・幅・範囲を決める。ショートカットは持たない)。
@@ -1266,6 +1269,7 @@ enum AppMenu {
             case .noteList: m.showNoteListSheet = true
             case .exportStill: m.chooseAndExportStill()
             case .exportThumbnail: m.chooseAndExportThumbnail()
+            case .exportThumbnailCandidates: m.chooseAndExportThumbnailCandidates()
             case .exportSequence: m.chooseAndExportSequence()
             case .exportGIF: m.chooseAndExportGIF()
             case .queueExport: m.chooseAndQueueExport()
