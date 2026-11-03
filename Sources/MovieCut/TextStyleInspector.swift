@@ -22,7 +22,7 @@ struct TextStyleInspector: View {
         if let c = clip {
             if c.type == .text { styleSection(c) }
             decorationSections(c)
-            if c.type == .text { bubbleSection(c); animationSection(c); counterSection(c) }
+            if c.type == .text { bubbleSection(c); animationSection(c); counterSection(c); valueRefSection(c) }
         }
     }
 
@@ -270,6 +270,58 @@ struct TextStyleInspector: View {
             .disabled(model.isLocked)
             Text("クリップの頭から終わりまで、開始から終わりへ直線に変わります。文字は「テキスト」の後ろに続きます。").font(.system(size: 11)).foregroundStyle(.secondary)
         }
+    }
+
+    // MARK: 他のクリップの値(文字クリップ)
+
+    @ViewBuilder private func valueRefSection(_ c: Clip) -> some View {
+        let cands = model.valueRefCandidates(for: c.id)
+        InspectorSection(title: "他のクリップの値")
+        Toggle("他のクリップの値を表示", isOn: Binding(get: { c.valueRef != nil }, set: { on in
+            guard let first = cands.first else { return }
+            model.setValueRef(on ? ValueRef(clipId: first.id) : nil, name: on ? "他のクリップの値を表示" : "値の表示を外す", clipId: clipId)
+        }))
+        .toggleStyle(.checkbox).font(.system(size: 12)).disabled(model.isLocked || (c.valueRef == nil && cands.isEmpty))
+        if let r = c.valueRef {
+            VStack(alignment: .leading, spacing: 6) {
+                InspectorField(label: "クリップ") {
+                    Picker("", selection: Binding(get: { r.clipId }, set: { v in model.editValueRef({ $0.clipId = v }, name: "参照クリップの変更", clipId: clipId) })) {
+                        ForEach(cands, id: \.id) { Text(Self.candidateLabel($0)).tag($0.id) }
+                        if !cands.contains(where: { $0.id == r.clipId }) { Text("（見つかりません）").tag(r.clipId) }
+                    }
+                    .labelsHidden()
+                }
+                InspectorField(label: "項目") {
+                    Picker("", selection: Binding(get: { r.param }, set: { v in model.editValueRef({ $0.param = v }, name: "参照する項目の変更", clipId: clipId) })) {
+                        ForEach(ValueRef.params, id: \.self) { Text(ValueRef.label(of: $0)).tag($0) }
+                    }
+                    .labelsHidden()
+                }
+                InspectorField(label: "表示") {
+                    Picker("", selection: Binding(get: { r.format }, set: { v in model.editValueRef({ $0.format = v }, name: "値の表示形式の変更", clipId: clipId) })) {
+                        ForEach(ValueRef.formats, id: \.self) { Text(ValueRef.formatLabel($0)).tag($0) }
+                    }
+                    .pickerStyle(.segmented).labelsHidden()
+                }
+                InspectorField(label: "小数の桁") {
+                    NumField(value: Double(r.decimals), step: 1, decimals: 0, clamp: { min(max($0.rounded(), 0), 4) },
+                             onCommit: { v in model.editValueRef({ $0.decimals = Int(v) }, name: "値の桁数の変更", clipId: clipId) },
+                             onStep: { v in model.editValueRef({ $0.decimals = Int(v) }, name: "値の桁数の変更", clipId: clipId) })
+                }
+            }
+            .padding(.leading, 10)
+            .disabled(model.isLocked)
+            Text("再生位置での値(キーフレーム反映)が「テキスト」の後ろに続きます。参照先が無いときは「—」。カウントダウンがあるときはそちらが先です。").font(.system(size: 11)).foregroundStyle(.secondary)
+        }
+    }
+
+    private static func candidateLabel(_ k: Clip) -> String {
+        let name: String
+        switch k.type {
+        case .text, .voice: name = (k.text ?? "").prefix(12).description
+        default: name = k.src.map { ($0 as NSString).lastPathComponent } ?? k.type.rawValue
+        }
+        return "\(k.type.rawValue) \(name) @\(String(format: "%.1f", k.start))s"
     }
 
     // MARK: アニメーション

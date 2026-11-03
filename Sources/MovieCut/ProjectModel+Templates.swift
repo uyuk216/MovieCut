@@ -49,32 +49,65 @@ enum ProjectTemplateActions {
 }
 
 extension ProjectModel {
-    /// ファイル ▸ テンプレートとして保存…: 名前を聞いて、クリップを外した中身を保存する。同じ名前があれば「名前 2」にする。
+    /// ファイル ▸ テンプレートとして保存…: 名前と、含める項目(設定・キャラクター・レイヤー構成・マーカー・選んでいるクリップ)を聞いて保存する。
+    /// 同じ名前があれば「名前 2」にする。
     func saveAsTemplate() {
         let alert = NSAlert()
         alert.messageText = "テンプレートとして保存"
-        alert.informativeText = "クリップは含めません。キャラクター・レイヤー・設定・マーカーを保存します。"
+        alert.informativeText = "含める項目を選びます。選ばなかった項目は新規プロジェクトの初期値になります。"
         let field = NSTextField(string: "新しいテンプレート")
         field.frame = NSRect(x: 0, y: 0, width: 300, height: 24)
-        alert.accessoryView = field
+        var boxes: [(ProjectTemplate.Parts, NSButton)] = []
+        let titles: [(ProjectTemplate.Parts, String)] = [
+            (.settings, "設定(解像度・fps・背景・書き出し)"), (.characters, "キャラクター"),
+            (.layers, "レイヤーの構成"), (.markers, "マーカー")]
+        let stack = NSStackView(views: [field])
+        stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 6
+        for (part, title) in titles {
+            let b = NSButton(checkboxWithTitle: title, target: nil, action: nil)
+            b.state = .on
+            stack.addArrangedSubview(b)
+            boxes.append((part, b))
+        }
+        let selectedCount = selectedClipIDs.count
+        var clipBox: NSButton?
+        if selectedCount > 0 {
+            let b = NSButton(checkboxWithTitle: "選んでいるクリップ(\(selectedCount) 個)を含める", target: nil, action: nil)
+            b.state = .off
+            stack.addArrangedSubview(b)
+            clipBox = b
+        }
+        stack.frame = NSRect(x: 0, y: 0, width: 320, height: CGFloat(30 + 22 * (titles.count + (selectedCount > 0 ? 1 : 0))))
+        alert.accessoryView = stack
         alert.addButton(withTitle: "保存")
         alert.addButton(withTitle: "キャンセル")
         guard alert.runModal() == .alertFirstButtonReturn else { return }
-        guard let name = ProjectTemplate.sanitizedName(field.stringValue) else {
+        var parts: ProjectTemplate.Parts = []
+        for (part, b) in boxes where b.state == .on { parts.insert(part) }
+        let clipIds: Set<String> = clipBox?.state == .on ? selectedClipIDs : []
+        saveTemplate(named: field.stringValue, parts: parts, clipIds: clipIds)
+    }
+
+    /// 名前と項目を決めたあとの保存(ダイアログを使わない部分。テストから呼べる)。
+    @discardableResult
+    func saveTemplate(named raw: String, parts: ProjectTemplate.Parts, clipIds: Set<String>, store: TemplateStore? = nil) -> String? {
+        guard let name = ProjectTemplate.sanitizedName(raw) else {
             statusText = "テンプレートの名前が空なので保存しませんでした"
-            return
+            return nil
         }
         do {
-            guard let store = TemplateStore.standard() else { throw TemplateStore.StoreError.invalidName }
-            let saved = try store.save(project, as: name)
+            guard let store = store ?? TemplateStore.standard() else { throw TemplateStore.StoreError.invalidName }
+            let saved = try store.save(project, as: name, parts: parts, clipIds: clipIds)
             ProjectTemplateLibrary.invalidate()
             ActiveDocument.shared.refresh()
             statusText = "テンプレート「\(saved)」を保存しました"
+            return saved
         } catch {
             let err = NSAlert()
             err.messageText = "テンプレートを保存できませんでした"
             err.informativeText = error.localizedDescription
             err.runModal()
+            return nil
         }
     }
 }

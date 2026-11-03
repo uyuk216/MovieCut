@@ -44,16 +44,18 @@ final class MenuM7Tests: XCTestCase {
         XCTAssertEqual(groups.map { $0.map(\.title) }, [
             ["テキストを追加", "ぼかし範囲を追加", "調整レイヤーを追加", "音声ビジュアライザを追加", "QRコードを追加…", "AIで画像を作る…"],
             ["クリップを分割", "クリップを複製", "クリップをロック", "クリップを削除", "すき間を詰めて削除", "選択クリップを再生ヘッドに揃える", "選択クリップをつなげて並べる", "1 コマ前へ動かす", "1 コマ後ろへ動かす", "手ぶれ補正（映像を滑らかにする）", "縦動画に自動リフレーム", "動きに追従させる", "複合クリップにまとめる", "複合クリップを解除"],
-            ["再生位置より前を切り落とす", "再生位置より後ろを切り落とす"],
+            ["再生位置より前を切り落とす", "再生位置より後ろを切り落とす", "分割点を統合"],
             ["前のクリップを選択", "次のクリップを選択", "選択クリップを上のレイヤーへ", "選択クリップを下のレイヤーへ", "再生位置のクリップを選ぶ", "重なったクリップを巡回選択", "短いクリップを選ぶ", "元素材の使用範囲を表示"],
-            ["レイヤーを追加", "選択クリップの音声を作り直す", "AIでセリフを直す…", "話者ごとの発話時間を表示"],
+            ["レイヤーを追加", "選択クリップの音声を作り直す", "音声の作り直しで後続を詰める", "AIでセリフを直す…", "話者ごとの発話時間を表示"],
+            ["同じセリフのテイクを比較…", "候補クリップを比較して差し替え…", "選択クリップを別プロジェクトへ複製…", "範囲を指定してサブクリップを一括作成…"],
         ])
         XCTAssertEqual(groups.map { $0.map(\.shortcut) }, [
             [sc("t", [.command, .shift]), sc("b", [.command, .shift]), nil, nil, nil, nil],
             [nil, sc("d", .command), nil, nil, sc(.delete, [.option, .command]), nil, nil, nil, nil, nil, nil, nil, nil, nil],
-            [sc("[", [.option, .command]), sc("]", [.option, .command])],
+            [sc("[", [.option, .command]), sc("]", [.option, .command]), nil],
             [sc("[", .command), sc("]", .command), sc("[", [.shift, .command]), sc("]", [.shift, .command]), sc(.upArrow, [.control, .option]), nil, nil, nil],
-            [sc("l", [.command, .shift]), sc("r", [.command, .option]), nil, nil],
+            [sc("l", [.command, .shift]), sc("r", [.command, .option]), nil, nil, nil],
+            [nil, nil, nil, nil],
         ])
         XCTAssertEqual(groups[1].map(\.hint), ["S", nil, "移動・トリム・分割・削除を防ぐ", "⌫", nil, "一番手前の頭を再生ヘッドへ", "2 つ以上選ぶ", nil, nil, nil, nil, nil, nil, nil], "分割・削除は通常キー(KeyRouter)なのでヒントだけ。並べるは 2 つ以上の条件を書く")
     }
@@ -123,7 +125,7 @@ final class MenuM7Tests: XCTestCase {
         // 選択あり・再生位置がクリップの中・真ん中の行
         s = state { $0.hasSelection = true; $0.canTrim = true; $0.canSplit = true; $0.canMoveUp = true; $0.canMoveDown = true; $0.hasPrevClip = true; $0.hasNextClip = true ; $0.canCompoundGroup = true; $0.hasClips = true; $0.hasSourceUsage = true }
         // 手ぶれ補正・AI・ボイス・複合の解除は、ここでは対象外(それぞれの選択条件でだけ使える)
-        let gated: Set<MenuCommand> = [.regenerateVoice, .aiRewrite, .stabilizeToggle, .autoReframe, .motionTrack, .compoundUngroup, .concatenateClips, .selectShortClips, .cycleOverlapping]
+        let gated: Set<MenuCommand> = [.regenerateVoice, .aiRewrite, .stabilizeToggle, .autoReframe, .motionTrack, .compoundUngroup, .concatenateClips, .selectShortClips, .cycleOverlapping, .mergeSplits, .compareTakes, .candidateSwap, .transferClips]
         XCTAssertTrue(AppMenuSpec.clipMenu(s).flatMap { $0 }.filter { !gated.contains($0.command) }.allSatisfy(\.enabled))
         XCTAssertFalse(item(AppMenuSpec.clipLayerAndVoice(s), .regenerateVoice).enabled, "ボイス以外では押せない")
         s.isVoiceSelected = true

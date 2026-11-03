@@ -65,6 +65,27 @@ extension ProjectModel {
         return applyAlignment(o, name: "選択クリップをつなげて並べる")
     }
 
+    /// 統合の対象の選び方: クリップを選んでいればそのクリップが関わる分割点だけ、何も選んでいなければ全体(nil)。
+    var mergeScope: Set<String>? {
+        let ids = selectionIdsForAlignment
+        return ids.isEmpty ? nil : ids
+    }
+
+    /// 「分割点を統合」(候補 34): 連続する同じ素材の分割点を一括でつなぎ直す。全体で 1 回の Undo。統合するものが無ければ何もしない。
+    @discardableResult
+    func mergeSplitPoints() -> Bool {
+        guard !isLocked else { return false }
+        flushCoalesced()
+        guard let r = ClipMerge.mergeAll(in: project, scope: mergeScope) else {
+            statusText = "統合できる分割点がありません"
+            return false
+        }
+        guard edit("分割点を統合", { $0 = r.project }) else { return false }
+        if let first = r.keptIds.first { selectedClipId = first }
+        statusText = "\(r.merged) 個の分割点を統合しました"
+        return true
+    }
+
     /// 位置合わせの結果を反映する。重なるときは何も変えず、理由を状態欄に出す(1 回の取り消し)。
     private func applyAlignment(_ o: TimelineAlignment.Outcome, name: String) -> Bool {
         switch o {

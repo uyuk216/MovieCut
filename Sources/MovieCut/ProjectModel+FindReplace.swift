@@ -64,6 +64,7 @@ extension ProjectModel {
             for (id, c) in updated {
                 if let l = ClipEditing.locate(id, in: p) { p.tracks[l.track].clips[l.index] = c }
             }
+            _ = applyVoiceRipple(&p, changed: Set(r.changes.filter(\.isVoice).map(\.clipId)))
         }
         var note = "\(r.count) 箇所を置き換えました"
         if voiceCount > 0 { note += "(セリフ \(voiceCount) 個は音声を作り直しました)" }

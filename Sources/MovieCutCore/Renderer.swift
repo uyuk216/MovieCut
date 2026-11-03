@@ -359,7 +359,7 @@ public struct Renderer {
             let blurred = pose.blur > 0
             let style = c.textStyle
             // カウントダウンの文字(無ければ text そのもの)
-            let shown = c.displayText(at: t)
+            let shown = c.displayText(at: t, in: project)
             // 文字のアニメーション(頭の数秒だけ。終わったあとは静止した文字と同じ速い道)
             var pose = pose
             var visible: Int?

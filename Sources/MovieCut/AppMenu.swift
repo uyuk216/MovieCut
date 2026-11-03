@@ -29,6 +29,8 @@ enum MenuCommand: Hashable {
     case trimLoopWidth(Double)
     // 再生 ▸ 重なったクリップの音だけ試聴(オン/オフ)・次のクリップへ(ショートカットは持たない)
     case toggleAudition, cycleAudition
+    // クリップ ▸ 音声の作り直しで後続を詰める(アプリの設定のオン/オフ。ショートカットなし)
+    case toggleVoiceRipple
     case aiScript, aiChapters, aiTitles, aiRewrite, aiSettings
     // 書き出し範囲(イン / アウト / 解除)と、静止画・連番画像の書き出し
     case rangeIn, rangeOut, rangeClear, exportStill, exportSequence
@@ -64,6 +66,16 @@ enum MenuCommand: Hashable {
     case duplicate, rippleDelete, trimBefore, trimAfter, prevClip, nextClip, moveLayerUp, moveLayerDown, addLayer, regenerateVoice
     // クリップ ▸ 選択クリップを再生ヘッドに揃える / つなげて並べる(ショートカットは持たない。1 回の Undo)
     case alignToPlayhead, concatenateClips
+    // クリップ ▸ 分割点を統合(連続する同じ素材の分割点を一括で。選んでいればその周り、無ければ全体。ショートカットなし)
+    case mergeSplits
+    // クリップ ▸ 同じセリフのテイクを比較…(シート。ショートカットなし)
+    case compareTakes
+    // クリップ ▸ 候補クリップを比較して差し替え…(シート。ショートカットなし)
+    case candidateSwap
+    // クリップ ▸ 選択クリップを別プロジェクトへ複製…(元の配置のまま。ショートカットなし)
+    case transferClips
+    // クリップ ▸ 範囲を指定してサブクリップを一括作成…(シート。ショートカットなし)
+    case subclipBatch
     case playPause, toStart, stepBack, stepForward
     // 移動(M7)
     case goStart, goEnd, prevEdit, nextEdit, prevLine, nextLine, jumpToTime
@@ -188,6 +200,8 @@ struct MenuState: Equatable {
     /// 音だけの試聴がオン / 再生位置で鳴っているクリップの数
     var auditionActive = false
     var auditionCandidateCount = 0
+    /// 音声を作り直したとき後ろのクリップをずらす設定
+    var voiceRipple = false
     var hasSelection = false
     /// 文字クリップかボイスクリップがある(検索と置換の対象)
     var hasTextTargets = false
@@ -210,6 +224,12 @@ struct MenuState: Equatable {
     /// 再生位置に画面で重なって見えているクリップの数(巡回選択は 2 つ以上で使える)
     var overlapCount = 0
     var hasShortClips = false
+    /// 統合できる分割点がある(選んでいればその周り、無ければ全体)
+    var hasMergeableSplits = false
+    /// 同じセリフのボイスクリップが 2 つ以上ある(テイクの比較)
+    var hasTakeGroups = false
+    /// 選んだクリップに、差し替えの候補(同じ種類の素材)がある
+    var canCandidateSwap = false
     /// 選んでいるクリップ 1 つが、元素材の使用範囲を持つ(動画・音声・画像で、フリーズでない)。
     var hasSourceUsage = false
     /// 声のクリップが 1 つ以上ある(台本の書き出し)。
@@ -352,6 +372,7 @@ struct MenuState: Equatable {
         rangeLoop = m.rangeLoop
         trimLoopActive = m.trimLoop != nil
         trimLoopHalfWidth = TrimLoopSettings.halfWidth
+        voiceRipple = VoiceRippleSettings.enabled
         auditionActive = m.auditionOn
         auditionCandidateCount = m.auditionCandidates.count
         hasSelection = m.selectedClip != nil
@@ -369,6 +390,9 @@ struct MenuState: Equatable {
         hasGaps = !TimelineQuery.gapStarts(in: m.project).isEmpty
         overlapCount = PreviewPicking.stack(in: m.project, at: m.currentTime).count
         hasShortClips = !TimelineQuery.shortClipIds(in: m.project).isEmpty
+        hasMergeableSplits = ClipMerge.hasMergeable(in: m.project, scope: m.mergeScope)
+        hasTakeGroups = !TakeCompare.groups(in: m.project).isEmpty
+        canCandidateSwap = m.canOpenCandidateSwap
         hasSourceUsage = m.selectedClip.flatMap { SourceUsage.range(of: $0) } != nil
         hasVoiceClips = m.project.allClips.contains { $0.type == .voice }
         hasSelectionSpan = TimelineQuery.span(ofClipIds: m.selectedClipIDs, in: m.project) != nil
@@ -588,9 +612,9 @@ enum AppMenuSpec {
         MenuItemSpec(command: .welcomeAtLaunchToggle, title: "起動時の画面を表示", shortcut: nil, enabled: true, checked: s.welcomeAtLaunch)
     }
 
-    /// ファイル ▸ テンプレートとして保存…(クリップは含めない。ショートカットなし)。
+    /// ファイル ▸ テンプレートとして保存…(含める項目を選べる。ショートカットなし)。
     static func templateSave(_ s: MenuState) -> MenuItemSpec {
-        MenuItemSpec(command: .saveTemplate, title: "テンプレートとして保存…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "クリップは含めない")
+        MenuItemSpec(command: .saveTemplate, title: "テンプレートとして保存…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "含める項目を選べる")
     }
 
     /// ファイル ▸ テンプレートから新規作成 ▸ の各テンプレート(開くと無題の書類になる)。
@@ -756,7 +780,8 @@ enum AppMenuSpec {
 
     static func clipTrim(_ s: MenuState) -> [MenuItemSpec] {
         [MenuItemSpec(command: .trimBefore, title: "再生位置より前を切り落とす", shortcut: MenuShortcut(key: "[", modifiers: [.option, .command]), enabled: s.canEdit && s.canTrim, checked: nil),
-         MenuItemSpec(command: .trimAfter, title: "再生位置より後ろを切り落とす", shortcut: MenuShortcut(key: "]", modifiers: [.option, .command]), enabled: s.canEdit && s.canTrim, checked: nil)]
+         MenuItemSpec(command: .trimAfter, title: "再生位置より後ろを切り落とす", shortcut: MenuShortcut(key: "]", modifiers: [.option, .command]), enabled: s.canEdit && s.canTrim, checked: nil),
+         MenuItemSpec(command: .mergeSplits, title: "分割点を統合", shortcut: nil, enabled: s.canEdit && s.hasMergeableSplits, checked: nil, hint: "同じ素材の続きを 1 つに")]
     }
 
     static func clipNavigate(_ s: MenuState) -> [MenuItemSpec] {
@@ -773,13 +798,22 @@ enum AppMenuSpec {
     static func clipLayerAndVoice(_ s: MenuState) -> [MenuItemSpec] {
         [MenuItemSpec(command: .addLayer, title: "レイヤーを追加", shortcut: cmd("l", shift: true), enabled: s.canEdit, checked: nil),
          MenuItemSpec(command: .regenerateVoice, title: "選択クリップの音声を作り直す", shortcut: MenuShortcut(key: "r", modifiers: [.command, .option]), enabled: s.canEdit && s.isVoiceSelected, checked: nil),
+         MenuItemSpec(command: .toggleVoiceRipple, title: "音声の作り直しで後続を詰める", shortcut: nil, enabled: s.canEdit, checked: s.voiceRipple, hint: "尺が変わった分だけ後ろをずらす"),
          aiRewrite(s),
          MenuItemSpec(command: .speechShare, title: "話者ごとの発話時間を表示", shortcut: nil, enabled: s.canEdit && s.hasClips, checked: nil, hint: "セリフの長さから")]
     }
 
+    /// クリップ ▸ 比べる・写す・まとめて作る(テイク比較・候補の差し替え・別プロジェクトへ複製・サブクリップの一括作成。ショートカットなし)。
+    static func clipCompareAndTransfer(_ s: MenuState) -> [MenuItemSpec] {
+        [MenuItemSpec(command: .compareTakes, title: "同じセリフのテイクを比較…", shortcut: nil, enabled: s.canEdit && s.hasTakeGroups, checked: nil, hint: "長さ・音量・無音を並べて試聴"),
+         MenuItemSpec(command: .candidateSwap, title: "候補クリップを比較して差し替え…", shortcut: nil, enabled: s.canEdit && s.canCandidateSwap, checked: nil, hint: "素材だけを取り替えて見比べる"),
+         MenuItemSpec(command: .transferClips, title: "選択クリップを別プロジェクトへ複製…", shortcut: nil, enabled: s.canEdit && s.selectionCount > 0, checked: nil, hint: "レイヤーと時刻をそのまま"),
+         MenuItemSpec(command: .subclipBatch, title: "範囲を指定してサブクリップを一括作成…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "複数の素材から、再生位置へ順に並べる")]
+    }
+
     /// クリップメニューの全項目(区切りごとのグループ)。
     static func clipMenu(_ s: MenuState) -> [[MenuItemSpec]] {
-        [clipAdd(s), clipEdit(s), clipTrim(s), clipNavigate(s), clipLayerAndVoice(s)]
+        [clipAdd(s), clipEdit(s), clipTrim(s), clipNavigate(s), clipLayerAndVoice(s), clipCompareAndTransfer(s)]
     }
 
     /// 編集メニューのクリップのコピー / 切り取り / 貼り付け / 全選択。ショートカットは付けない(⌘C ⌘X ⌘V ⌘A は標準の項目が responder chain で
@@ -1201,6 +1235,7 @@ enum AppMenu {
             case .trimLoopWidth(let w): TrimLoopSettings.halfWidth = w
             case .toggleAudition: m.toggleAudition()
             case .cycleAudition: m.cycleAuditionTarget()
+            case .toggleVoiceRipple: VoiceRippleSettings.enabled.toggle()
             case .copyChapters: m.copyChapters()
             case .copyChaptersColor(let c): m.copyChapters(color: c)
             case .aiScript: m.openAIScriptDialog()
@@ -1240,6 +1275,11 @@ enum AppMenu {
             case .rippleDelete: m.rippleDeleteSelected()
             case .alignToPlayhead: m.alignSelectedToPlayhead()
             case .concatenateClips: m.concatenateSelectedClips()
+            case .mergeSplits: m.mergeSplitPoints()
+            case .compareTakes: m.openTakeCompare()
+            case .candidateSwap: m.openCandidateSwap()
+            case .transferClips: m.chooseTransferDestination()
+            case .subclipBatch: m.openSubclipSheet()
             case .copyClips: m.copySelection()
             case .cutClips: m.cutSelection()
             case .pasteClips: m.pasteClips()

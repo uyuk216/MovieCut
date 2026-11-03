@@ -152,11 +152,22 @@ extension ProjectModel {
             return false
         }
         let result = c
+        var shifted = 0
         edit(name) { p in
             if let l = ClipEditing.locate(clipId, in: p) { p.tracks[l.track].clips[l.index] = result }
+            shifted = applyVoiceRipple(&p, changed: [clipId])
         }
-        statusText = ""
+        statusText = shifted > 0 ? "後ろの \(shifted) 個のクリップを、尺の変化に合わせてずらしました" : ""
         return true
+    }
+
+    /// 音声を作り直したあと、設定がオンなら、尺が変わった分だけ同じレイヤーの後ろのクリップをずらす(候補 31)。ずらした数を返す。
+    /// `edit` の中から呼ぶ(`project` は編集前のまま。同じ 1 回の Undo に入る)。
+    func applyVoiceRipple(_ p: inout Project, changed: Set<String>) -> Int {
+        guard VoiceRippleSettings.enabled else { return 0 }
+        let r = VoiceRipple.apply(old: project, new: p, changedIds: changed)
+        p = r.project
+        return r.shifted
     }
 
     /// セリフの文字を変える(確定したとき)。音声も作り直す。変わっていなければ何もしない。
@@ -210,12 +221,14 @@ extension ProjectModel {
             errorMessage = error.localizedDescription
             return 0
         }
+        var shifted = 0
         edit("全セリフの作り直し") { p in
             for (id, c) in results {
                 if let l = ClipEditing.locate(id, in: p) { p.tracks[l.track].clips[l.index] = c }
             }
+            shifted = applyVoiceRipple(&p, changed: Set(results.keys))
         }
-        statusText = "\(results.count) 個のセリフの音声を作り直しました"
+        statusText = "\(results.count) 個のセリフの音声を作り直しました" + (shifted > 0 ? "(後ろの \(shifted) 個のクリップをずらしました)" : "")
         return results.count
     }
 

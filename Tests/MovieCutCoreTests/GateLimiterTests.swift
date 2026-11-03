@@ -122,11 +122,12 @@ final class GateLimiterTests: XCTestCase {
         let plain = String(decoding: try JSONEncoder().encode(c), as: UTF8.self)
         XCTAssertFalse(plain.contains("gate")); XCTAssertFalse(plain.contains("limiter"))
         AudioFxEditing.setGate(&c, -45); AudioFxEditing.setLimiter(&c, -2)
-        let data = try JSONEncoder().encode(c)
+        let sorted = JSONEncoder(); sorted.outputFormatting = [.sortedKeys]   // 辞書の順番は実行ごとに変わるので、キーを並べて比べる
+        let data = try sorted.encode(c)
         let back = try JSONDecoder().decode(Clip.self, from: data)
         XCTAssertEqual(back.audioFx?.gate, -45)
         XCTAssertEqual(back.audioFx?.limiter, -2)
-        XCTAssertEqual(try JSONEncoder().encode(back), data, "往復でバイト一致")
+        XCTAssertEqual(try sorted.encode(back), data, "往復でバイト一致")
         // 数でない値は捨てずに書き戻す
         let json = #"{"type":"audio","src":"a.wav","audioFx":{"gate":"x","future":1}}"#
         let c2 = try JSONDecoder().decode(Clip.self, from: Data(json.utf8))

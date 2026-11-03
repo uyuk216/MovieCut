@@ -369,6 +369,8 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var bubble: Bubble? = nil
     /// カウントダウン(文字クリップ)。無いときはファイルに書かない。`text` の後ろに残りの数を続ける。
     public var counter: TextCounter? = nil
+    /// 他のクリップの値の表示(文字クリップ)。`text` の後ろに参照先の項目の値を続ける。無いときはファイルに書かない。
+    public var valueRef: ValueRef? = nil
     /// BGM の自動ダッキング(音声クリップ。声があるときに下げる)。無いときはファイルに書かない。
     public var duck: Duck? = nil
     /// 音声ビジュアライザの見た目(visualizer クリップ)。無いときは既定。ファイルには設定した項目だけ書く。
@@ -387,7 +389,7 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var locked: Bool? = nil
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["id", "type", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "bokehShape", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "frameFlow", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "duck", "visualizer", "stabilize", "tracks", "mask", "figure", "note", "locked"]
+    static let knownKeys: Set<String> = ["id", "type", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "bokehShape", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "frameFlow", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "valueRef", "duck", "visualizer", "stabilize", "tracks", "mask", "figure", "note", "locked"]
 
     public init() {}
 
@@ -520,6 +522,9 @@ public struct Clip: Codable, Equatable, Identifiable {
         if let raw: JSONValue = l.value("counter") {
             if let v: TextCounter = l.value("counter") { counter = v } else { extra["counter"] = raw }
         }
+        if let raw: JSONValue = l.value("valueRef") {
+            if let v: ValueRef = l.value("valueRef") { valueRef = v } else { extra["valueRef"] = raw }
+        }
         if let raw: JSONValue = l.value("duck") {
             if let v: Duck = l.value("duck") { duck = v } else { extra["duck"] = raw }
         }
@@ -618,6 +623,7 @@ public struct Clip: Codable, Equatable, Identifiable {
         try c.encodeIfPresent(textAnim, forKey: AnyKey("textAnim"))
         try c.encodeIfPresent(bubble, forKey: AnyKey("bubble"))
         try c.encodeIfPresent(counter, forKey: AnyKey("counter"))
+        try c.encodeIfPresent(valueRef, forKey: AnyKey("valueRef"))
         try c.encodeIfPresent(duck, forKey: AnyKey("duck"))
         try c.encodeIfPresent(visualizer, forKey: AnyKey("visualizer"))
         if let f = figure?.normalized { try c.encode(f, forKey: AnyKey("figure")) }

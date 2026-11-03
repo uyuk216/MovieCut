@@ -22,6 +22,58 @@ public enum ProjectTemplate {
         return p
     }
 
+    /// テンプレートに含める項目(候補 32)。保存のとき選ぶ。`standard` は従来どおり(クリップ以外を全部残す)。
+    public struct Parts: OptionSet, Sendable {
+        public let rawValue: Int
+        public init(rawValue: Int) { self.rawValue = rawValue }
+        /// 解像度・fps・背景色・コーデック・VOICEVOX / AquesTalk の設定。
+        public static let settings = Parts(rawValue: 1 << 0)
+        /// キャラクター(声・立ち絵・位置)。
+        public static let characters = Parts(rawValue: 1 << 1)
+        /// レイヤーの構成(名前・ロック・ソロ・高さ)。
+        public static let layers = Parts(rawValue: 1 << 2)
+        /// マーカー。
+        public static let markers = Parts(rawValue: 1 << 3)
+        public static let standard: Parts = [.settings, .characters, .layers, .markers]
+        public static let all: [Parts] = [.settings, .characters, .layers, .markers]
+    }
+
+    /// 選んだ項目だけを残したテンプレートの中身を作る。
+    /// - 含めない項目は新規プロジェクトの既定に戻す(設定 = 解像度 1920×1080・60fps ほか、キャラ = 既定の 3 人、レイヤー = 5 本、マーカー = なし)。
+    /// - `clipIds` のクリップ(複合クリップの中身ごと)は残す。残すクリップがあるレイヤーは、`layers` を選んでいなくても残る(クリップの居場所のため)。
+    ///   クリップを残さないレイヤーのクリップは全部外す。
+    /// - `parts == .standard` で `clipIds` が空のとき、`make(from:)` と同じ結果。
+    public static func make(from project: Project, parts: Parts, clipIds: Set<String> = []) -> Project {
+        var p = project
+        let keepAny = !clipIds.isEmpty && project.tracks.contains { $0.clips.contains { clipIds.contains($0.id) } }
+        if keepAny || parts.contains(.layers) {
+            p.tracks = p.tracks.map { track in
+                var t = track
+                t.clips = track.clips.filter { clipIds.contains($0.id) }
+                return t
+            }
+            if !parts.contains(.layers) {
+                // レイヤーの構成は含めない: 名前・フラグを初期化(クリップの入ったレイヤーの並びだけ残す)
+                p.tracks = p.tracks.enumerated().map { i, t in
+                    var n = Track(name: "レイヤー\(i + 1)")
+                    n.id = t.id
+                    n.clips = t.clips
+                    return n
+                }
+            }
+        } else {
+            p.tracks = Track.defaultLayers()
+        }
+        if !parts.contains(.characters) { p.characters = Character.defaults() }
+        if !parts.contains(.markers) { p.markers = [] }
+        if !parts.contains(.settings) {
+            let d = Project()
+            p.width = d.width; p.height = d.height; p.fps = d.fps; p.bg = d.bg; p.codec = d.codec
+            p.voicevoxUrl = d.voicevoxUrl; p.aquestalkCommand = d.aquestalkCommand
+        }
+        return p
+    }
+
     /// 名前をファイル名に使える形に整える。区切り文字と制御文字は空白に、前後の空白と先頭のドットは取る。空なら nil。
     public static func sanitizedName(_ raw: String) -> String? {
         let bad = CharacterSet(charactersIn: "/:\\\0").union(.controlCharacters)
@@ -41,7 +93,6 @@ public enum ProjectTemplate {
         guard taken.contains(base.lowercased()) else { return base }
         var n = 2
         while taken.contains("\(base) \(n)".lowercased()) { n += 1 }
-        return "\(base) \(n)"
         return "\(base) \(n)"
     }
 
@@ -90,11 +141,12 @@ public struct TemplateStore {
 
     /// プロジェクトからテンプレートを作って保存する。同じ名前があれば「名前 2」のように避ける。保存した名前を返す。
     @discardableResult
-    public func save(_ project: Project, as rawName: String) throws -> String {
+    public func save(_ project: Project, as rawName: String, parts: ProjectTemplate.Parts? = nil, clipIds: Set<String> = []) throws -> String {
         guard let base = ProjectTemplate.sanitizedName(rawName) else { throw StoreError.invalidName }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let name = ProjectTemplate.uniqueName(base: base, existing: names())
-        try ProjectTemplate.make(from: project).save(to: url(for: name))
+        let body = parts.map { ProjectTemplate.make(from: project, parts: $0, clipIds: clipIds) } ?? ProjectTemplate.make(from: project)
+        try body.save(to: url(for: name))
         return name
     }
 

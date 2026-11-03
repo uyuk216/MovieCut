@@ -157,3 +157,24 @@ extension ProjectModel {
         coalescedClipProperty({ _ = CounterEditing.update(&$0, change) }, name: name, clipId: c.id)
     }
 }
+
+// MARK: 他のクリップの値の表示(文字クリップ・候補 30)
+extension ProjectModel {
+    /// 値の表示を置く・外す(nil で外す)。変わらないときは何もしない。1 回の Undo。
+    func setValueRef(_ ref: ValueRef?, name: String, clipId: String? = nil) {
+        guard let c = styleTarget(clipId), c.type == .text else { return }
+        var probe = c
+        guard ValueRefEditing.set(&probe, to: ref) else { return }
+        setClipProperty({ _ = ValueRefEditing.set(&$0, to: ref) }, name: name, clipId: c.id)
+    }
+
+    func editValueRef(_ change: (inout ValueRef) -> Void, name: String, clipId: String? = nil) {
+        guard let c = styleTarget(clipId), c.type == .text, c.valueRef != nil else { return }
+        var probe = c
+        guard ValueRefEditing.update(&probe, change) else { return }
+        setClipProperty({ _ = ValueRefEditing.update(&$0, change) }, name: name, clipId: c.id)
+    }
+
+    /// 参照先にできるクリップ(インスペクタの選び肢)。
+    func valueRefCandidates(for clipId: String) -> [Clip] { ValueRefEditing.candidates(in: project, excluding: clipId) }
+}

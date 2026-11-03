@@ -9,3 +9,12 @@ enum TrimLoopSettings {
         set { UserDefaults.standard.set(TrimLoop.normalizedHalfWidth(newValue), forKey: key) }
     }
 }
+
+/// 合成音声を作り直して尺が変わったとき、同じレイヤーの後ろのクリップをずらして詰めるか(アプリの設定。プロジェクトには入れない。既定はオフ)。
+enum VoiceRippleSettings {
+    static let key = "voiceAutoRipple"
+    static var enabled: Bool {
+        get { UserDefaults.standard.bool(forKey: key) }
+        set { UserDefaults.standard.set(newValue, forKey: key) }
+    }
+}

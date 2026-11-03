@@ -182,6 +182,14 @@ final class ProjectModel: ObservableObject {
     @Published var showFindSheet = false
     /// 出力 ▸ 使用クリップ一覧…(表・TSV コピー・CSV 書き出し)のシート。
     @Published var showClipListSheet = false
+    /// 同じセリフのテイク比較シート(表示の状態)と、試聴の出口・鳴らしているテイクの id
+    @Published var showTakeSheet = false
+    @Published var takePlayingId: String?
+    @Published var showSubclipSheet = false
+    /// 候補クリップの比較(オーディション)中の状態と、素材の長さを測る手段(テストでは差し替える)
+    @Published var candidateSession: CandidateSession?
+    var candidateProbe: (URL, ClipType) async -> Double? = { url, kind in await ClipEditing.probeDuration(url: url, kind: kind) }
+    var takePlayer: AuditionPlaying = AVAuditionPlayer()
     /// 出力 ▸ 注記一覧…(注記のあるクリップの表・テキストと CSV の書き出し)のシート。
     @Published var showNoteListSheet = false
     @Published var showUnusedMediaSheet = false
@@ -279,6 +287,7 @@ final class ProjectModel: ObservableObject {
         self.project = project
         self.selectedCharId = project.characters.first?.id
         self.playback = PlaybackController(model: self)
+        OpenProjects.register(self)
         // プロキシ編集の設定(アプリ全体)を、この書類の素材キャッシュへ。設定が変わったら付け直す。
         assets.setPreviewProxies(ProxySettings.enabled(), lookup: ProjectModel.previewProxyPath)
         let a = assets
@@ -417,6 +426,8 @@ final class ProjectModel: ObservableObject {
         dockWindows?.closeAll(); dockWindows = nil
         mediaBrowserWindow?.closeAll(); mediaBrowserWindow = nil
         stopAudition()
+        takePlayer.stop()
+        OpenProjects.unregister(self)
         playback.shutdown()
     }
 
