@@ -378,7 +378,8 @@ final class AudioFxChain {
     private let reverb: ReverbProcessor?
 
     init(_ fx: AudioFx, sr: Double) {
-        denoise = fx.denoiseStrength > 0 ? DenoiseProcessor(strength: fx.denoiseStrength, sr: sr) : nil
+        // 強(スペクトル)のときは、ミキサーが入力の側でかける(`SpectralDenoiseSource`)ので、ここでは簡易版を使わない
+        denoise = fx.denoiseStrength > 0 && !fx.spectralDenoiseOn ? DenoiseProcessor(strength: fx.denoiseStrength, sr: sr) : nil
         gate = fx.gateDb.map { GateProcessor(thresholdDb: $0, sr: sr) }
         limiter = fx.limiterDb.map { LimiterProcessor(ceilingDb: $0, sr: sr) }
         eq = fx.eq.flatMap { $0.isActive ? EQProcessor($0, sr: sr) : nil }

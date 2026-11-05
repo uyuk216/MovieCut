@@ -22,6 +22,9 @@ public final class RenderAssets {
     /// 合成音声の音量エンベロープ(直前の 1 件だけ)。キーは音に関わる内容の指紋。
     private var mixEnvelopeKey: String?
     private var mixEnvelopeValue: [Float]?
+    /// 音声クリップ 1 つを入力にしたビジュアライザの音量エンベロープ・スペクトル(少数だけ覚える)。キーはその 1 クリップの指紋(+帯の数)。
+    private var vizEnvelopes: [String: [Float]] = [:]
+    private var vizSpectra: [String: [Float]] = [:]
     /// プロキシ編集: プレビューの映像だけ、プロキシのファイルを読む(書き出しは読まない)。
     private var useProxies = false
     private var proxyLookup: ((String) -> String?)?
@@ -121,10 +124,55 @@ public final class RenderAssets {
         let key = Self.mixKey(project)
         lock.lock(); defer { lock.unlock() }
         if key == mixEnvelopeKey, let v = mixEnvelopeValue { return v }
-        guard let env = Self.computeMixEnvelope(project, assets: self) else { return nil }
+        guard let env = Self.computeMix(project, assets: self, wantMono: false)?.env else { return nil }
         mixEnvelopeKey = key
         mixEnvelopeValue = env
         return env
+    }
+
+    /// ビジュアライザの入力にする音声だけを残したプロジェクト。`source` が nil か、見つからない・音の無いクリップなら nil(合成音声全体を使う)。
+    public static func vizSourceProject(_ project: Project, source: String?) -> Project? {
+        guard let id = source, let c = project.allClips.first(where: { $0.id == id }),
+              [ClipType.audio, .voice, .video].contains(c.type) else { return nil }
+        var p = project
+        var tr = Track()
+        tr.clips = [c]
+        p.tracks = [tr]
+        return p
+    }
+
+    /// ビジュアライザの音量エンベロープ。`source` があればそのクリップだけの音(クリップの位置・速度・エフェクトを含む)。
+    public func vizEnvelope(for project: Project, source: String?) -> [Float]? {
+        guard let sp = Self.vizSourceProject(project, source: source) else { return mixEnvelope(for: project) }
+        let key = Self.mixKey(sp)
+        lock.lock(); defer { lock.unlock() }
+        if let v = vizEnvelopes[key] { return v }
+        guard let env = Self.computeMix(sp, assets: self, wantMono: false)?.env else { return nil }
+        if vizEnvelopes.count >= 8 { vizEnvelopes.removeAll() }
+        vizEnvelopes[key] = env
+        return env
+    }
+
+    /// ビジュアライザのスペクトル(コマ k・帯 b は `[k * count + b]`、1/60 秒ごと、0〜1、平滑化済み)。作れなければ nil。
+    public func vizSpectrum(for project: Project, source: String?, count: Int) -> [Float]? {
+        let sp = Self.vizSourceProject(project, source: source) ?? project
+        let key = Self.mixKey(sp) + "|\(count)"
+        lock.lock(); defer { lock.unlock() }
+        if let v = vizSpectra[key] { return v }
+        guard let mix = Self.computeMix(sp, assets: self, wantMono: true), let mono = mix.mono else { return nil }
+        let out = SpectrumAnalyzer.analyze(mono: mono, sampleRate: mix.sampleRate, count: count, frames: mix.env.count)
+        if vizSpectra.count >= 8 { vizSpectra.removeAll() }
+        vizSpectra[key] = out
+        return out
+    }
+
+    /// プロジェクト中のビジュアライザが使う解析を先に作っておく(再生の最初のコマで待たされないように)。
+    public func prepareVisualizers(for project: Project) {
+        for c in project.allClips where c.type == .visualizer {
+            let vz = c.visualizerOrDefault
+            if vz.isSpectrum { _ = vizSpectrum(for: project, source: vz.source, count: vz.countOrDefault) }
+            else { _ = vizEnvelope(for: project, source: vz.source) }
+        }
     }
 
     /// 音に関わる部分の指紋(音のあるクリップと、トラックが鳴るかどうか)。映像・文字だけの変更では変わらない。
@@ -140,20 +188,23 @@ public final class RenderAssets {
         return String(decoding: data, as: UTF8.self)
     }
 
-    static func computeMixEnvelope(_ project: Project, assets: RenderAssets) -> [Float]? {
+    struct MixAnalysis { var env: [Float]; var mono: [Float]?; var sampleRate: Double }
+
+    static func computeMix(_ project: Project, assets: RenderAssets, wantMono: Bool) -> MixAnalysis? {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("mc-viz-mix-\(UUID().uuidString).caf")
         defer { try? FileManager.default.removeItem(at: url) }
         guard let dur = try? AudioMixer.mixdown(project: project, assets: assets, to: url) else { return nil }
         // 音が 1 つも無いときは書かれないことがある。その場合は無音の長さ分の 0
         guard FileManager.default.fileExists(atPath: url.path),
               let file = try? AVAudioFile(forReading: url) else {
-            return [Float](repeating: 0, count: Int((dur * 60).rounded(.up)))
+            let n = Int((dur * 60).rounded(.up))
+            return MixAnalysis(env: [Float](repeating: 0, count: n), mono: wantMono ? [] : nil, sampleRate: 48000)
         }
         let frames = AVAudioFrameCount(file.length)
         guard frames > 0,
               let buf = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: frames),
               (try? file.read(into: buf)) != nil,
-              let ch = buf.floatChannelData else { return [] }
+              let ch = buf.floatChannelData else { return MixAnalysis(env: [], mono: wantMono ? [] : nil, sampleRate: 48000) }
         let n = Int(buf.frameLength)
         let nch = Int(file.processingFormat.channelCount)
         let step = max(1, Int(file.processingFormat.sampleRate / 60))
@@ -168,7 +219,14 @@ public final class RenderAssets {
             }
             env[i] = (sum / Float(max(1, (e - s) * nch))).squareRoot()
         }
-        return env
+        var mono: [Float]? = nil
+        if wantMono {
+            var m = [Float](repeating: 0, count: n)
+            for c in 0..<nch { for j in 0..<n { m[j] += ch[c][j] } }
+            if nch > 1 { let k = 1 / Float(nch); for j in 0..<n { m[j] *= k } }
+            mono = m
+        }
+        return MixAnalysis(env: env, mono: mono, sampleRate: file.processingFormat.sampleRate)
     }
 
     static func computeEnvelope(_ path: String) -> [Float]? {

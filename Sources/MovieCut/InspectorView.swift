@@ -961,6 +961,30 @@ extension ClipInspector {
             num("幅", .w)
             num("高さ", .h)
         }
+        InspectorSection(title: "入力")
+        InspectorField(label: "見方") {
+            Picker("", selection: Binding(get: { vz.modeOrDefault }, set: { v in model.setClipProperty({ $0.visualizer = Self.vizUpdated($0.visualizer) { $0.mode = v } }, name: "ビジュアライザの見方の変更", clipId: clipId) })) {
+                Text("音量").tag("level")
+                Text("スペクトル").tag("spectrum")
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .help("音量: 全体の大きさで動く。スペクトル: 左が低い音・右が高い音で、周波数ごとに動く")
+        }
+        InspectorField(label: "音声") {
+            let sources = model.project.allClips.filter { [ClipType.audio, .voice, .video].contains($0.type) && $0.src != nil }
+            Picker("", selection: Binding(get: { vz.source ?? "" }, set: { v in model.setClipProperty({ $0.visualizer = Self.vizUpdated($0.visualizer) { $0.source = v.isEmpty ? nil : v } }, name: "ビジュアライザの入力音声の変更", clipId: clipId) })) {
+                Text("全体のミックス").tag("")
+                ForEach(sources, id: \.id) { s in
+                    Text(((s.src ?? "") as NSString).lastPathComponent).tag(s.id)
+                }
+                if let cur = vz.source, !sources.contains(where: { $0.id == cur }) {
+                    Text("（見つからないクリップ）").tag(cur)
+                }
+            }
+            .labelsHidden()
+            .help("選んだ音声クリップだけの音で動かします。「全体のミックス」は書き出しと同じ合成音声")
+        }
         InspectorSection(title: "見た目")
         InspectorField(label: "形") {
             Picker("", selection: Binding(get: { vz.styleOrDefault }, set: { v in model.setClipProperty({ $0.visualizer = Self.vizUpdated($0.visualizer) { $0.style = v } }, name: "ビジュアライザの形の変更", clipId: clipId) })) {
@@ -1047,7 +1071,9 @@ extension ClipInspector {
         if v.style == Visualizer.defaultStyle { v.style = nil }
         if v.color?.lowercased() == Visualizer.defaultColor { v.color = nil }
         if v.count == Visualizer.defaultCount { v.count = nil }
-        return (v.style == nil && v.color == nil && v.count == nil) ? nil : v
+        if v.mode == Visualizer.defaultMode { v.mode = nil }
+        if v.source?.isEmpty == true { v.source = nil }
+        return (v.style == nil && v.color == nil && v.count == nil && v.mode == nil && v.source == nil) ? nil : v
     }
 }
 

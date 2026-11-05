@@ -66,6 +66,10 @@ struct AudioFxPanel: View {
                          format: { "\(Int(($0 * 100).rounded()))%" }, undo: ProjectModel.denoiseUndoName) {
                     _ = AudioFxEditing.setDenoise(&$0, $1)
                 }
+                Toggle("強（スペクトル）", isOn: Binding(
+                    get: { c.audioFx?.spectralDenoiseOn ?? false },
+                    set: { on in model.setAudioFx({ _ = AudioFxEditing.setDenoiseSpectral(&$0, on) }, name: ProjectModel.denoiseUndoName, clipId: clipId) }))
+                    .help("いちばん静かな 0.5 秒をノイズとみなし、周波数ごとにノイズだけを減らします（声の最中のノイズにも効く。書き出しは少し時間がかかります）。静かな所が無いクリップでは効きが弱くなります")
                 fxSlider("ノイズゲート", value: c.audioFx?.gateDb ?? AudioFx.gateRange.lowerBound - 1, range: (AudioFx.gateRange.lowerBound - 1)...AudioFx.gateRange.upperBound, step: 1,
                          format: { $0 < AudioFx.gateRange.lowerBound ? "なし" : String(format: "−%.0f dB 以下を消す", abs($0)) }, undo: ProjectModel.gateUndoName) {
                     _ = AudioFxEditing.setGate(&$0, $1 < AudioFx.gateRange.lowerBound ? nil : $1)

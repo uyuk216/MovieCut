@@ -12,6 +12,8 @@ public struct AudioFx: Codable, Equatable, Sendable {
     public var normalize: Normalize?
     /// ノイズ除去の強さ(0〜1)。0 と未設定は同じ(書かない)。
     public var denoise: Double?
+    /// ノイズ除去を「強(スペクトル)」にする。true のときだけ書く(未設定 = 簡易)。強さが 0 のときは意味を持たない。
+    public var denoiseSpectral: Bool?
     /// 音程(半音、−24〜+24。小数部がセント。0.01 半音 = 1 セント刻み)。0 と未設定は同じ(書かない)。音の高さだけを変え、長さは変えない。
     public var pitch: Double?
     /// ノイズゲートのしきい値(dBFS、−80〜−20)。これより小さい音を閉じて消す。未設定 = ゲートなし。
@@ -20,7 +22,7 @@ public struct AudioFx: Codable, Equatable, Sendable {
     public var limiter: Double?
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["eq", "compressor", "reverb", "normalize", "denoise", "pitch", "gate", "limiter"]
+    static let knownKeys: Set<String> = ["eq", "compressor", "reverb", "normalize", "denoise", "denoiseSpectral", "pitch", "gate", "limiter"]
 
     public init(eq: EQ? = nil, compressor: Compressor? = nil, reverb: Reverb? = nil, normalize: Normalize? = nil, denoise: Double? = nil, pitch: Double? = nil, gate: Double? = nil, limiter: Double? = nil) {
         self.eq = eq; self.compressor = compressor; self.reverb = reverb; self.normalize = normalize; self.denoise = denoise; self.pitch = pitch
@@ -72,6 +74,9 @@ public struct AudioFx: Codable, Equatable, Sendable {
         return min(max(v, 0), 1)
     }
 
+    /// スペクトルゲート(強)が効く(ノイズ除去が入っていて、強にしてある)。
+    public var spectralDenoiseOn: Bool { denoiseSpectral == true && denoiseStrength > 0 }
+
     /// 実際に音を変えるものが 1 つでもある。
     public var isActive: Bool {
         (eq?.isActive ?? false) || (compressor?.isActive ?? false) || (reverb?.isActive ?? false) || (normalize?.isActive ?? false) || denoiseStrength > 0 || pitchSemitones != 0 || gateDb != nil || limiterDb != nil
@@ -87,7 +92,7 @@ public struct AudioFx: Codable, Equatable, Sendable {
         if let c = compressor, c.isActive { parts.append("comp=\(c.thresholdDb),\(c.ratioValue),\(c.attackMs),\(c.releaseMs),\(String(describing: c.makeupDb))") }
         if let r = reverb, r.isActive { parts.append("rev=\(r.mix),\(r.sizeOrDefault.rawValue)") }
         if let n = normalize, n.isActive { parts.append("norm=\(n.targetDb),\(n.modeOrDefault.rawValue)") }
-        if denoiseStrength > 0 { parts.append("dn=\(denoiseStrength)") }
+        if denoiseStrength > 0 { parts.append("dn=\(denoiseStrength)" + (spectralDenoiseOn ? ",spectral" : "")) }
         if pitchSemitones != 0 { parts.append("pitch=\(pitchSemitones)") }
         if let g = gateDb { parts.append("gate=\(g)") }
         if let l = limiterDb { parts.append("lim=\(l)") }
@@ -287,6 +292,7 @@ public struct AudioFx: Codable, Equatable, Sendable {
         let l = Lenient(c: try decoder.container(keyedBy: AnyKey.self), known: Self.knownKeys)
         eq = l.value("eq"); compressor = l.value("compressor"); reverb = l.value("reverb"); normalize = l.value("normalize")
         denoise = l.double("denoise")
+        denoiseSpectral = l.bool("denoiseSpectral")
         pitch = l.double("pitch")
         gate = l.double("gate"); limiter = l.double("limiter")
         extra = l.extra()
@@ -299,6 +305,7 @@ public struct AudioFx: Codable, Equatable, Sendable {
             case "compressor": ok = compressor != nil
             case "reverb": ok = reverb != nil
             case "denoise": ok = denoise != nil
+            case "denoiseSpectral": ok = denoiseSpectral != nil
             case "pitch": ok = pitch != nil
             case "gate": ok = gate != nil
             case "limiter": ok = limiter != nil
@@ -316,6 +323,7 @@ public struct AudioFx: Codable, Equatable, Sendable {
         try c.encodeIfPresent(reverb, forKey: AnyKey("reverb"))
         try c.encodeIfPresent(normalize, forKey: AnyKey("normalize"))
         if denoiseStrength > 0 { try c.encode(denoiseStrength, forKey: AnyKey("denoise")) }
+        if spectralDenoiseOn { try c.encode(true, forKey: AnyKey("denoiseSpectral")) }
         if pitchSemitones != 0 { try c.encode(pitchSemitones, forKey: AnyKey("pitch")) }
         if let g = gateDb { try c.encode(g, forKey: AnyKey("gate")) }
         if let v = limiterDb { try c.encode(v, forKey: AnyKey("limiter")) }

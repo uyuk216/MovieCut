@@ -16,6 +16,9 @@ protocol AudioBackend: AnyObject {
     func unload()
     /// プロジェクトの time 秒から鳴らし始める(鳴っていれば鳴らし直す)。
     func start(at time: Double) throws
+    /// プロジェクトの time 秒から、rate 倍(2 倍・4 倍)の速さで鳴らし始める(シャトル用)。keepPitch が false なら音程も rate 倍に上がる。
+    /// 音声が無いバックエンドは何もしない。通常の `start(at:)` で 1 倍に戻る。
+    func startShuttle(at time: Double, rate: Double, keepPitch: Bool) throws
     /// 止める(位置は覚えない)。
     func pause()
     /// いま鳴っているプロジェクト時刻(秒)。時計が使えないとき(まだ最初の音が出ていない等)は nil。
@@ -40,6 +43,9 @@ final class EngineAudioBackend: AudioBackend {
     private let player = AVAudioPlayerNode()
     private var file: AVAudioFile?
     private var attached = false
+    /// 速さを変える部品を挟んでいるか(挟んでいる間のプレイヤー時刻は素材の時刻で進む)
+    private var rateUnit: AVAudioUnit?
+    private var rate = 1.0
     private var baseTime = 0.0
     private var observer: NSObjectProtocol?
     var onConfigurationChange: (() -> Void)?
@@ -75,6 +81,8 @@ final class EngineAudioBackend: AudioBackend {
     func start(at time: Double) throws {
         guard let f = file, let e = engine else { return }  // 音声なし: エンジンは使わず、呼び出し側がホスト時計で進める
         player.stop()
+        route(through: nil, format: f.processingFormat, engine: e)
+        rate = 1
         if !e.isRunning { try e.start() }
         let sr = f.processingFormat.sampleRate
         let frame = AVAudioFramePosition(max(0, time) * sr)
@@ -86,13 +94,46 @@ final class EngineAudioBackend: AudioBackend {
         player.play()
     }
 
+    func startShuttle(at time: Double, rate newRate: Double, keepPitch: Bool) throws {
+        guard let f = file, let e = engine else { return }
+        player.stop()
+        route(through: ShuttleAudio.makeRateUnit(rate: newRate, keepPitch: keepPitch), format: f.processingFormat, engine: e)
+        rate = newRate
+        if !e.isRunning { try e.start() }
+        let sr = f.processingFormat.sampleRate
+        let frame = AVAudioFramePosition(max(0, time) * sr)
+        let count = f.length - frame
+        if count > 0 {
+            player.scheduleSegment(f, startingFrame: frame, frameCount: AVAudioFrameCount(count), at: nil)
+        }
+        baseTime = time
+        player.play()
+    }
+
+    /// プレイヤー → (速さの部品) → ミキサー の道を作り直す。部品が同じ種類・同じ速さならそのまま。
+    private func route(through unit: AVAudioUnit?, format: AVAudioFormat, engine e: AVAudioEngine) {
+        if unit == nil && rateUnit == nil { return }
+        e.disconnectNodeOutput(player)
+        if let old = rateUnit { e.disconnectNodeOutput(old); e.detach(old); rateUnit = nil }
+        if let u = unit {
+            e.attach(u)
+            e.connect(player, to: u, format: format)
+            e.connect(u, to: e.mainMixerNode, format: format)
+            rateUnit = u
+        } else {
+            e.connect(player, to: e.mainMixerNode, format: format)
+        }
+        e.prepare()
+    }
+
     func pause() { player.stop() }
 
     func currentTime() -> Double? {
         guard player.isPlaying, let nt = player.lastRenderTime, let pt = player.playerTime(forNodeTime: nt), pt.sampleRate > 0 else { return nil }
         // 「描いた時刻」と「聞こえる時刻」の差(出力遅延)を引く。極端な値は無視する。
         let latency = min(0.3, max(0, engine?.outputNode.presentationLatency ?? 0))
-        return baseTime + max(0, Double(pt.sampleTime) / pt.sampleRate - latency)
+        // 速さの部品を挟んでいるときは、プレイヤーの時刻が素材の時刻(出力の 1 秒で rate 秒進む)
+        return baseTime + max(0, Double(pt.sampleTime) / pt.sampleRate - latency * rate)
     }
 
     func shutdown() {
@@ -103,6 +144,8 @@ final class EngineAudioBackend: AudioBackend {
         engine = nil
         file = nil
         attached = false
+        rateUnit = nil
+        rate = 1
     }
 }
 
@@ -241,7 +284,7 @@ final class PlaybackController {
             }
             return
         }
-        // 2 倍以上・逆再生は音を止めて、時刻だけを進める
+        // 2 倍・4 倍(順方向)は音も同じ速さで鳴らす。逆再生は音を止めて、時刻だけを進める
         if isPlaying && !shuttling { backend.pause() }
         if !isPlaying {
             model.assets.beginExportMode(preview: true)
@@ -252,6 +295,17 @@ final class PlaybackController {
         shuttleState = next
         shuttling = true
         shuttleClock = clock.now()
+        restartShuttleAudio(at: model.currentTime)
+    }
+
+    /// シャトル中の音: 順方向の 2 倍・4 倍は速さを変えて鳴らし、それ以外(逆再生)は止める。
+    private func restartShuttleAudio(at t: Double) {
+        guard let model else { return }
+        let speed = shuttleState.speed
+        guard ShuttleAudio.playsAudio(speed: speed) else { backend.pause(); return }
+        startT = t; clockStart = clock.now(); lastT = t
+        do { try backend.startShuttle(at: t, rate: speed, keepPitch: ShuttleAudio.keepsPitch(in: model.project, at: t)) }
+        catch { reportAudioError(error) }
     }
 
     /// ←/→: 1 コマ(1/fps)ずつ。
@@ -323,6 +377,7 @@ final class PlaybackController {
     }
 
     private func restartAudio(at t: Double) {
+        if shuttling { restartShuttleAudio(at: t); return }
         startT = t; clockStart = clock.now(); lastT = t
         do { try backend.start(at: t) } catch { reportAudioError(error) }
     }
@@ -445,7 +500,7 @@ final class PlaybackController {
                 // 口パク用の音量エンベロープも先に作っておく(最初のフレームで待たされないように)
                 if let assets { for c in project.allClips where c.type == .voice { if let s = c.src { _ = assets.mouthEnvelope(for: s) } } }
                 // ビジュアライザがあれば、合成音声の音量も先に作る(もう 1 回ミックスするので、ある時だけ)
-                if let assets, project.allClips.contains(where: { $0.type == .visualizer }) { _ = assets.mixEnvelope(for: project) }
+                if let assets, project.allClips.contains(where: { $0.type == .visualizer }) { assets.prepareVisualizers(for: project) }
                 return .success(d)
             } catch { return .failure(error) }
         }.value

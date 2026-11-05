@@ -167,7 +167,20 @@ public enum AudioFxEditing {
     @discardableResult
     public static func setDenoise(_ c: inout Clip, _ v: Double) -> Bool {
         let x = (AudioFx.clampDenoise(v) * 100).rounded() / 100
-        return edit(&c) { fx in fx.denoise = x > 0 ? x : nil }
+        return edit(&c) { fx in fx.denoise = x > 0 ? x : nil; if x == 0 { fx.denoiseSpectral = nil } }
+    }
+
+    /// 「強(スペクトル)」の切り替え。オンにするとき強さが 0 なら既定の強さも入れる。オフは項目ごと外す。変わらなければ false。
+    @discardableResult
+    public static func setDenoiseSpectral(_ c: inout Clip, _ on: Bool) -> Bool {
+        edit(&c) { fx in
+            if on {
+                if fx.denoiseStrength == 0 { fx.denoise = defaultDenoise }
+                fx.denoiseSpectral = true
+            } else {
+                fx.denoiseSpectral = nil
+            }
+        }
     }
 
     /// 既定の強さ(ノイズ除去を初めて入れるとき)。

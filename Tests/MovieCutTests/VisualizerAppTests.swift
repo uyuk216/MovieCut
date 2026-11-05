@@ -48,4 +48,19 @@ final class VisualizerAppTests: XCTestCase {
         XCTAssertNil(ClipInspector.vizUpdated(nil) { $0.count = 32 }, "既定の本数は書かない")
         XCTAssertEqual(ClipInspector.vizUpdated(nil) { $0.count = 12 }, Visualizer(count: 12))
     }
+
+    func testSpectrumModeAndSourceAreOneUndoStepAndDefaultsAreNotWritten() {
+        let m = makeModel()
+        m.currentTime = 0
+        let id = m.addVisualizerClip()!
+        m.setClipProperty({ $0.visualizer = ClipInspector.vizUpdated($0.visualizer) { $0.mode = "spectrum" } }, name: "ビジュアライザの見方の変更", clipId: id)
+        XCTAssertEqual(m.clip(id)?.visualizer, Visualizer(mode: "spectrum"))
+        m.setClipProperty({ $0.visualizer = ClipInspector.vizUpdated($0.visualizer) { $0.source = "clip-1" } }, name: "ビジュアライザの入力音声の変更", clipId: id)
+        XCTAssertEqual(m.clip(id)?.visualizer, Visualizer(mode: "spectrum", source: "clip-1"))
+        m.effectiveUndoManager.undo()
+        XCTAssertEqual(m.clip(id)?.visualizer, Visualizer(mode: "spectrum"))
+        m.setClipProperty({ $0.visualizer = ClipInspector.vizUpdated($0.visualizer) { $0.mode = "level" } }, name: "戻す", clipId: id)
+        XCTAssertNil(m.clip(id)?.visualizer, "音量(既定)に戻したら項目ごと外れる")
+        XCTAssertNil(ClipInspector.vizUpdated(nil) { $0.source = "" }, "空の音声指定は書かない")
+    }
 }

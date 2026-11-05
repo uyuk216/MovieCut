@@ -376,6 +376,33 @@ public enum AudioMixer {
 
     /// ミキサーが読むソースを開く。速度・逆再生のクリップは、音声を作り直した一時ファイルから。作り直せないときは警告を出して無音にする。
     private static func openItem(_ it: Item, remapDir: URL) throws -> PCMSource? {
+        guard let raw = try openItemRaw(it, remapDir: remapDir) else { return nil }
+        // ノイズ除去(強): いちばん静かな 0.5 秒からノイズの型を作り、入力にスペクトルゲートをかける(音程・速度の変更のあと、EQ などの前)
+        guard let fx = it.fx, fx.spectralDenoiseOn else { return raw }
+        let frames = it.endFrame - it.startFrame
+        let profile = SpectralDenoise.estimateProfile(open: {
+            guard let s = try? openItemRaw(it, remapDir: remapDir) else { return nil }
+            return LimitedSource(s, frames: frames)
+        }, sampleRate: mixSampleRate)
+        guard let profile else { return raw }   // 短すぎる・読めない: そのまま
+        return SpectralDenoiseSource(inner: LimitedSource(raw, frames: frames), profile: profile, strength: fx.denoiseStrength)
+    }
+
+    /// 先頭から frames フレームだけ読ませる(ミキサーが使う範囲に揃える)。
+    private final class LimitedSource: PCMSource {
+        let inner: PCMSource
+        var left: Int
+        init(_ s: PCMSource, frames: Int) { inner = s; left = max(0, frames) }
+        func read(left l: UnsafeMutablePointer<Float>, right r: UnsafeMutablePointer<Float>, frames: Int) -> Int {
+            let n = min(frames, left)
+            if n <= 0 { return 0 }
+            let got = inner.read(left: l, right: r, frames: n)
+            left -= got
+            return got
+        }
+    }
+
+    private static func openItemRaw(_ it: Item, remapDir: URL) throws -> PCMSource? {
         guard it.remapped else { return try openSource(it.clip, offset: it.offset, span: it.clip.duration) }
         let c = it.clip
         let url: URL

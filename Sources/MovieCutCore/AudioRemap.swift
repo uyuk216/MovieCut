@@ -148,17 +148,8 @@ enum AudioRemap {
         let fmt = file.processingFormat
         let engine = AVAudioEngine()
         let player = AVAudioPlayerNode()
-        let unit: AVAudioUnit
+        let unit = ShuttleAudio.makeRateUnit(rate: rate, keepPitch: keepPitch)
         var latencyFrames = 0
-        if keepPitch {
-            let u = AVAudioUnitTimePitch()
-            u.rate = Float(rate); u.pitch = 0
-            unit = u
-        } else {
-            let u = AVAudioUnitVarispeed()
-            u.rate = Float(rate)
-            unit = u
-        }
         engine.attach(player); engine.attach(unit)
         engine.connect(player, to: unit, format: fmt)
         engine.connect(unit, to: engine.mainMixerNode, format: fmt)

@@ -9,6 +9,8 @@ final class FakeBackend: AudioBackend {
     var running = false
     var loaded: [URL] = []
     var starts: [Double] = []
+    /// シャトルの音(2 倍・4 倍): (開始時刻, 速さ, 音程を保つか)
+    var shuttleStarts: [(time: Double, rate: Double, keepPitch: Bool)] = []
     var pauses = 0
     var time: Double?
     var onConfigurationChange: (() -> Void)?
@@ -16,6 +18,7 @@ final class FakeBackend: AudioBackend {
     func load(url: URL) throws -> Double { loaded.append(url); return 10 }
     func unload() {}
     func start(at t: Double) throws { starts.append(t); running = true }
+    func startShuttle(at t: Double, rate: Double, keepPitch: Bool) throws { shuttleStarts.append((t, rate, keepPitch)); running = true }
     func pause() { pauses += 1; running = false }
     func currentTime() -> Double? { time }
     func shutdown() { running = false }

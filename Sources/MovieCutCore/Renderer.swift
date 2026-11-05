@@ -133,9 +133,6 @@ public struct Renderer {
         let W = Double(project.width), H = Double(project.height)
         var speaking: [String: Clip] = [:]  // charId -> 最後に見つかったボイス
         var subtitles: [Clip] = []
-        // 合成音声の音量(ビジュアライザが初めて要る時に 1 回だけ作る。無いプロジェクトでは作らない)
-        var mixEnv: [Float]? = nil
-        var mixLoaded = false
 
         for tr in project.tracks where !tr.isHidden {
             for c in tr.clips where t >= c.start && t < c.start + c.duration {
@@ -145,8 +142,7 @@ public struct Renderer {
                 case .adjustment:
                     applyAdjustment(c, t: t, ctx: ctx, W: W, H: H)
                 case .visualizer:
-                    if !mixLoaded { mixEnv = assets.mixEnvelope(for: project); mixLoaded = true }
-                    drawVisualizer(c, t: t, env: mixEnv, ctx: ctx, W: W, H: H)
+                    drawVisualizer(c, t: t, ctx: ctx, W: W, H: H)
                 case .shape:
                     drawShape(c, t: t, ctx: ctx, W: W, H: H)
                 case .image, .video, .text, .compound:

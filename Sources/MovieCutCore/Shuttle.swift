@@ -1,4 +1,5 @@
 import Foundation
+import AVFoundation
 
 /// J/K/L のシャトル再生の速度状態(純粋なロジック)。
 /// 速さは段階で決まる: -4 / -2 / -1 / 停止 / 1 / 2 / 4 倍。J は一段遅く(逆再生側へ)、L は一段速く、K で停止。
@@ -29,4 +30,39 @@ public struct ShuttleState: Equatable {
 
     /// K: 停止。
     public var stoppedState: ShuttleState { .stopped }
+}
+
+// MARK: - シャトルの音(2 倍・4 倍)
+
+
+/// L / J のシャトルで 2 倍・4 倍のとき、音も同じ速さで鳴らす。クリップの速度変更(`AudioRemap`)と同じ部品
+/// (AVAudioUnitTimePitch / AVAudioUnitVarispeed)を使い、「音程を保つ」は既存のクリップの設定(`keepPitch`)に合わせる。
+public enum ShuttleAudio {
+    /// 音を出す速さの範囲(順方向のみ。逆再生と 1 倍以下の段は、1 倍は通常再生・逆再生は無音)。
+    public static let speedRange: ClosedRange<Double> = 1.0001...4
+
+    /// この速さのシャトルで音を出すか。
+    public static func playsAudio(speed: Double) -> Bool { speedRange.contains(speed) }
+
+    /// 時刻 t に鳴っている音声クリップのどれかが「音程を保たない」(`keepPitch == false`)なら false、それ以外は true(既定は保つ)。
+    public static func keepsPitch(in project: Project, at t: Double) -> Bool {
+        for c in CompoundEditing.audibleClips(in: project)
+        where [ClipType.audio, .voice, .video].contains(c.type) && t >= c.start && t < c.start + c.duration {
+            if c.keepPitch == false { return false }
+        }
+        return true
+    }
+
+    /// 速さを変える部品。音程を保つなら TimePitch(rate = speed, pitch = 0)、保たないなら Varispeed。
+    /// `AudioRemap`(書き出し・ミックス)と、再生中のシャトルで同じものを使う。
+    public static func makeRateUnit(rate: Double, keepPitch: Bool) -> AVAudioUnit {
+        if keepPitch {
+            let u = AVAudioUnitTimePitch()
+            u.rate = Float(rate); u.pitch = 0
+            return u
+        }
+        let u = AVAudioUnitVarispeed()
+        u.rate = Float(rate)
+        return u
+    }
 }

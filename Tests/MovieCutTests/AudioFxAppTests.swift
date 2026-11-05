@@ -38,6 +38,19 @@ final class AudioFxAppTests: XCTestCase {
         return n
     }
 
+    func testSpectralDenoiseToggleIsOneUndoStep() {
+        let m = makeModel()
+        m.setAudioFx({ _ = AudioFxEditing.setDenoiseSpectral(&$0, true) }, name: ProjectModel.denoiseUndoName, clipId: "m")
+        XCTAssertEqual(m.clip("m")?.audioFx?.spectralDenoiseOn, true)
+        XCTAssertEqual(m.clip("m")?.audioFx?.denoiseStrength, AudioFxEditing.defaultDenoise, "強さも一緒に入る")
+        XCTAssertEqual(undoSteps(m), 1)
+        m.setAudioFx({ _ = AudioFxEditing.setDenoiseSpectral(&$0, true) }, name: ProjectModel.denoiseUndoName, clipId: "m")
+        XCTAssertEqual(undoSteps(m), 1, "何も変わらない操作は履歴に載せない")
+        m.setAudioFx({ _ = AudioFxEditing.setDenoiseSpectral(&$0, false) }, name: ProjectModel.denoiseUndoName, clipId: "m")
+        XCTAssertEqual(m.clip("m")?.audioFx?.spectralDenoiseOn, false)
+        XCTAssertEqual(m.clip("m")?.audioFx?.denoiseStrength, AudioFxEditing.defaultDenoise, "簡易のノイズ除去は残る")
+    }
+
     // MARK: モデル(1 操作 = 1 Undo)
 
     func testEachEditIsOneUndoStepAndNoOpsRegisterNothing() {

@@ -28,19 +28,54 @@ final class ShuttleAppTests: XCTestCase {
         XCTAssertEqual(m.currentTime, 0)
     }
 
-    func testLTwiceGoesFourTimesWithoutAudioAndAdvancesByClock() async {
+    func testLTwiceGoesFourTimesWithAudioAtRateAndAdvancesByClock() async {
         let (m, c, b, k) = make()
         c.shuttle(by: 1)                             // 順 1 倍(音あり)
         await c.preparation?.value
         c.shuttle(by: 1)                             // 2 倍
         XCTAssertEqual(c.shuttleState.speed, 2)
         XCTAssertTrue(c.isPlaying)
-        XCTAssertEqual(b.pauses, 1)                  // 1 倍 → 2 倍で音を止める(1 回)
+        XCTAssertEqual(b.pauses, 1)                  // 1 倍 → 2 倍で通常の音を止める(1 回)
+        XCTAssertEqual(b.shuttleStarts.count, 1)     // 代わりに 2 倍の音を鳴らす
+        XCTAssertEqual(b.shuttleStarts.last?.rate, 2)
+        XCTAssertEqual(b.shuttleStarts.last?.keepPitch, true, "音程を保つのが既定")
         k.t += 1; c.tick()                           // 1 秒経過 → 2 秒進む
         XCTAssertEqual(m.currentTime, 2, accuracy: 1e-9)
         c.shuttle(by: 1)                             // 4 倍
+        XCTAssertEqual(b.shuttleStarts.last?.rate, 4)
+        XCTAssertEqual(b.shuttleStarts.last?.time ?? -1, 2, accuracy: 1e-9, "いまの位置から 4 倍で鳴らし直す")
         k.t += 0.5; c.tick()
         XCTAssertEqual(m.currentTime, 4, accuracy: 1e-9)
+    }
+
+    func testReverseShuttleIsSilentAndSeekKeepsShuttleRate() async {
+        let (m, c, b, _) = make()
+        c.shuttle(by: 1); await c.preparation?.value
+        c.shuttle(by: 1)                             // 2 倍
+        c.seek(to: 5)                                // 動かすと、同じ速さで鳴らし直す(1 倍の音に戻らない)
+        XCTAssertEqual(b.shuttleStarts.last?.rate, 2)
+        XCTAssertEqual(b.shuttleStarts.last?.time ?? -1, 5, accuracy: 1e-9)
+        let n = b.shuttleStarts.count
+        c.shuttleStop()
+        m.currentTime = 6
+        c.shuttle(by: -1)                            // 停止から J: 逆 1 倍は音なし
+        XCTAssertEqual(c.shuttleState.speed, -1)
+        XCTAssertEqual(b.shuttleStarts.count, n, "逆再生では速さを変えた音を鳴らさない")
+        XCTAssertFalse(b.running)
+    }
+
+    func testKeepPitchOffClipMakesShuttleUseVarispeed() async {
+        var p = Project.new()
+        var c = Clip(); c.type = .voice; c.src = "/tmp/a.wav"; c.start = 0; c.duration = 10; c.keepPitch = false
+        p.tracks[0].clips.append(c)
+        let m = ProjectModel(project: p)
+        let b = FakeBackend(), k = FakeClock()
+        let pc = PlaybackController(model: m, backend: b, clock: k, debounce: 0, mixer: { _, _ in 10 })
+        pc.timerFallback = false
+        m.playback = pc
+        pc.shuttle(by: 1); await pc.preparation?.value
+        pc.shuttle(by: 1)
+        XCTAssertEqual(b.shuttleStarts.last?.keepPitch, false, "クリップが「音程を保たない」なら、シャトルも速さぶん音程が上がる")
     }
 
     func testJFromStopReversesAndStopsAtStart() {
