@@ -25,6 +25,7 @@ public enum UnusedMedia {
         for ch in p.characters {
             for s in [ch.imgClosed, ch.imgOpen, ch.imgBlink] + Array((ch.imgVowels ?? [:]).values) { if let s, !s.isEmpty { out.insert(s) } }
             for s in (ch.expressions ?? [:]).values where !s.isEmpty { out.insert(s) }
+            for s in ch.rig?.allPaths ?? [] where !s.isEmpty { out.insert(s) }
         }
         return out
     }

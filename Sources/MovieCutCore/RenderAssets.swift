@@ -32,6 +32,8 @@ public final class RenderAssets {
 
     /// オプティカルフロー補間のフロー(素材のコマの組ごと。プレビューと書き出しで同じ組を何度も描くので、求めた動きを覚えておく)。
     public let flowCache = FlowCache()
+    /// パーツ式立ち絵の合成のキャッシュ(プレビューと書き出しで同じ道)。
+    public let rigCache = RigFrameCache()
 
     public init() {}
 

@@ -241,6 +241,48 @@ final class RendererTests: XCTestCase {
         XCTAssertEqual(try render(ai, t: 0.95, assets: RenderAssets()).rgb(200, 100).2, late.2)
     }
 
+    func testRigMouthVowelsAndExpressionFollowVoice() throws {
+        // パーツ式立ち絵: 口は あい の読みに合わせて(あ 赤 → い 青、無音は閉じ 緑、う は割り当てなしで開き 黄)、眉は [笑顔] の行だけ切り替わる
+        func part(_ n: String, _ c: (UInt8, UInt8, UInt8), _ box: CGRect) throws -> String {
+            let ctx = CGContext(data: nil, width: 40, height: 40, bitsPerComponent: 8, bytesPerRow: 160, space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+            ctx.setFillColor(CGColor(srgbRed: CGFloat(c.0) / 255, green: CGFloat(c.1) / 255, blue: CGFloat(c.2) / 255, alpha: 1)); ctx.fill(box)
+            return try writePNG(ctx.makeImage()!, n)
+        }
+        let mb = CGRect(x: 0, y: 0, width: 10, height: 40), kb = CGRect(x: 15, y: 0, width: 10, height: 40)
+        var rig = CharacterRig(slots: [
+            RigSlot(name: "眉", parts: [try part("rm0.png", (90, 90, 90), mb), try part("rm1.png", (255, 0, 255), mb)], active: 0),
+            RigSlot(name: "口", parts: [try part("rk0.png", (0, 255, 0), kb), try part("rk1.png", (255, 255, 0), kb), try part("rk2.png", (255, 0, 0), kb), try part("rk3.png", (0, 0, 255), kb)], active: 0),
+        ])
+        rig.mouthClosed = 0; rig.mouthOpen = 1; rig.vowels = ["a": 2, "i": 3]; rig.expressions = ["笑顔": ["眉": 1]]
+        let wav = try writeToneWAV("rig-tone.wav")
+        func make(_ text: String) -> Project {
+            var ch = Character(); ch.id = "rg"; ch.name = "R"; ch.rig = rig
+            ch.x = 0.5; ch.y = 0.5; ch.scale = 1; ch.flip = false; ch.alwaysShow = false
+            var v = Clip(); v.type = .voice; v.start = 0; v.duration = 1; v.charId = "rg"; v.src = wav; v.text = text; v.subtitle = false
+            return project(clips: [v], characters: [ch])
+        }
+        let assets = RenderAssets()
+        let ai = make("あい")
+        func mouth(_ p: Project, _ t: Double) throws -> (Int, Int, Int) { try render(p, t: t, assets: assets).rgb(200, 100) }
+        func brow(_ p: Project, _ t: Double) throws -> (Int, Int, Int) { try render(p, t: t, assets: assets).rgb(150, 100) }
+        let early = try mouth(ai, 0.6), late = try mouth(ai, 0.95), quiet = try mouth(ai, 0.25)
+        XCTAssertGreaterThan(early.0, 200); XCTAssertLessThan(early.2, 50)     // あ
+        XCTAssertGreaterThan(late.2, 200); XCTAssertLessThan(late.0, 50)       // い
+        XCTAssertGreaterThan(quiet.1, 200); XCTAssertLessThan(quiet.0, 50)     // 無音 = 閉じ
+        let u = try mouth(make("う"), 0.75)
+        XCTAssertGreaterThan(u.0, 200); XCTAssertGreaterThan(u.1, 200); XCTAssertLessThan(u.2, 50)   // 割り当てのない母音 = 開き
+        // 眉: タグなしは 0 番(灰)、[笑顔] の行は 1 番(紫)。タグは口には影響しない
+        XCTAssertEqual(try brow(ai, 0.75).0, 90)
+        let tagged = make("[笑顔]あい")
+        XCTAssertGreaterThan(try brow(tagged, 0.75).0, 200); XCTAssertLessThan(try brow(tagged, 0.75).1, 50)
+        XCTAssertGreaterThan(try mouth(tagged, 0.6).0, 200)
+        // 同じ入力は何度描いても同じ(プレビューと書き出し)。同じ組み合わせは合成を使い回す
+        let n = assets.rigCache.composeCount
+        _ = try mouth(ai, 0.6)
+        XCTAssertEqual(assets.rigCache.composeCount, n)
+        XCTAssertEqual(try mouth(ai, 0.95).2, try render(ai, t: 0.95, assets: RenderAssets()).rgb(200, 100).2)
+    }
+
     func testBounceOffsetFollowsVoiceLevel() throws {
         // バウンス: 無音の間は動かず、音が大きい間は画面の高さの 1.2% まで上へ揺れる。バウンスなしは音量に関係なく同じ位置
         let closed = try solidPNG("bounce.png", r: 255, g: 0, b: 0)

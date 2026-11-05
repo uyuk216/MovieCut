@@ -212,8 +212,26 @@ public struct Renderer {
             else if open, let o = ch.imgOpen { path = o }
             else if blinking, let b = ch.imgBlink { path = b }
             else { path = expr ?? ch.imgClosed }
-            guard let p = path, let img = assets.image(at: p), img.height > 0 else { continue }
             let h = H * 0.6 * ch.scale
+            let img: CGImage
+            if let rig = ch.rig, rig.hasParts {
+                // パーツ式: 表情 → 口 → まばたきを重ねた組み合わせで 1 枚に合成(組み合わせごとにキャッシュ)
+                var mouth: RigMouth = .closed
+                if v != nil {
+                    if let vv = v, let vs = rig.vowels, !vs.isEmpty, let shape = lipShape(vv, t: t) {
+                        mouth = shape.vowelKey.map { .vowel($0) } ?? .closed
+                    } else { mouth = open ? .open : .closed }
+                }
+                let isBlink = rig.blink != nil && Blink.isClosed(seed: v?.id ?? ch.id, t: t - (v?.start ?? 0))
+                let tag = v.flatMap { ExpressionTag.split($0.text ?? "").tag }
+                let active = rig.resolvedActive(expression: tag, mouth: mouth, blinking: isBlink)
+                guard let f = assets.rigCache.frame(paths: rig.paths(active: active), height: max(16, Int(h.rounded()))) else { continue }
+                img = f
+            } else {
+                guard let p = path, let i = assets.image(at: p), i.height > 0 else { continue }
+                img = i
+            }
+            guard img.height > 0 else { continue }
             let w = Double(img.width) * (h / Double(img.height))
             // 話し中バウンス(オプション): 音量に比例して上へ揺れる
             var lift = 0.0

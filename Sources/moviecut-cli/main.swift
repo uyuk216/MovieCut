@@ -3,6 +3,7 @@ import MovieCutCore
 import ImageIO
 import AVFoundation
 import UniformTypeIdentifiers
+import CoreText
 
 func fail(_ msg: String) -> Never {
     FileHandle.standardError.write(Data((msg + "\n").utf8))
@@ -197,6 +198,141 @@ case "frame" where args.count >= 2:
         do { try StillExporter.writeImage(img, format: fmt, to: outURL) } catch { fail("\(fmt.title) を書けませんでした: \(outPath)") }
         print("wrote \(outPath) (\(p.width)x\(p.height))")
     } catch { fail("読めませんでした: \(error)") }
+case "psd-info" where args.count >= 2:
+    // psd-info <file.psd>: レイヤーの一覧(グループは字下げ)。読み取り専用
+    do {
+        let data = try Data(contentsOf: URL(fileURLWithPath: args[1]), options: .mappedIfSafe)
+        let t0 = Date()
+        let doc = try PSDParser.parse(data)
+        print(String(format: "parsed in %.2fs  %dx%d depth=%d channels=%d  layers=%d (content %d)  layerError=%@  composite=%@",
+                     Date().timeIntervalSince(t0), doc.width, doc.height, doc.depth, doc.channels, doc.layers.count, doc.contentLayers.count,
+                     doc.layerError ?? "なし", doc.composite == nil ? "なし" : "あり"))
+        var depth = 0
+        for l in doc.layers.reversed() {
+            if l.group == .divider { depth -= 1; continue }
+            let pad = String(repeating: "  ", count: max(0, depth))
+            let mark = l.group == .none ? "-" : "[\(l.group == .closedFolder ? "閉" : "開")]"
+            print("\(pad)\(mark) \(l.name)  \(l.width)x\(l.height)@\(l.left),\(l.top) vis=\(l.visible) op=\(l.opacity) blend=\(l.blendKey)")
+            if l.group != .none { depth += 1 }
+        }
+    } catch { fail("読めませんでした: \(error)") }
+case "rig-frame" where args.count >= 2:
+    // rig-frame <フォルダ|.psd> --out x.png [--mouth あ|い|う|え|お|open|closed] [--blink] [--expr 名前] [--pick 眉=2,目=5] [--height 1080] [--bench N] [--list]
+    // パーツ式立ち絵を 1 枚に合成して見る(アプリのプレビュー・書き出しと同じ合成)。
+    do {
+        let input = URL(fileURLWithPath: args[1])
+        var rig: CharacterRig
+        var note = ""
+        if input.pathExtension.lowercased() == "psd" {
+            let doc = try PSDParser.parse(Data(contentsOf: input, options: .mappedIfSafe))
+            let dir = FileManager.default.temporaryDirectory.appendingPathComponent("moviecut-rigcli-\(PSDImporter.cacheKey(path: input.path, modified: nil, size: nil))")
+            let res = try RigPSDImporter.build(doc, cacheDir: dir)
+            rig = res.rig; note = res.notes.joined(separator: " / ")
+        } else {
+            guard let rep = RigFolderImporter.scan(folder: input) else { fail("パーツの画像が見つかりませんでした") }
+            rig = rep.rig; note = "\(rep.width)x\(rep.height) " + rep.notes.joined(separator: " / ") + " 未分類 \(rep.unclassified)"
+        }
+        print("rig: " + rig.slots.map { "\($0.name)(\($0.parts.count),active=\($0.active))" }.joined(separator: " "))
+        print("blink=\(rig.blink.map(String.init) ?? "-") mouthClosed=\(rig.mouthClosed.map(String.init) ?? "-") mouthOpen=\(rig.mouthOpen.map(String.init) ?? "-")  \(note)")
+        if args.contains("--list") { for s in rig.slots { print("[\(s.name)]"); for (i, p) in s.parts.enumerated() { print("  \(i): \((p as NSString).lastPathComponent)") } } }
+        if let picks = optValue("--pick") {
+            for kv in picks.split(separator: ",") {
+                let p = kv.split(separator: "=")
+                if p.count == 2, let n = Int(p[1]) { rig = RigEditing.select(rig, slot: String(p[0]), index: n) }
+            }
+        }
+        if let roles = optValue("--roles") {
+            // 例: a=16,i=23,u=7,e=17,o=18,closed=1,open=16,blink=41(口・目スロットの添字の割り当て)
+            for kv in roles.split(separator: ",") {
+                let p = kv.split(separator: "=")
+                guard p.count == 2, let n = Int(p[1]) else { continue }
+                let key = String(p[0])
+                if key == "blink" { rig.blink = n }
+                else if key == "closed" { rig.mouthClosed = n }
+                else if key == "open" { rig.mouthOpen = n }
+                else { var v = rig.vowels ?? [:]; v[key] = n; rig.vowels = v }
+            }
+        }
+        if let e = optValue("--expr") { rig = RigEditing.applyExpression(rig, name: e) }
+        var mouth: RigMouth = .unchanged
+        if let m = optValue("--mouth") {
+            let map: [String: String] = ["あ": "a", "い": "i", "う": "u", "え": "e", "お": "o"]
+            if m == "open" { mouth = .open } else if m == "closed" { mouth = .closed } else if let k = map[m] ?? (["a","i","u","e","o"].contains(m) ? m : nil) { mouth = .vowel(k) } else { fail("--mouth は あ い う え お open closed") }
+        }
+        if let sheetSlot = optValue("--sheet"), let si = rig.slotIndex(sheetSlot) {
+            // 開発用: スロットの全パーツを顔の拡大で並べた見本(番号つき)。--crop x,y,w,h(0〜1)
+            let cr = (optValue("--crop") ?? "0.40,0.12,0.22,0.16").split(separator: ",").compactMap { Double($0) }
+            guard cr.count == 4 else { fail("--crop x,y,w,h") }
+            let cache = RigFrameCache(); cache.frameLimit = 2
+            let cols = 8, cell = 240
+            let n = rig.slots[si].parts.count
+            let rows = (n + cols - 1) / cols
+            let ctx = CGContext(data: nil, width: cols * cell, height: rows * cell, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue)!
+            ctx.setFillColor(CGColor(red: 0.92, green: 0.92, blue: 0.92, alpha: 1)); ctx.fill(CGRect(x: 0, y: 0, width: cols * cell, height: rows * cell))
+            for i in 0..<n {
+                var r2 = rig; r2.slots[si].active = i
+                guard let full = cache.frame(paths: r2.paths(active: r2.resolvedActive()), height: 2400) else { continue }
+                let rect = CGRect(x: cr[0] * Double(full.width), y: cr[1] * Double(full.height), width: cr[2] * Double(full.width), height: cr[3] * Double(full.height))
+                guard let crop = full.cropping(to: rect) else { continue }
+                let x = (i % cols) * cell, y = (rows - 1 - i / cols) * cell
+                ctx.draw(crop, in: CGRect(x: x, y: y, width: cell, height: cell * Int(rect.height) / max(1, Int(rect.width))))
+                let line = CTLineCreateWithAttributedString(NSAttributedString(string: "\(i)", attributes: [NSAttributedString.Key(kCTFontAttributeName as String): CTFontCreateWithName("Helvetica-Bold" as CFString, 22, nil), NSAttributedString.Key(kCTForegroundColorAttributeName as String): CGColor(red: 1, green: 0, blue: 0, alpha: 1)]))
+                ctx.textPosition = CGPoint(x: x + 6, y: y + 6); CTLineDraw(line, ctx)
+            }
+            if let o = optValue("--out"), let img = ctx.makeImage() { try StillExporter.writeImage(img, format: .png, to: URL(fileURLWithPath: o)); print("wrote \(o)") }
+            exit(0)
+        }
+        let active = rig.resolvedActive(expression: nil, mouth: mouth, blinking: args.contains("--blink"))
+        let paths = rig.paths(active: active)
+        let height = optValue("--height").flatMap(Int.init) ?? 1080
+        if let n = optValue("--bench").flatMap(Int.init), n > 0 {
+            // 冷たい(キャッシュなし)/ パーツだけ温かい(組み合わせが初めて)/ 温かい(合成キャッシュあり)の ms
+            let cold = RigFrameCache()
+            var t0 = Date(); _ = cold.frame(paths: paths, height: height)
+            print(String(format: "cold  : %.1f ms (パーツ読み込み + 合成, %d 枚)", Date().timeIntervalSince(t0) * 1000, paths.count))
+            let other = rig.paths(active: rig.resolvedActive(expression: nil, mouth: .vowel("a"), blinking: true))
+            t0 = Date(); _ = cold.frame(paths: other, height: height)
+            print(String(format: "parts-warm: %.1f ms (別の組み合わせ, 合成のみ)", Date().timeIntervalSince(t0) * 1000))
+            t0 = Date(); _ = cold.frame(paths: Array(paths.reversed()), height: height)
+            print(String(format: "compose-only: %.1f ms (パーツ読み込み済み・合成キャッシュなしの新しい組み合わせ)", Date().timeIntervalSince(t0) * 1000))
+            t0 = Date(); for _ in 0..<n { _ = cold.frame(paths: paths, height: height) }
+            print(String(format: "warm  : %.4f ms/frame (合成キャッシュ)", Date().timeIntervalSince(t0) * 1000 / Double(n)))
+        }
+        if let n = optValue("--bench-render").flatMap(Int.init), n > 0 {
+            // 1920x1080 のフレームを Renderer で描く時間(立ち絵 1 人。プレビュー・書き出しと同じ道)。cold = パーツ読み込みから、warm = 合成キャッシュあり
+            var p = Project(); p.width = 1920; p.height = 1080; p.bg = "#202020"; p.tracks = []
+            var c = Character(); c.id = "bench"; c.name = "B"; c.x = 0.5; c.y = 0.5; c.scale = 1.6; c.rig = rig
+            p.characters = [c]
+            var t0 = Date()
+            _ = Renderer(project: p, assets: RenderAssets()).renderImage(t: 0.1)
+            print(String(format: "render cold : %.1f ms/frame (新しい RenderAssets で 1 枚目)", Date().timeIntervalSince(t0) * 1000))
+            let assets = RenderAssets()
+            let r = Renderer(project: p, assets: assets)
+            _ = r.renderImage(t: 0.1)
+            t0 = Date(); for _ in 0..<n { _ = r.renderImage(t: 0.1) }
+            print(String(format: "render warm : %.2f ms/frame (%d frames, 合成キャッシュあり)", Date().timeIntervalSince(t0) * 1000 / Double(n), n))
+            // 立ち絵なしの背景だけ(比較)
+            var empty = p; empty.characters = []
+            let re = Renderer(project: empty, assets: RenderAssets()); _ = re.renderImage(t: 0.1)
+            t0 = Date(); for _ in 0..<n { _ = re.renderImage(t: 0.1) }
+            print(String(format: "render bg-only: %.2f ms/frame (立ち絵なし)", Date().timeIntervalSince(t0) * 1000 / Double(n)))
+            // 従来の 1 枚画像の立ち絵(合成済みの 1 枚を imgClosed に)
+            if let composed = RigFrameCache().frame(paths: paths, height: 1080) {
+                let url = FileManager.default.temporaryDirectory.appendingPathComponent("moviecut-bench-flat.png")
+                try StillExporter.writeImage(composed, format: .png, to: url)
+                var legacy = p; legacy.characters[0].rig = nil; legacy.characters[0].imgClosed = url.path
+                let rl = Renderer(project: legacy, assets: RenderAssets()); _ = rl.renderImage(t: 0.1)
+                t0 = Date(); for _ in 0..<n { _ = rl.renderImage(t: 0.1) }
+                print(String(format: "render legacy1枚: %.2f ms/frame (従来の画像 1 枚の立ち絵)", Date().timeIntervalSince(t0) * 1000 / Double(n)))
+            }
+        }
+        if let outPath = optValue("--out") {
+            guard let img = RigFrameCache().frame(paths: paths, height: height) else { fail("合成できませんでした") }
+            let outURL = URL(fileURLWithPath: outPath)
+            try StillExporter.writeImage(img, format: StillFormat(pathExtension: outURL.pathExtension) ?? .png, to: outURL)
+            print("wrote \(outPath) (\(img.width)x\(img.height))")
+        }
+    } catch { fail("rig-frame: \(error)") }
 case "export" where args.count >= 3:
     // export <in.mcpjc> <out.mp4|out.m4a> [--range a:b|project] [--preset <組み込み名 または保存したプリセット名>] [--bitrate 8(Mbps)] [--size WxH] [--fps 29.97] [--codec h264|hevc]
     // --preset はプロジェクトの写しに当てるだけ(入力ファイルは変えない)。--size / --codec は、プリセットの前に当てる。
@@ -568,5 +704,5 @@ case "smoke":
         try await runExport(p, to: URL(fileURLWithPath: outPath))
     } catch { fail("書き出せませんでした: \(error.localizedDescription)") }
 default:
-    fail("usage:\n  moviecut-cli info <file.ymproj>\n  moviecut-cli new <out.ymproj>\n  moviecut-cli export <in.mcpjc> <out.mp4|out.m4a> [--range a:b|project] [--preset youtube1080|youtube1080p60|youtube4k|short|shorts|tiktok|reels|x720|x1080|light|audio|<保存したプリセット名>] [--bitrate 8(Mbps)] [--size WxH] [--fps 29.97] [--codec h264|hevc] [--fan-max [--fan-port 1200|1201]]\n  moviecut-cli fan status | fan test [--seconds 8] [--fan-port 1200|1201]\n  moviecut-cli smoke --out <mp4> [--size WxH] [--fps 23.976] [--codec h264|hevc] [--blur] [--tone] [--save-project p.ymproj]\n  moviecut-cli speak (--voicevox <id> [--speed --pitch --intonation] | --voice <preset> [--speed]) --text <t> --out <wav>\n  moviecut-cli speakers | deps | script <script.txt> --out <p.ymproj>\n  moviecut-cli frame <in.ymproj> --t <sec> --out <png|jpg> [--size WxH] [--bench N]\n  moviecut-cli gif <in.mcpjc> --out <x.gif> [--fps 10] [--width 480] [--range a:b|project]\n  moviecut-cli sequence <in.mcpjc> --out <dir> [--format png|jpeg] [--name base] [--range a:b|project] [--fps 30] [--size WxH]\n  moviecut-cli addvideo <in.ymproj> <clip.mp4> <out.ymproj>\n  moviecut-cli genclips <N> <out.ymproj>\n  moviecut-cli silence <project|media> [--threshold -40] [--min 0.4] [--pad 0.1]\n  moviecut-cli beats <project|media> [--all]\n  moviecut-cli subs <project> --out <x.srt|x.vtt>\n  moviecut-cli transcribe <media|project> --out <x.srt|x.vtt> [--clip 0] [--locale ja-JP]\n  moviecut-cli chapters <project> [--color red|orange|yellow|green|blue|purple|gray|teal]\n  moviecut-cli loudness <project> [--range a:b|project]\n  moviecut-cli project-info <project>   (JSON。読み取り専用)\n  moviecut-cli ai script --theme <t> [--chars 霊夢,魔理沙] [--lines 12] (--provider-cmd \"claude -p\" | --provider-url http://127.0.0.1:11434 --model <m>) [--timeout 120] [--out x.txt] [--show-prompt]")
+    fail("usage:\n  moviecut-cli info <file.ymproj>\n  moviecut-cli new <out.ymproj>\n  moviecut-cli export <in.mcpjc> <out.mp4|out.m4a> [--range a:b|project] [--preset youtube1080|youtube1080p60|youtube4k|short|shorts|tiktok|reels|x720|x1080|light|audio|<保存したプリセット名>] [--bitrate 8(Mbps)] [--size WxH] [--fps 29.97] [--codec h264|hevc] [--fan-max [--fan-port 1200|1201]]\n  moviecut-cli fan status | fan test [--seconds 8] [--fan-port 1200|1201]\n  moviecut-cli smoke --out <mp4> [--size WxH] [--fps 23.976] [--codec h264|hevc] [--blur] [--tone] [--save-project p.ymproj]\n  moviecut-cli speak (--voicevox <id> [--speed --pitch --intonation] | --voice <preset> [--speed]) --text <t> --out <wav>\n  moviecut-cli speakers | deps | script <script.txt> --out <p.ymproj>\n  moviecut-cli rig-frame <フォルダ|.psd> --out <png> [--mouth あ|い|う|え|お|open|closed] [--blink] [--pick 眉=2,目=5] [--expr 名前] [--height 1080] [--bench N] [--list]\n  moviecut-cli psd-info <file.psd>\n  moviecut-cli frame <in.ymproj> --t <sec> --out <png|jpg> [--size WxH] [--bench N]\n  moviecut-cli gif <in.mcpjc> --out <x.gif> [--fps 10] [--width 480] [--range a:b|project]\n  moviecut-cli sequence <in.mcpjc> --out <dir> [--format png|jpeg] [--name base] [--range a:b|project] [--fps 30] [--size WxH]\n  moviecut-cli addvideo <in.ymproj> <clip.mp4> <out.ymproj>\n  moviecut-cli genclips <N> <out.ymproj>\n  moviecut-cli silence <project|media> [--threshold -40] [--min 0.4] [--pad 0.1]\n  moviecut-cli beats <project|media> [--all]\n  moviecut-cli subs <project> --out <x.srt|x.vtt>\n  moviecut-cli transcribe <media|project> --out <x.srt|x.vtt> [--clip 0] [--locale ja-JP]\n  moviecut-cli chapters <project> [--color red|orange|yellow|green|blue|purple|gray|teal]\n  moviecut-cli loudness <project> [--range a:b|project]\n  moviecut-cli project-info <project>   (JSON。読み取り専用)\n  moviecut-cli ai script --theme <t> [--chars 霊夢,魔理沙] [--lines 12] (--provider-cmd \"claude -p\" | --provider-url http://127.0.0.1:11434 --model <m>) [--timeout 120] [--out x.txt] [--show-prompt]")
 }

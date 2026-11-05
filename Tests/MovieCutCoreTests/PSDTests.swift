@@ -1,5 +1,6 @@
 import XCTest
 import ImageIO
+import Compression
 @testable import MovieCutCore
 
 /// テスト用に PSD をバイト列から組み立てる(RAW / RLE / 16 ビット / グループ / 非表示)。
@@ -13,13 +14,15 @@ struct PSDBuilder {
         var rle = false
         var blend = "norm"
         var section: UInt32? = nil         // 1 開く / 2 閉じる / 3 終わり
-        var zip = false
+        var zip = false                    // 壊れた ZIP(読めない → 統合画像に戻る確認用)
+        var zipKind: Int? = nil            // 本物の ZIP(2 = 予測なし、3 = 予測あり)
         var unicodeName: String? = nil
     }
     var width: Int, height: Int
     var depth = 8
     var layers: [L] = []
     var compositeRLE = false
+    var compositeZip: Int? = nil
     var composite: [[UInt8]]? = nil        // 無ければ全面 白
 
     static func be16(_ v: Int) -> [UInt8] { [UInt8((v >> 8) & 0xff), UInt8(v & 0xff)] }
@@ -42,11 +45,38 @@ struct PSDBuilder {
     }
 
     /// 1 チャンネル(圧縮方式 + 本体)
-    func channelData(plane: [UInt8], w: Int, h: Int, rle: Bool, zip: Bool = false) -> [UInt8] {
+    /// 圧縮前の行(必要なら予測の差分にして)を zlib 形式(2 バイトのヘッダー + deflate + 4 バイト)にする
+    func zipBytes(_ rows: [[UInt8]], kind: Int) -> [UInt8] {
+        var raw: [UInt8] = []
+        for r in rows {
+            if kind == 3 {
+                var d = r
+                if depth == 16 {
+                    var i = r.count - 2
+                    while i >= 2 {
+                        let cur = Int(r[i]) << 8 | Int(r[i + 1]), prev = Int(r[i - 2]) << 8 | Int(r[i - 1])
+                        let v = (cur - prev) & 0xFFFF
+                        d[i] = UInt8(v >> 8); d[i + 1] = UInt8(v & 0xFF); i -= 2
+                    }
+                } else {
+                    var i = r.count - 1
+                    while i >= 1 { d[i] = r[i] &- r[i - 1]; i -= 1 }
+                }
+                raw += d
+            } else { raw += r }
+        }
+        var out = [UInt8](repeating: 0, count: raw.count + 1024)
+        let n = raw.withUnsafeBufferPointer { src in out.withUnsafeMutableBufferPointer { dst in
+            compression_encode_buffer(dst.baseAddress!, dst.count, src.baseAddress!, src.count, nil, COMPRESSION_ZLIB) } }
+        return [0x78, 0x9C] + out.prefix(n) + [0, 0, 0, 0]
+    }
+
+    func channelData(plane: [UInt8], w: Int, h: Int, rle: Bool, zip: Bool = false, zipKind: Int? = nil) -> [UInt8] {
         let rows: [[UInt8]] = (0..<h).map { y in
             let r = Array(plane[(y * w)..<((y + 1) * w)])
             return depth == 16 ? r.flatMap { [$0, $0 &* 0] } : r      // 16 ビットは上位バイト = 値
         }
+        if let k = zipKind { return Self.be16(k) + zipBytes(rows, kind: k) }
         if zip { return Self.be16(2) + [1, 2, 3] }
         if !rle { return Self.be16(0) + rows.flatMap { $0 } }
         let packed = rows.map { Self.packBits($0) }
@@ -66,7 +96,7 @@ struct PSDBuilder {
             if w > 0, h > 0 {
                 for (k, id) in [0, 1, 2, -1].enumerated() {
                     let plane = l.rgba.map { $0[k] }
-                    chans.append((id, channelData(plane: plane, w: w, h: h, rle: l.rle, zip: l.zip && id == 0)))
+                    chans.append((id, channelData(plane: plane, w: w, h: h, rle: l.rle, zip: l.zip && id == 0, zipKind: l.zipKind)))
                 }
             } else {
                 for id in [0, 1, 2, -1] { chans.append((id, Self.be16(0))) }
@@ -100,7 +130,11 @@ struct PSDBuilder {
         let comp = composite ?? [[UInt8]](repeating: [255, 255, 255, 255], count: width * height)
         var planes: [[UInt8]] = []
         for k in 0..<4 { planes.append(comp.map { $0[k] }) }
-        if compositeRLE {
+        if let k = compositeZip {
+            let rows: [[UInt8]] = planes.flatMap { p in (0..<height).map { y in
+                let r = Array(p[(y * width)..<((y + 1) * width)]); return depth == 16 ? r.flatMap { [$0, 0] } : r } }
+            d += Self.be16(k) + zipBytes(rows, kind: k)
+        } else if compositeRLE {
             let rows: [[UInt8]] = planes.flatMap { p in (0..<height).map { y in
                 let r = Array(p[(y * width)..<((y + 1) * width)]); return Self.packBits(depth == 16 ? r.flatMap { [$0, 0] } : r) } }
             d += Self.be16(1) + rows.flatMap { Self.be16($0.count) } + rows.flatMap { $0 }
@@ -203,6 +237,49 @@ final class PSDTests: XCTestCase {
         XCTAssertEqual(plan.items.count, 1)
         XCTAssertTrue(plan.usedComposite)
         XCTAssertEqual(plan.items[0].scale, 1); XCTAssertEqual(plan.items[0].x, 0.5)
+    }
+
+    /// 8×6 の、行の中で値が大きく動く画素(予測の差分が 0 ばかりにならない)
+    private var varied: [[UInt8]] {
+        (0..<48).map { (i: Int) -> [UInt8] in
+            let r = UInt8((i * 37) % 256), g = UInt8((i * 53 + 7) % 256), b = UInt8((i * i) % 256)
+            return [r, g, b, 255]
+        }
+    }
+
+    func testZipLayersAndCompositeAreDecoded() throws {
+        for kind in [2, 3] {
+            var b = sample(rle: false)
+            b.layers[0].rgba = varied
+            b.layers[0].zipKind = kind; b.layers[1].zipKind = kind
+            b.compositeZip = kind
+            b.composite = solid(8, 6, [10, 20, 30, 255])
+            let doc = try PSDParser.parse(b.build())
+            XCTAssertNil(doc.layerError, "ZIP(方式 \(kind))のレイヤーを読めた")
+            var ref = sample(rle: false); ref.layers[0].rgba = varied
+            let plain = try PSDParser.parse(ref.build())
+            XCTAssertEqual(doc.layers.map(\.raster), plain.layers.map(\.raster), "ZIP と RAW で画素が同じ(方式 \(kind))")
+            XCTAssertEqual(doc.composite?.pixel(2, 2), [10, 20, 30, 255])
+        }
+    }
+
+    func testZip16BitWithPrediction() throws {
+        var b = sample(rle: false)
+        b.depth = 16
+        b.layers[0].rgba = varied
+        b.layers[0].zipKind = 3; b.layers[1].zipKind = 3
+        let doc = try PSDParser.parse(b.build())
+        var ref = sample(rle: false); ref.depth = 16; ref.layers[0].rgba = varied
+        let plain = try PSDParser.parse(ref.build())
+        XCTAssertNil(doc.layerError)
+        XCTAssertEqual(doc.layers.map(\.raster), plain.layers.map(\.raster))
+    }
+
+    func testInflateRejectsGarbageAndWrongSize() {
+        XCTAssertThrowsError(try PSDParser.inflate([0x78, 0x9C, 1, 2, 3], expected: 10))
+        let good = PSDBuilder(width: 1, height: 1).zipBytes([[1, 2, 3, 4]], kind: 2)
+        XCTAssertEqual(try PSDParser.inflate(good, expected: 4), [1, 2, 3, 4])
+        XCTAssertThrowsError(try PSDParser.inflate(good, expected: 5))
     }
 
     func testBadInputs() {

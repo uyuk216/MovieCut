@@ -116,6 +116,8 @@ public struct Character: Codable, Equatable, Identifiable {
     public var expressions: [String: String]? = nil
     /// B-7: 話している間に上下へ揺れる。オンのときだけ書く。
     public var bounce: Bool? = nil
+    /// パーツ式立ち絵(`CharacterRig`)。あるときは `imgClosed` などの代わりに、パーツを重ねた 1 枚を使う。無ければ書かない。
+    public var rig: CharacterRig? = nil
     /// 話し手ごとの字幕の文字色(#rrggbb)。字幕の自動生成でこのキャラのセリフの字幕に使う。未設定 = 文字スタイルの色。
     public var subtitleColor: String? = nil
     public var x: Double = 0.5
@@ -125,7 +127,7 @@ public struct Character: Codable, Equatable, Identifiable {
     public var alwaysShow: Bool = true
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["id", "name", "engine", "speaker", "voice", "speed", "pitch", "intonation", "color", "imgClosed", "imgOpen", "imgBlink", "imgVowels", "expressions", "bounce", "subtitleColor", "x", "y", "scale", "flip", "alwaysShow"]
+    static let knownKeys: Set<String> = ["id", "name", "engine", "speaker", "voice", "speed", "pitch", "intonation", "color", "imgClosed", "imgOpen", "imgBlink", "imgVowels", "expressions", "bounce", "rig", "subtitleColor", "x", "y", "scale", "flip", "alwaysShow"]
 
     public init() {}
 
@@ -166,6 +168,7 @@ public struct Character: Codable, Equatable, Identifiable {
         imgVowels = l.value("imgVowels").flatMap { (d: [String: String]) in d.isEmpty ? nil : d }
         expressions = l.value("expressions").flatMap { (d: [String: String]) in d.isEmpty ? nil : d }
         bounce = l.bool("bounce")
+        rig = l.value("rig")
         subtitleColor = l.string("subtitleColor").flatMap(SpeakerSubtitleColor.normalized)
         x = l.double("x") ?? x
         y = l.double("y") ?? y
@@ -194,6 +197,7 @@ public struct Character: Codable, Equatable, Identifiable {
         if let v = imgVowels, !v.isEmpty { try c.encode(v, forKey: AnyKey("imgVowels")) }
         if let e = expressions, !e.isEmpty { try c.encode(e, forKey: AnyKey("expressions")) }
         if bounce == true { try c.encode(true, forKey: AnyKey("bounce")) }
+        if let r = rig { try c.encode(r, forKey: AnyKey("rig")) }
         if let s = subtitleColor { try c.encode(s, forKey: AnyKey("subtitleColor")) }
         try c.encode(x, forKey: AnyKey("x"))
         try c.encode(y, forKey: AnyKey("y"))

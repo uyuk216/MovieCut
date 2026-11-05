@@ -1214,6 +1214,7 @@ struct CharacterInspector: View {
                 portraitRow(c, closed: true)
                 portraitRow(c, closed: false)
                 vowelSection(c)
+                if let rig = c.rig { RigInspectorSection(model: model, charId: charId, rig: rig) }
                 InspectorSection(title: "演出")
                 blinkRow(c)
                 check("バウンス（話し中に上下に揺れる）", c, name: "バウンスの切り替え", get: { $0.bounce == true }, set: { $0.bounce = $1 ? true : nil })

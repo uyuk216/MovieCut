@@ -1,9 +1,11 @@
 import Foundation
+import Compression
 
 /// PSD(Photoshop 形式)の読み取り。外部ライブラリなし。
 /// 対応: RGB・8 ビット / 16 ビット(上位バイトだけ使う)、チャンネルは RAW と RLE(PackBits)。
 /// 読むもの: ヘッダー、レイヤー記録(名前・範囲・不透明度・表示フラグ・ブレンドモードのキー・グループの印)、レイヤーごとの画素、統合済みの合成画像。
-/// 読まないもの: 画像リソース、カラーモードデータ、レイヤーマスク、調整レイヤー、レイヤー効果、ZIP 圧縮(→ レイヤーの読み取り失敗として合成画像に戻す)。
+/// ZIP 圧縮(予測あり・なし)も読む(Compression フレームワークの zlib)。
+/// 読まないもの: 画像リソース、カラーモードデータ、レイヤーマスク、調整レイヤー、レイヤー効果。
 public enum PSDError: Error, Equatable, CustomStringConvertible {
     case notPSD
     case truncated
@@ -292,10 +294,50 @@ public enum PSDParser {
                 try unpackBits(row, expected: bpr, into: &raw)
             }
             decodeRows(raw: raw, rowBytes: bpr, width: width, height: height, depth: depth, into: &out)
+        case 2, 3:
+            let rest = try r.take(r.count - r.pos)
+            var raw = try inflate(rest, expected: bpr * height)
+            if comp == 3 { undoPrediction(&raw, rowBytes: bpr, height: height, depth: depth) }
+            decodeRows(raw: raw, rowBytes: bpr, width: width, height: height, depth: depth, into: &out)
         default:
-            throw PSDError.unsupported(comp == 2 || comp == 3 ? "ZIP 圧縮" : "圧縮方式 \(comp)")
+            throw PSDError.unsupported("圧縮方式 \(comp)")
         }
         return out
+    }
+
+    /// ZIP(zlib 形式: 先頭 2 バイトのヘッダー + deflate + 末尾 4 バイトの検査値)を `expected` バイトに展開する。
+    static func inflate(_ data: [UInt8], expected: Int) throws -> [UInt8] {
+        guard data.count > 2 else { throw PSDError.corrupt("ZIP のデータが短い") }
+        guard expected > 0 else { return [] }
+        var out = [UInt8](repeating: 0, count: expected)
+        let n = data.withUnsafeBufferPointer { src -> Int in
+            out.withUnsafeMutableBufferPointer { dst -> Int in
+                compression_decode_buffer(dst.baseAddress!, expected, src.baseAddress! + 2, src.count - 2, nil, COMPRESSION_ZLIB)
+            }
+        }
+        guard n == expected else { throw PSDError.corrupt("ZIP の展開結果の大きさ") }
+        return out
+    }
+
+    /// 予測つき ZIP(方式 3): 各行を左から足し込んで元に戻す(8 ビットはバイト、16 ビットは 2 バイトの語、上位が先)。
+    static func undoPrediction(_ raw: inout [UInt8], rowBytes: Int, height: Int, depth: Int) {
+        guard rowBytes > 0 else { return }
+        for y in 0..<height {
+            let base = y * rowBytes
+            if depth == 16 {
+                var i = 2
+                while i + 1 < rowBytes {
+                    let prev = Int(raw[base + i - 2]) << 8 | Int(raw[base + i - 1])
+                    let cur = Int(raw[base + i]) << 8 | Int(raw[base + i + 1])
+                    let v = (prev + cur) & 0xFFFF
+                    raw[base + i] = UInt8(v >> 8); raw[base + i + 1] = UInt8(v & 0xFF)
+                    i += 2
+                }
+            } else {
+                var i = 1
+                while i < rowBytes { raw[base + i] = raw[base + i] &+ raw[base + i - 1]; i += 1 }
+            }
+        }
     }
 
     private static func decodeRows(raw: [UInt8], rowBytes: Int, width: Int, height: Int, depth: Int, into out: inout [UInt8]) {
@@ -358,8 +400,19 @@ public enum PSDParser {
                     planes.append(p)
                 }
             }
+        case 2, 3:
+            // ZIP: 全チャンネルをひとつづきに圧縮している(予測ありは行ごと)
+            let rest = try r.take(r.count - r.pos)
+            let all = try inflate(rest, expected: bpr * height * channels)
+            for c in 0..<used {
+                var raw = Array(all[(c * bpr * height)..<((c + 1) * bpr * height)])
+                if comp == 3 { undoPrediction(&raw, rowBytes: bpr, height: height, depth: depth) }
+                var p = [UInt8](repeating: 0, count: width * height)
+                decodeRows(raw: raw, rowBytes: bpr, width: width, height: height, depth: depth, into: &p)
+                planes.append(p)
+            }
         default:
-            throw PSDError.unsupported(comp == 2 || comp == 3 ? "ZIP 圧縮" : "圧縮方式 \(comp)")
+            throw PSDError.unsupported("圧縮方式 \(comp)")
         }
         var map: [Int: [UInt8]] = [0: planes[0], 1: planes[1], 2: planes[2]]
         if planes.count > 3 { map[-1] = planes[3] }
