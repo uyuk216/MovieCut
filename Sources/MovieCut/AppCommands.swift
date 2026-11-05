@@ -110,6 +110,8 @@ struct AppCommands: Commands {
                 Menu("図形を追加") { items(AppMenuSpec.shapeItems(s), run) }
                 Menu("スタンプを追加") { items(AppMenuSpec.stampItems(s), run) }
                 Divider()
+                Menu("マルチカメラ") { items(AppMenuSpec.multicamItems(s), run) }
+                Divider()
                 Menu("レイヤー") {
                     items(AppMenuSpec.layerItems(s), run)
                     items([AppMenuSpec.layerDeleteItem(s)], run)

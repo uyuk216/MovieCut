@@ -13,6 +13,10 @@ enum MenuCommand: Hashable {
     case translateSubtitles
     // クリップ ▸ ロール編集… / スリップ編集…(シートでコマ数を指定。ショートカットは持たない)
     case rollEdit, slipEdit
+    // クリップ ▸ リップルトリム(頭 / 尻を再生位置へ。後ろを詰める)と、その対象を全レイヤーにする設定(ショートカットは持たない)
+    case rippleTrimHead, rippleTrimTail, rippleAllLayersToggle
+    // クリップ ▸ マルチカメラ: 作る… / 切替…(シート)/ 再生位置からアングル N(0 始まりの番号)に切り替える(ショートカットは持たない。1〜9 のキーは切替シートの中だけ)
+    case multicamCreate, multicamSwitch, multicamCut(Int)
     // 音声から字幕を作る(オンデバイスの音声認識。選んでいるクリップ)
     case transcribeSubtitles
     // 素材(欠落の再指定)
@@ -259,6 +263,14 @@ struct MenuState: Equatable {
     /// 選んだクリップ 1 つが、隣り合うクリップとのロールができる / スリップできる
     var canRoll = false
     var canSlip = false
+    /// リップルトリム: 頭 / 尻を再生位置へトリムできる、対象はすべてのレイヤーか
+    var canRippleHead = false
+    var canRippleTail = false
+    var rippleAllLayers = false
+    /// マルチカメラ: 選んだクリップから作れる / グループがある / 再生位置のグループの角度の数(無ければ 0)
+    var canMulticamCreate = false
+    var hasMulticam = false
+    var multicamAngleCount = 0
     /// 対象のレイヤーを消せない理由(消せるなら nil)。レイヤーがなければ nil で hasLayerTarget が false
     var layerDeleteBlocked: String?
     var layerHeight = LayerHeight.normal
@@ -423,6 +435,12 @@ struct MenuState: Equatable {
         canSplit = m.canSplit
         canRoll = m.canRoll
         canSlip = m.canSlip
+        canRippleHead = m.canRipple(edge: .head)
+        canRippleTail = m.canRipple(edge: .tail)
+        rippleAllLayers = m.rippleTrimAllLayers
+        canMulticamCreate = m.canMulticamCreate
+        hasMulticam = !m.project.multicams.isEmpty
+        multicamAngleCount = m.activeMulticam?.angles.count ?? 0
         resolutionKey = m.resolutionKey
         fps = m.project.fps
         recentResolutions = RecentCustoms.resolutions().items
@@ -803,7 +821,7 @@ enum AppMenuSpec {
     static func clipTrim(_ s: MenuState) -> [MenuItemSpec] {
         [MenuItemSpec(command: .trimBefore, title: "再生位置より前を切り落とす", shortcut: MenuShortcut(key: "[", modifiers: [.option, .command]), enabled: s.canEdit && s.canTrim, checked: nil),
          MenuItemSpec(command: .trimAfter, title: "再生位置より後ろを切り落とす", shortcut: MenuShortcut(key: "]", modifiers: [.option, .command]), enabled: s.canEdit && s.canTrim, checked: nil),
-         rollEditItem(s), slipEditItem(s),
+         rollEditItem(s), slipEditItem(s)] + rippleItems(s) + [
          MenuItemSpec(command: .mergeSplits, title: "分割点を統合", shortcut: nil, enabled: s.canEdit && s.hasMergeableSplits, checked: nil, hint: "同じ素材の続きを 1 つに")]
     }
 
@@ -815,6 +833,22 @@ enum AppMenuSpec {
     /// クリップ ▸ スリップ編集…(位置と長さはそのままで、使う素材の区間をずらす)。タイムラインではクリップ本体を ⌥⇧ ドラッグでも。
     static func slipEditItem(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .slipEdit, title: "スリップ編集…", shortcut: nil, enabled: s.canEdit && s.canSlip, checked: nil, hint: "素材の区間をずらす。⌥⇧ ドラッグでも")
+    }
+
+    /// クリップ ▸ リップルトリム(頭 / 尻を再生位置へ。同じレイヤーの後ろを詰める)と、すべてのレイヤーを対象にする設定。タイムラインでは端を ⌘ ドラッグでも。
+    static func rippleItems(_ s: MenuState) -> [MenuItemSpec] {
+        [MenuItemSpec(command: .rippleTrimHead, title: "リップルトリム(頭)を再生位置へ", shortcut: nil, enabled: s.canEdit && s.canRippleHead, checked: nil, hint: "後ろのクリップを詰める。端を ⌘ ドラッグでも"),
+         MenuItemSpec(command: .rippleTrimTail, title: "リップルトリム(尻)を再生位置へ", shortcut: nil, enabled: s.canEdit && s.canRippleTail, checked: nil, hint: "後ろのクリップを詰める。端を ⌘ ドラッグでも"),
+         MenuItemSpec(command: .rippleAllLayersToggle, title: "リップルトリムをすべてのレイヤーに", shortcut: nil, enabled: s.canEdit, checked: s.rippleAllLayers, hint: "オフは同じレイヤーだけ")]
+    }
+
+    /// クリップ ▸ マルチカメラ(サブメニュー): 作る… / 切替… / 再生位置からアングル 1〜9 に切り替える。ショートカットは付けない(1〜9 のキーは切替シートの中だけ)。
+    static func multicamItems(_ s: MenuState) -> [MenuItemSpec] {
+        [MenuItemSpec(command: .multicamCreate, title: "マルチカメラを作る…", shortcut: nil, enabled: s.canEdit && s.canMulticamCreate, checked: nil, hint: "映像クリップを 2〜9 個選ぶ。音で同期"),
+         MenuItemSpec(command: .multicamSwitch, title: "マルチカメラ切替…", shortcut: nil, enabled: s.canEdit && s.hasMulticam, checked: nil, hint: "再生しながら 1〜9 のキーで切り替える")]
+            + (0..<Multicam.maxAngles).map { i in
+                MenuItemSpec(command: .multicamCut(i), title: "再生位置からアングル \(i + 1) に切り替え", shortcut: nil, enabled: s.canEdit && s.multicamAngleCount > i, checked: nil)
+            }
     }
 
     static func clipNavigate(_ s: MenuState) -> [MenuItemSpec] {
@@ -1214,7 +1248,7 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s)] + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), clipListItem(s), noteListItem(s)] + scriptStoryboardItems(s) + [makeProxies(s)] + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textCounterItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), audioAutoSyncItem(s), beatMarkersItem(s), scaleDuplicateItem(s), beatPlaceItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
+        [about, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s)] + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), clipListItem(s), noteListItem(s)] + scriptStoryboardItems(s) + [makeProxies(s)] + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + multicamItems(s) + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textCounterItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), audioAutoSyncItem(s), beatMarkersItem(s), scaleDuplicateItem(s), beatPlaceItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerColorItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + guideItems(s) + [previewProxy(s), fullScreen(s)] + help.flatMap { $0 }
@@ -1278,6 +1312,12 @@ enum AppMenu {
             case .addFont: m.chooseAndAddFonts()
             case .addSubtitle: m.openSubtitleSheet()
             case .rollEdit: m.openRollSheet()
+            case .rippleTrimHead: m.rippleTrimSelectedToPlayhead(edge: .head)
+            case .rippleTrimTail: m.rippleTrimSelectedToPlayhead(edge: .tail)
+            case .rippleAllLayersToggle: m.rippleTrimAllLayers.toggle()
+            case .multicamCreate: m.openMulticamCreateSheet()
+            case .multicamSwitch: m.openMulticamSwitchSheet()
+            case .multicamCut(let i): m.multicamCut(angle: i)
             case .slipEdit: m.openSlipSheet()
             case .removeBackground: m.removeBackgroundSelected()
             case .imageChroma: m.addEffectSelected(.chromaKey)

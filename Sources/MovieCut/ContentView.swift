@@ -76,6 +76,7 @@ struct ContentView: View {
         .sheet(isPresented: $model.showSubtitleSheet) { SubtitleQuickSheet(model: model) }
         .sheet(isPresented: $model.showRollSheet) { RollSlipSheet(model: model, slip: false) }
         .sheet(isPresented: $model.showSlipSheet) { RollSlipSheet(model: model, slip: true) }
+        .modifier(MulticamSheets(model: model))
         .sheet(isPresented: $model.showSilenceSheet) { SilenceCutSheet(model: model) }
         .sheet(isPresented: $model.showScaleSheet) { ScaleDuplicateSheet(model: model) }
         .sheet(isPresented: $model.showBeatPlaceSheet) { BeatPlaceSheet(model: model) }

@@ -208,6 +208,12 @@ final class ProjectModel: ObservableObject {
     /// タイムラインの拡大率(pt/秒)と吸着(M4 のドラッグで使う)。
     @Published var pps: Double = TimelineLayout.defaultPps
     @Published var snapEnabled = true
+    /// リップルトリムが、同じレイヤーだけでなくすべてのレイヤーの後ろのクリップを動かす(表示の設定。保存しない)。
+    @Published var rippleTrimAllLayers = false
+    /// クリップ ▸ マルチカメラを作る… / マルチカメラ切替… のシート(作る対象の選択は開くときに控える)。
+    @Published var showMulticamCreateSheet = false
+    @Published var showMulticamSwitchSheet = false
+    var multicamCreateIds: Set<String> = []
     @Published var isPlaying = false
     /// 書き出し範囲だけをループ再生する(表示の状態。プロジェクトには保存せず、Undo にも載せない)。
     @Published var rangeLoop = false

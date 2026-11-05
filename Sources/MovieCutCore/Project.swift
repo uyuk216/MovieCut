@@ -36,10 +36,12 @@ public struct Project: Codable, Equatable {
     public var mediaPool: [String] = []
     /// トラックターゲット: 新しく足すクリップの行き先のレイヤー(`Track.id`)。1 つだけ。設定したときだけファイルに書く。
     public var targetTrackId: String? = nil
+    /// マルチカメラのグループ(使ったときだけ。空のときはファイルに書かない)。切り替えた結果は普通のクリップで、ここには角度と同期のずれだけを持つ。
+    public var multicams: [MulticamGroup] = []
     /// 知らないキー(保持して書き戻す)
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["width", "height", "fps", "bg", "codec", "voicevoxUrl", "aquestalkCommand", "characters", "tracks", "markers", "rangeIn", "rangeOut", "mediaHints", "mediaPool", "targetTrackId"]
+    static let knownKeys: Set<String> = ["width", "height", "fps", "bg", "codec", "voicevoxUrl", "aquestalkCommand", "characters", "tracks", "markers", "rangeIn", "rangeOut", "mediaHints", "mediaPool", "targetTrackId", "multicams"]
 
     public init() {}
 
@@ -63,9 +65,11 @@ public struct Project: Codable, Equatable {
         mediaHints = l.value("mediaHints") ?? [:]
         mediaPool = l.value("mediaPool") ?? []
         targetTrackId = l.string("targetTrackId")
+        multicams = l.value("multicams") ?? []
         extra = l.extra()
         // 型が違って読めなかったときは、捨てずにそのまま書き戻す
         if targetTrackId == nil, let raw: JSONValue = l.value("targetTrackId") { extra["targetTrackId"] = raw }
+        if multicams.isEmpty, let raw: JSONValue = l.value("multicams"), raw != .array([]) { extra["multicams"] = raw }
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -88,6 +92,7 @@ public struct Project: Codable, Equatable {
         if !mediaHints.isEmpty { try c.encode(mediaHints, forKey: AnyKey("mediaHints")) }
         if !mediaPool.isEmpty { try c.encode(mediaPool, forKey: AnyKey("mediaPool")) }
         try c.encodeIfPresent(targetTrackId, forKey: AnyKey("targetTrackId"))
+        if !multicams.isEmpty { try c.encode(multicams, forKey: AnyKey("multicams")) }
     }
 
     /// fps を Int / Double / "29.97" / "30000/1001" のどれからでも読む。読めない・欠けているときは 60、範囲外は 1〜240 に収める。

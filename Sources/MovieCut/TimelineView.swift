@@ -144,7 +144,7 @@ final class TimelineCanvas: NSView {
     private var projectEnd = 0.0
 
     // ドラッグ編集(M4a)
-    enum DragMode { case move, trimLeft, trimRight, roll, slip }
+    enum DragMode { case move, trimLeft, trimRight, roll, slip, rippleLeft, rippleRight }
     struct ClipDrag {
         var clipId: String
         var mode: DragMode
@@ -1246,6 +1246,7 @@ final class TimelineCanvas: NSView {
         }
         let mod: SelectionModifier = modifiers.contains(.command) ? .command : (modifiers.contains(.shift) ? .shift : .none)
         if modifiers.contains(.option), !modifiers.contains(.command), let id = clipId(at: p), beginRollSlip(on: id, at: p, shift: modifiers.contains(.shift)) { return }
+        if modifiers.contains(.command), !modifiers.contains(.option), !modifiers.contains(.shift), let id = clipId(at: p), beginRippleTrim(on: id, at: p) { return }
         if let id = clipId(at: p) {
             guard let m = model else { return }
             if mod != .none {
@@ -1444,6 +1445,9 @@ final class TimelineCanvas: NSView {
         guard let d = drag else { return }
         drag = nil
         stopAutoScroll()
+        if !d.active, d.mode == .rippleLeft || d.mode == .rippleRight, let m = model {
+            m.setSelection(TimelineSelection.click(m.selection, on: d.clipId, modifier: .command, in: project))
+        }
         if !d.active, let id = d.collapseTo { model?.selectOnly(id) }   // 動かさずに離した: 複数選択の中の 1 つだけにする
         if d.active {
             snapGuides = []
@@ -1455,12 +1459,27 @@ final class TimelineCanvas: NSView {
             case .trimRight: name = "クリップの右端トリム"
             case .roll: name = "ロール編集"
             case .slip: name = "スリップ編集"
+            case .rippleLeft, .rippleRight: name = ProjectModel.rippleUndoName
             }
             model?.commitGesture(name)             // 変わっていれば 1 回の Undo
             syncFromModel()
             window?.invalidateCursorRects(for: self)
             needsDisplay = true
         }
+    }
+
+    /// ⌘ ドラッグ(クリップの端): リップルトリム。頭 / 尻をトリムして、後ろのクリップを詰める / 空ける(設定でレイヤーを選ぶ)。
+    /// 端でないとき・ロックのとき(後ろにロックされたクリップがあるときも編集は断られる)は false を返し、いつもの ⌘ クリック(選択の切り替え)に任せる。
+    private func beginRippleTrim(on id: String, at p: NSPoint) -> Bool {
+        guard let m = model, !m.isLocked, let loc = ClipEditing.locate(id, in: project), !project.tracks[loc.track].isLocked else { return false }
+        let c = project.tracks[loc.track].clips[loc.index]
+        let r = geometry.clipRect(start: c.start, duration: c.duration, track: loc.track)
+        let zone = TimelineHit.zone(x: p.x, minX: r.minX, maxX: r.maxX, edgeZone: Self.edgeZone)
+        guard zone != .body else { return false }
+        // 動かさずに離したときは、いつもの ⌘ クリック(選択の切り替え)として扱う(mouseUp)
+        drag = ClipDrag(clipId: id, mode: zone == .left ? .rippleLeft : .rippleRight, downPoint: p, downTime: geometry.time(forX: p.x),
+                        lastTarget: loc.track, lastPoint: p, ids: [id], collapseTo: nil)
+        return true
     }
 
     /// ⌥ ドラッグ: クリップの端ならロール(隣り合うクリップとの境界を動かす)、⌥⇧ でクリップ本体ならスリップ(素材の区間をずらす)。
@@ -1500,6 +1519,16 @@ final class TimelineCanvas: NSView {
             result = ClipEditing.trimLeft(in: d.base, clipId: d.clipId, deltaT: dt, playhead: m.currentTime, pps: geometry.pps, snapEnabled: m.snapEnabled)
         case .trimRight:
             result = ClipEditing.trimRight(in: d.base, clipId: d.clipId, deltaT: dt, playhead: m.currentTime, pps: geometry.pps, snapEnabled: m.snapEnabled)
+        case .rippleLeft, .rippleRight:
+            // 断られる(ロック・重なり・変化なし)ときは元のまま。ロックのときは理由を状態欄に出す
+            let edge: ClipRippleTrim.Edge = d.mode == .rippleLeft ? .head : .tail
+            if let r = ClipRippleTrim.trim(in: d.base, clipId: d.clipId, edge: edge, deltaT: dt, allLayers: m.rippleTrimAllLayers,
+                                           playhead: m.currentTime, pps: geometry.pps, snapEnabled: m.snapEnabled) {
+                result = r
+            } else {
+                if ClipRippleTrim.touchesLocked(d.clipId, in: d.base, allLayers: m.rippleTrimAllLayers) { m.statusText = ProjectModel.lockedNotice }
+                result = ClipEditing.Result(project: d.base, guides: [])
+            }
         case .roll:
             result = ClipEditing.Result(project: ClipRollSlip.roll(in: d.base, leftClipId: d.clipId, deltaT: dt) ?? d.base, guides: [])
         case .slip:

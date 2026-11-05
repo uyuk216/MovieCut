@@ -537,3 +537,9 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
 - personal = 今までの場所そのまま(`Application Support/MovieCut/{Fonts,Proxies,voices,Templates,export-presets.json,Recovery,QRCodes,AIImages,PSDCache,Cutouts}`、`UserDefaults.standard`、バンドル ID `jp.local.moviecut`)。public = `Application Support/Movie Cut (Public)/...`、バンドル ID `jp.local.moviecut.public`(設定ドメインも別。アプリ外のプロセスでは同名のスイート)。2 つの版の保存先が重ならないことは `AppEditionTests` で確認。
 - サムネイル・波形のキャッシュはメモリ上だけでディスクに書かない。旧名 `yukkuri-editor/voices` の引き継ぎは personal のときだけ。
 - `Scripts/make-app.sh --edition public` は `build/public/` に作り、パス情報を消し、`strip` し、バンドルを検査(`/Users/`・個人名・メディア・Fixtures・データフォルダ)して、見つかれば失敗する。`--dry-run` はビルドせず、仮のバンドルで検査だけ試す。ファイル形式(`.mcpjc` / `.ymproj`)はどちらの版でも同じ。
+
+
+## リップルトリムとマルチカメラ
+
+- `ClipRippleTrim`(Core): `trim(in:clipId:edge:deltaT:allLayers:…)` が頭 / 尻を `ClipEditing.trimLeft` / `trimRight` の規則(素材の区間・最短・速度・逆再生)で動かし、後ろ(同じレイヤー、設定で全レイヤーの、終わり以降に頭があるクリップ)を長さの変化ぶんずらす。頭は位置を動かさない(計算の間だけ 0 秒の下限を避けて一時的にずらす)。ロックが関わる・元より重なりが増える・変化なしは nil。アプリ側は `ProjectModel+Multicam.swift`、タイムラインは ⌘ + 端のドラッグ(`beginRippleTrim`)。設定 `rippleTrimAllLayers` は保存しない。
+- `Multicam`(Core): `MulticamGroup`(`angles` = 名前・元クリップのコピー・同期のずれ、`targetTrackId`)を `Project.multicams` に持つ(空なら書かない。読めない値は `extra` に保って書き戻す)。ずれは「その角度の素材の時刻 − 基準の素材の時刻」(秒)。`makeGroup` が結果のレイヤーを一番手前に足し、基準以外の元クリップを `volume = 0` にする。`cut` は再生位置から次のクリップ(無ければ基準の終わり)まで、角度のクリップ(素材の頭 = 基準の素材の時刻 + ずれ、`volume = 0`)で結果のレイヤーを置き換える。素材が区間にないときは断る。

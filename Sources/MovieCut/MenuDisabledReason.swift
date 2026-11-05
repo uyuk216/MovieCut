@@ -56,6 +56,11 @@ extension AppMenuSpec {
         case .layerDelete: return s.hasLayerTarget ? (s.layerDeleteBlocked ?? "今の状態では使えません") : "レイヤーかクリップを選んでください"
         case .clipLock: return "クリップを選んでください"
         case .rollEdit: return "同じレイヤーでぴったり隣り合うクリップを 1 つ選んでください(ロックされたものは不可)"
+        case .rippleTrimHead: return s.canRippleHead ? "今の状態では使えません" : "再生位置がクリップの途中にあるクリップを 1 つ選んでください(ロックされたものは不可)"
+        case .rippleTrimTail: return s.canRippleTail ? "今の状態では使えません" : "再生位置がクリップの途中にあるクリップを 1 つ選んでください(ロックされたものは不可)"
+        case .multicamCreate: return Multicam.selectionHint
+        case .multicamSwitch: return "マルチカメラのグループがありません(先に「マルチカメラを作る…」)"
+        case .multicamCut(let i): return s.hasMulticam ? (s.multicamAngleCount == 0 ? "再生位置にマルチカメラのグループがありません" : "このグループにはアングル \(i + 1) がありません") : "マルチカメラのグループがありません"
         case .slipEdit: return "動画・音声・ボイス・複合クリップを 1 つ選んでください(フリーズ・ロックは対象外)"
         case .layerLock, .layerSolo, .layerTarget: return "レイヤーかクリップを選んでください"
         case .moveLayerUp: return "いちばん上のレイヤーです"
