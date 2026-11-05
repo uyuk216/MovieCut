@@ -595,6 +595,38 @@ public enum DockMetrics {
         return min(max(avail * DockLayout.clamp(fraction), minPanelSize), avail - minPanelSize)
     }
 
+    /// パネルごとの、使える最小の大きさ(幅, 高さ)。プロパティとキャラクターは中身が入る幅を割らせない。
+    public static func minSize(of panel: DockPanel) -> (width: Double, height: Double) {
+        switch panel {
+        case .inspector, .characters: return (300, 160)
+        case .preview: return (320, 200)
+        case .timeline: return (320, 140)
+        }
+    }
+
+    /// 木の `axis` 方向に必要な最小の長さ(同じ向きの分割は合計 + 仕切り、直交する向きは大きい方)。
+    public static func minExtent(of node: DockNode, axis: DockAxis) -> Double {
+        switch node {
+        case .group(let g):
+            let sizes = g.panels.map { minSize(of: $0) }
+            return axis == .horizontal ? (sizes.map(\.width).max() ?? minPanelSize) : (sizes.map(\.height).max() ?? minPanelSize)
+        case .split(let a, _, let first, let second):
+            let f = minExtent(of: first, axis: axis), s = minExtent(of: second, axis: axis)
+            return a == axis ? f + s + dividerThickness : max(f, s)
+        }
+    }
+
+    /// 各側の最小を守った first の大きさ。両方は守れないほど狭いときは、最小の比で分ける。
+    public static func firstSize(total: Double, fraction: Double, minFirst: Double, minSecond: Double) -> Double {
+        let avail = max(total - dividerThickness, 0)
+        let lo = max(minFirst, minPanelSize), hi = avail - max(minSecond, minPanelSize)
+        guard hi >= lo else {
+            let sum = max(minFirst, minPanelSize) + max(minSecond, minPanelSize)
+            return avail * max(minFirst, minPanelSize) / sum
+        }
+        return min(max(avail * DockLayout.clamp(fraction), lo), hi)
+    }
+
     /// ドラッグで first を `size` にしたときの比率。
     public static func fraction(forFirstSize size: Double, total: Double) -> Double {
         let avail = max(total - dividerThickness, 1)

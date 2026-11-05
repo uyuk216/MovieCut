@@ -322,3 +322,23 @@ final class DockLayoutTests: XCTestCase {
         }
     }
 }
+
+final class DockMinimumWidthTests: XCTestCase {
+    /// 右のパネル(プロパティ/キャラクター)は、保存された比率が極端でも、中身が入る幅(300)を割らない。
+    func testRightColumnKeepsItsMinimumWidth() {
+        let w = DockMetrics.firstSize(total: 1100, fraction: 0.97, minFirst: 640, minSecond: 300)
+        XCTAssertGreaterThanOrEqual(1100 - 6 - w, 300 - 1e-9)
+        let left = DockMetrics.firstSize(total: 1100, fraction: 0.05, minFirst: 640, minSecond: 300)
+        XCTAssertGreaterThanOrEqual(left, 640 - 1e-9)
+    }
+    func testDefaultLayoutNeedsRoomForPanels() {
+        guard case .split(.horizontal, _, let left, let right) = DockLayout.default.root! else { return XCTFail() }
+        XCTAssertGreaterThanOrEqual(DockMetrics.minExtent(of: right, axis: .horizontal), 300)
+        XCTAssertGreaterThanOrEqual(DockMetrics.minExtent(of: left, axis: .horizontal), 320)
+        XCTAssertGreaterThanOrEqual(DockMetrics.minExtent(of: left, axis: .vertical), 340)   // プレビュー 200 + タイムライン 140
+    }
+    func testTooNarrowSplitsProportionally() {
+        let w = DockMetrics.firstSize(total: 400, fraction: 0.5, minFirst: 320, minSecond: 300)
+        XCTAssertEqual(w, (400 - 6) * 320 / 620, accuracy: 1e-9)
+    }
+}

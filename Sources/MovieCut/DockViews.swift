@@ -99,7 +99,10 @@ struct DockSplitView: View {
         GeometryReader { geo in
             let horizontal = axis == .horizontal
             let total = Double(horizontal ? geo.size.width : geo.size.height)
-            let firstSize = CGFloat(DockMetrics.firstSize(total: total, fraction: fraction))
+            let ax: DockAxis = horizontal ? .horizontal : .vertical
+            let firstSize = CGFloat(DockMetrics.firstSize(total: total, fraction: fraction,
+                                                          minFirst: DockMetrics.minExtent(of: first, axis: ax),
+                                                          minSecond: DockMetrics.minExtent(of: second, axis: ax)))
             let stack = horizontal ? AnyLayout(HStackLayout(spacing: 0)) : AnyLayout(VStackLayout(spacing: 0))
             stack {
                 DockNodeView(node: first, path: path + [false], model: model, store: store)
