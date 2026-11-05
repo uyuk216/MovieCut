@@ -6,11 +6,8 @@ import MovieCutCore
 extension AppMenuSpec {
     static func disabledReason(for spec: MenuItemSpec, state s: MenuState) -> String? {
         if spec.enabled { return nil }
-        // 書類がなくても動く項目(ファンの設定)は専用の理由
+        // 書類がなくても動く項目は専用の理由
         switch spec.command {
-        case .fanMaxToggle: return s.fanReason ?? "この Mac では使えません"
-        case .fanInstall: return "すでに有効か、この Mac は対象外です"
-        case .fanUninstall: return "ファン制御は有効になっていません"
         case .openRecent: return "ファイルが見つかりません"
         case .clearRecents: return "履歴はありません"
         default: break

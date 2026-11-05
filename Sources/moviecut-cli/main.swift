@@ -71,60 +71,6 @@ func parseRange(_ p: Project) -> ExportRange? {
     }
 }
 
-// MARK: - ファン(書き出し中の最大化)
-
-func fanLine(_ s: FanStatus) -> String {
-    func n(_ v: Double?) -> String { v.map { String(Int($0)) } ?? "?" }
-    let fans = s.fans.map { f in
-        "fan\(f.index) mode=\(f.mode) target=\(n(f.targetRPM)) actual=\(n(f.actualRPM)) (min \(n(f.minimumRPM)) / max \(n(f.maximumRPM)))"
-    }.joined(separator: "; ")
-    return fans + (s.hottestCoreCelsius.map { String(format: " hottest-core=%.1fC", $0) } ?? "")
-}
-
-let fanPort: Int? = optValue("--fan-port").flatMap(Int.init)
-nonisolated(unsafe) let fanSignals = FanSignalHandlers()
-
-func fanCandidates() -> [FanBackend]? {
-    fanPort.map { [HTTPFanBackend(kind: $0 == HTTPFanBackend.userPort ? .userFanctl : .bundledHelper, port: $0)] }
-}
-
-/// バックエンドの状態を 1 行で(fan status / fan test / 書き出しの前後で共用)。
-func fanSnapshot(_ backend: FanBackend?) -> String {
-    guard let b = backend else { return "(ファン制御サービスなし)" }
-    do { return fanLine(try b.status()) } catch { return "(状態を読めません: \(error.localizedDescription))" }
-}
-
-/// `body` の間だけファンを最大にする(オンのとき)。終わり・失敗・SIGTERM/SIGINT のどれでも自動に戻し、戻ったことを確認して表示する。
-func withFanMax(_ on: Bool, label: String = "fan", _ body: () async throws -> Void) async throws {
-    guard on else { try await body(); return }
-    let (availability, g) = FanControlCenter.prepare(enabled: true, port: fanPort) { ev in
-        if case .notice(let m) = ev { print("\(label): 注意 \(m)") }
-        if case .released(let r) = ev { print("\(label): 解放 \(r)") }
-    }
-    guard let g else {
-        print("\(label): 最大にしません — \(availability.reason ?? "使えません")")
-        try await body(); return
-    }
-    fanSignals.install { print("\(label): シグナルを受信 → 自動に戻します"); fflush(stdout); FanGuardRegistry.shared.releaseAll(.signal) }
-    let monitorBackend = FanBackendResolver.resolve(candidates: fanCandidates())?.backend
-    print("\(label): 前    \(fanSnapshot(monitorBackend))")
-    let result = g.engage()
-    print("\(label): engage → \(result)")
-    let monitor = Task {
-        while !Task.isCancelled {
-            try? await Task.sleep(nanoseconds: 1_500_000_000)
-            if Task.isCancelled { break }
-            print("\(label): 書き出し中 \(fanSnapshot(monitorBackend))")
-        }
-    }
-    defer {
-        monitor.cancel()
-        let ok = g.release(.finished)
-        print("\(label): 後    \(fanSnapshot(monitorBackend))  (自動に戻した=\(ok))")
-    }
-    try await body()
-}
-
 switch args.first {
 case "info" where args.count == 2:
     do {
@@ -153,7 +99,7 @@ case "project-info" where args.count == 2:
     // project-info <file>: プロジェクトの中身(クリップ・長さ・キャラ・セリフ)を JSON で出す。読み取り専用(外部の AI が中身を見る用)
     do { print(try ProjectInfo.json(try Project.load(from: URL(fileURLWithPath: args[1])))) } catch { fail("読めませんでした: \(error)") }
 case "ai" where args.count >= 2 && args[1] == "script":
-    // ai script --theme T [--chars 霊夢,魔理沙] [--lines 12] (--provider-cmd "claude -p" | --provider-url http://127.0.0.1:11434 --model m) [--timeout 120] [--out file] [--show-prompt]
+    // ai script --theme T [--chars 霊夢,魔理沙] [--lines 12] --provider-cmd "claude -p" [--timeout 120] [--out file] [--show-prompt]
     // 実行したときだけ 1 回問い合わせる。クラウドの鍵は扱わない。台本の行(「名前: セリフ」)を stdout か --out に出す。
     guard let theme = optValue("--theme"), !theme.trimmingCharacters(in: .whitespaces).isEmpty else { fail("--theme が必要です") }
     let names = optValue("--chars").map { $0.split(whereSeparator: { $0 == "," || $0 == "、" }).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty } } ?? Project.new().characters.map(\.name)
@@ -162,8 +108,7 @@ case "ai" where args.count >= 2 && args[1] == "script":
     do {
         let provider: AIProvider
         if let cmd = optValue("--provider-cmd") { provider = try CommandAIProvider(commandLine: cmd, timeout: timeout) }
-        else if let url = optValue("--provider-url") { provider = try HTTPAIProvider(baseURL: url, model: optValue("--model") ?? "", timeout: timeout) }
-        else { fail("--provider-cmd \"claude -p\" か --provider-url http://127.0.0.1:11434 --model <名前> が必要です") }
+        else { fail("--provider-cmd \"claude -p\" が必要です") }
         let prompt = AIScriptPrompt.build(.init(theme: theme, characterNames: names, lineCount: optValue("--lines").flatMap(Int.init) ?? 12))
         if args.contains("--show-prompt") { FileHandle.standardError.write(Data(("--- 送るプロンプト ---\n" + prompt + "\n--- ここまで ---\n").utf8)) }
         let lines = try AIScriptPrompt.parse(try await provider.complete(prompt), characterNames: names)
@@ -362,7 +307,7 @@ case "export" where args.count >= 3:
             bitrate = ok
         }
         let range = parseRange(p)
-        try await withFanMax(args.contains("--fan-max")) { try await runExport(p, to: URL(fileURLWithPath: args[2]), preset: preset, spec: spec, bitrateMbps: bitrate, range: range) }
+        try await runExport(p, to: URL(fileURLWithPath: args[2]), preset: preset, spec: spec, bitrateMbps: bitrate, range: range)
     } catch { fail("書き出せませんでした: \(error.localizedDescription)") }
 case "loudness" where args.count >= 2:
     // loudness <project> [--range a:b|project]: 書き出しと同じミックスダウンを BS.1770 で測る(読み取りのみ・自動では音量を変えない)
@@ -611,26 +556,6 @@ case "genclips" where args.count == 3:
     }
     do { try p.save(to: URL(fileURLWithPath: args[2])); print("wrote \(args[2]) clips=\(p.allClips.count) end=\(String(format: "%.1f", p.endTime))s") }
     catch { fail("書けませんでした: \(error)") }
-case "fan":
-    // fan status [--fan-port N] / fan test [--seconds 8] [--fan-port N]
-    switch args.count > 1 ? args[1] : "" {
-    case "status":
-        let info = FanMachine.detect()
-        let support = FanModelPolicy.classify(hwModel: info.hwModel, marketingName: info.marketingName)
-        print("machine: \(info.hwModel ?? "?") / \(info.marketingName ?? "?") → \(support.isSupported ? "対象" : "対象外")")
-        let (availability, _) = FanControlCenter.prepare(enabled: false, port: fanPort)
-        print("availability: \(availability)\(availability.reason.map { " — \($0)" } ?? "")")
-        let resolved = FanBackendResolver.resolve(candidates: fanCandidates())
-        print("backend: \(resolved?.backend.label ?? "なし")")
-        print("status: \(fanSnapshot(resolved?.backend))")
-    case "test":
-        let seconds = optValue("--seconds").flatMap(Double.init).map { min($0, 8) } ?? 6
-        try await withFanMax(true, label: "fan-test") {
-            try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
-        }
-    default:
-        fail("usage: moviecut-cli fan status | fan test [--seconds 8]  (--fan-port 1200|1201)")
-    }
 case "beats" where args.count >= 2:
     // beats <media|project> [--all]: テンポとビートの時刻を表示する(画面なしの確認用。ファイルは変えない)
     func report(_ c: Clip, label: String) {
@@ -733,5 +658,5 @@ case "smoke":
         try await runExport(p, to: URL(fileURLWithPath: outPath))
     } catch { fail("書き出せませんでした: \(error.localizedDescription)") }
 default:
-    fail("usage:\n  moviecut-cli info <file.ymproj>\n  moviecut-cli new <out.ymproj>\n  moviecut-cli export <in.mcpjc> <out.mp4|out.m4a> [--range a:b|project] [--preset youtube1080|youtube1080p60|youtube4k|short|shorts|tiktok|reels|x720|x1080|light|audio|<保存したプリセット名>] [--bitrate 8(Mbps)] [--size WxH] [--fps 29.97] [--codec h264|hevc|prores422|prores4444] [--bg #rrggbb|transparent] [--fan-max [--fan-port 1200|1201]]\n  moviecut-cli fan status | fan test [--seconds 8] [--fan-port 1200|1201]\n  moviecut-cli smoke --out <mp4> [--size WxH] [--fps 23.976] [--codec h264|hevc] [--blur] [--tone] [--save-project p.ymproj]\n  moviecut-cli speak (--voicevox <id> [--speed --pitch --intonation] | --voice <preset> [--speed]) --text <t> --out <wav>\n  moviecut-cli speakers | deps | script <script.txt> --out <p.ymproj>\n  moviecut-cli rig-frame <フォルダ|.psd> --out <png> [--mouth あ|い|う|え|お|open|closed] [--blink] [--pick 眉=2,目=5] [--expr 名前] [--height 1080] [--bench N] [--list]\n  moviecut-cli psd-info <file.psd>\n  moviecut-cli frame <in.ymproj> --t <sec> --out <png|jpg> [--size WxH] [--bench N]\n  moviecut-cli gif <in.mcpjc> --out <x.gif> [--fps 10] [--width 480] [--range a:b|project]\n  moviecut-cli apng <in.mcpjc> --out <x.png> [--fps 15] [--width 480] [--loop 0] [--bg transparent] [--range a:b|project]\n  moviecut-cli sequence <in.mcpjc> --out <dir> [--format png|jpeg] [--name base] [--range a:b|project] [--fps 30] [--size WxH]\n  moviecut-cli addvideo <in.ymproj> <clip.mp4> <out.ymproj>\n  moviecut-cli genclips <N> <out.ymproj>\n  moviecut-cli silence <project|media> [--threshold -40] [--min 0.4] [--pad 0.1]\n  moviecut-cli beats <project|media> [--all]\n  moviecut-cli subs <project> --out <x.srt|x.vtt>\n  moviecut-cli transcribe <media|project> --out <x.srt|x.vtt> [--clip 0] [--locale ja-JP]\n  moviecut-cli chapters <project> [--color red|orange|yellow|green|blue|purple|gray|teal]\n  moviecut-cli loudness <project> [--range a:b|project]\n  moviecut-cli project-info <project>   (JSON。読み取り専用)\n  moviecut-cli ai script --theme <t> [--chars 霊夢,魔理沙] [--lines 12] (--provider-cmd \"claude -p\" | --provider-url http://127.0.0.1:11434 --model <m>) [--timeout 120] [--out x.txt] [--show-prompt]")
+    fail("usage:\n  moviecut-cli info <file.ymproj>\n  moviecut-cli new <out.ymproj>\n  moviecut-cli export <in.mcpjc> <out.mp4|out.m4a> [--range a:b|project] [--preset youtube1080|youtube1080p60|youtube4k|short|shorts|tiktok|reels|x720|x1080|light|audio|<保存したプリセット名>] [--bitrate 8(Mbps)] [--size WxH] [--fps 29.97] [--codec h264|hevc|prores422|prores4444] [--bg #rrggbb|transparent]\n  moviecut-cli smoke --out <mp4> [--size WxH] [--fps 23.976] [--codec h264|hevc] [--blur] [--tone] [--save-project p.ymproj]\n  moviecut-cli speak (--voicevox <id> [--speed --pitch --intonation] | --voice <preset> [--speed]) --text <t> --out <wav>\n  moviecut-cli speakers | deps | script <script.txt> --out <p.ymproj>\n  moviecut-cli rig-frame <フォルダ|.psd> --out <png> [--mouth あ|い|う|え|お|open|closed] [--blink] [--pick 眉=2,目=5] [--expr 名前] [--height 1080] [--bench N] [--list]\n  moviecut-cli psd-info <file.psd>\n  moviecut-cli frame <in.ymproj> --t <sec> --out <png|jpg> [--size WxH] [--bench N]\n  moviecut-cli gif <in.mcpjc> --out <x.gif> [--fps 10] [--width 480] [--range a:b|project]\n  moviecut-cli apng <in.mcpjc> --out <x.png> [--fps 15] [--width 480] [--loop 0] [--bg transparent] [--range a:b|project]\n  moviecut-cli sequence <in.mcpjc> --out <dir> [--format png|jpeg] [--name base] [--range a:b|project] [--fps 30] [--size WxH]\n  moviecut-cli addvideo <in.ymproj> <clip.mp4> <out.ymproj>\n  moviecut-cli genclips <N> <out.ymproj>\n  moviecut-cli silence <project|media> [--threshold -40] [--min 0.4] [--pad 0.1]\n  moviecut-cli beats <project|media> [--all]\n  moviecut-cli subs <project> --out <x.srt|x.vtt>\n  moviecut-cli transcribe <media|project> --out <x.srt|x.vtt> [--clip 0] [--locale ja-JP]\n  moviecut-cli chapters <project> [--color red|orange|yellow|green|blue|purple|gray|teal]\n  moviecut-cli loudness <project> [--range a:b|project]\n  moviecut-cli project-info <project>   (JSON。読み取り専用)\n  moviecut-cli ai script --theme <t> [--chars 霊夢,魔理沙] [--lines 12] --provider-cmd \"claude -p\" [--timeout 120] [--out x.txt] [--show-prompt]")
 }

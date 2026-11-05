@@ -21,7 +21,7 @@ final class ExportQueueController: ObservableObject {
         queue.onChange = { [weak self] in self?.objectWillChange.send() }
     }
 
-    /// 1 件を書く間の画面の決まり(直接の書き出しと同じ): Dock の進行バー、ファン最大化、終わりの知らせ。
+    /// 1 件を書く間の画面の決まり(直接の書き出しと同じ): Dock の進行バー、終わりの知らせ。
     /// 終わったあとに遅れて届いた進み具合では Dock を出し直さない。
     static func withExportHooks(dock: DockProgressController, progress: @escaping (Double) -> Void,
                                 _ body: (@escaping (Double) -> Void) async throws -> Void) async throws {
@@ -35,22 +35,18 @@ final class ExportQueueController: ObservableObject {
             }
         }
         dock.update(0)
-        await AppServices.fan.beginExport()
         do {
             try await body(report)
         } catch is CancellationError {
             live.on = false
-            await AppServices.fan.endExport(.cancelled)
             dock.finish(notify: false)
             throw CancellationError()
         } catch {
             live.on = false
-            await AppServices.fan.endExport(.failed)
             dock.finish(notify: true)
             throw error
         }
         live.on = false
-        await AppServices.fan.endExport(.finished)
         dock.finish(notify: true)
     }
 

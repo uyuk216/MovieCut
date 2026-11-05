@@ -96,7 +96,7 @@ final class AITests: XCTestCase {
         do { _ = try await t.value; XCTFail() } catch { XCTAssertEqual(error as? AIError, .cancelled) }
     }
     func testJapaneseErrorMessages() {
-        let all: [AIError] = [.notConfigured, .emptyCommand, .commandNotFound("x"), .launchFailed("y"), .timedOut(3), .cancelled, .nonZeroExit(2, "boom"), .outputTooLarge(10), .emptyResponse, .notLocalURL("http://e.com"), .serverUnreachable("z"), .httpStatus(500), .badResponse, .unparsable("台本")]
+        let all: [AIError] = [.notConfigured, .emptyCommand, .commandNotFound("x"), .launchFailed("y"), .timedOut(3), .cancelled, .nonZeroExit(2, "boom"), .outputTooLarge(10), .emptyResponse, .unparsable("台本")]
         for e in all { XCTAssertTrue(e.localizedDescription.unicodeScalars.contains { $0.value > 0x3000 }, "\(e)") }
     }
 
@@ -171,48 +171,14 @@ final class AITests: XCTestCase {
         XCTAssertEqual(AICommandLine.split("echo hi; rm -rf x | cat"), ["echo", "hi;", "rm", "-rf", "x", "|", "cat"])
     }
 
-    // MARK: HTTP 版
-    func testHTTPRejectsNonLocal() {
-        for u in ["http://example.com", "https://127.0.0.1", "http://192.168.0.2:11434", "ftp://localhost", "garbage"] {
-            XCTAssertThrowsError(try HTTPAIProvider(baseURL: u, model: "m"), u) { guard case AIError.notLocalURL = $0 else { return XCTFail() } }
-        }
-        XCTAssertNoThrow(try HTTPAIProvider(baseURL: "http://127.0.0.1:11434", model: "m"))
-        XCTAssertNoThrow(try HTTPAIProvider(baseURL: "http://localhost:11434", model: "m"))
-        XCTAssertNoThrow(try HTTPAIProvider(baseURL: "http://[::1]:11434", model: "m"))
-    }
-    func testHTTPRequestAndResponse() async throws {
-        let box = Box()
-        let p = try HTTPAIProvider(baseURL: "http://127.0.0.1:11434", model: "gemma", transport: { req in
-            box.set(req)
-            return (Data(#"{"response":"霊夢: はい","done":true}"#.utf8), 200)
-        })
-        let out = try await p.complete("プロンプト")
-        XCTAssertEqual(out, "霊夢: はい")
-        let req = try XCTUnwrap(box.req)
-        XCTAssertEqual(req.url?.absoluteString, "http://127.0.0.1:11434/api/generate")
-        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(req.httpBody)) as? [String: Any])
-        XCTAssertEqual(body["model"] as? String, "gemma"); XCTAssertEqual(body["prompt"] as? String, "プロンプト"); XCTAssertEqual(body["stream"] as? Bool, false)
-    }
-    func testHTTPErrors() async throws {
-        func make(_ t: @escaping HTTPAIProvider.Transport) throws -> HTTPAIProvider { try HTTPAIProvider(baseURL: "http://localhost:1", model: "m", transport: t) }
-        do { _ = try await make({ _ in (Data(), 500) }).complete("x"); XCTFail() } catch { XCTAssertEqual(error as? AIError, .httpStatus(500)) }
-        do { _ = try await make({ _ in (Data("nope".utf8), 200) }).complete("x"); XCTFail() } catch { XCTAssertEqual(error as? AIError, .badResponse) }
-        do { _ = try await make({ _ in (Data(#"{"response":" "}"#.utf8), 200) }).complete("x"); XCTFail() } catch { XCTAssertEqual(error as? AIError, .emptyResponse) }
-        do { _ = try await make({ _ in throw URLError(.cannotConnectToHost) }).complete("x"); XCTFail() } catch { guard case AIError.serverUnreachable = error else { return XCTFail("\(error)") } }
-        do { _ = try await make({ _ in (Data(count: HTTPAIProvider.maxResponseBytes + 1), 200) }).complete("x"); XCTFail() } catch { guard case AIError.outputTooLarge = error else { return XCTFail("\(error)") } }
-        do { _ = try await make({ _ in throw URLError(.timedOut) }).complete("x"); XCTFail() } catch { guard case AIError.timedOut = error else { return XCTFail("\(error)") } }
-    }
-
     // MARK: 設定
     func testSettingsRoundTripAndProvider() throws {
         let d = UserDefaults(suiteName: "ai-test-\(UUID().uuidString)")!
         XCTAssertEqual(AISettings.load(from: d).kind, .none)
         XCTAssertThrowsError(try AISettings.load(from: d).makeProvider()) { XCTAssertEqual($0 as? AIError, .notConfigured) }
-        var s = AISettings(); s.kind = .http; s.url = "http://localhost:11434"; s.model = "m"; s.timeoutSeconds = 30
+        var s = AISettings(); s.kind = .command; s.command = "/bin/cat"; s.timeoutSeconds = 30
         s.save(to: d)
         XCTAssertEqual(AISettings.load(from: d), s)
-        XCTAssertTrue(try s.makeProvider() is HTTPAIProvider)
-        s.kind = .command; s.command = "/bin/cat"
         XCTAssertTrue(try s.makeProvider() is CommandAIProvider)
         s.timeoutSeconds = 99999; s.save(to: d)
         XCTAssertEqual(AISettings.load(from: d).timeoutSeconds, 900)
@@ -234,10 +200,4 @@ final class AITests: XCTestCase {
         let clip = try XCTUnwrap((obj["clips"] as? [[String: Any]])?.first)
         XCTAssertEqual(clip["character"] as? String, "霊夢"); XCTAssertEqual(clip["type"] as? String, "voice")
     }
-}
-
-private final class Box: @unchecked Sendable {
-    private let l = NSLock(); private var r: URLRequest?
-    func set(_ x: URLRequest) { l.withLock { r = x } }
-    var req: URLRequest? { l.withLock { r } }
 }

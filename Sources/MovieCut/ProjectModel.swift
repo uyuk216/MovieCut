@@ -20,8 +20,6 @@ enum AppServices {
     @MainActor static let notices = OneTimeNotices()
     /// Dock アイコンの進行バー(書き出し中)。
     @MainActor static let dock = DockProgressController(tile: NSApp?.dockTile)
-    /// 書き出し中のファン最大化(設定・検出・ヘルパーのインストール)。アプリ全体で 1 つ。
-    @MainActor static var fan = FanService()
     /// 書き出しキュー(アプリ全体で 1 つ。書類を切り替えても、待っている件は続く)。
     @MainActor static let exportQueue = ExportQueueController()
     /// 起動時の依存チェックとバナー(アプリ全体で 1 つ。閉じたらこの起動中は出さない)。
@@ -615,8 +613,6 @@ final class ProjectModel: ObservableObject {
         let dock = dockOverride ?? AppServices.dock
         dock.update(0)
         defer { isExporting = false; exportTask = nil; queue.queue.isHeld = false }
-        // ファン最大化(オンのときだけ)。開始・終了・キャンセル・失敗のどれでも必ず自動に戻す(下の endExport)
-        await AppServices.fan.beginExport()
         let task = Task { [weak self] in
             try await job { v in
                 Task { @MainActor in
@@ -630,18 +626,15 @@ final class ProjectModel: ObservableObject {
         exportTask = task
         do {
             try await task.value
-            await AppServices.fan.endExport(.finished)
             exportProgress = 1
             statusText = success
             dock.finish(notify: true)
             return .success(result)
         } catch is CancellationError {
-            await AppServices.fan.endExport(.cancelled)
             statusText = "書き出しをキャンセルしました"
             dock.finish(notify: false)
             return .cancelled
         } catch {
-            await AppServices.fan.endExport(.failed)
             statusText = "書き出しに失敗しました"
             errorTitle = "書き出せませんでした"
             errorMessage = error.localizedDescription

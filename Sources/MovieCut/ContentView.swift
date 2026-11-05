@@ -170,7 +170,6 @@ struct ToolbarBar: View {
                     .help("選択中のクリップを削除(Delete)")
             }
             Spacer(minLength: 12)
-            FanStatusText(fan: AppServices.fan)
             Text(statusLine)
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -370,7 +369,6 @@ struct ExportSheet: View {
             if !model.exportNotice.isEmpty {
                 Text(model.exportNotice).font(.caption).foregroundStyle(.orange).frame(width: 320, alignment: .leading)
             }
-            FanExportLines(fan: AppServices.fan)
             ProgressView(value: model.exportProgress).frame(width: 320)
             HStack {
                 Text("\(Int((model.exportProgress * 100).rounded()))%").monospacedDigit().foregroundStyle(.secondary)
@@ -553,7 +551,6 @@ struct SettingsSheet: View {
                 }
                 .padding(8)
             }
-            FanSettingsBox(fan: AppServices.fan)
             GroupBox("VOICEVOX（互換エンジンも可）") {
                 VStack(alignment: .leading, spacing: 4) {
                     TextField("エンジンのURL", text: $draft.voicevoxUrl)
@@ -609,58 +606,5 @@ enum DropLoader {
         }
         group.notify(queue: .main) { completion(urls.compactMap { $0 }) }
         return true
-    }
-}
-
-// MARK: - 書き出し中のファン最大化の表示
-
-/// 設定シートの「書き出し」欄。チェックはアプリ全体の設定(すぐ保存。「適用」を待たない)。
-struct FanSettingsBox: View {
-    @ObservedObject var fan: FanService
-    var body: some View {
-        GroupBox("書き出し") {
-            VStack(alignment: .leading, spacing: 4) {
-                Toggle("書き出し中はファンを最大にする", isOn: Binding(get: { fan.enabled }, set: { fan.setEnabled($0) }))
-                    .disabled(!fan.isAvailable)
-                    .accessibilityIdentifier("fan-max-toggle")
-                if let reason = fan.reason {
-                    Text(reason).font(.caption).foregroundStyle(.secondary)
-                } else if fan.availability == nil {
-                    Text("確認しています…").font(.caption).foregroundStyle(.secondary)
-                } else {
-                    Text("終了・キャンセル・失敗・アプリ終了のどれでも自動に戻します。95 ℃ に達したときも自動に戻します。").font(.caption).foregroundStyle(.secondary)
-                }
-                HStack {
-                    if fan.machineSupported && fan.availability != nil && !fan.helperInstalled {
-                        Button("ファン制御を有効にする…") { fan.install() }.disabled(fan.busy)
-                    }
-                    if fan.helperInstalled {
-                        Button("ファン制御を無効にする…") { fan.uninstall() }.disabled(fan.busy)
-                    }
-                }
-            }.padding(8)
-        }
-        .onAppear { fan.refresh() }
-    }
-}
-
-/// 書き出しシートの中のファンの状態とお知らせ。
-struct FanExportLines: View {
-    @ObservedObject var fan: FanService
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            if !fan.statusLine.isEmpty { Text(fan.statusLine).font(.callout).monospacedDigit() }
-            if !fan.notice.isEmpty { Text(fan.notice).font(.caption).foregroundStyle(.orange).frame(width: 320, alignment: .leading) }
-        }
-    }
-}
-
-/// ツールバー右端の状態表示(ファンを使ったあとも「ファン: 自動」を残す)。
-struct FanStatusText: View {
-    @ObservedObject var fan: FanService
-    var body: some View {
-        if !fan.statusLine.isEmpty {
-            Text(fan.statusLine).font(.callout).foregroundStyle(.secondary).lineLimit(1)
-        }
     }
 }

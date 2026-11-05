@@ -1,7 +1,7 @@
 import Foundation
 
 // AI 連携の土台。クラウドの鍵はアプリに保存しない。
-// 使えるのは「ユーザーが指定したローカルのコマンド(claude -p / codex exec など)」と「このマシン上のサーバー(Ollama など)」だけ。
+// 使えるのは「ユーザーが指定したローカルのコマンド(claude -p / codex exec など)」だけ。
 // どの呼び出しも、ユーザーが操作したときだけ行う(自動送信なし)。
 
 /// 1 回の問い合わせ(プロンプト → 返事の文字)。
@@ -20,15 +20,11 @@ public enum AIError: Error, LocalizedError, Equatable {
     case nonZeroExit(Int32, String)
     case outputTooLarge(Int)
     case emptyResponse
-    case notLocalURL(String)
-    case serverUnreachable(String)
-    case httpStatus(Int)
-    case badResponse
     case unparsable(String)
 
     public var errorDescription: String? {
         switch self {
-        case .notConfigured: return "AI が設定されていません。設定で、AI を呼ぶコマンド(例: claude -p)かローカルサーバーの URL を指定してください。"
+        case .notConfigured: return "AI が設定されていません。設定で、AI を呼ぶコマンド(例: claude -p)を指定してください。"
         case .emptyCommand: return "AI を呼ぶコマンドが空です。"
         case .commandNotFound(let c): return "コマンドが見つかりません: \(c)"
         case .launchFailed(let m): return "コマンドを起動できませんでした: \(m)"
@@ -39,10 +35,6 @@ public enum AIError: Error, LocalizedError, Equatable {
             return "コマンドがエラーで終わりました(終了コード \(code))。" + (tail.isEmpty ? "" : "\n" + tail)
         case .outputTooLarge(let n): return "AI の返事が大きすぎます(\(n) バイトを超えました)。途中で止めました。"
         case .emptyResponse: return "AI の返事が空でした。"
-        case .notLocalURL(let u): return "このマシン上のサーバー(127.0.0.1 / localhost)だけ使えます: \(u)"
-        case .serverUnreachable(let m): return "ローカルサーバーにつながりません: \(m)"
-        case .httpStatus(let c): return "サーバーがエラーを返しました(HTTP \(c))。"
-        case .badResponse: return "サーバーの返事を読めませんでした。"
         case .unparsable(let what): return "AI の返事から\(what)を読み取れませんでした。もう一度試すか、プロンプトを見直してください。"
         }
     }
@@ -51,12 +43,11 @@ public enum AIError: Error, LocalizedError, Equatable {
 // MARK: - 設定(UserDefaults。鍵は持たない)
 
 public enum AIProviderKind: String, CaseIterable, Sendable {
-    case none, command, http
+    case none, command
     public var title: String {
         switch self {
         case .none: return "使わない"
         case .command: return "ローカルのコマンド"
-        case .http: return "ローカルサーバー(Ollama 形式)"
         }
     }
 }
@@ -65,13 +56,10 @@ public struct AISettings: Equatable, Sendable {
     public var kind: AIProviderKind = .none
     /// 例: `claude -p` / `codex exec -`。プロンプトは標準入力で渡す。
     public var command: String = ""
-    /// 例: `http://127.0.0.1:11434`(Ollama)。127.0.0.1 / localhost / [::1] のみ。
-    public var url: String = "http://127.0.0.1:11434"
-    public var model: String = ""
     public var timeoutSeconds: Int = 120
 
     public static let timeoutRange = 5...900
-    static let kindKey = "ai.kind", commandKey = "ai.command", urlKey = "ai.url", modelKey = "ai.model", timeoutKey = "ai.timeout"
+    static let kindKey = "ai.kind", commandKey = "ai.command", timeoutKey = "ai.timeout"
 
     public init() {}
 
@@ -79,8 +67,6 @@ public struct AISettings: Equatable, Sendable {
         var s = AISettings()
         s.kind = d.string(forKey: kindKey).flatMap(AIProviderKind.init(rawValue:)) ?? .none
         s.command = d.string(forKey: commandKey) ?? ""
-        s.url = d.string(forKey: urlKey) ?? s.url
-        s.model = d.string(forKey: modelKey) ?? ""
         let t = d.integer(forKey: timeoutKey)
         s.timeoutSeconds = t == 0 ? 120 : min(max(t, timeoutRange.lowerBound), timeoutRange.upperBound)
         return s
@@ -89,8 +75,6 @@ public struct AISettings: Equatable, Sendable {
     public func save(to d: UserDefaults = DataLocations.current.defaults) {
         d.set(kind.rawValue, forKey: Self.kindKey)
         d.set(command, forKey: Self.commandKey)
-        d.set(url, forKey: Self.urlKey)
-        d.set(model, forKey: Self.modelKey)
         d.set(timeoutSeconds, forKey: Self.timeoutKey)
     }
 
@@ -99,7 +83,6 @@ public struct AISettings: Equatable, Sendable {
         switch kind {
         case .none: throw AIError.notConfigured
         case .command: return try CommandAIProvider(commandLine: command, timeout: TimeInterval(timeoutSeconds))
-        case .http: return try HTTPAIProvider(baseURL: url, model: model, timeout: TimeInterval(timeoutSeconds))
         }
     }
 
@@ -108,7 +91,6 @@ public struct AISettings: Equatable, Sendable {
         switch kind {
         case .none: return "(未設定)"
         case .command: return "コマンド: \(command)"
-        case .http: return "ローカルサーバー: \(url)" + (model.isEmpty ? "" : "(モデル \(model))")
         }
     }
 }
@@ -269,56 +251,6 @@ final class ProcessRun: @unchecked Sendable {
         if o.count > cap { throw AIError.outputTooLarge(cap) }
         guard status == 0 else { throw AIError.nonZeroExit(status, String(decoding: e, as: UTF8.self)) }
         let text = String(decoding: o, as: UTF8.self)
-        if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { throw AIError.emptyResponse }
-        return text
-    }
-}
-
-// MARK: - ローカルサーバー版(Ollama 形式)
-
-/// `POST {base}/api/generate`(stream なし)。127.0.0.1 / localhost / [::1] 以外は断る。
-public struct HTTPAIProvider: AIProvider {
-    /// (リクエスト) → (本体, HTTP ステータス)。テストで差し替える。
-    public typealias Transport = @Sendable (URLRequest) async throws -> (Data, Int)
-    public static let maxResponseBytes = 2_000_000
-
-    public let endpoint: URL
-    public let model: String
-    public let timeout: TimeInterval
-    let transport: Transport
-
-    public static func isLoopback(_ host: String?) -> Bool {
-        guard let h = host?.lowercased() else { return false }
-        return h == "127.0.0.1" || h == "localhost" || h == "::1" || h == "[::1]"
-    }
-
-    public init(baseURL: String, model: String, timeout: TimeInterval = 120, transport: Transport? = nil) throws {
-        let trimmed = baseURL.trimmingCharacters(in: .whitespaces)
-        guard let base = URL(string: trimmed), base.scheme == "http", Self.isLoopback(base.host) else { throw AIError.notLocalURL(trimmed) }
-        self.endpoint = base.appendingPathComponent("api/generate")
-        self.model = model
-        self.timeout = timeout
-        self.transport = transport ?? { req in
-            let (data, resp) = try await URLSession.shared.data(for: req)
-            return (data, (resp as? HTTPURLResponse)?.statusCode ?? 0)
-        }
-    }
-
-    public func complete(_ prompt: String) async throws -> String {
-        var req = URLRequest(url: endpoint, timeoutInterval: timeout)
-        req.httpMethod = "POST"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.httpBody = try JSONSerialization.data(withJSONObject: ["model": model, "prompt": prompt, "stream": false] as [String: Any])
-        let data: Data, status: Int
-        do { (data, status) = try await transport(req) } catch is CancellationError { throw AIError.cancelled } catch let e as AIError { throw e } catch {
-            if Task.isCancelled || (error as? URLError)?.code == .cancelled { throw AIError.cancelled }
-            if (error as? URLError)?.code == .timedOut { throw AIError.timedOut(Int(timeout.rounded())) }
-            throw AIError.serverUnreachable(error.localizedDescription)
-        }
-        if Task.isCancelled { throw AIError.cancelled }
-        guard (200..<300).contains(status) else { throw AIError.httpStatus(status) }
-        guard data.count <= Self.maxResponseBytes else { throw AIError.outputTooLarge(Self.maxResponseBytes) }
-        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let text = obj["response"] as? String else { throw AIError.badResponse }
         if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { throw AIError.emptyResponse }
         return text
     }

@@ -68,17 +68,13 @@ swift build -c release --arch arm64 ${EXTRA_FLAGS[@]+"${EXTRA_FLAGS[@]}"}
 BIN="$(swift build -c release --arch arm64 --show-bin-path)"
 
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Helpers"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN/MovieCut" "$APP/Contents/MacOS/MovieCut"
-# 書き出し中のファン最大化用ヘルパー(アプリ内の「ファン制御を有効にする…」が /usr/local/libexec に入れて launchd に登録する)
-cp "$BIN/moviecut-fanhelper" "$APP/Contents/Helpers/moviecut-fanhelper"
 
 # ヘルプメニューの「ライセンス」「第三者の規約」で開く文書(リポジトリ直下から)
 REPO_ROOT="$(pwd)"
 cp "$REPO_ROOT/LICENSE.ja.md" "$APP/Contents/Resources/LICENSE.ja.md"
 cp "$REPO_ROOT/docs/第三者の規約.md" "$APP/Contents/Resources/第三者の規約.md"
-# launchd の設定ひな形(ラベル com.moviecut.fanhelper。インストール時に /Library/LaunchDaemons へ置く)
-cp "$REPO_ROOT/Resources/Helper/com.moviecut.fanhelper.plist" "$APP/Contents/Resources/com.moviecut.fanhelper.plist"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -151,7 +147,7 @@ PLIST
 
 plutil -lint "$APP/Contents/Info.plist"
 if [ "$EDITION" = public ]; then
-  strip -x "$APP/Contents/MacOS/MovieCut" "$APP/Contents/Helpers/moviecut-fanhelper"
+  strip -x "$APP/Contents/MacOS/MovieCut"
   if ! scan_bundle "$APP"; then echo "失敗: 配布版に個人の情報が入っています" >&2; exit 1; fi
   echo "OK: 個人情報の検査を通過"
 fi

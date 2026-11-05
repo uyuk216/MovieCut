@@ -5,8 +5,6 @@ import MovieCutCore
 enum MenuCommand: Hashable {
     case about, settings, videoSettings
     case addMedia, importPSD, importRigFolder, importRigPSD, export, exportPreset(ExportPreset), exportCustomPreset(String), saveCustomPreset
-    // 出力 ▸ 書き出し中のファン最大化(設定と、ヘルパーのインストール / 削除)
-    case fanMaxToggle, fanInstall, fanUninstall
     // 字幕(B3)とチャプター
     case importSubtitles, exportSubtitles, generateSubtitles, copyChapters, copyChaptersColor(MarkerColor)
     // 字幕を AI で翻訳して SRT に書き出す(ショートカットは持たない)
@@ -359,12 +357,6 @@ struct MenuState: Equatable {
     var previewBackground = PreviewBackground.default
     /// 表示 ▸ ガイド線: 出しているガイド(アプリ全体の設定)。
     var previewGuides: Set<PreviewGuide> = []
-    /// 出力 ▸ ファン(アプリ全体の設定)。使える / オン / 使えない理由 / 対象機種でヘルパー未導入 / ヘルパー導入済み。
-    var fanAvailable = false
-    var fanEnabled = false
-    var fanReason: String?
-    var fanCanInstall = false
-    var fanInstalled = false
     /// プロキシ編集: 表示のチェック / 映像の素材があって作れる
     var previewProxyEnabled = false
     var canMakeProxies = false
@@ -385,12 +377,6 @@ struct MenuState: Equatable {
         let rc = RecentProjectsController.shared
         recentItems = rc.recents.entries.map { RecentMenuItem(path: $0.path, name: $0.name, missing: rc.isMissing($0)) }
         welcomeAtLaunch = WelcomeSettings.showAtLaunch()
-        let fan = AppServices.fan
-        fanAvailable = fan.isAvailable
-        fanEnabled = fan.enabled
-        fanReason = fan.reason
-        fanCanInstall = fan.machineSupported && fan.availability != nil && !fan.helperInstalled && !fan.busy
-        fanInstalled = fan.helperInstalled && !fan.busy
         previewProxyEnabled = ProxySettings.enabled()
         dockVisible = Set(DockPanel.allCases.filter { AppServices.panelDock.layout.isVisible($0) })
         guard let m = model else { return }
@@ -545,17 +531,6 @@ enum AppMenuSpec {
     }
 
     /// 出力 ▸ 動画の設定…(設定シート。⌘, の「設定…」と同じ操作でショートカットは持たない)。
-    // 出力 ▸ ファン(書き出し中はファンを最大にする)。アプリ全体の設定なので書類がなくても押せる。
-    static func fanMaxToggle(_ s: MenuState) -> MenuItemSpec {
-        MenuItemSpec(command: .fanMaxToggle, title: "書き出し中はファンを最大にする", shortcut: nil, enabled: s.fanAvailable || s.fanEnabled, checked: s.fanEnabled, hint: s.fanAvailable ? nil : s.fanReason)
-    }
-    static func fanInstall(_ s: MenuState) -> MenuItemSpec {
-        MenuItemSpec(command: .fanInstall, title: "ファン制御を有効にする…", shortcut: nil, enabled: s.fanCanInstall, checked: nil)
-    }
-    static func fanUninstall(_ s: MenuState) -> MenuItemSpec {
-        MenuItemSpec(command: .fanUninstall, title: "ファン制御を無効にする…", shortcut: nil, enabled: s.fanInstalled, checked: nil)
-    }
-
     static func videoSettings(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .videoSettings, title: "動画の設定…", shortcut: nil, enabled: s.canEdit, checked: nil)
     }
@@ -1279,7 +1254,7 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s), apngExport(s)] + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), clipListItem(s), noteListItem(s)] + scriptStoryboardItems(s) + [makeProxies(s)] + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + multicamItems(s) + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textVerticalItem(s), textPerCharItem(s), textCounterItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), audioAutoSyncItem(s), beatMarkersItem(s), scaleDuplicateItem(s), beatPlaceItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
+        [about, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s), apngExport(s)] + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), clipListItem(s), noteListItem(s)] + scriptStoryboardItems(s) + [makeProxies(s)] + [] + clipMenu(s).flatMap { $0 } + multicamItems(s) + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textVerticalItem(s), textPerCharItem(s), textCounterItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), audioAutoSyncItem(s), beatMarkersItem(s), scaleDuplicateItem(s), beatPlaceItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerColorItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + guideItems(s) + [previewProxy(s), fullScreen(s)] + help.flatMap { $0 }
@@ -1294,9 +1269,6 @@ enum AppMenu {
     static func perform(_ c: MenuCommand, model: ProjectModel?) {
         switch c {
         case .about: AppInfo.showAboutPanel()
-        case .fanMaxToggle: AppServices.fan.setEnabled(!AppServices.fan.enabled)
-        case .fanInstall: AppServices.fan.install()
-        case .fanUninstall: AppServices.fan.uninstall()
         case .helpShortcuts: ShortcutSheet.show()
         case .openRecent(let path): WelcomeActions.open(path: path)
         case .clearRecents: RecentProjectsController.shared.clear()

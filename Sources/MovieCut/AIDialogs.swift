@@ -100,13 +100,13 @@ enum AIDialogs {
         return AIRewritePrompt.Mode.allCases[max(0, pop.indexOfSelectedItem)]
     }
 
-    /// ファイル ▸ AI の設定…。鍵は保存しない(コマンドか、このマシンのサーバーだけ)。
+    /// ファイル ▸ AI の設定…。鍵は保存しない(コマンドだけ)。
     static func editSettings() {
         var s = AISettings.load()
         let a = NSAlert()
         a.messageText = "AI の設定"
-        a.informativeText = "クラウドの鍵はこのアプリに保存しません。ご自分のコマンド(例: claude -p)か、このマシン上のサーバー(Ollama など)を指定します。AI は、メニューから操作したときだけ呼ばれます。"
-        let box = NSView(frame: NSRect(x: 0, y: 0, width: 460, height: 150))
+        a.informativeText = "クラウドの鍵はこのアプリに保存しません。ご自分のコマンド(例: claude -p)を指定します。AI は、メニューから操作したときだけ呼ばれます。"
+        let box = NSView(frame: NSRect(x: 0, y: 0, width: 460, height: 90))
         func row(_ label: String, _ y: CGFloat, _ view: NSView) {
             let l = NSTextField(labelWithString: label); l.frame = NSRect(x: 0, y: y + 4, width: 120, height: 20)
             view.frame = NSRect(x: 125, y: y, width: 335, height: 26)
@@ -116,18 +116,14 @@ enum AIDialogs {
         kind.addItems(withTitles: AIProviderKind.allCases.map(\.title))
         kind.selectItem(at: AIProviderKind.allCases.firstIndex(of: s.kind) ?? 0)
         let cmd = NSTextField(string: s.command); cmd.placeholderString = "claude -p"
-        let url = NSTextField(string: s.url)
-        let model = NSTextField(string: s.model); model.placeholderString = "例: gemma3"
         let timeout = NSTextField(string: String(s.timeoutSeconds))
-        row("使い方", 120, kind); row("コマンド", 90, cmd); row("サーバー URL", 60, url); row("モデル名", 30, model); row("待つ秒数", 0, timeout)
+        row("使い方", 60, kind); row("コマンド", 30, cmd); row("待つ秒数", 0, timeout)
         a.accessoryView = box
         a.addButton(withTitle: "保存")
         a.addButton(withTitle: "キャンセル")
         guard a.runModal() == .alertFirstButtonReturn else { return }
         s.kind = AIProviderKind.allCases[max(0, kind.indexOfSelectedItem)]
         s.command = cmd.stringValue.trimmingCharacters(in: .whitespaces)
-        s.url = url.stringValue.trimmingCharacters(in: .whitespaces)
-        s.model = model.stringValue.trimmingCharacters(in: .whitespaces)
         s.timeoutSeconds = min(max(Int(timeout.stringValue) ?? 120, AISettings.timeoutRange.lowerBound), AISettings.timeoutRange.upperBound)
         s.save()
     }

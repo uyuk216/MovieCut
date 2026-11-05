@@ -33,11 +33,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !DebugHooks.isQuiet {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { MainActor.assumeIsolated { RecoveryPrompt.offerIfNeeded() } }
         }
-        // ファン最大化: 終了シグナルでも自動に戻す。機種とサービスの検出は裏で 1 回(静かな検証では行わない)
-        MainActor.assumeIsolated {
-            AppServices.fan.installSignalHandlers()
-            if !DebugHooks.isQuiet { AppServices.fan.refresh() }
-        }
     }
 
     /// 起動時のウィンドウ数を整える(方針は `LaunchWindowPolicy`)。
@@ -63,8 +58,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        // 何があっても、最大のままにして終わらない
-        FanGuardRegistry.shared.releaseAll(.appQuit)
         MainActor.assumeIsolated { WindowFrameKeeper.saveAll() }
         PlaybackTempFiles.removeCurrent()
         if HangWatch.enabled { HangWatch.shared.printSummary() }
