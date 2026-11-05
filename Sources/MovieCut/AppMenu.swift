@@ -101,7 +101,7 @@ enum MenuCommand: Hashable {
     // 無音カット(シートを開く)と、BGM の自動ダッキングの切り替え
     case silenceCut, fillerCut, transcriptEdit, audioDuckToggle, audioAutoSync
     // ビートにマーカーを打つ(選んでいる音のクリップ。ショートカットは持たない)
-    case beatMarkers
+    case beatMarkers, scaleDuplicate, beatPlace
     // 手ぶれ補正の切り替え(映像クリップ。ショートカットは持たない)
     case stabilizeToggle
     // 縦動画に自動リフレーム(映像・画像。ショートカットは持たない)
@@ -319,6 +319,8 @@ struct MenuState: Equatable {
     var hasAudioFx = false           // 選択クリップに音声エフェクトかパンがある
     var canSilenceCut = false        // 無音カットできるクリップ(音のある素材。速度・逆再生なし)を選んでいる
     var canAudioAutoSync = false     // 動画 1 つと音声 1 つを選んでいる(音で自動同期できる)
+    var canPitchLayout = false       // 音程を変えて並べられるクリップ(音のある・ロックでない)を選んでいる
+    var canBeatPlace = false         // 上に加えて、クリップの位置以降にマーカーがある
     var canBeatMarkers = false       // ビートを測れるクリップ(無音カットと同じ条件)を選んでいる
     var canDuck = false              // BGM(音声クリップ)を選んでいる
     var isDucking = false            // 選択クリップの自動ダッキングがオン
@@ -455,6 +457,8 @@ struct MenuState: Equatable {
             hasAudioFx = AudioFxEditing.hasAnyFx(c)
             canSilenceCut = SilenceDetector.supports(c)
             canBeatMarkers = BeatDetector.supports(c)
+            canPitchLayout = m.selectedClipIDs.count <= 1 && PitchLayout.supports(c, in: p)
+            canBeatPlace = canPitchLayout && !PitchLayout.markerTimes(in: p, from: c.start, beatsOnly: false).isEmpty
             canTranscribe = TranscriptionSupport.supports(c)
             canDuck = DuckEditing.supports(c)
             isDucking = c.hasDuck
@@ -1080,6 +1084,15 @@ enum AppMenuSpec {
         MenuItemSpec(command: .beatMarkers, title: "ビートにマーカーを打つ", shortcut: nil, enabled: s.canEdit && s.canBeatMarkers, checked: nil, hint: "テンポを測る")
     }
 
+    /// クリップ ▸ 選択クリップを音階で複製…(音MAD 用。シートで音階・移調・個数を選ぶ。1 回の Undo。ショートカットは持たない)。
+    static func scaleDuplicateItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .scaleDuplicate, title: "選択クリップを音階で複製…", shortcut: nil, enabled: s.canEdit && s.canPitchLayout, checked: nil, hint: "音MAD")
+    }
+    /// クリップ ▸ ビートに合わせてクリップを並べる…(マーカーの位置に繰り返し置く。1 回の Undo。ショートカットは持たない)。
+    static func beatPlaceItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .beatPlace, title: "ビートに合わせてクリップを並べる…", shortcut: nil, enabled: s.canEdit && s.canBeatPlace, checked: nil, hint: "音MAD")
+    }
+
     static func zoom(_ s: MenuState) -> [MenuItemSpec] {
         [MenuItemSpec(command: .zoomIn, title: "タイムラインを拡大", shortcut: cmd("+"), enabled: s.canEdit, checked: nil),
          MenuItemSpec(command: .zoomOut, title: "タイムラインを縮小", shortcut: cmd("-"), enabled: s.canEdit, checked: nil),
@@ -1176,7 +1189,7 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s)] + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), clipListItem(s), noteListItem(s)] + scriptStoryboardItems(s) + [makeProxies(s)] + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textCounterItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), audioAutoSyncItem(s), beatMarkersItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
+        [about, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s)] + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), clipListItem(s), noteListItem(s)] + scriptStoryboardItems(s) + [makeProxies(s)] + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textCounterItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), audioAutoSyncItem(s), beatMarkersItem(s), scaleDuplicateItem(s), beatPlaceItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerColorItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + guideItems(s) + [previewProxy(s), fullScreen(s)] + help.flatMap { $0 }
@@ -1362,6 +1375,8 @@ enum AppMenu {
             case .silenceCut: m.openSilenceSheet()
             case .audioAutoSync: m.autoSyncSelectedClips()
             case .beatMarkers: m.addBeatMarkersToSelectedClip()
+            case .scaleDuplicate: m.openScaleSheet()
+            case .beatPlace: m.openBeatPlaceSheet()
             case .fillerCut: m.openFillerSheet()
             case .transcriptEdit: m.openTranscriptEditSheet()
             case .findReplace: m.openFindReplace()

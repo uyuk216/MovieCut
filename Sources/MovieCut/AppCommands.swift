@@ -138,6 +138,8 @@ struct AppCommands: Commands {
                 MenuItemView(spec: AppMenuSpec.silenceCutItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.audioAutoSyncItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.beatMarkersItem(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.scaleDuplicateItem(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.beatPlaceItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.fillerCutItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.transcriptEditItem(s), perform: run)
                 Divider()

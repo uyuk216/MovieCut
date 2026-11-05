@@ -9,9 +9,59 @@ import AVFoundation
 public struct WaveformPeaks: Equatable, Sendable {
     /// 1 秒あたりのピークの数。
     public static let perSecond = 100
-    public var peaks: [Float]
+    public var peaks: [Float] { didSet { levels = Self.buildLevels(peaks) } }
+    /// 粗いピーク(最大値の縮約)。levels[k][j] = peaks[j × 8^(k+1) ..< (j+1) × 8^(k+1)] の最大。
+    /// 縮小表示(1 本の縦線が多数のピークを受け持つ)でも、描き直しの計算を小さく保つ。
+    private(set) var levels: [[Float]]
+    static let lodFactor = 8
+    static let lodLevels = 3
 
-    public init(peaks: [Float]) { self.peaks = peaks }
+    public init(peaks: [Float]) { self.peaks = peaks; self.levels = Self.buildLevels(peaks) }
+
+    public static func == (a: WaveformPeaks, b: WaveformPeaks) -> Bool { a.peaks == b.peaks }
+
+    static func buildLevels(_ p: [Float]) -> [[Float]] {
+        var out: [[Float]] = []
+        var cur = p
+        for _ in 0..<lodLevels {
+            guard cur.count >= lodFactor else { break }
+            var next = [Float](); next.reserveCapacity(cur.count / lodFactor)
+            var i = 0
+            while i + lodFactor <= cur.count {
+                var m: Float = 0
+                for k in i..<(i + lodFactor) where cur[k] > m { m = cur[k] }
+                next.append(m)
+                i += lodFactor
+            }
+            out.append(next)
+            cur = next
+        }
+        return out
+    }
+
+    /// peaks[i0...i1] の最大。範囲に丸ごと入る粗いセルを使う(結果は総当たりと同じ)。
+    func maxPeak(_ i0: Int, _ i1: Int) -> Float {
+        var m: Float = 0
+        var i = i0
+        peaks.withUnsafeBufferPointer { base in
+            while i <= i1 {
+                var step = 1
+                var level = -1
+                // 使える一番粗い段から試す(強さ 8^(k+1))
+                var k = levels.count - 1
+                var s = Self.strides[k < 0 ? 0 : k]
+                while k >= 0 {
+                    if i % s == 0 && i + s - 1 <= i1 { step = s; level = k; break }
+                    k -= 1; s /= Self.lodFactor
+                }
+                let v = level < 0 ? base[i] : levels[level][i / step]
+                if v > m { m = v }
+                i += step
+            }
+        }
+        return m
+    }
+    private static let strides = [8, 64, 512]
 
     public var duration: Double { Double(peaks.count) / Double(Self.perSecond) }
 
@@ -77,9 +127,7 @@ public struct WaveformPeaks: Equatable, Sendable {
             var i0 = Int((a * per).rounded(.down)), i1 = Int((b * per).rounded(.up)) - 1
             i0 = max(0, i0); i1 = min(peaks.count - 1, max(i0, i1))
             guard i0 <= i1, i0 < peaks.count else { continue }
-            var m: Float = 0
-            for k in i0...i1 where peaks[k] > m { m = peaks[k] }
-            out[i] = m
+            out[i] = maxPeak(i0, i1)
         }
         return reversed ? out.reversed() : out
     }

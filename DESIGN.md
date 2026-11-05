@@ -512,3 +512,8 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
 - **サムネイル候補**(`ThumbnailCandidates.swift`、`ProjectModel+ThumbnailCandidates.swift`): 範囲(選択中の動画クリップ、無ければ全体)を 30 等分した各中央のコマを `Renderer` で描き、長辺 160 の輝度画像で点数にする。点数 = 0.4×鮮明さ(ラプラシアンの分散 v を v/(v+300))+ 0.25×明るさ(平均 0.5 で最大の三角形)+ 0.35×顔(Vision。無ければ 0、あれば 0.5〜1。最大の顔が画面の 6% で満点)。上位 5 個を点数順に選び(同点は早い時刻、近すぎる時刻は調べた間隔の 2 倍で重複扱い)、`ThumbnailExporter` で `<名前>_candidate_01_t12.34s.png` のように書く。決定的。プロジェクトは変えない。顔の検出器はテストで差し替え可能(`FaceDetecting`)。
 - **アニメ付きタイトル**(`TextStyleLibrary.animatedTitles`、id は `builtin.title.*`): 見た目 + `TextAnim` の組 7 種。組み込みのスタイルなので、インスペクタの「スタイルを適用 ▸ アニメ付きタイトル」と文字メニューから 1 回の Undo で適用。速さ・時間は任意項目(スクロールは速さのみ)で、ファイルの形式は変わらない。
 - **確認できていないこと**: 実機の保存パネル、インスペクタのサブメニューの見た目、実際の動画での候補の質(人の目での良し悪し)。
+
+## 音MAD 向け(PitchLayout・音程・波形の粗い段)
+- `AudioFx.pitch` は半音(−24〜+24、0.01 刻み = 1 セント)。`splitPitch` / `composePitch` がインスペクタの「半音」と「セント」の 2 欄に分ける。0 は書かない。ミキサーは速度・逆再生の変換後に `PitchShift`(WSOLA)を通す(プレビューと書き出しで共通)。
+- `WaveformPeaks` は 1/100 秒ごとのピークに加え、8 倍ずつ 3 段の最大値の縮約(`levels`)を持つ。`columns` は範囲に丸ごと入る粗いセルを使う(総当たりと同じ結果)。
+- `PitchLayout`(Core): `scalePlan` / `beatPlan` が `[PitchStep]`(開始・長さ・追加の音程)を作り、`apply` が 1 つ目を元のクリップ、残りをコピーとして反映する(同じレイヤーで重なるなら全部を別レイヤーのコピーに)。±24 を超える音は、そこから後ろを作らない。メニュー `.scaleDuplicate` / `.beatPlace`(ショートカットなし)。

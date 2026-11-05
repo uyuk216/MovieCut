@@ -87,7 +87,7 @@ final class PitchShiftTests: XCTestCase {
         XCTAssertEqual(c.audioFx?.pitch, 5)
         XCTAssertFalse(AudioFxEditing.setPitch(&c, 5), "同じ値は変化なし")
         XCTAssertTrue(AudioFxEditing.setPitch(&c, 99))
-        XCTAssertEqual(c.audioFx?.pitch, 12, "−12〜+12 に収める")
+        XCTAssertEqual(c.audioFx?.pitch, 24, "−24〜+24 に収める")
         XCTAssertTrue(AudioFxEditing.setPitch(&c, 0))
         XCTAssertNil(c.audioFx, "0 に戻ったら項目ごと外す")
     }
@@ -109,5 +109,56 @@ final class PitchShiftTests: XCTestCase {
         let fx = try JSONDecoder().decode(AudioFx.self, from: Data(#"{"pitch":"high"}"#.utf8))
         XCTAssertNil(fx.pitch)
         XCTAssertEqual(fx.extra["pitch"], .string("high"))
+    }
+
+    // MARK: ±24 半音とセント(音MAD 向けの拡張)
+
+    func testPlusTwentyFourQuadruplesAndMinusTwentyFourQuarters() {
+        let x = sine(seconds: 2, f: 300)
+        let up = PitchShift.shift(x, semitones: 24)
+        XCTAssertEqual(up.count, x.count)
+        XCTAssertEqual(frequency(up, from: 0.25, to: 1.75), 1200, accuracy: 1200 * 0.04)
+        let down = PitchShift.shift(x, semitones: -24)
+        XCTAssertEqual(down.count, x.count)
+        XCTAssertEqual(frequency(down, from: 0.25, to: 1.75), 75, accuracy: 75 * 0.06)
+    }
+
+    func testCentsAreHonoured() {
+        // +50 セント = 半音の半分
+        let y = PitchShift.shift(sine(seconds: 2, f: 440), semitones: 0.5)
+        let expected = 440 * pow(2, 0.5 / 12)
+        XCTAssertEqual(frequency(y, from: 0.25, to: 1.75), expected, accuracy: expected * 0.02)
+    }
+
+    func testSetPitchKeepsOneCentResolution() {
+        var c = Clip(); c.type = .audio; c.src = "a.wav"; c.start = 0; c.duration = 1; c.srcDuration = 1
+        XCTAssertTrue(AudioFxEditing.setPitch(&c, 3.234))
+        XCTAssertEqual(c.audioFx?.pitch ?? 0, 3.23, accuracy: 1e-9)
+        XCTAssertTrue(AudioFxEditing.setPitch(&c, -24.5))
+        XCTAssertEqual(c.audioFx?.pitch, -24)
+        XCTAssertTrue(AudioFxEditing.setPitch(&c, 0.004), "0.4 セントは 0 に丸まる → 項目ごと外れる") 
+        XCTAssertNil(c.audioFx)
+    }
+
+    func testSplitAndComposePitch() {
+        for v in stride(from: -24.0, through: 24.0, by: 0.01) {
+            let r = (v * 100).rounded() / 100
+            let (st, ct) = AudioFx.splitPitch(r)
+            XCTAssertTrue((-50...50).contains(ct), "\(r) → \(st), \(ct)")
+            XCTAssertEqual(AudioFx.composePitch(semitones: st, cents: ct), r, accuracy: 1e-9)
+        }
+        XCTAssertTrue(AudioFx.splitPitch(3.2) == (3, 20))
+        XCTAssertTrue(AudioFx.splitPitch(-2.6) == (-3, 40))
+        XCTAssertEqual(AudioFx.composePitch(semitones: 24, cents: 50), 24, "範囲に収める")
+    }
+
+    func testOldFixtureRangeValuesUnchanged() throws {
+        // 旧い範囲(±12)の値と 0.1 刻みの値は、そのまま同じ文字列で書き戻る
+        for v in [-12.0, 7.5, 0.1, 12] {
+            var fx = AudioFx(); fx.pitch = v
+            let a = try JSONEncoder().encode(fx)
+            let back = try JSONDecoder().decode(AudioFx.self, from: a)
+            XCTAssertEqual(try JSONEncoder().encode(back), a)
+        }
     }
 }

@@ -12,7 +12,7 @@ public struct AudioFx: Codable, Equatable, Sendable {
     public var normalize: Normalize?
     /// ノイズ除去の強さ(0〜1)。0 と未設定は同じ(書かない)。
     public var denoise: Double?
-    /// 音程(半音、−12〜+12)。0 と未設定は同じ(書かない)。音の高さだけを変え、長さは変えない。
+    /// 音程(半音、−24〜+24。小数部がセント。0.01 半音 = 1 セント刻み)。0 と未設定は同じ(書かない)。音の高さだけを変え、長さは変えない。
     public var pitch: Double?
     /// ノイズゲートのしきい値(dBFS、−80〜−20)。これより小さい音を閉じて消す。未設定 = ゲートなし。
     public var gate: Double?
@@ -44,9 +44,22 @@ public struct AudioFx: Codable, Equatable, Sendable {
     /// 何も入っていない(ファイルに書かない)。
     public var isEmpty: Bool { eq == nil && compressor == nil && reverb == nil && normalize == nil && denoiseStrength == 0 && pitchSemitones == 0 && gateDb == nil && limiterDb == nil && extra.isEmpty }
 
-    /// 音程の半音数(−12〜+12 に収めた値。有限でなければ 0)。0 でないときだけ音程を変える。
+    /// 音程の半音数(−24〜+24 に収めた値。有限でなければ 0)。0 でないときだけ音程を変える。
     public var pitchSemitones: Double { Self.clampPitch(pitch) }
-    public static let pitchRange: ClosedRange<Double> = -12...12
+    public static let pitchRange: ClosedRange<Double> = -24...24
+    /// 音程を「半音(整数)+ セント(−50〜+50)」に分ける(インスペクタの 2 つの欄用)。例: 3.2 → (3, 20)、−2.6 → (−3, 40)。
+    public static func splitPitch(_ v: Double) -> (semitones: Int, cents: Int) {
+        let total = Int((clampPitch(v) * 100).rounded())
+        var st = Int((Double(total) / 100).rounded())     // 一番近い半音
+        var cents = total - st * 100
+        if cents > 50 { st += 1; cents -= 100 }
+        if cents < -50 { st -= 1; cents += 100 }
+        return (st, cents)
+    }
+    /// 半音とセントから音程(半音、範囲に収める)。
+    public static func composePitch(semitones: Int, cents: Int) -> Double {
+        clampPitch((Double(semitones) * 100 + Double(cents)) / 100)
+    }
     public static func clampPitch(_ v: Double?) -> Double {
         guard let v, v.isFinite else { return 0 }
         return min(max(v, pitchRange.lowerBound), pitchRange.upperBound)

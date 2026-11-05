@@ -21,7 +21,11 @@ struct AudioFxPanel: View {
     private static func pitchText(_ v: Double) -> String {
         if v == 0 { return "0 半音" }
         let sign = v > 0 ? "+" : "−"
-        return sign + String(format: "%.1f 半音", abs(v))
+        return sign + String(format: "%.0f 半音", abs(v))
+    }
+    private static func centsText(_ v: Double) -> String {
+        let c = Int(v.rounded())
+        return c == 0 ? "0 セント" : (c > 0 ? "+" : "−") + "\(abs(c)) セント"
     }
     private static func panText(_ v: Double) -> String {
         let p = Int((abs(v) * 100).rounded())
@@ -47,9 +51,16 @@ struct AudioFxPanel: View {
                 fxSlider("パン", value: c.panOrDefault, range: -1...1, step: 0.01, format: Self.panText, undo: ProjectModel.panUndoName) {
                     _ = AudioFxEditing.setPan(&$0, $1)
                 }
-                fxSlider("音程（半音）", value: c.audioFx?.pitchSemitones ?? 0, range: AudioFx.pitchRange, step: 0.1,
+                let pitchParts = AudioFx.splitPitch(c.audioFx?.pitchSemitones ?? 0)
+                fxSlider("音程（半音）", value: Double(pitchParts.semitones), range: AudioFx.pitchRange, step: 1,
                          format: Self.pitchText, undo: ProjectModel.pitchUndoName) {
-                    _ = AudioFxEditing.setPitch(&$0, $1)
+                    let cents = AudioFx.splitPitch($0.audioFx?.pitchSemitones ?? 0).cents
+                    _ = AudioFxEditing.setPitch(&$0, AudioFx.composePitch(semitones: Int($1.rounded()), cents: cents))
+                }
+                fxSlider("音程の微調整（セント）", value: Double(pitchParts.cents), range: -50...50, step: 1,
+                         format: Self.centsText, undo: ProjectModel.pitchUndoName) {
+                    let st = AudioFx.splitPitch($0.audioFx?.pitchSemitones ?? 0).semitones
+                    _ = AudioFxEditing.setPitch(&$0, AudioFx.composePitch(semitones: st, cents: Int($1.rounded())))
                 }
                 fxSlider("ノイズ除去", value: c.audioFx?.denoiseStrength ?? 0, range: 0...1, step: 0.01,
                          format: { "\(Int(($0 * 100).rounded()))%" }, undo: ProjectModel.denoiseUndoName) {
