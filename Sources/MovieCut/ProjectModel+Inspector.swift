@@ -287,6 +287,23 @@ extension ProjectModel {
         setCharacterProperty({ $0.imgBlink = url?.path }, name: url == nil ? "まばたき画像を外す" : "まばたき画像の変更", charId: charId)
     }
 
+    /// あいうえお口パクの画像を設定する(key は "a" "i" "u" "e" "o"。url が nil なら外す)。
+    /// 空になったら項目ごと消す(既定と同じ形)。同じ画像・無い画像の外しは履歴に載らない。
+    func setVowelImage(charId: String, key: String, url: URL?) {
+        guard Viseme.allCases.contains(where: { $0.vowelKey == key }),
+              let ch = character(charId), ch.imgVowels?[key] != url?.path else { return }
+        let label = Self.vowelLabel(key)
+        setCharacterProperty({ c in
+            var d = c.imgVowels ?? [:]
+            if let u = url { d[key] = u.path } else { d.removeValue(forKey: key) }
+            c.imgVowels = d.isEmpty ? nil : d
+        }, name: url == nil ? "口「\(label)」の画像を外す" : "口「\(label)」の画像の変更", charId: charId)
+    }
+
+    static func vowelLabel(_ key: String) -> String {
+        ["a": "あ", "i": "い", "u": "う", "e": "え", "o": "お"][key] ?? key
+    }
+
     /// バウンス(話し中の上下の揺れ)の切り替え。オフは項目を消す(既定と同じ形で保存する)。
     func setBounce(charId: String, _ on: Bool) {
         setCharacterProperty({ $0.bounce = on ? true : nil }, name: "バウンスの切り替え", charId: charId)

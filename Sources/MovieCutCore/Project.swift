@@ -110,6 +110,8 @@ public struct Character: Codable, Equatable, Identifiable {
     public var imgOpen: String? = nil
     /// B-7: まばたき(目を閉じた画像)。未設定なら瞬きしない。
     public var imgBlink: String? = nil
+    /// B-7: あいうえお口パク。キー "a" "i" "u" "e" "o" → 口の形ごとの画像。未設定・空は書かない。1 つでもあればリップシンクを使い、無い母音は `imgOpen` で代用する。
+    public var imgVowels: [String: String]? = nil
     /// B-7: 表情名 → 画像(口を閉じた状態の代わりに使う)。セリフの `[表情名]` で切り替える。未設定・空は書かない。
     public var expressions: [String: String]? = nil
     /// B-7: 話している間に上下へ揺れる。オンのときだけ書く。
@@ -123,7 +125,7 @@ public struct Character: Codable, Equatable, Identifiable {
     public var alwaysShow: Bool = true
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["id", "name", "engine", "speaker", "voice", "speed", "pitch", "intonation", "color", "imgClosed", "imgOpen", "imgBlink", "expressions", "bounce", "subtitleColor", "x", "y", "scale", "flip", "alwaysShow"]
+    static let knownKeys: Set<String> = ["id", "name", "engine", "speaker", "voice", "speed", "pitch", "intonation", "color", "imgClosed", "imgOpen", "imgBlink", "imgVowels", "expressions", "bounce", "subtitleColor", "x", "y", "scale", "flip", "alwaysShow"]
 
     public init() {}
 
@@ -161,6 +163,7 @@ public struct Character: Codable, Equatable, Identifiable {
         imgClosed = l.string("imgClosed")
         imgOpen = l.string("imgOpen")
         imgBlink = l.string("imgBlink")
+        imgVowels = l.value("imgVowels").flatMap { (d: [String: String]) in d.isEmpty ? nil : d }
         expressions = l.value("expressions").flatMap { (d: [String: String]) in d.isEmpty ? nil : d }
         bounce = l.bool("bounce")
         subtitleColor = l.string("subtitleColor").flatMap(SpeakerSubtitleColor.normalized)
@@ -188,6 +191,7 @@ public struct Character: Codable, Equatable, Identifiable {
         if let s = imgClosed { try c.encode(s, forKey: AnyKey("imgClosed")) } else { try c.encodeNil(forKey: AnyKey("imgClosed")) }
         if let s = imgOpen { try c.encode(s, forKey: AnyKey("imgOpen")) } else { try c.encodeNil(forKey: AnyKey("imgOpen")) }
         try c.encodeIfPresent(imgBlink, forKey: AnyKey("imgBlink"))
+        if let v = imgVowels, !v.isEmpty { try c.encode(v, forKey: AnyKey("imgVowels")) }
         if let e = expressions, !e.isEmpty { try c.encode(e, forKey: AnyKey("expressions")) }
         if bounce == true { try c.encode(true, forKey: AnyKey("bounce")) }
         if let s = subtitleColor { try c.encode(s, forKey: AnyKey("subtitleColor")) }

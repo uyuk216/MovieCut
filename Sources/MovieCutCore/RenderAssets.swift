@@ -11,6 +11,7 @@ public final class RenderAssets {
     private var missingImages: Set<String> = []
     private var envelopes: [String: [Float]] = [:]
     private var mouthStateCache: [String: [Bool]] = [:]
+    private var visemeCache: [String: [Viseme]?] = [:]
     private var missingEnvelopes: Set<String> = []
     private var generators: [String: AVAssetImageGenerator] = [:]
     private var missingVideos: Set<String> = []
@@ -95,6 +96,21 @@ public final class RenderAssets {
         let s = MouthGate.states(env)
         mouthStateCache[path] = s
         return s
+    }
+
+    /// あいうえお口パク: コマ(1/60 秒)ごとの口の形。セリフの文字・音声・使う範囲が同じならキャッシュを返す。作れなければ nil。
+    public func visemes(src: String, text: String, offset: Double, duration: Double) -> [Viseme]? {
+        let key = "\(src)|\(offset)|\(duration)|\(text)"
+        lock.lock()
+        if let c = visemeCache[key] { lock.unlock(); return c }
+        lock.unlock()
+        var result: [Viseme]? = nil
+        if let env = mouthEnvelope(for: src) {
+            let lo = Int(floor(offset * LipSync.envelopeRate)), hi = Int(ceil((offset + duration) * LipSync.envelopeRate))
+            result = LipSync.frames(moras: LipSync.moras(of: text), envelope: env, range: lo..<max(lo, hi))
+        }
+        lock.lock(); visemeCache[key] = .some(result); lock.unlock()
+        return result
     }
 
     /// プロジェクトの合成音声(書き出しと同じミックス)の 1/60 秒ごとの RMS(プロジェクトの時刻 0 から)。

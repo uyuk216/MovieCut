@@ -209,6 +209,38 @@ final class RendererTests: XCTestCase {
         XCTAssertEqual(try render(p, t: 1.5, assets: assets).rgb(200, 100).0, 0)
     }
 
+    func testVowelImagesFollowReadingAndFallBackToOpen() throws {
+        // 声のある後半(0.5〜1.0 秒)で「あい」: 前半は あ(赤)、後半は い(青)。ん・無音は閉じた画像(緑)。う は画像が無く imgOpen(黄)
+        let closed = try solidPNG("v-closed.png", r: 0, g: 255, b: 0)
+        let open = try solidPNG("v-open.png", r: 255, g: 255, b: 0)
+        let a = try solidPNG("v-a.png", r: 255, g: 0, b: 0)
+        let i = try solidPNG("v-i.png", r: 0, g: 0, b: 255)
+        let wav = try writeToneWAV("v-tone.wav")
+        func make(_ text: String) -> Project {
+            var ch = Character(); ch.id = "cv"; ch.name = "V"; ch.imgClosed = closed; ch.imgOpen = open; ch.imgVowels = ["a": a, "i": i]
+            ch.x = 0.5; ch.y = 0.5; ch.scale = 1; ch.flip = false; ch.alwaysShow = false
+            var v = Clip(); v.type = .voice; v.start = 0; v.duration = 1; v.charId = "cv"; v.src = wav; v.text = text; v.subtitle = false
+            return project(clips: [v], characters: [ch])
+        }
+        let assets = RenderAssets()
+        let ai = make("あい")
+        let early = try render(ai, t: 0.6, assets: assets).rgb(200, 100)
+        let late = try render(ai, t: 0.95, assets: assets).rgb(200, 100)
+        XCTAssertGreaterThan(early.0, 200); XCTAssertLessThan(early.2, 50)   // あ
+        XCTAssertGreaterThan(late.2, 200); XCTAssertLessThan(late.0, 50)     // い
+        let quiet = try render(ai, t: 0.25, assets: assets).rgb(200, 100)
+        XCTAssertGreaterThan(quiet.1, 200); XCTAssertLessThan(quiet.0, 50)   // 無音 = 閉じた口
+        // 画像の無い母音(う)は imgOpen で代用
+        let u = try render(make("う"), t: 0.75, assets: assets).rgb(200, 100)
+        XCTAssertGreaterThan(u.0, 200); XCTAssertGreaterThan(u.1, 200); XCTAssertLessThan(u.2, 50)
+        // 「あん」: 後半は ん で閉じる(あ → 閉じ)
+        let an = make("あんあ")
+        let mid = try render(an, t: 0.75, assets: assets).rgb(200, 100)
+        XCTAssertGreaterThan(mid.1, 200); XCTAssertLessThan(mid.0, 50)
+        // 同じ入力は何度描いても同じ(プレビューと書き出しの一致)
+        XCTAssertEqual(try render(ai, t: 0.95, assets: RenderAssets()).rgb(200, 100).2, late.2)
+    }
+
     func testBounceOffsetFollowsVoiceLevel() throws {
         // バウンス: 無音の間は動かず、音が大きい間は画面の高さの 1.2% まで上へ揺れる。バウンスなしは音量に関係なく同じ位置
         let closed = try solidPNG("bounce.png", r: 255, g: 0, b: 0)

@@ -186,6 +186,23 @@ final class InspectorModelTests: XCTestCase {
         XCTAssertEqual(m.character(id)?.expressions, nil)
     }
 
+    func testVowelImagesOneUndoStepEachAndNoOpsRegisterNothing() {
+        let m = makeModel()
+        let id = m.project.characters[0].id
+        m.setVowelImage(charId: id, key: "a", url: nil)                       // 無い画像を外す = 何も起きない
+        m.setVowelImage(charId: id, key: "x", url: URL(fileURLWithPath: "/tmp/x.png"))   // 母音でないキー
+        XCTAssertFalse(m.effectiveUndoManager.canUndo)
+        m.setVowelImage(charId: id, key: "a", url: URL(fileURLWithPath: "/tmp/a.png"))
+        m.setVowelImage(charId: id, key: "a", url: URL(fileURLWithPath: "/tmp/a.png"))   // 同じ画像 = 何も起きない
+        m.setVowelImage(charId: id, key: "o", url: URL(fileURLWithPath: "/tmp/o.png"))
+        XCTAssertEqual(m.character(id)?.imgVowels, ["a": "/tmp/a.png", "o": "/tmp/o.png"])
+        m.setVowelImage(charId: id, key: "o", url: nil)
+        m.setVowelImage(charId: id, key: "a", url: nil)
+        XCTAssertNil(m.character(id)?.imgVowels, "空になったら項目ごと消す")
+        XCTAssertEqual(undoAll(m), 4)
+        XCTAssertNil(m.character(id)?.imgVowels)
+    }
+
     func testExpressionNoOpsRegisterNothing() {
         let m = makeModel()
         let id = m.project.characters[0].id

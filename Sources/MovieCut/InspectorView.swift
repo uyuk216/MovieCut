@@ -1096,6 +1096,32 @@ struct CharacterInspector: View {
         }
     }
 
+    /// あいうえお口パク: 母音ごとの画像。1 つでも設定すると、セリフの読みに合わせて口の形が変わる(無い母音は「口開き」で代用)。
+    @ViewBuilder private func vowelSection(_ c: Character) -> some View {
+        Text("口パク（あいうえお）: 1 つでも選ぶと、セリフの読みに合わせて口の形が変わります。選んでいない母音は「口開き」の画像になります")
+            .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        ForEach(["a", "i", "u", "e", "o"], id: \.self) { key in
+            let path = c.imgVowels?[key]
+            let label = ProjectModel.vowelLabel(key)
+            HStack(alignment: .center, spacing: 8) {
+                PortraitThumb(path: path)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("口「\(label)」").font(.system(size: 12)).foregroundStyle(.secondary)
+                    Text(fileName(path)).font(.system(size: 11)).lineLimit(1).truncationMode(.middle)
+                    HStack(spacing: 6) {
+                        Button("選ぶ…") { model.chooseImage(title: "口「\(label)」の画像を選ぶ") { model.setVowelImage(charId: charId, key: key, url: $0) } }
+                            .help("「\(label)」と発音するときの立ち絵の画像を選ぶ")
+                        Button { model.setVowelImage(charId: charId, key: key, url: nil) } label: { Image(systemName: "xmark") }
+                            .disabled(path == nil)
+                            .help("画像を外す")
+                    }
+                    .controlSize(.small)
+                }
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
     private func blinkRow(_ c: Character) -> some View {
         HStack(alignment: .center, spacing: 10) {
             PortraitThumb(path: c.imgBlink)
@@ -1187,6 +1213,7 @@ struct CharacterInspector: View {
                 InspectorSection(title: "立ち絵")
                 portraitRow(c, closed: true)
                 portraitRow(c, closed: false)
+                vowelSection(c)
                 InspectorSection(title: "演出")
                 blinkRow(c)
                 check("バウンス（話し中に上下に揺れる）", c, name: "バウンスの切り替え", get: { $0.bounce == true }, set: { $0.bounce = $1 ? true : nil })

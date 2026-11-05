@@ -196,13 +196,20 @@ public struct Renderer {
         for ch in (drawsPortraits ? project.characters : []) {
             let v = speaking[ch.id]
             if v == nil && !ch.alwaysShow { continue }
-            let open = v.map { mouthOpen($0, t: t) } ?? false
+            var open = v.map { mouthOpen($0, t: t) } ?? false
+            // あいうえお口パク(母音画像が 1 つでもあるとき): 口の形はセリフの読みと音量から決める。ん・っ・無音は閉じる
+            var vowelPath: String? = nil
+            if let v, let vs = ch.imgVowels, !vs.isEmpty, let shape = lipShape(v, t: t) {
+                open = shape != .closed
+                if let k = shape.vowelKey, let p = vs[k], !p.isEmpty { vowelPath = p }
+            }
             // 目: まばたき中は imgBlink(無ければ通常)。瞬きの種はしゃべっているクリップ、無ければキャラ。
             let blinking = ch.imgBlink != nil && Blink.isClosed(seed: v?.id ?? ch.id, t: t - (v?.start ?? 0))
             // 口: 開いていれば imgOpen。閉じていれば、その行の表情(タグ)か通常の立ち絵。
             let expr = v.flatMap { ExpressionTag.imagePath(for: $0.text ?? "", in: ch.expressions) }
             let path: String?
-            if open, let o = ch.imgOpen { path = o }
+            if open, let vp = vowelPath { path = vp }
+            else if open, let o = ch.imgOpen { path = o }
             else if blinking, let b = ch.imgBlink { path = b }
             else { path = expr ?? ch.imgClosed }
             guard let p = path, let img = assets.image(at: p), img.height > 0 else { continue }
@@ -272,6 +279,14 @@ public struct Renderer {
         guard let src = clip.src, let st = assets.mouthStates(for: src) else { return false }
         let i = Int(floor((t - clip.start + clip.offset) * 60))
         return i >= 0 && i < st.count && st[i]
+    }
+
+    /// あいうえお口パク: 時刻 t の口の形。セリフの文字か音声が無いときは nil(従来の開閉に戻す)。
+    func lipShape(_ clip: Clip, t: Double) -> Viseme? {
+        guard let src = clip.src, let text = clip.text,
+              let vis = assets.visemes(src: src, text: text, offset: clip.offset, duration: clip.duration) else { return nil }
+        let i = Int(floor((t - clip.start + clip.offset) * 60))
+        return i >= 0 && i < vis.count ? vis[i] : .closed
     }
 
     /// 話しているクリップの、時刻 t での音量(RMS)。素材が無ければ 0。
