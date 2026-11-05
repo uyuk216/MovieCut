@@ -161,6 +161,7 @@ struct AppCommands: Commands {
                 }
                 MenuItemView(spec: AppMenuSpec.lutLoadItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.autoWhiteBalanceItem(s), perform: run)
+                items(AppMenuSpec.cutoutItems(s), run)
             }
         }
 
@@ -240,6 +241,7 @@ struct AppCommands: Commands {
                 MenuItemView(spec: AppMenuSpec.loudnessItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.clipListItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.noteListItem(s), perform: run)
+                items(AppMenuSpec.scriptStoryboardItems(s), run)
                 Divider()
                 MenuItemView(spec: AppMenuSpec.fanMaxToggle(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.fanInstall(s), perform: run)

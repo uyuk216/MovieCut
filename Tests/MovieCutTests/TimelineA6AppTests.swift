@@ -470,7 +470,7 @@ final class TimelineA6AppTests: XCTestCase {
         XCTAssertEqual(st.selectionCount, 1); XCTAssertTrue(st.hasLayerTarget); XCTAssertTrue(st.hasClips)
         XCTAssertTrue(AppMenuSpec.clipboardItems(st).first { $0.command == .copyClips }!.enabled)
         XCTAssertFalse(AppMenuSpec.clipboardItems(st).first { $0.command == .pasteClips }!.enabled)
-        XCTAssertTrue(AppMenuSpec.layerItems(st).allSatisfy(\.enabled))
+        XCTAssertTrue(AppMenuSpec.layerItems(st).filter { $0.command != .layerTarget }.allSatisfy(\.enabled))
         XCTAssertEqual(AppMenuSpec.layerHeightItems(st).map(\.checked), [false, true, false])
         var locked = st; locked.isLocked = true
         XCTAssertTrue((AppMenuSpec.clipboardItems(locked) + AppMenuSpec.layerItems(locked)).allSatisfy { !$0.enabled }, "書き出し中は触れない")
@@ -494,7 +494,7 @@ final class TimelineA6AppTests: XCTestCase {
         XCTAssertEqual(LayerHeight.of(model.project.tracks[0]), .small)
         // 状態が変われば項目表も変わる(チェック)
         let st = state()
-        XCTAssertTrue(AppMenuSpec.layerItems(st).allSatisfy { $0.checked == true })
+        XCTAssertTrue(AppMenuSpec.layerItems(st).filter { $0.command != .layerTarget }.allSatisfy { $0.checked == true })
         XCTAssertEqual(AppMenuSpec.layerHeightItems(st).map(\.checked), [true, false, false])
     }
 

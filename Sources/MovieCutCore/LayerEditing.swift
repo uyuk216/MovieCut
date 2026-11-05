@@ -147,6 +147,7 @@ public enum LayerEditing {
     public static func delete(in project: Project, index: Int) -> Project? {
         guard deleteBlockedReason(in: project, index: index) == nil else { return nil }
         var p = project
+        if p.targetTrackId == p.tracks[index].id { p.targetTrackId = nil }   // 印のレイヤーを消したら印も外す
         p.tracks.remove(at: index)
         return p
     }

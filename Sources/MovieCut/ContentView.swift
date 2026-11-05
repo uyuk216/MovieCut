@@ -74,6 +74,8 @@ struct ContentView: View {
         .sheet(isPresented: $model.showScopeSheet) { ScopeSheet(model: model) }
         .sheet(isPresented: $model.showJumpSheet) { JumpToTimeSheet(model: model) }
         .sheet(isPresented: $model.showSubtitleSheet) { SubtitleQuickSheet(model: model) }
+        .sheet(isPresented: $model.showRollSheet) { RollSlipSheet(model: model, slip: false) }
+        .sheet(isPresented: $model.showSlipSheet) { RollSlipSheet(model: model, slip: true) }
         .sheet(isPresented: $model.showSilenceSheet) { SilenceCutSheet(model: model) }
         .sheet(isPresented: $model.showScaleSheet) { ScaleDuplicateSheet(model: model) }
         .sheet(isPresented: $model.showBeatPlaceSheet) { BeatPlaceSheet(model: model) }

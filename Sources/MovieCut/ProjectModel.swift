@@ -171,6 +171,9 @@ final class ProjectModel: ObservableObject {
     /// 「字幕を追加…」のシート。直すときは対象の文字クリップの id を入れる(新規なら nil)。
     @Published var showSubtitleSheet = false
     var subtitleSheetTargetId: String?
+    /// クリップ ▸ ロール編集… / スリップ編集… のシート(コマ数で境界・素材の区間をずらす)。
+    @Published var showRollSheet = false
+    @Published var showSlipSheet = false
     /// 「無音をカット…」のシートと、その対象のクリップ。
     @Published var showSilenceSheet = false
     var silenceClipId: String?

@@ -11,6 +11,8 @@ enum MenuCommand: Hashable {
     case importSubtitles, exportSubtitles, generateSubtitles, copyChapters, copyChaptersColor(MarkerColor)
     // 字幕を AI で翻訳して SRT に書き出す(ショートカットは持たない)
     case translateSubtitles
+    // クリップ ▸ ロール編集… / スリップ編集…(シートでコマ数を指定。ショートカットは持たない)
+    case rollEdit, slipEdit
     // 音声から字幕を作る(オンデバイスの音声認識。選んでいるクリップ)
     case transcribeSubtitles
     // 素材(欠落の再指定)
@@ -57,7 +59,7 @@ enum MenuCommand: Hashable {
     // ファイル ▸ プロジェクトテンプレート(テンプレートとして保存 / テンプレートから新規作成。ショートカットは持たない)
     case saveTemplate, newFromTemplate(String)
     // A6: クリップのコピー / 切り取り / 貼り付け / 全選択(ショートカットは持たない: ⌘C ⌘X ⌘V ⌘A は responder chain が受ける)と、レイヤー
-    case copyClips, cutClips, pasteClips, selectAllClips, layerLock, layerSolo, layerDelete, layerHeight(LayerHeight)
+    case copyClips, cutClips, pasteClips, selectAllClips, layerLock, layerSolo, layerTarget, layerDelete, layerHeight(LayerHeight)
     case clipLock
     case split, delete, addText, addBlur, addAdjustment, addVisualizer, addQRCode, addCharacter, makeVoices
     // 図形(クリップ ▸ 図形を追加 ▸ 種類。ショートカットは持たない)
@@ -252,6 +254,11 @@ struct MenuState: Equatable {
     /// 選んだクリップが全部ロック済み(メニューは「ロックを解除」になる)
     var clipsLocked = false
     var layerSolo = false
+    /// 対象のレイヤーがトラックターゲット(新しく足すクリップの行き先)
+    var layerIsTarget = false
+    /// 選んだクリップ 1 つが、隣り合うクリップとのロールができる / スリップできる
+    var canRoll = false
+    var canSlip = false
     /// 対象のレイヤーを消せない理由(消せるなら nil)。レイヤーがなければ nil で hasLayerTarget が false
     var layerDeleteBlocked: String?
     var layerHeight = LayerHeight.normal
@@ -408,11 +415,14 @@ struct MenuState: Equatable {
             hasLayerTarget = true
             layerLocked = m.project.tracks[li].isLocked
             layerSolo = m.project.tracks[li].isSolo
+            layerIsTarget = m.project.targetTrackId == m.project.tracks[li].id
             layerDeleteBlocked = LayerEditing.deleteBlockedReason(in: m.project, index: li)
             layerHeight = LayerHeight.of(m.project.tracks[li])
         }
         clipsLocked = LayerEditing.allClipsLocked(m.selectedClipIDs, in: m.project)
         canSplit = m.canSplit
+        canRoll = m.canRoll
+        canSlip = m.canSlip
         resolutionKey = m.resolutionKey
         fps = m.project.fps
         recentResolutions = RecentCustoms.resolutions().items
@@ -793,7 +803,18 @@ enum AppMenuSpec {
     static func clipTrim(_ s: MenuState) -> [MenuItemSpec] {
         [MenuItemSpec(command: .trimBefore, title: "再生位置より前を切り落とす", shortcut: MenuShortcut(key: "[", modifiers: [.option, .command]), enabled: s.canEdit && s.canTrim, checked: nil),
          MenuItemSpec(command: .trimAfter, title: "再生位置より後ろを切り落とす", shortcut: MenuShortcut(key: "]", modifiers: [.option, .command]), enabled: s.canEdit && s.canTrim, checked: nil),
+         rollEditItem(s), slipEditItem(s),
          MenuItemSpec(command: .mergeSplits, title: "分割点を統合", shortcut: nil, enabled: s.canEdit && s.hasMergeableSplits, checked: nil, hint: "同じ素材の続きを 1 つに")]
+    }
+
+    /// クリップ ▸ ロール編集…(隣り合う 2 つのクリップの境界を動かす)。タイムラインでは境界を ⌥ ドラッグでも。
+    static func rollEditItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .rollEdit, title: "ロール編集…", shortcut: nil, enabled: s.canEdit && s.canRoll, checked: nil, hint: "境界を動かす。⌥ ドラッグでも")
+    }
+
+    /// クリップ ▸ スリップ編集…(位置と長さはそのままで、使う素材の区間をずらす)。タイムラインではクリップ本体を ⌥⇧ ドラッグでも。
+    static func slipEditItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .slipEdit, title: "スリップ編集…", shortcut: nil, enabled: s.canEdit && s.canSlip, checked: nil, hint: "素材の区間をずらす。⌥⇧ ドラッグでも")
     }
 
     static func clipNavigate(_ s: MenuState) -> [MenuItemSpec] {
@@ -841,7 +862,8 @@ enum AppMenuSpec {
     static func layerItems(_ s: MenuState) -> [MenuItemSpec] {
         let on = s.canEdit && s.hasLayerTarget
         return [MenuItemSpec(command: .layerLock, title: "レイヤーをロック", shortcut: nil, enabled: on, checked: on ? s.layerLocked : false),
-                MenuItemSpec(command: .layerSolo, title: "レイヤーをソロ", shortcut: nil, enabled: on, checked: on ? s.layerSolo : false)]
+                MenuItemSpec(command: .layerSolo, title: "レイヤーをソロ", shortcut: nil, enabled: on, checked: on ? s.layerSolo : false),
+                MenuItemSpec(command: .layerTarget, title: "トラックターゲットにする", shortcut: nil, enabled: on, checked: on ? s.layerIsTarget : false, hint: "素材・テキスト・字幕の行き先")]
     }
 
     /// クリップメニュー ▸ レイヤー ▸ レイヤーを削除…(確認ダイアログが出る。ショートカットなし)。
@@ -1255,6 +1277,8 @@ enum AppMenu {
             case .packageSave: m.saveAsPackage()
             case .addFont: m.chooseAndAddFonts()
             case .addSubtitle: m.openSubtitleSheet()
+            case .rollEdit: m.openRollSheet()
+            case .slipEdit: m.openSlipSheet()
             case .removeBackground: m.removeBackgroundSelected()
             case .imageChroma: m.addEffectSelected(.chromaKey)
             case .toggleRangeLoop: m.rangeLoop.toggle()
@@ -1316,6 +1340,7 @@ enum AppMenu {
             case .clipLock: m.toggleClipLockSelected()
             case .layerLock: if let i = m.targetLayerIndex { m.toggleLayerLock(i) }
             case .layerSolo: if let i = m.targetLayerIndex { m.toggleLayerSolo(i) }
+            case .layerTarget: if let i = m.targetLayerIndex { m.toggleTrackTarget(i) }
             case .layerDelete: if let i = m.targetLayerIndex { m.requestDeleteLayer(i) }
             case .layerHeight(let h): if let i = m.targetLayerIndex { m.setLayerHeight(i, h) }
             case .trimBefore: m.trimSelectedBeforePlayhead()

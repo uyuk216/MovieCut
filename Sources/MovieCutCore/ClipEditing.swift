@@ -19,6 +19,7 @@ public enum ClipEditing {
     public struct Result: Equatable {
         public var project: Project
         public var guides: [Double]
+        public init(project: Project, guides: [Double]) { self.project = project; self.guides = guides }
     }
 
     // MARK: 吸着
@@ -402,8 +403,13 @@ public enum ClipEditing {
     /// 一番上のレイヤー(配列の最後)の末尾に足す。ただし [start, end) が一番上で空いていて、ロックされていないときだけ。
     /// 塞がっている・ロックされているときは、ロックされていない新しいレイヤーを一番上に足して、そこへ置く(レイヤーが無ければ作る)。
     /// 同じレイヤーで重ならない(2026-11-02 修正: 以前は重なりを見ずに末尾へ足していた)。
-    public static func appendToTopLayer(_ clip: Clip, in project: inout Project) {
+    /// `useTarget` が true で、トラックターゲットのレイヤーに置けるなら(ロックでなく、重ならない)そこへ置く。
+    public static func appendToTopLayer(_ clip: Clip, in project: inout Project, useTarget: Bool = false) {
         if project.tracks.isEmpty { project.tracks.append(Track(name: "レイヤー1")) }
+        if useTarget, let ti = TrackTarget.usableIndex(in: project, start: clip.start, duration: clip.duration) {
+            project.tracks[ti].clips.append(clip)
+            return
+        }
         let end = clip.start + clip.duration
         let top = project.tracks.count - 1
         let free = !project.tracks[top].isLocked && project.tracks[top].clips.allSatisfy { c in

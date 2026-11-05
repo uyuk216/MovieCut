@@ -34,10 +34,12 @@ public struct Project: Codable, Equatable {
     public var mediaHints: [String: MediaHint] = [:]
     /// 取り込んだ素材のパス(順番どおり)。クリップを消しても残り、「未使用の素材」で整理する。空のときは書かない。
     public var mediaPool: [String] = []
+    /// トラックターゲット: 新しく足すクリップの行き先のレイヤー(`Track.id`)。1 つだけ。設定したときだけファイルに書く。
+    public var targetTrackId: String? = nil
     /// 知らないキー(保持して書き戻す)
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["width", "height", "fps", "bg", "codec", "voicevoxUrl", "aquestalkCommand", "characters", "tracks", "markers", "rangeIn", "rangeOut", "mediaHints", "mediaPool"]
+    static let knownKeys: Set<String> = ["width", "height", "fps", "bg", "codec", "voicevoxUrl", "aquestalkCommand", "characters", "tracks", "markers", "rangeIn", "rangeOut", "mediaHints", "mediaPool", "targetTrackId"]
 
     public init() {}
 
@@ -60,7 +62,10 @@ public struct Project: Codable, Equatable {
         rangeIn = l.value("rangeIn"); rangeOut = l.value("rangeOut")
         mediaHints = l.value("mediaHints") ?? [:]
         mediaPool = l.value("mediaPool") ?? []
+        targetTrackId = l.string("targetTrackId")
         extra = l.extra()
+        // 型が違って読めなかったときは、捨てずにそのまま書き戻す
+        if targetTrackId == nil, let raw: JSONValue = l.value("targetTrackId") { extra["targetTrackId"] = raw }
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -82,6 +87,7 @@ public struct Project: Codable, Equatable {
         try c.encodeIfPresent(rangeOut, forKey: AnyKey("rangeOut"))
         if !mediaHints.isEmpty { try c.encode(mediaHints, forKey: AnyKey("mediaHints")) }
         if !mediaPool.isEmpty { try c.encode(mediaPool, forKey: AnyKey("mediaPool")) }
+        try c.encodeIfPresent(targetTrackId, forKey: AnyKey("targetTrackId"))
     }
 
     /// fps を Int / Double / "29.97" / "30000/1001" のどれからでも読む。読めない・欠けているときは 60、範囲外は 1〜240 に収める。

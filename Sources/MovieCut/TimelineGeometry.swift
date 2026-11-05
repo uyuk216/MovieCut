@@ -66,6 +66,8 @@ enum TimelineLayout {
 
     /// 行ヘッダーのロックとソロのボタン(名前の行の右端)。
     static func lockRect(rowTop: CGFloat) -> CGRect { CGRect(x: headerWidth - 39, y: rowTop + 2, width: 17, height: 17) }
+    /// 行ヘッダーのトラックターゲットの印(ロックの左)。
+    static func targetRect(rowTop: CGFloat) -> CGRect { CGRect(x: headerWidth - 57, y: rowTop + 2, width: 17, height: 17) }
     static func soloRect(rowTop: CGFloat) -> CGRect { CGRect(x: headerWidth - 21, y: rowTop + 2, width: 17, height: 17) }
     /// 行ヘッダーの右下の × (レイヤーを削除)。チップの行に置く(隠す・消音の右)。
     static func deleteRect(rowTop: CGFloat, rowHeight h: CGFloat = rowHeight) -> CGRect { CGRect(x: headerWidth - 22, y: rowTop + h - 19, width: 16, height: 16) }

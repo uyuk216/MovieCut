@@ -37,7 +37,10 @@ public enum SubtitleQuickAdd {
         if let style { style.apply(to: &clip) }
         var p = project
         let idx: Int
-        if let i = freeSubtitleLayer(in: p, start: start, end: start + len) {
+        if let i = TrackTarget.usableIndex(in: p, start: start, duration: len) {
+            p.tracks[i].clips.append(clip)    // トラックターゲットがあれば、そこへ
+            idx = i
+        } else if let i = freeSubtitleLayer(in: p, start: start, end: start + len) {
             p.tracks[i].clips.append(clip)
             idx = i
         } else {

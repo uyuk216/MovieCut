@@ -144,10 +144,12 @@ final class TimelineCanvas: NSView {
     private var projectEnd = 0.0
 
     // ドラッグ編集(M4a)
-    enum DragMode { case move, trimLeft, trimRight }
+    enum DragMode { case move, trimLeft, trimRight, roll, slip }
     struct ClipDrag {
         var clipId: String
         var mode: DragMode
+        /// ロール: 境界の右側のクリップ(clipId が左側)
+        var rightId: String?
         var downPoint: NSPoint
         var downTime: Double
         var active = false
@@ -944,9 +946,10 @@ final class TimelineCanvas: NSView {
         TimelinePalette.rowLine.setFill()
         NSRect(x: 0, y: top + rowH - 1, width: hw, height: 1).fill()
         if renamingRow != i {
-            let nameRect = NSRect(x: 6, y: top + (rowH < 40 ? 2 : 4), width: hw - 48, height: 14)
+            let nameRect = NSRect(x: 6, y: top + (rowH < 40 ? 2 : 4), width: hw - 66, height: 14)
             (tr.name as NSString).draw(in: nameRect, withAttributes: [.font: Self.headFont, .foregroundColor: TimelinePalette.label, .paragraphStyle: Self.truncStyle])
         }
+        drawTargetButton(rect: TimelineLayout.targetRect(rowTop: top), on: project.targetTrackId == tr.id)
         drawLockButton(rect: TimelineLayout.lockRect(rowTop: top), on: tr.isLocked)
         drawSoloButton(rect: TimelineLayout.soloRect(rowTop: top), on: tr.isSolo)
         let chips = TimelineLayout.chipRects(rowTop: top, rowHeight: rowH)
@@ -981,6 +984,17 @@ final class TimelineCanvas: NSView {
         color.setStroke(); shackle.stroke()
         let b = NSBezierPath(roundedRect: body, xRadius: 1.5, yRadius: 1.5)
         if on { color.setFill(); b.fill() } else { b.lineWidth = 1.2; color.setStroke(); b.stroke() }
+    }
+
+    /// トラックターゲットの印(的の形。オンは塗りつぶし)。新しく足すクリップの行き先。
+    private func drawTargetButton(rect r: CGRect, on: Bool) {
+        let c = NSPoint(x: r.midX, y: r.midY)
+        let color = on ? TimelinePalette.accent : NSColor(white: 1, alpha: 0.4)
+        let ring = NSBezierPath(ovalIn: NSRect(x: c.x - 5.5, y: c.y - 5.5, width: 11, height: 11))
+        ring.lineWidth = 1.4
+        color.setStroke(); ring.stroke()
+        let dot = NSBezierPath(ovalIn: NSRect(x: c.x - 2.5, y: c.y - 2.5, width: 5, height: 5))
+        if on { color.setFill(); dot.fill() } else { dot.lineWidth = 1; color.setStroke(); dot.stroke() }
     }
 
     /// ソロの「S」(オンは黄色の地)。
@@ -1213,6 +1227,7 @@ final class TimelineCanvas: NSView {
                 let chips = TimelineLayout.chipRects(rowTop: top, rowHeight: geometry.rowHeight(i))
                 if chips.hide.contains(p) { model?.toggleTrack(i, .hidden) }
                 else if chips.mute.contains(p) { model?.toggleTrack(i, .muted) }
+                else if TimelineLayout.targetRect(rowTop: top).contains(p) { model?.toggleTrackTarget(i) }
                 else if TimelineLayout.lockRect(rowTop: top).contains(p) { model?.toggleLayerLock(i) }
                 else if TimelineLayout.soloRect(rowTop: top).contains(p) { model?.toggleLayerSolo(i) }
                 else if TimelineLayout.deleteRect(rowTop: top, rowHeight: geometry.rowHeight(i)).contains(p) { model?.requestDeleteLayer(i) }   // ×: 確認のうえ削除
@@ -1230,6 +1245,7 @@ final class TimelineCanvas: NSView {
             return
         }
         let mod: SelectionModifier = modifiers.contains(.command) ? .command : (modifiers.contains(.shift) ? .shift : .none)
+        if modifiers.contains(.option), !modifiers.contains(.command), let id = clipId(at: p), beginRollSlip(on: id, at: p, shift: modifiers.contains(.shift)) { return }
         if let id = clipId(at: p) {
             guard let m = model else { return }
             if mod != .none {
@@ -1437,12 +1453,38 @@ final class TimelineCanvas: NSView {
             case .move: name = "クリップの移動"
             case .trimLeft: name = "クリップの左端トリム"
             case .trimRight: name = "クリップの右端トリム"
+            case .roll: name = "ロール編集"
+            case .slip: name = "スリップ編集"
             }
             model?.commitGesture(name)             // 変わっていれば 1 回の Undo
             syncFromModel()
             window?.invalidateCursorRects(for: self)
             needsDisplay = true
         }
+    }
+
+    /// ⌥ ドラッグ: クリップの端ならロール(隣り合うクリップとの境界を動かす)、⌥⇧ でクリップ本体ならスリップ(素材の区間をずらす)。
+    /// 始められないとき(ロック・隣がない・スリップできない種類)は false を返し、いつもの操作に任せる。
+    private func beginRollSlip(on id: String, at p: NSPoint, shift: Bool) -> Bool {
+        guard let m = model, !m.isLocked, let loc = ClipEditing.locate(id, in: project) else { return false }
+        let c = project.tracks[loc.track].clips[loc.index]
+        let r = geometry.clipRect(start: c.start, duration: c.duration, track: loc.track)
+        let zone = TimelineHit.zone(x: p.x, minX: r.minX, maxX: r.maxX, edgeZone: Self.edgeZone)
+        var mode: DragMode?
+        var left = id
+        var right: String?
+        if shift, zone == .body {
+            if ClipRollSlip.slipBlockedReason(in: project, clipId: id) == nil { mode = .slip }
+        } else if !shift, zone != .body {
+            if zone == .right, let n = ClipRollSlip.rightNeighbor(of: id, in: project) { left = id; right = n }
+            else if zone == .left, let l = ClipRollSlip.leftNeighbor(of: id, in: project) { left = l; right = id }
+            if let right, ClipRollSlip.rollBlockedReason(in: project, clipId: left) == nil { mode = .roll; _ = right }
+        }
+        guard let mode else { return false }
+        m.selectOnly(id)
+        drag = ClipDrag(clipId: mode == .roll ? left : id, mode: mode, rightId: right, downPoint: p, downTime: geometry.time(forX: p.x),
+                        lastTarget: loc.track, lastPoint: p, ids: m.selectedClipIDs, collapseTo: nil)
+        return true
     }
 
     /// ポインタの位置から、いまのドラッグ(モード・行)を計算してモデルへ反映する。
@@ -1458,6 +1500,11 @@ final class TimelineCanvas: NSView {
             result = ClipEditing.trimLeft(in: d.base, clipId: d.clipId, deltaT: dt, playhead: m.currentTime, pps: geometry.pps, snapEnabled: m.snapEnabled)
         case .trimRight:
             result = ClipEditing.trimRight(in: d.base, clipId: d.clipId, deltaT: dt, playhead: m.currentTime, pps: geometry.pps, snapEnabled: m.snapEnabled)
+        case .roll:
+            result = ClipEditing.Result(project: ClipRollSlip.roll(in: d.base, leftClipId: d.clipId, deltaT: dt) ?? d.base, guides: [])
+        case .slip:
+            // 右へドラッグ = 絵が右へ動く = 前の素材が見える(区間は前へ)
+            result = ClipEditing.Result(project: ClipRollSlip.slip(in: d.base, clipId: d.clipId, deltaT: -dt) ?? d.base, guides: [])
         }
         snapGuides = result.guides
         m.updateGesture(result.project)
