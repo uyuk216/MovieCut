@@ -27,9 +27,7 @@ public enum ProxyStore {
 
     /// 既定の置き場所(Application Support/MovieCut/Proxies)。
     public static func defaultDirectory() -> URL {
-        let support = (try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true))
-            ?? URL(fileURLWithPath: NSHomeDirectory() + "/Library/Application Support", isDirectory: true)
-        return support.appendingPathComponent("MovieCut/Proxies", isDirectory: true)
+        DataLocations.current.proxies
     }
 
     /// 元ファイルの指紋から決まる名前(パス・更新日時(ミリ秒)・バイト数)。同じ入力なら同じ名前。
@@ -183,9 +181,9 @@ public enum ProxySettings {
     public static let key = "previewProxyEnabled"
     public static let didChange = Notification.Name("MovieCut.previewProxyDidChange")
 
-    public static func enabled(_ d: UserDefaults = .standard) -> Bool { d.bool(forKey: key) }
+    public static func enabled(_ d: UserDefaults = DataLocations.current.defaults) -> Bool { d.bool(forKey: key) }
 
-    public static func set(_ on: Bool, _ d: UserDefaults = .standard) {
+    public static func set(_ on: Bool, _ d: UserDefaults = DataLocations.current.defaults) {
         d.set(on, forKey: key)
         NotificationCenter.default.post(name: didChange, object: nil)
     }

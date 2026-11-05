@@ -7,12 +7,12 @@ import MovieCutCore
 enum AudioLibraryStore {
     static let defaultsKey = "audioLibrary.folder"
 
-    static func folder(defaults: UserDefaults = .standard) -> URL? {
+    static func folder(defaults: UserDefaults = DataLocations.current.defaults) -> URL? {
         guard let p = defaults.string(forKey: defaultsKey), !p.isEmpty else { return nil }
         return URL(fileURLWithPath: p, isDirectory: true)
     }
 
-    static func setFolder(_ url: URL?, defaults: UserDefaults = .standard) {
+    static func setFolder(_ url: URL?, defaults: UserDefaults = DataLocations.current.defaults) {
         if let url { defaults.set(url.path, forKey: defaultsKey) } else { defaults.removeObject(forKey: defaultsKey) }
     }
 }

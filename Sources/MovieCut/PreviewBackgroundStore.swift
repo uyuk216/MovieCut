@@ -10,10 +10,10 @@ enum PreviewBackgroundStore {
 
     static var current: PreviewBackground {
         if let memory { return memory }
-        return PreviewBackground.resolve(UserDefaults.standard.string(forKey: PreviewBackground.defaultsKey))
+        return PreviewBackground.resolve(DataLocations.current.defaults.string(forKey: PreviewBackground.defaultsKey))
     }
 
-    static func set(_ b: PreviewBackground, defaults: UserDefaults? = .standard) {
+    static func set(_ b: PreviewBackground, defaults: UserDefaults? = DataLocations.current.defaults) {
         if DebugHooks.isQuiet { memory = b } else { defaults?.set(b.rawValue, forKey: PreviewBackground.defaultsKey) }
         NotificationCenter.default.post(name: didChange, object: nil)
     }

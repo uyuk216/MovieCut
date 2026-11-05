@@ -5,8 +5,8 @@ import MovieCutCore
 enum TrimLoopSettings {
     static let key = "trimLoopHalfWidth"
     static var halfWidth: Double {
-        get { UserDefaults.standard.object(forKey: key) == nil ? TrimLoop.defaultHalfWidth : TrimLoop.normalizedHalfWidth(UserDefaults.standard.double(forKey: key)) }
-        set { UserDefaults.standard.set(TrimLoop.normalizedHalfWidth(newValue), forKey: key) }
+        get { DataLocations.current.defaults.object(forKey: key) == nil ? TrimLoop.defaultHalfWidth : TrimLoop.normalizedHalfWidth(DataLocations.current.defaults.double(forKey: key)) }
+        set { DataLocations.current.defaults.set(TrimLoop.normalizedHalfWidth(newValue), forKey: key) }
     }
 }
 
@@ -14,7 +14,7 @@ enum TrimLoopSettings {
 enum VoiceRippleSettings {
     static let key = "voiceAutoRipple"
     static var enabled: Bool {
-        get { UserDefaults.standard.bool(forKey: key) }
-        set { UserDefaults.standard.set(newValue, forKey: key) }
+        get { DataLocations.current.defaults.bool(forKey: key) }
+        set { DataLocations.current.defaults.set(newValue, forKey: key) }
     }
 }

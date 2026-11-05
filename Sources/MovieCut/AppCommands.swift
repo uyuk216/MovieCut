@@ -58,6 +58,8 @@ struct AppCommands: Commands {
                 MenuItemView(spec: AppMenuSpec.subtitleImport(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.mediaRelink(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.unusedMediaItem(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.packageSave(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.addSubtitle(s), perform: run)
                 Divider()
                 Menu("最近使った項目") {
                     if s.recentItems.isEmpty {
@@ -244,6 +246,7 @@ struct AppCommands: Commands {
                 MenuItemView(spec: AppMenuSpec.fanUninstall(s), perform: run)
                 Divider()
                 MenuItemView(spec: AppMenuSpec.subtitleExport(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.subtitleTranslate(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.subtitleGenerate(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.transcribeSubtitles(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.chapterCopy(s), perform: run)

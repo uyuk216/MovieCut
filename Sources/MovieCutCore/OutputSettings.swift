@@ -251,12 +251,12 @@ public struct RecentCustoms {
     public let defaults: UserDefaults
     public let limit: Int
 
-    public init(key: String, defaults: UserDefaults = .standard, limit: Int = 3) {
+    public init(key: String, defaults: UserDefaults = DataLocations.current.defaults, limit: Int = 3) {
         self.key = key; self.defaults = defaults; self.limit = limit
     }
 
-    public static func resolutions(_ defaults: UserDefaults = .standard) -> RecentCustoms { RecentCustoms(key: "recentCustomResolutions", defaults: defaults) }
-    public static func frameRates(_ defaults: UserDefaults = .standard) -> RecentCustoms { RecentCustoms(key: "recentCustomFrameRates", defaults: defaults) }
+    public static func resolutions(_ defaults: UserDefaults = DataLocations.current.defaults) -> RecentCustoms { RecentCustoms(key: "recentCustomResolutions", defaults: defaults) }
+    public static func frameRates(_ defaults: UserDefaults = DataLocations.current.defaults) -> RecentCustoms { RecentCustoms(key: "recentCustomFrameRates", defaults: defaults) }
 
     public var items: [String] { Array((defaults.stringArray(forKey: key) ?? []).prefix(limit)) }
 

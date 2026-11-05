@@ -53,6 +53,6 @@ extension ProjectModel {
 /// 切り抜き画像などの保存先(Application Support/MovieCut/...)。
 enum CutoutDirectory {
     static var cutouts: URL {
-        FontLibrary.defaultDirectory().deletingLastPathComponent().appendingPathComponent("Cutouts", isDirectory: true)
+        DataLocations.current.cutouts
     }
 }

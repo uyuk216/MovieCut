@@ -1,4 +1,5 @@
 import AppKit
+import MovieCutCore
 
 // MARK: - 起動時のウィンドウ数
 
@@ -96,14 +97,14 @@ enum WindowFramePolicy {
     static let lastKey = "windowFrame.last"
     static func key(forDocument url: URL) -> String { "windowFrame.doc." + url.standardizedFileURL.path }
 
-    static func save(_ frame: NSRect, forDocument url: URL?, defaults: UserDefaults = .standard) {
+    static func save(_ frame: NSRect, forDocument url: URL?, defaults: UserDefaults = DataLocations.current.defaults) {
         let s = NSStringFromRect(frame)
         defaults.set(s, forKey: lastKey)
         if let url { defaults.set(s, forKey: key(forDocument: url)) }
     }
 
     /// 書類のフレーム → なければ最後に使ったフレーム → なければ nil。
-    static func load(forDocument url: URL?, defaults: UserDefaults = .standard) -> NSRect? {
+    static func load(forDocument url: URL?, defaults: UserDefaults = DataLocations.current.defaults) -> NSRect? {
         if let url, let s = defaults.string(forKey: key(forDocument: url)) { return rect(from: s) }
         if let s = defaults.string(forKey: lastKey) { return rect(from: s) }
         return nil
@@ -164,8 +165,8 @@ final class WindowFrameKeeper {
     private func restore() {
         guard let w = window, !w.styleMask.contains(.fullScreen) else { return }
         let url = documentURL
-        let perDoc = url.flatMap { WindowFramePolicy.load(forDocument: $0, defaults: .standard) }
-        let hasPerDocRecord = url.map { UserDefaults.standard.string(forKey: WindowFramePolicy.key(forDocument: $0)) != nil } ?? false
+        let perDoc = url.flatMap { WindowFramePolicy.load(forDocument: $0, defaults: DataLocations.current.defaults) }
+        let hasPerDocRecord = url.map { DataLocations.current.defaults.string(forKey: WindowFramePolicy.key(forDocument: $0)) != nil } ?? false
         guard let saved = perDoc ?? WindowFramePolicy.load(forDocument: nil) else { return }
         var target = saved
         if !hasPerDocRecord {

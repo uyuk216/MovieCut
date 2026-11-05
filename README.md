@@ -15,6 +15,8 @@ swift build                      # 開発用ビルド
 swift run MovieCut               # アプリを起動
 Scripts/make-app.sh              # build/Movie Cut.app を作る(ad-hoc 署名)
 Scripts/make-app.sh dmg          # build/MovieCut-0.2.0-arm64.dmg も作る
+Scripts/make-app.sh --edition public dmg   # 配布版(build/public/)。個人の環境と完全に分かれる
+Scripts/make-app.sh --edition public --dry-run   # 何も作らず、やることの表示と個人情報の検査だけ試す
 ```
 
 ## テスト
@@ -277,3 +279,10 @@ AI 連携(任意・オフライン優先): クラウドの鍵はアプリにも�
 - **クリップ ▸ 選択クリップを音階で複製…**: 長音階・短音階・半音階・ペンタトニック(長調・短調)、開始の音(元の音から ±24 半音)、個数、下降。元のクリップが 1 つ目の音で、すき間なく並べる。元のレイヤーが塞がっていれば別のレイヤーへ。1 回の Undo。
 - **クリップ ▸ ビートに合わせてクリップを並べる…**: クリップの位置以降のマーカー(「ビート」だけにもできる)の位置に繰り返し置く。次のマーカーより長いぶんは短くする。1 つごとの音程の変化(±12 半音)と個数の上限。1 回の Undo。
 - **逆再生の音**: 既存の「逆再生にする」(クリップ ▸ 速度)が音も逆にする(新規実装なし)。
+
+## 個人版と配布版(エディション)
+Info.plist の `MovieCutEdition`(`personal` / `public`。無ければ `personal`)で、データの置き場を分けています。個人版は今までと同じ場所(`~/Library/Application Support/MovieCut/...`・バンドル ID `jp.local.moviecut`)で、既存のデータや設定は移動も変換もしません。
+
+- **作り方**: 個人版は `Scripts/make-app.sh [dmg]`(`build/`)。配布版は `Scripts/make-app.sh --edition public [dmg]`(`build/public/`、バンドル ID `jp.local.moviecut.public`、アプリ名は同じ「Movie Cut」)。
+- **分けているもの**: Application Support のフォルダ(個人版 `MovieCut`、配布版 `Movie Cut (Public)`)の下の Fonts・Proxies・voices・Templates・export-presets.json・Recovery(自動保存の復元)・QRCodes・AIImages・PSDCache・Cutouts と、設定(UserDefaults。最近使ったプロジェクト・素材フォルダ・文字スタイル・ドックの配置など)。保存先は Core の `DataLocations`(`AppEdition.swift`)だけが決めます。
+- **個人のデータを配布に入れない**: 配布版のビルドはビルド場所のパスを消し(`-file-prefix-map`)、`strip` したうえで、バンドルに `/Users/`・個人名・PSD/動画/音声・試験用ファイル・データフォルダが入っていないかを調べ、見つかるとビルドを失敗にします。ソースにも個人のパスや名前を書かないことを試験(`DistributionGuardTests`)で守っています。

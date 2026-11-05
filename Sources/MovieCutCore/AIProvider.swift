@@ -75,7 +75,7 @@ public struct AISettings: Equatable, Sendable {
 
     public init() {}
 
-    public static func load(from d: UserDefaults = .standard) -> AISettings {
+    public static func load(from d: UserDefaults = DataLocations.current.defaults) -> AISettings {
         var s = AISettings()
         s.kind = d.string(forKey: kindKey).flatMap(AIProviderKind.init(rawValue:)) ?? .none
         s.command = d.string(forKey: commandKey) ?? ""
@@ -86,7 +86,7 @@ public struct AISettings: Equatable, Sendable {
         return s
     }
 
-    public func save(to d: UserDefaults = .standard) {
+    public func save(to d: UserDefaults = DataLocations.current.defaults) {
         d.set(kind.rawValue, forKey: Self.kindKey)
         d.set(command, forKey: Self.commandKey)
         d.set(url, forKey: Self.urlKey)

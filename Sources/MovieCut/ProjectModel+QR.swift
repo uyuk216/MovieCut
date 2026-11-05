@@ -27,8 +27,7 @@ extension ProjectModel {
 enum QRCodeStore {
     static func imageURL(for text: String) -> URL? {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let support = try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true) else { return nil }
-        let dir = support.appendingPathComponent("MovieCut/QRCodes", isDirectory: true)
+        let dir = DataLocations.current.qrCodes
         let url = dir.appendingPathComponent(String(format: "%016llx.png", fnv1a(t)))
         if FileManager.default.fileExists(atPath: url.path) { return url }
         guard let data = QRCode.pngData(text: t) else { return nil }

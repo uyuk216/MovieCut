@@ -1,6 +1,6 @@
 // moviecut-fanhelper: Movie Cut が書き出し中にファンを最大にするための、小さな特権ヘルパー(root の LaunchDaemon)。
 //
-// SMC(AppleSMC)を読み書きする部分は、ユーザー自身のツール fanctl(/Users/USER/開発/ツール/Macアプリ/ファン制御)の実装をそのまま使っている。
+// SMC(AppleSMC)を読み書きする部分は、ユーザー自身のツール fanctlの実装をそのまま使っている。
 // fanctl との違い:
 //   - 127.0.0.1:1201 で待ち受ける(ユーザーの fanctl の :1200 とぶつからない)。設定ファイル・履歴・カーブ・Web 画面は持たない
 //   - 見張り(watchdog): ファンが手動の間に heartbeat(または最大の再要求)が 15 秒途切れたら、全ファンを自動に戻す

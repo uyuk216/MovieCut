@@ -10,16 +10,16 @@ public struct VoiceCache {
 
     /// 既定の Application Support フォルダ。
     public static var applicationSupport: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: NSHomeDirectory() + "/Library/Application Support")
+        DataLocations.current.applicationSupport
     }
 
     /// 既定の保存先 `~/Library/Application Support/MovieCut/voices/`。
     /// 初回だけ、旧名のフォルダ(`yukkuri-editor/voices`)が残っていれば中身ごと移して、作った声のキャッシュを引き継ぐ。
     public static var standard: VoiceCache {
         let base = applicationSupport
-        migrateLegacyVoices(in: base)
-        return VoiceCache(directory: base.appendingPathComponent("MovieCut/voices", isDirectory: true))
+        // 旧名からの引き継ぎは personal だけ(配布版には持ち込まない)
+        if AppEdition.current == .personal { migrateLegacyVoices(in: base) }
+        return VoiceCache(directory: DataLocations.current.voices)
     }
 
     /// 旧名 `yukkuri-editor/voices` があり、新しい `MovieCut/voices` がまだ無いときだけ、`voices` を移す。

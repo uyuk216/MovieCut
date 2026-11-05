@@ -27,7 +27,7 @@ final class FanService: ObservableObject {
     }
     var onChange: () -> Void = { ActiveDocument.shared.refresh() }
 
-    init(defaults: UserDefaults? = DebugHooks.isQuiet ? nil : .standard) {
+    init(defaults: UserDefaults? = DebugHooks.isQuiet ? nil : DataLocations.current.defaults) {
         self.defaults = defaults
         self.enabled = defaults?.bool(forKey: Self.defaultsKey) ?? false
         self.helperInstalled = FileManager.default.fileExists(atPath: FanHelperInstaller.installedBinary)

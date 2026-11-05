@@ -528,3 +528,9 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
 - `AudioFx.pitch` は半音(−24〜+24、0.01 刻み = 1 セント)。`splitPitch` / `composePitch` がインスペクタの「半音」と「セント」の 2 欄に分ける。0 は書かない。ミキサーは速度・逆再生の変換後に `PitchShift`(WSOLA)を通す(プレビューと書き出しで共通)。
 - `WaveformPeaks` は 1/100 秒ごとのピークに加え、8 倍ずつ 3 段の最大値の縮約(`levels`)を持つ。`columns` は範囲に丸ごと入る粗いセルを使う(総当たりと同じ結果)。
 - `PitchLayout`(Core): `scalePlan` / `beatPlan` が `[PitchStep]`(開始・長さ・追加の音程)を作り、`apply` が 1 つ目を元のクリップ、残りをコピーとして反映する(同じレイヤーで重なるなら全部を別レイヤーのコピーに)。±24 を超える音は、そこから後ろを作らない。メニュー `.scaleDuplicate` / `.beatPlace`(ショートカットなし)。
+
+## エディション(個人版 / 配布版)とデータの分離
+- Core `AppEdition`(`personal` | `public`)は Info.plist の `MovieCutEdition` から決まる(キー無し・不明な値は `personal`)。`DataLocations` が版ごとの保存先と設定(UserDefaults)を返し、アプリ・Core・CLI の保存先はすべてここを通る(直接 `applicationSupportDirectory` や `UserDefaults.standard` を書かない。`DistributionGuardTests` が検査)。
+- personal = 今までの場所そのまま(`Application Support/MovieCut/{Fonts,Proxies,voices,Templates,export-presets.json,Recovery,QRCodes,AIImages,PSDCache,Cutouts}`、`UserDefaults.standard`、バンドル ID `jp.local.moviecut`)。public = `Application Support/Movie Cut (Public)/...`、バンドル ID `jp.local.moviecut.public`(設定ドメインも別。アプリ外のプロセスでは同名のスイート)。2 つの版の保存先が重ならないことは `AppEditionTests` で確認。
+- サムネイル・波形のキャッシュはメモリ上だけでディスクに書かない。旧名 `yukkuri-editor/voices` の引き継ぎは personal のときだけ。
+- `Scripts/make-app.sh --edition public` は `build/public/` に作り、パス情報を消し、`strip` し、バンドルを検査(`/Users/`・個人名・メディア・Fixtures・データフォルダ)して、見つかれば失敗する。`--dry-run` はビルドせず、仮のバンドルで検査だけ試す。ファイル形式(`.mcpjc` / `.ymproj`)はどちらの版でも同じ。

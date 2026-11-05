@@ -5,7 +5,7 @@ import MovieCutCore
 /// 組み込みの 6 つは別に持つ(`TextStyleLibrary.builtins`)。静かな検証(MC_DEBUG_*)では UserDefaults に書かない。
 @MainActor
 final class TextStyleStore: ObservableObject {
-    static let shared = TextStyleStore(defaults: DebugHooks.isQuiet ? nil : .standard)
+    static let shared = TextStyleStore(defaults: DebugHooks.isQuiet ? nil : DataLocations.current.defaults)
 
     @Published private(set) var user: [SavedTextStyle]
     private let defaults: UserDefaults?

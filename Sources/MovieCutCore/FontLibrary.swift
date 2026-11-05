@@ -27,9 +27,7 @@ public enum FontLibrary {
 
     /// 既定の保存先(無ければ作る場所を示すだけで、作成はしない)。
     public static func defaultDirectory(fileManager: FileManager = .default) -> URL {
-        let base = (try? fileManager.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: false))
-            ?? fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support")
-        return base.appendingPathComponent("MovieCut/Fonts", isDirectory: true)
+        DataLocations.current.fonts
     }
 
     /// フォントファイルとして読め、ファミリー名が取れるかを調べる。読めれば名前の一覧を返す。

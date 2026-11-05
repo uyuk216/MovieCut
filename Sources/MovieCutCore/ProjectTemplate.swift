@@ -122,9 +122,7 @@ public struct TemplateStore {
 
     /// 既定の保存先 `~/Library/Application Support/MovieCut/Templates`(無ければ作る)。
     public static func standard() -> TemplateStore? {
-        guard let base = try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true) else { return nil }
-        let dir = base.appendingPathComponent("MovieCut", isDirectory: true)
-            .appendingPathComponent(ProjectTemplate.folderName, isDirectory: true)
+        let dir = DataLocations.current.templates
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return TemplateStore(directory: dir)
     }

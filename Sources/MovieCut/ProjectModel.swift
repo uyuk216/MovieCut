@@ -9,7 +9,7 @@ enum AppServices {
     static let engine = VoicevoxEngine()
     /// 画面のドッキング(パネルの配置)。アプリ全体で 1 つ。静かな検証(MC_DEBUG_*)では UserDefaults に書かない。試験は差し替える。
     @MainActor static var panelDock: DockStore = makePanelDock()
-    @MainActor static func makePanelDock(defaults: UserDefaults? = DebugHooks.isQuiet ? nil : .standard) -> DockStore {
+    @MainActor static func makePanelDock(defaults: UserDefaults? = DebugHooks.isQuiet ? nil : DataLocations.current.defaults) -> DockStore {
         let s = DockStore(defaults: defaults)
         s.onChange = { ActiveDocument.shared.refresh() }
         return s

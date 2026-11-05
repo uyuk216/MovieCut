@@ -35,7 +35,7 @@ public final class MemoryRecentProjectsStore: RecentProjectsStore {
 public struct UserDefaultsRecentProjectsStore: RecentProjectsStore {
     public static let key = "recentProjects.v1"
     private let defaults: UserDefaults
-    public init(defaults: UserDefaults = .standard) { self.defaults = defaults }
+    public init(defaults: UserDefaults = DataLocations.current.defaults) { self.defaults = defaults }
     public func loadData() -> Data? { defaults.data(forKey: Self.key) }
     public func saveData(_ data: Data) { defaults.set(data, forKey: Self.key) }
 }
@@ -118,8 +118,8 @@ public struct RecentProjects: Equatable {
 /// 起動時の画面の表示設定(既定は表示する)。
 public enum WelcomeSettings {
     public static let key = "welcome.showAtLaunch"
-    public static func showAtLaunch(_ d: UserDefaults = .standard) -> Bool {
+    public static func showAtLaunch(_ d: UserDefaults = DataLocations.current.defaults) -> Bool {
         d.object(forKey: key) == nil ? true : d.bool(forKey: key)
     }
-    public static func setShowAtLaunch(_ v: Bool, _ d: UserDefaults = .standard) { d.set(v, forKey: key) }
+    public static func setShowAtLaunch(_ v: Bool, _ d: UserDefaults = DataLocations.current.defaults) { d.set(v, forKey: key) }
 }

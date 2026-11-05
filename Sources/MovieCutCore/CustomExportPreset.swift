@@ -43,8 +43,9 @@ public enum CustomExportPresetStore {
 
     /// 既定の保存先: ~/Library/Application Support/MovieCut/export-presets.json
     public static func defaultURL() -> URL? {
-        guard let base = try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true) else { return nil }
-        return base.appendingPathComponent("MovieCut", isDirectory: true).appendingPathComponent(fileName)
+        let root = DataLocations.current.root
+        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        return DataLocations.current.exportPresets
     }
 
     /// JSON から読む。形が違えば空。項目ごとに検査し、通らないものは捨てる。同じ名前は先に出た方だけ残す。

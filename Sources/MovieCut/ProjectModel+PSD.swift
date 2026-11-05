@@ -7,8 +7,7 @@ import MovieCutCore
 /// パス + 更新日時 + サイズで決まるフォルダへ PNG で書く。Undo は 1 回。
 extension ProjectModel {
     static var psdCacheRoot: URL? {
-        guard let support = try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true) else { return nil }
-        return support.appendingPathComponent("MovieCut/PSDCache", isDirectory: true)
+        DataLocations.current.psdCache
     }
 
     func chooseAndImportPSD() {

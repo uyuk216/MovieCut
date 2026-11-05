@@ -10,11 +10,11 @@ enum PreviewGuideStore {
 
     static var current: Set<PreviewGuide> {
         if let memory { return memory }
-        return PreviewGuide.resolve(UserDefaults.standard.stringArray(forKey: PreviewGuide.defaultsKey))
+        return PreviewGuide.resolve(DataLocations.current.defaults.stringArray(forKey: PreviewGuide.defaultsKey))
     }
 
     /// 1 つ切り替える(表示 ▸ ガイド線 ▸ 項目)。
-    static func toggle(_ g: PreviewGuide, defaults: UserDefaults? = .standard) {
+    static func toggle(_ g: PreviewGuide, defaults: UserDefaults? = DataLocations.current.defaults) {
         var s = current
         if s.contains(g) { s.remove(g) } else { s.insert(g) }
         if DebugHooks.isQuiet { memory = s } else { defaults?.set(PreviewGuide.encode(s), forKey: PreviewGuide.defaultsKey) }

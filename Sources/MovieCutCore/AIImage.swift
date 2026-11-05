@@ -11,9 +11,9 @@ public enum AIImageSettings {
     public static let key = "aiImage.command"
     public static let maxPromptLength = 2000
 
-    public static func command(_ d: UserDefaults = .standard) -> String { d.string(forKey: key) ?? "" }
+    public static func command(_ d: UserDefaults = DataLocations.current.defaults) -> String { d.string(forKey: key) ?? "" }
 
-    public static func setCommand(_ c: String, _ d: UserDefaults = .standard) {
+    public static func setCommand(_ c: String, _ d: UserDefaults = DataLocations.current.defaults) {
         d.set(c.trimmingCharacters(in: .whitespacesAndNewlines), forKey: key)
     }
 }
@@ -37,9 +37,7 @@ public enum AIImageError: Error, LocalizedError, Equatable {
 /// 画像の置き場所(Application Support/MovieCut/AIImages/<UUID>.png)。
 public enum AIImageStore {
     public static func directory() -> URL {
-        let support = (try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true))
-            ?? URL(fileURLWithPath: NSHomeDirectory() + "/Library/Application Support", isDirectory: true)
-        return support.appendingPathComponent("MovieCut/AIImages", isDirectory: true)
+        DataLocations.current.aiImages
     }
 
     public static func newOutputURL(in dir: URL = directory()) -> URL {

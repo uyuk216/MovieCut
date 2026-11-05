@@ -7,8 +7,7 @@ import MovieCutCore
 /// 復元フォルダ(無ければ作る)。
 enum RecoveryFolder {
     static var url: URL? {
-        guard let base = try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true) else { return nil }
-        let dir = base.appendingPathComponent("MovieCut", isDirectory: true).appendingPathComponent(AutosaveRecovery.folderName, isDirectory: true)
+        let dir = DataLocations.current.recovery
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }
