@@ -131,6 +131,20 @@ extension ProjectModel {
         liveClipProperty(keyedChange(key, value), name: Self.undoName(forKey: key), clipId: clipId)
     }
 
+    // MARK: イージング曲線
+
+    /// 再生ヘッドのキーの「次のキーまでの動き方」を書く。1 回の Undo。変わらない・キーが無いときは何も積まない。
+    @discardableResult
+    func setKeyEase(_ key: String, _ ease: Ease, clipId: String? = nil) -> Bool {
+        guard !isLocked, let id = clipId ?? selectedClipId, let c = clip(id) else { return false }
+        var probe = c
+        let t = clipTime(c), tol = keyTolerance
+        guard KeyframeEditing.setEase(&probe, key: key, ease, at: t, tolerance: tol) else { return false }
+        focusedAnimatableKey = key
+        setClipProperty({ _ = KeyframeEditing.setEase(&$0, key: key, ease, at: t, tolerance: tol) }, name: "イージング曲線の変更", clipId: id)
+        return true
+    }
+
     // MARK: 反転・切り抜き・リセット
 
     func setFlip(horizontal: Bool, _ on: Bool, clipId: String? = nil) {

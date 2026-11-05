@@ -26,6 +26,9 @@ struct KeyframeControl {
     var toggle: () -> Void
     var prev: () -> Void
     var next: () -> Void
+    /// ここのキーから次のキーまでのイージング(ここにキーがあり、次のキーもあるときだけ)。曲線エディタを出す。
+    var ease: Ease? = nil
+    var setEase: (Ease) -> Void = { _ in }
 }
 
 /// ◇(キーなし)/ ◆(ここにキーがある)/ 半塗り(動く項目だが、ここにキーは無い)。
@@ -77,6 +80,7 @@ struct InspectorField<Content: View>: View {
             if let key {
                 HStack(spacing: 2) {
                     content
+                    if let ease = key.ease { EaseCurveButton(ease: ease, onCommit: key.setEase) }
                     KeyframeDiamond(state: key.state, action: key.toggle)
                 }
             } else {
@@ -344,7 +348,9 @@ struct ClipInspector: View {
             canNext: KeyframeEditing.nextKeyTime(c, key: key, after: rel, tolerance: tol) != nil,
             toggle: { model.toggleKeyframe(key, clipId: clipId) },
             prev: { model.seekKeyframe(forward: false, key: key) },
-            next: { model.seekKeyframe(forward: true, key: key) })
+            next: { model.seekKeyframe(forward: true, key: key) },
+            ease: KeyframeEditing.segmentEase(c, key: key, at: rel, tolerance: tol),
+            setEase: { model.setKeyEase(key, $0, clipId: clipId) })
     }
 
     /// 項目の、再生ヘッドでの値(キーがあれば補間後)。
