@@ -71,7 +71,7 @@ final class MenuUndoSweepTests: XCTestCase {
     /// 対象外の項目(開く・保存する・外部に出る・非同期・全体の設定)。
     static func isExcluded(_ c: MenuCommand) -> Bool {
         switch c {
-        case .about, .settings, .videoSettings, .addMedia, .export, .exportPreset, .exportCustomPreset, .saveCustomPreset,
+        case .about, .settings, .videoSettings, .addMedia, .importPSD, .export, .exportPreset, .exportCustomPreset, .saveCustomPreset,
              .fanMaxToggle, .fanInstall, .fanUninstall, .importSubtitles, .exportSubtitles, .translateSubtitles,
              .transcribeSubtitles, .relinkMedia, .packageSave, .addFont, .addSubtitle, .removeBackground, .toggleRangeLoop, .toggleTrimLoop, .toggleClipLoop, .toggleAudition, .cycleAudition, .toggleVoiceRipple, .transferClips, .subclipBatch, .trimLoopWidth(0.5), .trimLoopWidth(1), .trimLoopWidth(2), .aiScript, .aiChapters, .aiTitles, .aiRewrite, .aiSettings,
              .exportStill, .exportSequence, .exportThumbnail, .exportThumbnailCandidates, .exportGIF, .queueExport, .showExportQueue, .audioLibrary,

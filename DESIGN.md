@@ -300,6 +300,7 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
 - **タイトル案をAIで作る…**: 出力 ▸ (`AppMenuSpec.aiTitles`、ショートカットなし)→ `ProjectModel.suggestAITitles`。送る前に確認(`askAI`)→ 返事を `AITitlePrompt`(Core)で 5 件に → 確認シートで「コピーする」。プロジェクトは変えない(Undo なし)。字幕とマーカーの名前だけを送る。
 - **カウントダウン(文字クリップの任意項目 `counter`)**: `{from, to, format}`。`format` は `mm:ss`(既定)か `ss`。未設定のときはファイルに書かない。表示は `Clip.displayText(at:)` = `text` の後ろに残りの数(減る向きは切り上げ、増える向きは切り捨て)。`Renderer` の文字の経路が使う。**画面の入力欄はまだ無い**(モデルと描画だけ)。
 - **QR コード(画像クリップ)**: クリップ ▸ QRコードを追加…(ショートカットなし)→ `ProjectModel+QR.swift`。`QRCode.pngData`(Core・CIQRCodeGenerator、白地・既定 800 px)で作り、Application Support/MovieCut/QRCodes/<文字の FNV-1a>.png に保存して、画像クリップ(5 秒)として再生ヘッドに置く(Undo 1 回)。画像は外に置いたままなので、移動すると素材の再リンクが要る。
+- **PSD 読み込み**: ファイル ▸ PSDを読み込む…(ショートカットなし。素材追加・ドロップの .psd も同じ流れ)→ `ProjectModel+PSD.swift`。Core の `PSD.swift`(`PSDParser`: ヘッダー、レイヤー記録=名前・範囲・不透明度・表示フラグ・ブレンドキー(名前のみ)・`lsct` のグループ印・`luni` の名前、チャンネルは RAW / RLE(PackBits)、8/16 ビット RGB、統合画像)と `PSDImport.swift`(`PSDImporter.prepare` が PNG を Application Support/MovieCut/PSDCache/<パス+更新日時+サイズの FNV-1a>/ に書き、PSD キャンバスをプロジェクトに収まるよう一様に拡大して中央に置いた x/y/scale を計算。`place` が下から順に別の段へ置く)。非表示(グループの目も含む)は読み込まず、件数を状態欄に出す。レイヤーの読み取りに失敗(ZIP 圧縮など)したら統合画像 1 枚で代用。Undo 1 回。ファイル形式は変えない(画像クリップのみ)。
 
 ## 追加機能(2026-11-02 第2弾)
 - **カウントダウンの入力欄**: インスペクタ ▸ 文字 ▸「カウントダウン」(付ける・開始・終わり・表示)と、クリップ ▸ テキスト ▸ カウントダウンにする(チェックで付いている表示)。Core は `CounterEditing`(文字クリップだけ・変わらない編集は false)。モデルは `ProjectModel+TextStyle.swift` の `setCounter` / `editCounter` / `coalescedCounter` / `toggleCounterSelected`。1 回の Undo。

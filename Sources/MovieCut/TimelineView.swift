@@ -1593,7 +1593,7 @@ final class TimelineCanvas: NSView {
 
     private func droppedMediaURLs(_ info: NSDraggingInfo) -> [URL] {
         let urls = info.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
-        return urls.filter { ClipEditing.isSupportedMedia(path: $0.path) }
+        return urls.filter { ClipEditing.isDroppableMedia(path: $0.path) }
     }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {

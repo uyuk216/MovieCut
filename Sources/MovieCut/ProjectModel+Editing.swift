@@ -44,8 +44,14 @@ extension ProjectModel {
     /// 素材を再生ヘッド(または `at`)に 1 つずつ置く。対応しない拡張子は無視。全体で 1 回の Undo、最後に置いたものを選択。
     /// 置いたクリップの id を返す。
     @discardableResult
-    func addMedia(urls: [URL], at time: Double? = nil) async -> [String] {
+    func addMedia(urls allUrls: [URL], at time: Double? = nil) async -> [String] {
         guard !isLocked else { return [] }
+        let psds = allUrls.filter { PSDImporter.isPSD(path: $0.path) }
+        let urls = allUrls.filter { !PSDImporter.isPSD(path: $0.path) }
+        if !psds.isEmpty {
+            let psdIds = await importPSDFiles(urls: psds, at: time)
+            if urls.isEmpty { return psdIds }
+        }
         let files = urls.filter { ClipEditing.isSupportedMedia(path: $0.path) }
         guard !files.isEmpty else { return [] }
         var media: [(path: String, kind: ClipType, duration: Double)] = []
@@ -64,8 +70,14 @@ extension ProjectModel {
     /// タイムラインへのドロップ(Finder・素材ブラウザ共通): 落とした時刻を吸着して、落とした行のレイヤーへ置く。
     /// 置けないときは `ClipEditing.place` と同じく空いている最初のレイヤー(無ければ新しいレイヤー)へ。1 回の取り消し。
     @discardableResult
-    func dropMedia(urls: [URL], dropTime: Double, rowIndex: Int?) async -> [String] {
+    func dropMedia(urls allUrls: [URL], dropTime: Double, rowIndex: Int?) async -> [String] {
         guard !isLocked else { return [] }
+        let psds = allUrls.filter { PSDImporter.isPSD(path: $0.path) }
+        let urls = allUrls.filter { !PSDImporter.isPSD(path: $0.path) }
+        if !psds.isEmpty {
+            let psdIds = await importPSDFiles(urls: psds, at: dropTime)
+            if urls.isEmpty { return psdIds }
+        }
         let files = urls.filter { ClipEditing.isSupportedMedia(path: $0.path) }
         guard !files.isEmpty else { return [] }
         var media: [(path: String, kind: ClipType, duration: Double)] = []
@@ -156,7 +168,7 @@ extension ProjectModel {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
-        panel.allowedContentTypes = ClipEditing.mediaExtensions.compactMap { UTType(filenameExtension: $0) }
+        panel.allowedContentTypes = (ClipEditing.mediaExtensions + ["psd"]).compactMap { UTType(filenameExtension: $0) }
         panel.title = "素材を追加"
         let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
             guard resp == .OK else { return }

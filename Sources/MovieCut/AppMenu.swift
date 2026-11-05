@@ -4,7 +4,7 @@ import MovieCutCore
 /// メニューバーの項目が呼ぶ操作(ツールバーと同じモデルの関数に行き着く)。
 enum MenuCommand: Hashable {
     case about, settings, videoSettings
-    case addMedia, export, exportPreset(ExportPreset), exportCustomPreset(String), saveCustomPreset
+    case addMedia, importPSD, export, exportPreset(ExportPreset), exportCustomPreset(String), saveCustomPreset
     // 出力 ▸ 書き出し中のファン最大化(設定と、ヘルパーのインストール / 削除)
     case fanMaxToggle, fanInstall, fanUninstall
     // 字幕(B3)とチャプター
@@ -550,6 +550,7 @@ enum AppMenuSpec {
 
     static func file(_ s: MenuState) -> [MenuItemSpec] {
         [MenuItemSpec(command: .addMedia, title: "素材を追加…", shortcut: cmd("i"), enabled: s.canEdit, checked: nil),
+         MenuItemSpec(command: .importPSD, title: "PSDを読み込む…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "レイヤーごとに画像クリップへ"),
          MenuItemSpec(command: .audioLibrary, title: "素材ブラウザを開く…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "BGM・効果音のフォルダ"),
          MenuItemSpec(command: .addFont, title: "フォントを追加…", shortcut: nil, enabled: true, checked: nil, hint: "テキストで使えるようにする")]
     }
@@ -1234,6 +1235,7 @@ enum AppMenu {
             switch c {
             case .settings, .videoSettings: m.openSettings()
             case .addMedia: m.chooseAndAddMedia()
+            case .importPSD: m.chooseAndImportPSD()
             case .export: m.chooseAndExport()
             case .exportPreset(let p): m.chooseAndExport(preset: p)
             case .exportCustomPreset(let name):
