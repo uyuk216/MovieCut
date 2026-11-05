@@ -23,6 +23,7 @@ enum MenuCommand: Hashable {
     case relinkMedia
     // ファイル ▸ 未使用の素材…(ショートカットは持たない)
     case unusedMedia
+    case restoreVersion
     case packageSave
     case addFont
     case addSubtitle
@@ -55,7 +56,7 @@ enum MenuCommand: Hashable {
     // 出力 ▸ サムネイル候補を書き出す…(点数の高いコマを 5 枚。ショートカットは持たない)
     case exportThumbnailCandidates
     // 出力 ▸ GIFとして書き出す…(ショートカットは持たない)
-    case exportGIF
+    case exportGIF, exportAPNG
     // 出力 ▸ 書き出しキュー(今の設定の MP4 を積む / キューを表示)と、ファイル ▸ 素材ブラウザ(ショートカットは持たない)
     case queueExport, showExportQueue, audioLibrary
     // 出力 ▸ ラウドネスを測る…、表示 ▸ スコープ…(ショートカットは持たない)
@@ -97,7 +98,7 @@ enum MenuCommand: Hashable {
     // エフェクト
     case effectAdd(EffectKind), effectPreset(EffectPreset), effectClear, effectCopy, effectPaste, lutLoad, autoWhiteBalance
     // 文字(スタイルを適用 = id、文字アニメーション)
-    case textStyleApply(String), textStyleApplyAll(String), textAnim(TextAnimKind), toggleCounter
+    case textStyleApply(String), textStyleApplyAll(String), textAnim(TextAnimKind), toggleCounter, toggleVertical, togglePerChar
     // 配置(ピクチャー・イン・ピクチャーの角)
     case pip(PipCorner)
     // 速度・逆再生・フリーズフレーム
@@ -228,6 +229,7 @@ struct MenuState: Equatable {
     var canTranscribe = false
     var hasMissingMedia = false
     var hasUnusedMedia = false
+    var hasSavedFile = false         // 保存先のあるプロジェクト(世代バックアップがある)
     var hasGaps = false
     /// 再生位置に画面で重なって見えているクリップの数(巡回選択は 2 つ以上で使える)
     var overlapCount = 0
@@ -323,6 +325,10 @@ struct MenuState: Equatable {
     var canAutoColor = false         // 画像か動画のクリップを選んでいる(自動ホワイトバランスの対象)
     // 文字
     var isTextClip = false           // 文字クリップを選んでいる
+    var isTextLikeClipFlag = false   // 字幕(ボイス)を選んでいる(縦書き・文字アニメーション)
+    var isTextLikeClip: Bool { isTextClip || isTextLikeClipFlag }  // 文字クリップか字幕
+    var isVertical = false           // 縦書きになっている
+    var perCharInterval: Double?     // 1 文字ずつ動かす間隔(無ければ nil)
     var textAnimKind: TextAnimKind = .none
     var hasCounter = false           // 選択中の文字クリップにカウントダウンが付いている
     var canPip = false               // 映像に見える素材(画像・動画・文字)を選んでいる
@@ -411,6 +417,7 @@ struct MenuState: Equatable {
         canGenerateSubtitles = SubtitleGeneration.hasTargets(m.project)
         hasMissingMedia = !MissingMedia.find(in: m.project).isEmpty
         hasUnusedMedia = !UnusedMedia.find(in: m.project).isEmpty
+        hasSavedFile = m.fileURL != nil
         hasGaps = !TimelineQuery.gapStarts(in: m.project).isEmpty
         overlapCount = PreviewPicking.stack(in: m.project, at: m.currentTime).count
         hasShortClips = !TimelineQuery.shortClipIds(in: m.project).isEmpty
@@ -474,6 +481,9 @@ struct MenuState: Equatable {
             hasEffects = !c.effects.isEmpty
             canAutoColor = c.type == .image || c.type == .video
             isTextClip = c.type == .text
+            isTextLikeClipFlag = c.type == .voice
+            isVertical = c.textStyle?.verticalOrDefault ?? false
+            perCharInterval = c.textAnim?.perCharOrNil
             textAnimKind = c.textAnim?.known ?? .none
             hasCounter = c.counter != nil
             canPip = PictureInPicture.supports(c.type)
@@ -521,8 +531,8 @@ struct MenuState: Equatable {
 
 /// menu.js と同じ構成の項目表。表示(SwiftUI)と試験の両方がこれを見る。
 enum AppMenuSpec {
-    static let backgrounds: [(key: String, label: String)] = [("#000000", "黒"), ("#ffffff", "白"), ("#00b140", "緑（クロマキー）")]
-    static let codecs: [(key: String, label: String)] = [("h264", "H.264"), ("hevc", "HEVC")]
+    static let backgrounds: [(key: String, label: String)] = [("#000000", "黒"), ("#ffffff", "白"), ("#00b140", "緑（クロマキー）"), (Project.transparentBackground, "透明（ProRes 4444・APNG 用）")]
+    static let codecs: [(key: String, label: String)] = [("h264", "H.264"), ("hevc", "HEVC"), (OutputPlan.proRes422, "ProRes 422（.mov）"), (OutputPlan.proRes4444, "ProRes 4444（.mov・透明を残せる）")]
 
     private static func cmd(_ k: KeyEquivalent, shift: Bool = false) -> MenuShortcut {
         MenuShortcut(key: k, modifiers: shift ? [.command, .shift] : .command)
@@ -631,6 +641,11 @@ enum AppMenuSpec {
         MenuItemSpec(command: .addSubtitle, title: "字幕を追加…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "再生位置に字幕")
     }
 
+    /// ファイル ▸ 過去の版から復元…(保存のたびに残した世代を、新しい無題の書類として開く。元のファイルは変わらない。ショートカットなし)。
+    static func restoreVersionItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .restoreVersion, title: "過去の版から復元…", shortcut: nil, enabled: s.hasDocument && s.hasSavedFile, checked: nil, hint: "保存のたびの世代からコピーを開く")
+    }
+
     /// ファイル ▸ パッケージとして保存…(プロジェクトと使っている素材を 1 つのフォルダへ)。
     static func packageSave(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .packageSave, title: "パッケージとして保存…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "素材ごとフォルダへ")
@@ -712,6 +727,10 @@ enum AppMenuSpec {
     }
 
     /// 出力 ▸ GIFとして書き出す…(保存パネルで fps・幅・範囲を決める。ショートカットは持たない)。
+    static func apngExport(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .exportAPNG, title: "APNGとして書き出す…", shortcut: nil, enabled: s.canEdit && s.canExport, checked: nil, hint: "アニメーション PNG（透明を残せる）")
+    }
+
     static func gifExport(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .exportGIF, title: "GIFとして書き出す…", shortcut: nil, enabled: s.canEdit && s.canExport, checked: nil, hint: "アニメーション GIF")
     }
@@ -751,7 +770,7 @@ enum AppMenuSpec {
             MenuItemSpec(command: .exportPreset($0), title: $0.title, shortcut: nil, enabled: s.canEdit && s.canExport, checked: nil, hint: $0.summary)
         } + custom.map {
             MenuItemSpec(command: .exportCustomPreset($0.name), title: $0.name, shortcut: nil, enabled: s.canEdit && s.canExport, checked: nil,
-                         hint: "\($0.width)×\($0.height) · \($0.codec == "hevc" ? "HEVC" : "H.264")")
+                         hint: "\($0.width)×\($0.height) · \(OutputPlan.codecLabel($0.codec))")
         }
     }
 
@@ -1077,8 +1096,20 @@ enum AppMenuSpec {
         MenuItemSpec(command: .toggleCounter, title: "カウントダウンにする", shortcut: nil, enabled: s.canEdit && s.isTextClip, checked: s.isTextClip ? s.hasCounter : nil)
     }
 
+    /// 字幕(ボイス)も同じ動きが使える(スクロールだけは文字クリップのみ)。
     static func textAnimItems(_ s: MenuState) -> [MenuItemSpec] {
-        TextAnimKind.allCases.map { MenuItemSpec(command: .textAnim($0), title: $0.label, shortcut: nil, enabled: s.canEdit && s.isTextClip, checked: s.isTextClip && s.textAnimKind == $0) }
+        TextAnimKind.allCases.map { k in
+            MenuItemSpec(command: .textAnim(k), title: k.label, shortcut: nil, enabled: s.canEdit && s.isTextLikeClip && (s.isTextClip || !k.isScroll), checked: s.isTextLikeClip && s.textAnimKind == k)
+        }
+    }
+
+    static func textVerticalItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .toggleVertical, title: "縦書き", shortcut: nil, enabled: s.canEdit && s.isTextLikeClip, checked: s.isTextLikeClip ? s.isVertical : nil)
+    }
+
+    static func textPerCharItem(_ s: MenuState) -> MenuItemSpec {
+        let usable = s.textAnimKind != .none && !s.textAnimKind.isScroll
+        return MenuItemSpec(command: .togglePerChar, title: "1文字ずつ動かす", shortcut: nil, enabled: s.canEdit && s.isTextLikeClip && usable, checked: s.isTextLikeClip ? s.perCharInterval != nil : nil)
     }
 
     static func effectActions(_ s: MenuState) -> [MenuItemSpec] {
@@ -1242,13 +1273,13 @@ enum AppMenuSpec {
 
     /// 字幕と素材の項目(ファイル ▸ 字幕・素材のまとまり。式が長すぎて型検査が遅くなるので分けてある)。
     static func mediaSubtitleItems(_ s: MenuState) -> [MenuItemSpec] {
-        [subtitleImport(s), mediaRelink(s), unusedMediaItem(s), packageSave(s), addSubtitle(s), subtitleExport(s), subtitleTranslate(s), subtitleGenerate(s), transcribeSubtitles(s), chapterCopy(s)]
+        [subtitleImport(s), mediaRelink(s), unusedMediaItem(s), restoreVersionItem(s), packageSave(s), addSubtitle(s), subtitleExport(s), subtitleTranslate(s), subtitleGenerate(s), transcribeSubtitles(s), chapterCopy(s)]
             + cutoutItems(s)
     }
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s)] + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), clipListItem(s), noteListItem(s)] + scriptStoryboardItems(s) + [makeProxies(s)] + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + multicamItems(s) + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textCounterItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), audioAutoSyncItem(s), beatMarkersItem(s), scaleDuplicateItem(s), beatPlaceItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
+        [about, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s), apngExport(s)] + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), clipListItem(s), noteListItem(s)] + scriptStoryboardItems(s) + [makeProxies(s)] + [fanMaxToggle(s), fanInstall(s), fanUninstall(s)] + clipMenu(s).flatMap { $0 } + multicamItems(s) + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textVerticalItem(s), textPerCharItem(s), textCounterItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), audioAutoSyncItem(s), beatMarkersItem(s), scaleDuplicateItem(s), beatPlaceItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerColorItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + guideItems(s) + [previewProxy(s), fullScreen(s)] + help.flatMap { $0 }
@@ -1308,6 +1339,7 @@ enum AppMenu {
             case .transcribeSubtitles: Task { await m.transcribeSelectedToSubtitles() }
             case .relinkMedia: m.chooseAndRelinkMedia()
             case .unusedMedia: m.showUnusedMediaSheet = true
+            case .restoreVersion: m.showVersionRestore()
             case .packageSave: m.saveAsPackage()
             case .addFont: m.chooseAndAddFonts()
             case .addSubtitle: m.openSubtitleSheet()
@@ -1355,6 +1387,7 @@ enum AppMenu {
             case .exportThumbnailCandidates: m.chooseAndExportThumbnailCandidates()
             case .exportSequence: m.chooseAndExportSequence()
             case .exportGIF: m.chooseAndExportGIF()
+            case .exportAPNG: m.chooseAndExportAPNG()
             case .queueExport: m.chooseAndQueueExport()
             case .showExportQueue: m.showExportQueueSheet = true
             case .makeProxies: m.makeProxies()
@@ -1428,6 +1461,8 @@ enum AppMenu {
             case .textStyleApplyAll(let id): m.applyTextStyleToAll(id: id)
             case .textAnim(let k): m.setTextAnim(k)
             case .toggleCounter: m.toggleCounterSelected()
+            case .toggleVertical: m.toggleVerticalSelected()
+            case .togglePerChar: m.togglePerCharSelected()
             case .pip(let k): m.setPipCorner(k)
             case .speed(let v): m.setSpeedSelected(v)
             case .toggleReverse: m.toggleReverseSelected()

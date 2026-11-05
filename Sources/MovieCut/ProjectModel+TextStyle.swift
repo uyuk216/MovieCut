@@ -34,6 +34,43 @@ extension ProjectModel {
         return true
     }
 
+    /// 1 文字ずつ動かす間隔(nil で全体が一度に)。1 回の Undo。
+    @discardableResult
+    func setTextAnimPerChar(_ v: Double?, clipId: String? = nil) -> Bool {
+        guard let c = styleTarget(clipId) else { return false }
+        var probe = c
+        guard TextStyleEditing.setPerChar(&probe, v) else { return false }
+        setClipProperty({ _ = TextStyleEditing.setPerChar(&$0, v) }, name: v == nil ? "1文字ずつの動きを外す" : "1文字ずつ動かす", clipId: c.id)
+        return true
+    }
+
+    func coalescedTextAnimPerChar(_ v: Double, clipId: String? = nil) {
+        guard styleTarget(clipId)?.textAnim?.perCharOrNil != nil else { return }
+        coalescedClipProperty({ _ = TextStyleEditing.setPerChar(&$0, v) }, name: "1文字ずつの間隔の変更", clipId: clipId)
+    }
+
+    /// 縦書きの切り替え(文字クリップと字幕)。
+    @discardableResult
+    func setVertical(_ on: Bool, clipId: String? = nil) -> Bool {
+        guard let c = styleTarget(clipId) else { return false }
+        var probe = c
+        guard TextStyleEditing.setVertical(&probe, on) else { return false }
+        setClipProperty({ _ = TextStyleEditing.setVertical(&$0, on) }, name: on ? "縦書きにする" : "横書きに戻す", clipId: c.id)
+        return true
+    }
+
+    /// メニュー「テキスト ▸ 縦書き」(なっていれば横書きへ)。
+    func toggleVerticalSelected() {
+        guard let c = styleTarget(nil) else { return }
+        setVertical(!(c.textStyle?.verticalOrDefault ?? false), clipId: c.id)
+    }
+
+    /// メニュー「テキスト ▸ 1文字ずつ動かす」。
+    func togglePerCharSelected() {
+        guard let c = styleTarget(nil) else { return }
+        setTextAnimPerChar(c.textAnim?.perCharOrNil == nil ? TextAnim.defaultPerChar : nil, clipId: c.id)
+    }
+
     func coalescedTextAnimDuration(_ d: Double, clipId: String? = nil) {
         guard let c = styleTarget(clipId), let k = c.textAnim?.known, k != .none else { return }
         coalescedClipProperty({ _ = TextStyleEditing.setAnim(&$0, kind: k, duration: d) }, name: "文字アニメーションの長さの変更", clipId: clipId)

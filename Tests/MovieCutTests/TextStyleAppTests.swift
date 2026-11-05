@@ -63,9 +63,10 @@ final class TextStyleAppTests: XCTestCase {
         // 画像には付けられない / ロック中も拒否
         XCTAssertFalse(m.setTextStyle({ $0.italic = true }, name: "x", clipId: "i"))
         XCTAssertFalse(m.setTextAnim(.shake, clipId: "i"))
-        // 字幕(ボイス)には装飾は付くが、アニメーションとスタイル適用は文字だけ
+        // 字幕(ボイス)には装飾と(スクロール以外の)アニメーションが付くが、スタイル適用は文字だけ
         XCTAssertTrue(m.setTextStyle({ $0.shadow = .init() }, name: "影の変更", clipId: "v"))
-        XCTAssertFalse(m.setTextAnim(.pop, clipId: "v"))
+        XCTAssertFalse(m.setTextAnim(.scrollUp, clipId: "v"))
+        XCTAssertTrue(m.setTextAnim(.pop, clipId: "v"))
         XCTAssertFalse(m.applyTextStyle(id: "builtin.news", clipId: "v"))
     }
 
@@ -212,5 +213,83 @@ final class TextStyleAppTests: XCTestCase {
         m.selectedClipId = "v"                                      // 字幕: 装飾だけ(スタイル・アニメーション欄なし)
         RunLoop.current.run(until: Date().addingTimeInterval(0.4))
         try writePNG(host, "inspector-textstyle-voice.png")
+    }
+}
+
+/// 縦書き・1 文字ずつの動き・字幕のアニメーション(メニューとモデル)。
+@MainActor
+final class VerticalTextAppTests: XCTestCase {
+    private func makeModel() -> ProjectModel {
+        var p = Project.new()
+        var t = Clip(); t.id = "t"; t.type = .text; t.start = 0; t.duration = 4; t.text = "テキスト"; t.fontSize = 80
+        var v = Clip(); v.id = "v"; v.type = .voice; v.start = 8; v.duration = 2; v.text = "セリフ"
+        var i = Clip(); i.id = "i"; i.type = .image; i.start = 5; i.duration = 2; i.src = "/tmp/none.png"
+        p.tracks[0].clips = [t, i, v]
+        let m = ProjectModel(project: p)
+        m.notices = OneTimeNotices()
+        return m
+    }
+
+    func testVerticalToggleIsOneUndoAndMenuReflectsIt() {
+        let m = makeModel(); let u = m.effectiveUndoManager
+        m.selectedClipId = "t"
+        var s = MenuState(model: m)
+        XCTAssertTrue(AppMenuSpec.textVerticalItem(s).enabled)
+        XCTAssertEqual(AppMenuSpec.textVerticalItem(s).checked, false)
+        AppMenu.perform(.toggleVertical, model: m)
+        XCTAssertEqual(m.clip("t")?.textStyle?.vertical, true)
+        s = MenuState(model: m)
+        XCTAssertEqual(AppMenuSpec.textVerticalItem(s).checked, true)
+        u.undo()
+        XCTAssertNil(m.clip("t")?.textStyle, "1 回で元に戻り、項目ごと消える")
+        u.redo()
+        AppMenu.perform(.toggleVertical, model: m)
+        XCTAssertNil(m.clip("t")?.textStyle?.vertical)
+        m.selectedClipId = "i"
+        XCTAssertFalse(AppMenuSpec.textVerticalItem(MenuState(model: m)).enabled)
+        XCTAssertNotNil(AppMenuSpec.disabledReason(for: AppMenuSpec.textVerticalItem(MenuState(model: m)), state: MenuState(model: m)))
+    }
+
+    func testSubtitleVoiceClipGetsVerticalAndAnimations() {
+        let m = makeModel(); let u = m.effectiveUndoManager
+        m.selectedClipId = "v"
+        let s = MenuState(model: m)
+        XCTAssertTrue(AppMenuSpec.textVerticalItem(s).enabled)
+        let anim = AppMenuSpec.textAnimItems(s)
+        XCTAssertEqual(anim.filter(\.enabled).map(\.title), ["なし", "タイプライター", "ポップ", "シェイク", "フェードイン"], "字幕はスクロール以外")
+        AppMenu.perform(.textAnim(.pop), model: m)
+        XCTAssertEqual(m.clip("v")?.textAnim?.kind, "pop")
+        AppMenu.perform(.textAnim(.scrollUp), model: m)
+        XCTAssertEqual(m.clip("v")?.textAnim?.kind, "pop", "字幕はスクロールにならない")
+        AppMenu.perform(.toggleVertical, model: m)
+        XCTAssertEqual(m.clip("v")?.textStyle?.vertical, true)
+        u.undo(); u.undo()
+        XCTAssertNil(m.clip("v")?.textAnim)
+    }
+
+    func testPerCharToggleNeedsAnimationAndIsOneUndo() {
+        let m = makeModel(); let u = m.effectiveUndoManager
+        m.selectedClipId = "t"
+        XCTAssertFalse(AppMenuSpec.textPerCharItem(MenuState(model: m)).enabled, "アニメーションが無いうちは使えない")
+        m.setTextAnim(.pop, clipId: "t")
+        XCTAssertTrue(AppMenuSpec.textPerCharItem(MenuState(model: m)).enabled)
+        AppMenu.perform(.togglePerChar, model: m)
+        XCTAssertEqual(m.clip("t")?.textAnim?.perChar, TextAnim.defaultPerChar)
+        XCTAssertEqual(AppMenuSpec.textPerCharItem(MenuState(model: m)).checked, true)
+        m.coalescedTextAnimPerChar(0.2, clipId: "t"); m.coalescedTextAnimPerChar(0.25, clipId: "t")
+        m.flushCoalesced()
+        XCTAssertEqual(m.clip("t")?.textAnim?.perChar, 0.25)
+        u.undo()
+        XCTAssertEqual(m.clip("t")?.textAnim?.perChar, TextAnim.defaultPerChar, "連続変更は 1 回で戻る")
+        AppMenu.perform(.togglePerChar, model: m)
+        XCTAssertNil(m.clip("t")?.textAnim?.perChar)
+        m.setTextAnim(.scrollUp, clipId: "t")
+        XCTAssertFalse(AppMenuSpec.textPerCharItem(MenuState(model: m)).enabled, "スクロールには使えない")
+    }
+
+    func testNewMenuItemsHaveNoShortcut() {
+        let s = MenuState()
+        XCTAssertNil(AppMenuSpec.textVerticalItem(s).shortcut)
+        XCTAssertNil(AppMenuSpec.textPerCharItem(s).shortcut)
     }
 }

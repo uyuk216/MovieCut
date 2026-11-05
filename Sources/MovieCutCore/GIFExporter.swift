@@ -85,8 +85,11 @@ public enum GIFExporter {
         let scaled = project.width == p.width ? project : project.scaledForResolution(newWidth: p.width, newHeight: p.height)
 
         let work = Task.detached(priority: .userInitiated) { () throws -> Result in
-            func cleanup() { try? FileManager.default.removeItem(at: part) }
+            // ImageIO は途中の書きかけを `part` の隣(名前に印が付く)に置くことがあるので、同じ名前で始まるものを全部消す
+            func cleanup() { ImageIOPartFiles.remove(part) }
             let renderer = Renderer(project: scaled, assets: assets)
+            // dest を手放してから後始末できるよう、描いて書く部分を内側の関数にする
+            func write() throws {
             guard let dest = CGImageDestinationCreateWithURL(part as CFURL, UTType.gif.identifier as CFString, p.frames, nil) else {
                 throw ExportError.cannotCreateWriter(CocoaError(.fileWriteUnknown))
             }
@@ -104,7 +107,9 @@ public enum GIFExporter {
                 if v - last >= 0.001 || i + 1 == p.frames { last = v; progress?(v) }
             }
             if Task.isCancelled { cleanup(); throw CancellationError() }
-            guard CGImageDestinationFinalize(dest) else { cleanup(); throw ExportError.writerFailed(nil) }
+            guard CGImageDestinationFinalize(dest) else { throw ExportError.writerFailed(nil) }
+            }
+            do { try write() } catch { cleanup(); throw error }
             if Task.isCancelled { cleanup(); throw CancellationError() }
             do {
                 try? FileManager.default.removeItem(at: url)

@@ -54,9 +54,29 @@ public struct OutputPlan: Equatable, Sendable {
         return w <= maxSide && h <= maxSide && w * h <= hevcMaxArea
     }
 
+    /// ProRes の書き出し形式(.mov)。"prores422" / "prores4444"。
+    public static let proRes422 = "prores422"
+    public static let proRes4444 = "prores4444"
+    public static func isProRes(_ codec: String) -> Bool { [proRes422, proRes4444].contains(codec.lowercased()) }
+    /// この計画のコーデックが ProRes か。
+    public var isProRes: Bool { Self.isProRes(codec) }
+    /// 書き出すファイルの拡張子(ProRes は .mov、他は .mp4)。
+    public var fileExtension: String { Self.fileExtension(forCodec: codec) }
+    public static func fileExtension(forCodec codec: String) -> String { isProRes(codec) ? "mov" : "mp4" }
+    /// 表示名。
+    public static func codecLabel(_ codec: String) -> String {
+        switch codec.lowercased() {
+        case "hevc": return "HEVC"
+        case proRes422: return "ProRes 422"
+        case proRes4444: return "ProRes 4444"
+        default: return "H.264"
+        }
+    }
+
     public static func make(width: Int, height: Int, codec: String) -> OutputPlan {
         let w = width & ~1, h = height & ~1
-        let requested = codec.lowercased() == "hevc" ? "hevc" : "h264"
+        let lower = codec.lowercased()
+        let requested = lower == "hevc" ? "hevc" : (isProRes(lower) ? lower : "h264")
         var plan = OutputPlan(width: w, height: h, requestedCodec: requested, codec: requested, error: nil, evenRoundedFrom: nil)
         if w != width || h != height { plan.evenRoundedFrom = (width, height) }
         if w < 2 || h < 2 {
@@ -176,7 +196,7 @@ public struct ResolutionInput: Equatable {
     public var summary: String {
         guard let w = width, let h = height, w > 0, h > 0 else { return "-" }
         guard let p = plan else { return "縦横比 \(Self.aspectLabel(width: w, height: h))" }
-        let name = { (c: String) in c == "hevc" ? "HEVC" : "H.264" }
+        let name = { (c: String) in OutputPlan.codecLabel(c) }
         let codecText = p.usesFallbackCodec ? "\(name(p.requestedCodec)) → \(name(p.codec))" : name(p.codec)
         return "縦横比 \(Self.aspectLabel(width: w, height: h)) · 書き出しサイズ \(p.width)×\(p.height) · \(codecText)"
     }

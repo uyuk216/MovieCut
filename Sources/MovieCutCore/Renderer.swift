@@ -118,7 +118,10 @@ public struct Renderer {
         ctx.scaleBy(x: 1, y: -1)
         ctx.interpolationQuality = .high
 
-        if drawsBackground {
+        if drawsBackground, project.hasTransparentBackground {
+            // 透明な背景: 書き出し用のバッファは前のコマが残っているので、はっきり消す
+            ctx.clear(CGRect(x: 0, y: 0, width: W, height: H))
+        } else if drawsBackground {
             ctx.setFillColor(parseHexColor(project.bg) ?? CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 1))
             ctx.fill(CGRect(x: 0, y: 0, width: W, height: H))
         }
@@ -248,7 +251,7 @@ public struct Renderer {
         // 字幕(キャラの色で縁取り)
         for c in subtitles {
             let ch = project.characters.first { $0.id == c.charId }
-            drawText(ExpressionTag.body(c.text ?? ""), x: W / 2, y: H * 0.88, size: c.fontSize ?? 64, color: "#ffffff", font: c.fontOrDefault, outline: ch?.color ?? "#000000", ctx: ctx, style: c.textStyle)
+            drawSubtitle(c, t: t, outline: ch?.color ?? "#000000", ctx: ctx, W: W, H: H)
         }
     }
 
@@ -398,8 +401,15 @@ public struct Renderer {
             var visible: Int?
             var animating = false
             var restoreAlpha = false
+            var charAnim: CharAnimSpec?
             defer { if restoreAlpha { ctx.restoreGState() } }
-            if let a = c.textAnim {
+            if let a = c.textAnim, a.perCharOrNil != nil {
+                // 1 文字ずつ動かす: 全体の動きは付けず、文字ごとの状態で描く
+                if TextAnimMath.perCharActive(a, count: shown.filter { $0 != "\n" }.count, rel: t - c.start) {
+                    animating = true
+                    charAnim = CharAnimSpec(anim: a, rel: t - c.start, baseAlpha: fadeAlpha)
+                }
+            } else if let a = c.textAnim {
                 let st = TextAnimMath.state(a, text: shown, rel: t - c.start, size: size)
                 if st.active {
                     animating = true
@@ -418,12 +428,12 @@ public struct Renderer {
             // 位置・拡大・回転が動く文字は、位置ごとにキャッシュしても使い回せないので直接描く
             let geometryAnimated = c.hasKeyframes && ["x", "y", "scale", "rotation"].contains { Animation.isAnimated($0, in: c) }
             // カラオケ字幕: 話している部分(先頭から)を色を変えて重ね描きする。終わったあとは全部その色。
-            let hlVisible = style?.highlight.map { min(KaraokeMath.coloredCount(text: shown, highlight: $0, rel: t - c.start, duration: c.duration), visible ?? Int.max) }
+            let hlVisible = charAnim != nil ? nil : style?.highlight.map { min(KaraokeMath.coloredCount(text: shown, highlight: $0, rel: t - c.start, duration: c.duration), visible ?? Int.max) }
             let hlStyle = Renderer.highlightPassStyle(style)
             if pose.isPlain(c) {
                 let plainCacheable = !geometryAnimated && !pose.transitionMoves && !animating && (pose.opacity >= 1 || blurred)
                 drawText(shown, x: pose.x * W, y: pose.y * H, size: size, color: c.colorOrDefault, font: c.fontOrDefault, outline: c.outlineOrDefault, ctx: ctx,
-                         cacheable: plainCacheable, style: style, visible: visible)
+                         cacheable: plainCacheable, style: style, visible: visible, charAnim: charAnim)
                 if let n = hlVisible, n > 0, let hl = style?.highlight {
                     drawText(shown, x: pose.x * W, y: pose.y * H, size: size, color: hl.colorOrDefault, font: c.fontOrDefault, outline: c.outlineOrDefault, ctx: ctx,
                              cacheable: plainCacheable, style: hlStyle, visible: n)
@@ -440,7 +450,7 @@ public struct Renderer {
                     ox = -(crop.l - crop.r) / 2 * box.width
                     oy = -(crop.t - crop.b) / 2 * box.height
                 }
-                drawText(shown, x: ox, y: oy, size: size, color: c.colorOrDefault, font: c.fontOrDefault, outline: c.outlineOrDefault, ctx: ctx, cacheable: false, style: style, visible: visible)
+                drawText(shown, x: ox, y: oy, size: size, color: c.colorOrDefault, font: c.fontOrDefault, outline: c.outlineOrDefault, ctx: ctx, cacheable: false, style: style, visible: visible, charAnim: charAnim)
                 if let n = hlVisible, n > 0, let hl = style?.highlight {
                     drawText(shown, x: ox, y: oy, size: size, color: hl.colorOrDefault, font: c.fontOrDefault, outline: c.outlineOrDefault, ctx: ctx, cacheable: false, style: hlStyle, visible: n)
                 }
@@ -492,6 +502,10 @@ public struct Renderer {
 
     /// 文字の枠(幅 = 一番長い行の幅、高さ = 行数 × 文字の大きさ × 1.2)。
     func textBlockSize(_ text: String, size: Double, font: String, style: TextStyle? = nil) -> CGSize {
+        // 縦書き: 幅 = 列の数 × 列の幅(行間 × 大きさ)、高さ = 一番長い列
+        if style?.verticalOrDefault == true {
+            return VerticalText.blockSize(text, size: size, spacing: style?.letterSpacingOrDefault ?? 0, lineHeight: style?.lineHeightOrDefault ?? TextStyle.defaultLineHeight)
+        }
         let lines = text.components(separatedBy: "\n")
         let f = TextCache.font(name: font, size: size, bold: style?.boldOrDefault ?? true)
         let sp = style?.letterSpacingOrDefault ?? 0, it = style?.italicOrDefault ?? false
@@ -759,8 +773,13 @@ public struct Renderer {
     }
 
     func drawText(_ text: String, x: Double, y: Double, size: Double, color: String, font: String, outline: String, ctx: CGContext, cacheable: Bool = true,
-                  style: TextStyle? = nil, visible: Int? = nil) {
+                  style: TextStyle? = nil, visible: Int? = nil, charAnim: CharAnimSpec? = nil) {
         guard size > 0 else { return }
+        // 縦書き・1 文字ずつの動きは、文字ごとに配置して描く(別の道)
+        if (style?.verticalOrDefault ?? false) || charAnim != nil {
+            drawTextChars(text, x: x, y: y, size: size, color: color, font: font, outline: outline, ctx: ctx, cacheable: cacheable, style: style, visible: visible, charAnim: charAnim)
+            return
+        }
         let lines = text.components(separatedBy: "\n")
         let fillC = parseHexColor(color) ?? parseHexColor("#ffffff")!
         let outC = parseHexColor(outline) ?? parseHexColor("#000000")!
@@ -770,16 +789,7 @@ public struct Renderer {
         let full = lines.map { TextCache.layout(f, font: font, line: $0, spacing: spacing, italic: italic) }
         let blockW = full.map(\.width).max() ?? 0
         let align = style?.alignOrDefault ?? .center
-        if let b = style?.box, let bc = parseHexColor(b.color), b.opacity > 0 {
-            let bw = blockW + 2 * b.paddingX, bh = Double(lines.count) * pitch + 2 * b.paddingY
-            let r = min(b.cornerRadius, bw / 2, bh / 2)
-            let rect = CGRect(x: x - bw / 2, y: y - bh / 2, width: bw, height: bh)
-            ctx.saveGState()
-            ctx.setFillColor(bc.copy(alpha: CGFloat(b.opacity)) ?? bc)
-            ctx.addPath(CGPath(roundedRect: rect, cornerWidth: r, cornerHeight: r, transform: nil))
-            ctx.fillPath()
-            ctx.restoreGState()
-        }
+        Renderer.drawTextBox(style?.box, x: x, y: y, blockW: blockW, blockH: Double(lines.count) * pitch, ctx: ctx)
         let lineStyled = style?.affectsLine ?? false
         var remaining = visible
         for (i, ln) in lines.enumerated() {
@@ -829,6 +839,19 @@ public struct Renderer {
             Renderer.paintLine(line, f, size: size, fill: fillC, outline: outC, ctx: ctx)
             ctx.restoreGState()
         }
+    }
+
+    /// 文字の後ろの箱(中心 (x, y)、文字の枠 blockW × blockH に余白を足した大きさ)。
+    static func drawTextBox(_ box: TextStyle.Box?, x: Double, y: Double, blockW: Double, blockH: Double, ctx: CGContext) {
+        guard let b = box, let bc = parseHexColor(b.color), b.opacity > 0 else { return }
+        let bw = blockW + 2 * b.paddingX, bh = blockH + 2 * b.paddingY
+        let r = min(b.cornerRadius, bw / 2, bh / 2)
+        let rect = CGRect(x: x - bw / 2, y: y - bh / 2, width: bw, height: bh)
+        ctx.saveGState()
+        ctx.setFillColor(bc.copy(alpha: CGFloat(b.opacity)) ?? bc)
+        ctx.addPath(CGPath(roundedRect: rect, cornerWidth: r, cornerHeight: r, transform: nil))
+        ctx.fillPath()
+        ctx.restoreGState()
     }
 
     /// 字形の輪郭が無い文字(絵文字)を、CoreText で直接描く。ctx は y 下向きなので、文字の行列を上下反転して合わせる。

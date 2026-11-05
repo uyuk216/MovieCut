@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 import MovieCutCore
 
 /// 保存パネルで選べる書き出しの種類(現在の設定 / 組み込みのプリセット / 保存したプリセット)。
@@ -30,9 +31,12 @@ final class ExportPanelOptions: NSObject {
     private let kindPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let ratePopup = NSPopUpButton(frame: .zero, pullsDown: false)
     weak var panel: NSSavePanel?
+    /// 「現在の設定」で書き出すときのコーデック(ProRes なら .mov)。
+    private let projectCodec: String
 
-    init(documentName: String, initial: ExportChoice, custom: [ExportSpec]) {
+    init(documentName: String, initial: ExportChoice, custom: [ExportSpec], projectCodec: String = "h264") {
         self.documentName = documentName
+        self.projectCodec = projectCodec
         var list: [ExportChoice] = [.current] + ExportPreset.allCases.map { .builtin($0) } + custom.map { .custom($0) }
         if initial.preset == nil, initial.spec != nil, !list.contains(where: { $0.spec == initial.spec }) { list.append(initial) }
         choices = list
@@ -57,9 +61,16 @@ final class ExportPanelOptions: NSObject {
     @objc func kindChanged(_ sender: Any?) {
         let c = selectedChoice
         guard let panel else { return }
-        panel.allowedContentTypes = [c.audioOnly ? .mpeg4Audio : .mpeg4Movie]
-        panel.nameFieldStringValue = c.spec?.suggestedFileName(documentName: documentName) ?? documentName + ".mp4"
-        panel.title = c.spec.map { "書き出し — \($0.name)" } ?? "MP4 書き出し"
+        panel.allowedContentTypes = [contentType(for: c)]
+        panel.nameFieldStringValue = c.spec?.suggestedFileName(documentName: documentName) ?? documentName + "." + OutputPlan.fileExtension(forCodec: projectCodec)
+        panel.title = c.spec.map { "書き出し — \($0.name)" } ?? (OutputPlan.isProRes(projectCodec) ? "\(OutputPlan.codecLabel(projectCodec)) 書き出し" : "MP4 書き出し")
+    }
+
+    /// 保存先の種類。音声のみは m4a、「現在の設定」で ProRes のときは .mov、他は mp4。
+    func contentType(for c: ExportChoice) -> UTType {
+        if c.audioOnly { return .mpeg4Audio }
+        if c.spec == nil, OutputPlan.isProRes(projectCodec) { return .quickTimeMovie }
+        return .mpeg4Movie
     }
 
     /// 保存パネルのアクセサリ(範囲のチェックがあれば上に置く)。

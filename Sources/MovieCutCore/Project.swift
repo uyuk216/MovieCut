@@ -20,6 +20,9 @@ public struct Project: Codable, Equatable {
     /// 正確な分数のレート(時刻とコマの変換はこれを使う)。
     public var frameRate: FrameRate { FrameRate.from(fps) }
     public var bg: String = "#000000"
+    /// 背景を透明にする指定(`bg` が "transparent")。ProRes 4444・APNG・PNG は透明のまま書き出し、他の形式は黒になる。
+    public static let transparentBackground = "transparent"
+    public var hasTransparentBackground: Bool { bg.lowercased() == Self.transparentBackground }
     public var codec: String = "h264"
     public var voicevoxUrl: String = "http://127.0.0.1:50021"
     public var aquestalkCommand: String = defaultAquesTalkCommand

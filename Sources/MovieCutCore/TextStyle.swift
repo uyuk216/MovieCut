@@ -114,9 +114,11 @@ public struct TextStyle: Codable, Equatable, Sendable {
     public var italic: Bool?
     /// カラオケ字幕(話している部分の色つけ)。未設定 = しない。文字クリップの装飾の一部なので、保存したスタイルにも入る。
     public var highlight: Highlight?
+    /// 縦書き(右の列から左へ。列の中は上から下)。未設定 = 横書き。
+    public var vertical: Bool?
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["shadow", "box", "gradient", "letterSpacing", "lineHeight", "align", "bold", "italic", "highlight"]
+    static let knownKeys: Set<String> = ["shadow", "box", "gradient", "letterSpacing", "lineHeight", "align", "bold", "italic", "highlight", "vertical"]
     public static let defaultLineHeight = 1.2
 
     public init() {}
@@ -132,9 +134,10 @@ public struct TextStyle: Codable, Equatable, Sendable {
         letterSpacing = l.double("letterSpacing"); lineHeight = l.double("lineHeight"); align = l.string("align")
         bold = l.bool("bold"); italic = l.bool("italic")
         highlight = l.value("highlight")
+        vertical = l.bool("vertical")
         extra = l.extra()
         // 読めなかった項目は捨てずに、そのまま書き戻す
-        for key in ["shadow", "box", "gradient", "letterSpacing", "lineHeight", "align", "bold", "italic", "highlight"] {
+        for key in ["shadow", "box", "gradient", "letterSpacing", "lineHeight", "align", "bold", "italic", "highlight", "vertical"] {
             guard let raw: JSONValue = l.value(key), raw != .null else { continue }
             let ok: Bool
             switch key {
@@ -146,6 +149,7 @@ public struct TextStyle: Codable, Equatable, Sendable {
             case "align": ok = align != nil
             case "bold": ok = bold != nil
             case "highlight": ok = highlight != nil
+            case "vertical": ok = vertical != nil
             default: ok = italic != nil
             }
             if !ok { extra[key] = raw }
@@ -164,11 +168,12 @@ public struct TextStyle: Codable, Equatable, Sendable {
         try c.encodeIfPresent(bold, forKey: AnyKey("bold"))
         try c.encodeIfPresent(italic, forKey: AnyKey("italic"))
         try c.encodeIfPresent(highlight, forKey: AnyKey("highlight"))
+        try c.encodeIfPresent(vertical, forKey: AnyKey("vertical"))
     }
 
     /// 何も設定していない(知らない項目も無い)。
     public var isEmpty: Bool {
-        shadow == nil && box == nil && gradient == nil && letterSpacing == nil && lineHeight == nil && align == nil && bold == nil && italic == nil && highlight == nil && extra.isEmpty
+        shadow == nil && box == nil && gradient == nil && letterSpacing == nil && lineHeight == nil && align == nil && bold == nil && italic == nil && highlight == nil && vertical == nil && extra.isEmpty
     }
 
     public var letterSpacingOrDefault: Double { Self.clamp(letterSpacing ?? 0, -50...200, 0) }
@@ -176,6 +181,7 @@ public struct TextStyle: Codable, Equatable, Sendable {
     public var alignOrDefault: Align { align.flatMap(Align.init(rawValue:)) ?? .center }
     public var boldOrDefault: Bool { bold ?? true }
     public var italicOrDefault: Bool { italic ?? false }
+    public var verticalOrDefault: Bool { vertical ?? false }
 
     /// 1 行の画素(影・グラデーション・字形)に関わる設定がある(行のビットマップを別の道で作る)。箱・揃え・行間は行の絵に関係しない。
     var affectsLine: Bool {
@@ -198,6 +204,7 @@ public struct TextStyle: Codable, Equatable, Sendable {
         if let v = lineHeight { s.lineHeight = Self.clamp(v, 0.6...3, Self.defaultLineHeight) }
         if let a = align, Align(rawValue: a) == nil { s.align = nil }
         s.highlight = highlight?.normalized
+        if vertical == false { s.vertical = nil }  // 既定の値は書かない
         return s
     }
 
@@ -239,11 +246,13 @@ public enum TextStyleEditing {
     /// 文字のアニメーションを設定する(kind が none なら外す)。
     @discardableResult
     public static func setAnim(_ c: inout Clip, kind: TextAnimKind, duration: Double? = nil, speed: Double? = nil) -> Bool {
-        guard c.type == .text else { return false }
+        // 文字クリップと、字幕(ボイス)。字幕はその場に固定なので、スクロールは使えない
+        guard c.type == .text || (c.type == .voice && !kind.isScroll) else { return false }
         let new: TextAnim?
         if kind == .none { new = nil } else {
             var a = c.textAnim ?? TextAnim(kind: kind.rawValue)
             a.kind = kind.rawValue
+            if kind.isScroll { a.perChar = nil }
             if let d = duration { a.duration = TextAnim.clampDuration(d) }
             // 速さは既定の値なら書かない(任意項目)
             if let v = speed { let s = TextAnim.clampSpeed(v); a.speed = s == TextAnim.defaultSpeed ? nil : s }
@@ -252,6 +261,22 @@ public enum TextStyleEditing {
         guard new != c.textAnim else { return false }
         c.textAnim = new
         return true
+    }
+
+    /// 1 文字ずつ動かす間隔(秒)を設定する(nil で全体が一度に動く状態へ戻す)。アニメーションが無い・スクロールのときは何もしない。
+    @discardableResult
+    public static func setPerChar(_ c: inout Clip, _ interval: Double?) -> Bool {
+        guard c.type == .text || c.type == .voice, var a = c.textAnim, let k = a.known, k != .none, !k.isScroll else { return false }
+        a.perChar = interval.map { TextAnim.clampPerChar($0) }
+        guard a != c.textAnim else { return false }
+        c.textAnim = a
+        return true
+    }
+
+    /// 縦書きの切り替え(文字クリップと字幕)。
+    @discardableResult
+    public static func setVertical(_ c: inout Clip, _ on: Bool) -> Bool {
+        update(&c) { $0.vertical = on ? true : nil }
     }
 }
 
@@ -282,8 +307,10 @@ public struct TextAnim: Codable, Equatable, Sendable {
     public var duration: Double?
     /// スクロールの速さ(画面の高さ・幅に対する割合 / 秒)。無ければ既定値。スクロールの種類だけ使う。
     public var speed: Double?
+    /// 1 文字ずつ動かすときの、文字ごとの遅れ(秒)。無ければ全体が一度に動く。スクロールでは使わない。
+    public var perChar: Double?
     public var extra: [String: JSONValue] = [:]
-    static let knownKeys: Set<String> = ["kind", "duration", "speed"]
+    static let knownKeys: Set<String> = ["kind", "duration", "speed", "perChar"]
     public static let defaultDuration = 1.0
     public static let defaultSpeed = 0.1
 
@@ -294,6 +321,7 @@ public struct TextAnim: Codable, Equatable, Sendable {
         kind = l.string("kind") ?? "none"
         duration = l.double("duration")
         speed = l.double("speed")
+        perChar = l.double("perChar")
         extra = l.extra()
     }
 
@@ -303,11 +331,19 @@ public struct TextAnim: Codable, Equatable, Sendable {
         try c.encode(kind, forKey: AnyKey("kind"))
         try c.encodeIfPresent(duration, forKey: AnyKey("duration"))
         try c.encodeIfPresent(speed, forKey: AnyKey("speed"))
+        try c.encodeIfPresent(perChar, forKey: AnyKey("perChar"))
     }
 
     public var known: TextAnimKind? { TextAnimKind(rawValue: kind) }
     public var durationOrDefault: Double { Self.clampDuration(duration ?? Self.defaultDuration) }
     public var speedOrDefault: Double { Self.clampSpeed(speed ?? Self.defaultSpeed) }
+    /// 1 文字ずつ動かす間隔(秒)。nil = 全体が一度に。
+    public var perCharOrNil: Double? {
+        guard let v = perChar, v.isFinite, !(known?.isScroll ?? false), known != .none else { return nil }
+        return Self.clampPerChar(v)
+    }
+    public static let defaultPerChar = 0.08
+    public static func clampPerChar(_ v: Double) -> Double { TextStyle.clamp(v, 0.01...1, defaultPerChar) }
     public static func clampDuration(_ d: Double) -> Double { TextStyle.clamp(d, 0.1...30, defaultDuration) }
     public static func clampSpeed(_ v: Double) -> Double { TextStyle.clamp(v, 0.01...1, defaultSpeed) }
 }
@@ -349,11 +385,11 @@ public enum TextAnimMath {
     }
 
     /// シェイク: 30 コマ/秒の刻みごとに決まった(乱数ではない)ずれ。振れ幅は終わりに向けて 0 になる。
-    public static func shakeOffset(rel: Double, duration: Double, amplitude: Double) -> (dx: Double, dy: Double) {
+    public static func shakeOffset(rel: Double, duration: Double, amplitude: Double, salt charSalt: UInt64 = 0) -> (dx: Double, dy: Double) {
         guard duration > 0, rel.isFinite, rel >= 0, rel < duration else { return (0, 0) }
         let n = (rel * 30).rounded(.down)
         let amp = amplitude * max(0, 1 - n / 30 / duration)  // 振れ幅も刻みごと(同じ刻みは同じ絵)
-        let step = UInt64(bitPattern: Int64(n))
+        let step = UInt64(bitPattern: Int64(n)) &+ charSalt &* 0x2545_F491_4F6C_DD1D
         func unit(_ salt: UInt64) -> Double {
             var z = (step &+ 0x9E37_79B9_7F4A_7C15) &* (salt | 1)
             z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
@@ -362,6 +398,42 @@ public enum TextAnimMath {
             return Double(z % 20_001) / 10_000 - 1  // −1…1
         }
         return (amp * unit(0x1234_5671), amp * unit(0x7654_3211))
+    }
+
+    // MARK: 1 文字ずつ
+
+    /// 1 文字ずつ動かす設定のとき、全文字が動き終わるまでの秒(長さ + (文字数 − 1) × 間隔)。
+    public static func perCharTotal(_ a: TextAnim, count: Int) -> Double {
+        guard let g = a.perCharOrNil, a.known != nil else { return a.durationOrDefault }
+        return a.durationOrDefault + Double(max(0, count - 1)) * g
+    }
+
+    /// 1 文字ずつの動きがまだ続いている(描画のキャッシュを使えない)。
+    public static func perCharActive(_ a: TextAnim, count: Int, rel: Double) -> Bool {
+        guard a.perCharOrNil != nil, let k = a.known, k != .none, !k.isScroll, rel.isFinite else { return false }
+        return rel < perCharTotal(a, count: count)
+    }
+
+    /// `index` 番目(0 始まり、改行を除く)の文字の、時刻 rel での状態。文字ごとに間隔ぶん遅れて始まる。
+    /// 始まる前は(シェイク以外)見えない。`visible` は使わず、見えるかどうかを `hidden` で返す。
+    public static func charState(_ a: TextAnim, index: Int, rel: Double, size: Double) -> (state: TextAnimState, hidden: Bool) {
+        var s = TextAnimState()
+        guard let g = a.perCharOrNil, let kind = a.known, kind != .none, !kind.isScroll else { return (s, false) }
+        let d = a.durationOrDefault
+        let r = rel - Double(index) * g
+        if r < 0 { return (s, kind != .shake) }
+        guard r < d else { return (s, false) }
+        s.active = true
+        switch kind {
+        case .typewriter: break
+        case .pop: s.scale = popScale(rel: r, duration: d)
+        case .fadeIn: s.alpha = min(max(r / d, 0), 1)
+        case .shake:
+            let o = shakeOffset(rel: r, duration: d, amplitude: size * 0.08, salt: UInt64(index + 1))
+            s.dx = o.dx; s.dy = o.dy
+        case .none, .scrollUp, .scrollLeft: s.active = false
+        }
+        return (s, false)
     }
 
     public static func state(_ a: TextAnim, text: String, rel: Double, size: Double) -> TextAnimState {

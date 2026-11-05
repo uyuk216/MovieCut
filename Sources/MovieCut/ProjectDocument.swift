@@ -47,7 +47,13 @@ final class ProjectDocument: ReferenceFileDocument {
 
     func fileWrapper(snapshot: Data, configuration: WriteConfiguration) throws -> FileWrapper {
         // 保存したら最近使った項目へ(保存先が決まっているときだけ。書き込みが済んだあとに記録する)
-        DispatchQueue.main.async { [model] in MainActor.assumeIsolated { RecentProjectsController.shared.record(url: model.fileURL) } }
+        // あわせて、保存した中身を世代バックアップへ残す(保存先が決まっているときだけ。別のキューで書き、保存を待たせない)
+        DispatchQueue.main.async { [model] in
+            MainActor.assumeIsolated {
+                RecentProjectsController.shared.record(url: model.fileURL)
+                ProjectVersionRecorder.record(data: snapshot, projectURL: model.fileURL)
+            }
+        }
         return FileWrapper(regularFileWithContents: snapshot)
     }
 }

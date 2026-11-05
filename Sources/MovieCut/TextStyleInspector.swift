@@ -23,6 +23,7 @@ struct TextStyleInspector: View {
             if c.type == .text { styleSection(c) }
             decorationSections(c)
             if c.type == .text { bubbleSection(c); animationSection(c); counterSection(c); valueRefSection(c) }
+            else if c.type == .voice { animationSection(c) }
         }
     }
 
@@ -233,6 +234,7 @@ struct TextStyleInspector: View {
             }
             .pickerStyle(.segmented).labelsHidden()
         }
+        toggle("縦書き（右の列から左へ）", isOn: st.verticalOrDefault, name: "縦書きの変更") { $0.vertical = $1 ? true : nil }
         HStack(spacing: 14) {
             toggle("太字", isOn: st.boldOrDefault, name: "太字の変更") { $0.bold = $1 ? nil : false }
             toggle("斜体", isOn: st.italicOrDefault, name: "斜体の変更") { $0.italic = $1 ? true : nil }
@@ -336,7 +338,7 @@ struct TextStyleInspector: View {
         InspectorField(label: "種類") {
             Picker("", selection: Binding(get: { c.textAnim == nil ? TextAnimKind.none.rawValue : c.textAnim!.kind },
                                           set: { v in model.setTextAnim(TextAnimKind(rawValue: v) ?? .none, clipId: clipId) })) {
-                ForEach(TextAnimKind.allCases, id: \.rawValue) { Text($0.label).tag($0.rawValue) }
+                ForEach(TextAnimKind.allCases.filter { c.type == .text || !$0.isScroll }, id: \.rawValue) { Text($0.label).tag($0.rawValue) }
                 if let a = c.textAnim, a.known == nil { Text("（未対応: \(a.kind)）").tag(a.kind) }
             }
             .labelsHidden()
@@ -354,7 +356,20 @@ struct TextStyleInspector: View {
                          onCommit: { model.setTextAnim(kind, duration: $0, clipId: clipId) },
                          onStep: { model.coalescedTextAnimDuration($0, clipId: clipId) })
             }
-            Text("クリップの頭からこの長さだけ動きます。").font(.system(size: 11)).foregroundStyle(.secondary)
+            Toggle("1文字ずつ動かす", isOn: Binding(get: { c.textAnim?.perCharOrNil != nil },
+                                                   set: { on in model.setTextAnimPerChar(on ? TextAnim.defaultPerChar : nil, clipId: clipId) }))
+                .toggleStyle(.checkbox).font(.system(size: 12)).disabled(model.isLocked)
+            if let g = c.textAnim?.perCharOrNil {
+                InspectorField(label: "文字の間隔（秒）") {
+                    NumField(value: g, step: 0.01, decimals: 2, clamp: { TextAnim.clampPerChar($0) },
+                             onCommit: { model.setTextAnimPerChar($0, clipId: clipId) },
+                             onStep: { model.coalescedTextAnimPerChar($0, clipId: clipId) })
+                }
+                .padding(.leading, 10)
+                Text("1 文字ごとに、この間隔だけ遅れて同じ動きを始めます（縦書きでは上の文字から）。").font(.system(size: 11)).foregroundStyle(.secondary)
+            } else {
+                Text("クリップの頭からこの長さだけ動きます。").font(.system(size: 11)).foregroundStyle(.secondary)
+            }
         }
     }
 }

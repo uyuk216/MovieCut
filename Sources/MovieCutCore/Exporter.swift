@@ -136,9 +136,10 @@ public final class Exporter {
 
         try? FileManager.default.removeItem(at: url)
         nonisolated(unsafe) let writer: AVAssetWriter
-        do { writer = try AVAssetWriter(outputURL: url, fileType: .mp4) }
+        let isProRes = plan.isProRes
+        do { writer = try AVAssetWriter(outputURL: url, fileType: isProRes ? .mov : .mp4) }
         catch { throw ExportError.cannotCreateWriter(error) }
-        writer.shouldOptimizeForNetworkUse = true
+        if !isProRes { writer.shouldOptimizeForNetworkUse = true }
 
         // 映像入力
         let isHEVC = plan.codec == "hevc"
@@ -152,8 +153,10 @@ public final class Exporter {
             AVVideoMaxKeyFrameIntervalKey: max(1, Int((2 * fpsValue).rounded())),
         ]
         if !isHEVC { props[AVVideoProfileLevelKey] = AVVideoProfileLevelH264HighAutoLevel }
-        let vSettings: [String: Any] = [
-            AVVideoCodecKey: isHEVC ? AVVideoCodecType.hevc : AVVideoCodecType.h264,
+        // ProRes はビットレート・キーフレームの指定が無い(フレームごとに独立した圧縮)。4444 は背景が透明なら透明も残る
+        let codecType: AVVideoCodecType = isProRes ? (plan.codec == OutputPlan.proRes4444 ? .proRes4444 : .proRes422) : (isHEVC ? .hevc : .h264)
+        var vSettings: [String: Any] = [
+            AVVideoCodecKey: codecType,
             AVVideoWidthKey: ew,
             AVVideoHeightKey: eh,
             AVVideoCompressionPropertiesKey: props,
@@ -164,6 +167,7 @@ public final class Exporter {
                 AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_709_2,
             ],
         ]
+        if isProRes { vSettings.removeValue(forKey: AVVideoCompressionPropertiesKey) }
         nonisolated(unsafe) let vInput = AVAssetWriterInput(mediaType: .video, outputSettings: vSettings)
         vInput.expectsMediaDataInRealTime = false
         // トラックの時間の目盛りをコマの長さの整数倍にする(既定の 1/600 だと 29.97 などの時刻が丸められて、コマの間隔がそろわない)
@@ -182,7 +186,16 @@ public final class Exporter {
         var aReader: AVAssetReader?
         var aOutput: AVAssetReaderTrackOutput?
         if hasAudio {
-            let aSettings: [String: Any] = [
+            // ProRes(.mov)の音は、編集用の素材として無圧縮(24 ビット PCM)で入れる
+            let aSettings: [String: Any] = isProRes ? [
+                AVFormatIDKey: kAudioFormatLinearPCM,
+                AVSampleRateKey: 48000,
+                AVNumberOfChannelsKey: 2,
+                AVLinearPCMBitDepthKey: 24,
+                AVLinearPCMIsFloatKey: false,
+                AVLinearPCMIsBigEndianKey: false,
+                AVLinearPCMIsNonInterleaved: false,
+            ] : [
                 AVFormatIDKey: kAudioFormatMPEG4AAC,
                 AVSampleRateKey: 48000,
                 AVNumberOfChannelsKey: 2,

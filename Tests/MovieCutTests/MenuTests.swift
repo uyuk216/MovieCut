@@ -54,8 +54,8 @@ final class MenuTests: XCTestCase {
         XCTAssertEqual(AppMenuSpec.swapResolution(s).title, "縦横を入れ替える")
         XCTAssertEqual(AppMenuSpec.fpsItems(s).map(\.title), ["24 fps", "30 fps", "48 fps", "60 fps", "120 fps", "240 fps"])
         XCTAssertEqual(AppMenuSpec.customFps(s).title, "カスタム…")
-        XCTAssertEqual(AppMenuSpec.codecItems(s).map(\.title), ["H.264", "HEVC"])
-        XCTAssertEqual(AppMenuSpec.backgroundItems(s).map(\.title), ["黒", "白", "緑（クロマキー）"])
+        XCTAssertEqual(AppMenuSpec.codecItems(s).map(\.title), ["H.264", "HEVC", "ProRes 422（.mov）", "ProRes 4444（.mov・透明を残せる）"])
+        XCTAssertEqual(AppMenuSpec.backgroundItems(s).map(\.title), ["黒", "白", "緑（クロマキー）", "透明（ProRes 4444・APNG 用）"])
         XCTAssertEqual(AppMenuSpec.help.map { $0.map(\.title) }, [["キーボードショートカット一覧"], ["VOICEVOX 公式サイト", "AquesTalkPlayer 公式サイト"], ["ライセンス", "第三者の規約"]])
     }
 
@@ -268,11 +268,12 @@ final class MenuTests: XCTestCase {
     }
 
     func testCodecAndBackgroundRadios() {
-        XCTAssertEqual(AppMenuSpec.codecItems(state { $0.codec = "hevc" }).map(\.checked), [false, true])
-        XCTAssertEqual(AppMenuSpec.codecItems(state { $0.codec = "h264" }).map(\.checked), [true, false])
-        XCTAssertEqual(AppMenuSpec.backgroundItems(state { $0.bg = "#FFFFFF" }).map(\.checked), [false, true, false], "大文字小文字は区別しない")
-        XCTAssertEqual(AppMenuSpec.backgroundItems(state { $0.bg = "#00b140" }).map(\.checked), [false, false, true])
-        XCTAssertEqual(AppMenuSpec.backgroundItems(state { $0.bg = "#123456" }).map(\.checked), [false, false, false], "自由な色はどれにも付かない")
+        XCTAssertEqual(AppMenuSpec.codecItems(state { $0.codec = "hevc" }).map(\.checked), [false, true, false, false])
+        XCTAssertEqual(AppMenuSpec.codecItems(state { $0.codec = "h264" }).map(\.checked), [true, false, false, false])
+        XCTAssertEqual(AppMenuSpec.backgroundItems(state { $0.bg = "#FFFFFF" }).map(\.checked), [false, true, false, false], "大文字小文字は区別しない")
+        XCTAssertEqual(AppMenuSpec.backgroundItems(state { $0.bg = "#00b140" }).map(\.checked), [false, false, true, false])
+        XCTAssertEqual(AppMenuSpec.backgroundItems(state { $0.bg = "Transparent" }).map(\.checked), [false, false, false, true], "透明（ProRes 4444・APNG 用）")
+        XCTAssertEqual(AppMenuSpec.backgroundItems(state { $0.bg = "#123456" }).map(\.checked), [false, false, false, false], "自由な色はどれにも付かない")
     }
 
     // MARK: メニューの操作がモデルの関数に届く

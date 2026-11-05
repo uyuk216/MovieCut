@@ -12,13 +12,14 @@ extension ProjectModel {
         let queue = queue ?? AppServices.exportQueue
         if reportMissingMediaForExport() { return }
         let panel = NSSavePanel()
-        panel.allowedContentTypes = [.mpeg4Movie]
-        panel.nameFieldStringValue = documentName + ".mp4"
+        let isProRes = OutputPlan.isProRes(project.codec)
+        panel.allowedContentTypes = [isProRes ? .quickTimeMovie : .mpeg4Movie]
+        panel.nameFieldStringValue = documentName + "." + OutputPlan.fileExtension(forCodec: project.codec)
         panel.canCreateDirectories = true
         panel.title = "書き出しキューに追加"
         let range = project.exportRange
-        panel.message = range.map { String(format: "今の設定のまま、範囲 %.2f〜%.2f 秒を MP4 にしてキューの最後に積みます。", $0.start, $0.end) }
-            ?? "今の設定のまま MP4 にして、キューの最後に積みます。"
+        panel.message = range.map { String(format: "今の設定のまま、範囲 %.2f〜%.2f 秒を \(isProRes ? "ProRes の .mov" : "MP4") にしてキューの最後に積みます。", $0.start, $0.end) }
+            ?? "今の設定のまま \(isProRes ? "ProRes の .mov" : "MP4") にして、キューの最後に積みます。"
         // 写しは保存先を選んだ時点で取る(パネルを開いている間の編集は含めない)
         let snapshot = project
         let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in

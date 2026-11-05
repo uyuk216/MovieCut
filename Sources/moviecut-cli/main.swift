@@ -340,7 +340,9 @@ case "export" where args.count >= 3:
         var p = try Project.load(from: URL(fileURLWithPath: args[1]))
         if let s = optValue("--size") { let sz = parseSize(s); p = p.scaledForResolution(newWidth: sz.0, newHeight: sz.1) }
         if let f = optValue("--fps") { p.fps = parseFps(f) }
-        if let c = optValue("--codec") { guard ["h264", "hevc"].contains(c) else { fail("--codec は h264 か hevc") }; p.codec = c }
+        if let c = optValue("--codec") { guard ["h264", "hevc", "prores422", "prores4444"].contains(c) else { fail("--codec は h264 / hevc / prores422 / prores4444(ProRes は .mov に書く)") }; p.codec = c }
+        if OutputPlan.isProRes(p.codec), !args[2].lowercased().hasSuffix(".mov") { FileHandle.standardError.write(Data("注意: ProRes の出力先は .mov にしてください\n".utf8)) }
+        if let b = optValue("--bg") { guard b == Project.transparentBackground || parseHexColor(b) != nil else { fail("--bg は #rrggbb か transparent") }; p.bg = b }
         var preset: ExportPreset?
         var spec: ExportSpec?
         if let name = optValue("--preset") {
@@ -425,6 +427,33 @@ case "gif" where args.count >= 2:
                 nextMark = (v * 10 + 1e-9).rounded(.down) / 10 + 0.1
             }
         }
+        let wall = Date().timeIntervalSince(t0)
+        print(String(format: "wrote %@ frames=%d bytes=%d wall=%.2fs (%.1f fps)", outPath, r.frameCount, r.bytes, wall, Double(r.frameCount) / max(wall, 1e-9)))
+    } catch { fail("書き出せませんでした: \(error.localizedDescription)") }
+case "apng" where args.count >= 2:
+    // apng <in.mcpjc> --out <x.png> [--fps 15] [--width 480] [--loop 0] [--range a:b|project]
+    guard let outPath = optValue("--out") else { fail("--out(出力先の .png)が必要です") }
+    var options = APNGOptions.standard
+    if let f = optValue("--fps") {
+        guard let v = Double(f), let fps = APNGOptions.validFPS(v) else { fail("--fps は \(Int(APNGOptions.fpsRange.lowerBound))〜\(Int(APNGOptions.fpsRange.upperBound)) の数字") }
+        options.fps = fps
+    }
+    if let w = optValue("--width") {
+        guard let v = Int(w), APNGOptions.widthRange.contains(v) else { fail("--width は \(APNGOptions.widthRange.lowerBound)〜\(APNGOptions.widthRange.upperBound) の整数(px)") }
+        options.maxWidth = v
+    }
+    if let l = optValue("--loop") {
+        guard let v = Int(l), APNGOptions.loopRange.contains(v) else { fail("--loop は 0(無限)〜\(APNGOptions.loopRange.upperBound) の整数") }
+        options.loopCount = v
+    }
+    do {
+        var p = try Project.load(from: URL(fileURLWithPath: args[1]))
+        if let b = optValue("--bg") { guard b == Project.transparentBackground || parseHexColor(b) != nil else { fail("--bg は #rrggbb か transparent") }; p.bg = b }
+        let range = parseRange(p)
+        let plan = APNGExporter.plan(project: p, range: range, options: options)
+        print("plan: \(plan.width)x\(plan.height) fps=\(FrameRate.label(options.fps)) frames=\(plan.frames) loop=\(options.loopCount)")
+        let t0 = Date()
+        let r = try await APNGExporter.export(project: p, range: range, options: options, to: URL(fileURLWithPath: outPath))
         let wall = Date().timeIntervalSince(t0)
         print(String(format: "wrote %@ frames=%d bytes=%d wall=%.2fs (%.1f fps)", outPath, r.frameCount, r.bytes, wall, Double(r.frameCount) / max(wall, 1e-9)))
     } catch { fail("書き出せませんでした: \(error.localizedDescription)") }
@@ -704,5 +733,5 @@ case "smoke":
         try await runExport(p, to: URL(fileURLWithPath: outPath))
     } catch { fail("書き出せませんでした: \(error.localizedDescription)") }
 default:
-    fail("usage:\n  moviecut-cli info <file.ymproj>\n  moviecut-cli new <out.ymproj>\n  moviecut-cli export <in.mcpjc> <out.mp4|out.m4a> [--range a:b|project] [--preset youtube1080|youtube1080p60|youtube4k|short|shorts|tiktok|reels|x720|x1080|light|audio|<保存したプリセット名>] [--bitrate 8(Mbps)] [--size WxH] [--fps 29.97] [--codec h264|hevc] [--fan-max [--fan-port 1200|1201]]\n  moviecut-cli fan status | fan test [--seconds 8] [--fan-port 1200|1201]\n  moviecut-cli smoke --out <mp4> [--size WxH] [--fps 23.976] [--codec h264|hevc] [--blur] [--tone] [--save-project p.ymproj]\n  moviecut-cli speak (--voicevox <id> [--speed --pitch --intonation] | --voice <preset> [--speed]) --text <t> --out <wav>\n  moviecut-cli speakers | deps | script <script.txt> --out <p.ymproj>\n  moviecut-cli rig-frame <フォルダ|.psd> --out <png> [--mouth あ|い|う|え|お|open|closed] [--blink] [--pick 眉=2,目=5] [--expr 名前] [--height 1080] [--bench N] [--list]\n  moviecut-cli psd-info <file.psd>\n  moviecut-cli frame <in.ymproj> --t <sec> --out <png|jpg> [--size WxH] [--bench N]\n  moviecut-cli gif <in.mcpjc> --out <x.gif> [--fps 10] [--width 480] [--range a:b|project]\n  moviecut-cli sequence <in.mcpjc> --out <dir> [--format png|jpeg] [--name base] [--range a:b|project] [--fps 30] [--size WxH]\n  moviecut-cli addvideo <in.ymproj> <clip.mp4> <out.ymproj>\n  moviecut-cli genclips <N> <out.ymproj>\n  moviecut-cli silence <project|media> [--threshold -40] [--min 0.4] [--pad 0.1]\n  moviecut-cli beats <project|media> [--all]\n  moviecut-cli subs <project> --out <x.srt|x.vtt>\n  moviecut-cli transcribe <media|project> --out <x.srt|x.vtt> [--clip 0] [--locale ja-JP]\n  moviecut-cli chapters <project> [--color red|orange|yellow|green|blue|purple|gray|teal]\n  moviecut-cli loudness <project> [--range a:b|project]\n  moviecut-cli project-info <project>   (JSON。読み取り専用)\n  moviecut-cli ai script --theme <t> [--chars 霊夢,魔理沙] [--lines 12] (--provider-cmd \"claude -p\" | --provider-url http://127.0.0.1:11434 --model <m>) [--timeout 120] [--out x.txt] [--show-prompt]")
+    fail("usage:\n  moviecut-cli info <file.ymproj>\n  moviecut-cli new <out.ymproj>\n  moviecut-cli export <in.mcpjc> <out.mp4|out.m4a> [--range a:b|project] [--preset youtube1080|youtube1080p60|youtube4k|short|shorts|tiktok|reels|x720|x1080|light|audio|<保存したプリセット名>] [--bitrate 8(Mbps)] [--size WxH] [--fps 29.97] [--codec h264|hevc|prores422|prores4444] [--bg #rrggbb|transparent] [--fan-max [--fan-port 1200|1201]]\n  moviecut-cli fan status | fan test [--seconds 8] [--fan-port 1200|1201]\n  moviecut-cli smoke --out <mp4> [--size WxH] [--fps 23.976] [--codec h264|hevc] [--blur] [--tone] [--save-project p.ymproj]\n  moviecut-cli speak (--voicevox <id> [--speed --pitch --intonation] | --voice <preset> [--speed]) --text <t> --out <wav>\n  moviecut-cli speakers | deps | script <script.txt> --out <p.ymproj>\n  moviecut-cli rig-frame <フォルダ|.psd> --out <png> [--mouth あ|い|う|え|お|open|closed] [--blink] [--pick 眉=2,目=5] [--expr 名前] [--height 1080] [--bench N] [--list]\n  moviecut-cli psd-info <file.psd>\n  moviecut-cli frame <in.ymproj> --t <sec> --out <png|jpg> [--size WxH] [--bench N]\n  moviecut-cli gif <in.mcpjc> --out <x.gif> [--fps 10] [--width 480] [--range a:b|project]\n  moviecut-cli apng <in.mcpjc> --out <x.png> [--fps 15] [--width 480] [--loop 0] [--bg transparent] [--range a:b|project]\n  moviecut-cli sequence <in.mcpjc> --out <dir> [--format png|jpeg] [--name base] [--range a:b|project] [--fps 30] [--size WxH]\n  moviecut-cli addvideo <in.ymproj> <clip.mp4> <out.ymproj>\n  moviecut-cli genclips <N> <out.ymproj>\n  moviecut-cli silence <project|media> [--threshold -40] [--min 0.4] [--pad 0.1]\n  moviecut-cli beats <project|media> [--all]\n  moviecut-cli subs <project> --out <x.srt|x.vtt>\n  moviecut-cli transcribe <media|project> --out <x.srt|x.vtt> [--clip 0] [--locale ja-JP]\n  moviecut-cli chapters <project> [--color red|orange|yellow|green|blue|purple|gray|teal]\n  moviecut-cli loudness <project> [--range a:b|project]\n  moviecut-cli project-info <project>   (JSON。読み取り専用)\n  moviecut-cli ai script --theme <t> [--chars 霊夢,魔理沙] [--lines 12] (--provider-cmd \"claude -p\" | --provider-url http://127.0.0.1:11434 --model <m>) [--timeout 120] [--out x.txt] [--show-prompt]")
 }

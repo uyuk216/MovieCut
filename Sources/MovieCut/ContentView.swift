@@ -487,7 +487,7 @@ struct SettingsSheet: View {
     private var fpsValid: Bool { if case .success = FrameRateInput.parse(fpsText) { return true } else { return false } }
     private var bgPreset: String {
         let b = draft.bg.lowercased()
-        return ["#000000", "#ffffff", "#00b140"].contains(b) ? b : "custom"
+        return ["#000000", "#ffffff", "#00b140", Project.transparentBackground].contains(b) ? b : "custom"
     }
 
     var body: some View {
@@ -531,6 +531,7 @@ struct SettingsSheet: View {
                                 Text("黒").tag("#000000")
                                 Text("白").tag("#ffffff")
                                 Text("緑（クロマキー）").tag("#00b140")
+                                Text("透明（ProRes 4444・APNG 用）").tag(Project.transparentBackground)
                                 Text("自由").tag("custom")
                             }.labelsHidden().frame(width: 170)
                         }
@@ -541,6 +542,8 @@ struct SettingsSheet: View {
                             Picker("", selection: $draft.codec) {
                                 Text("H.264（どこでも再生できる）").tag("h264")
                                 Text("HEVC（同じ画質で小さい・4K向け）").tag("hevc")
+                                Text("ProRes 422（編集用・.mov）").tag(OutputPlan.proRes422)
+                                Text("ProRes 4444（透明を残せる・.mov）").tag(OutputPlan.proRes4444)
                             }.labelsHidden().frame(width: 260)
                             if draft.codec == "h264", let w = res.width, let h = res.height, !OutputPlan.h264Supports(width: w, height: h) {
                                 Text("注意: このサイズは H.264 で書き出せないので、書き出しは HEVC になります").font(.caption).foregroundStyle(.orange)

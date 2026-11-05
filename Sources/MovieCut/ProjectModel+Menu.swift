@@ -36,12 +36,12 @@ extension ProjectModel {
         if reportMissingMediaForExport() { return }
         let initial: ExportChoice = spec.map { .custom($0) } ?? preset.map { .builtin($0) } ?? .current
         let customs = CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL()).map(\.spec)
-        let options = ExportPanelOptions(documentName: documentName, initial: initial, custom: customs)
+        let options = ExportPanelOptions(documentName: documentName, initial: initial, custom: customs, projectCodec: project.codec)
         let panel = NSSavePanel()
-        panel.allowedContentTypes = [initial.audioOnly ? .mpeg4Audio : .mpeg4Movie]
+        panel.allowedContentTypes = [options.contentType(for: initial)]
         panel.nameFieldStringValue = exportSuggestedName(preset: preset, spec: spec)
         panel.canCreateDirectories = true
-        panel.title = initial.spec.map { "書き出し — \($0.name)" } ?? "MP4 書き出し"
+        panel.title = initial.spec.map { "書き出し — \($0.name)" } ?? (OutputPlan.isProRes(project.codec) ? "\(OutputPlan.codecLabel(project.codec)) 書き出し" : "MP4 書き出し")
         options.panel = panel
         // 範囲があるときは「範囲だけ書き出す」(最初からオン)。
         let range = project.exportRange
@@ -102,7 +102,7 @@ extension ProjectModel {
 
     /// 保存パネルが最初に出す名前。
     func exportSuggestedName(preset: ExportPreset?, spec: ExportSpec? = nil) -> String {
-        (spec ?? preset?.spec)?.suggestedFileName(documentName: documentName) ?? documentName + ".mp4"
+        (spec ?? preset?.spec)?.suggestedFileName(documentName: documentName) ?? documentName + "." + OutputPlan.fileExtension(forCodec: project.codec)
     }
 
     /// フレームレート(メニューの定番・最近使ったカスタム・シート)。1〜240 の範囲外は断る。Undo は 1 回。
@@ -131,13 +131,13 @@ extension ProjectModel {
 
     func openFpsSheet() { if !isLocked { showFpsSheet = true } }
 
-    /// 書き出し形式(メニューの H.264 / HEVC)。Undo できる。
+    /// 書き出し形式(メニューの H.264 / HEVC / ProRes 422 / ProRes 4444)。Undo できる。
     func setCodec(_ codec: String) {
-        guard ["h264", "hevc"].contains(codec), !isLocked else { return }
+        guard ["h264", "hevc", OutputPlan.proRes422, OutputPlan.proRes4444].contains(codec), !isLocked else { return }
         edit("書き出し形式の変更") { $0.codec = codec }
     }
 
-    /// 背景色(メニューの黒 / 白 / 緑)。Undo できる。
+    /// 背景色(メニューの黒 / 白 / 緑 / 透明)。Undo できる。
     func setBackground(_ hex: String) {
         guard !isLocked else { return }
         edit("背景色の変更") { $0.bg = hex }

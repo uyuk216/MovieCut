@@ -462,7 +462,7 @@ final class ProjectModel: ObservableObject {
         }
         edit("解像度の変更", enforcesLock: false) { p in
             p = p.scaledForResolution(newWidth: w, newHeight: h)
-            if w * h >= 3840 * 2160 || !OutputPlan.h264Supports(width: w, height: h) { p.codec = "hevc" }
+            if !OutputPlan.isProRes(p.codec), w * h >= 3840 * 2160 || !OutputPlan.h264Supports(width: w, height: h) { p.codec = "hevc" }
         }
     }
 
@@ -502,7 +502,7 @@ final class ProjectModel: ObservableObject {
             let w = max(16, d.width), h = max(16, d.height)
             if w != p.width || h != p.height, OutputPlan.hevcSupports(width: w, height: h) {
                 p = p.scaledForResolution(newWidth: w, newHeight: h)
-                if w * h >= 3840 * 2160 || !OutputPlan.h264Supports(width: w, height: h) { p.codec = "hevc" }
+                if !OutputPlan.isProRes(p.codec), w * h >= 3840 * 2160 || !OutputPlan.h264Supports(width: w, height: h) { p.codec = "hevc" }
             }
             if d.codec != original.codec { p.codec = d.codec }
             p.fps = FrameRate.canonical(d.fps)
@@ -573,7 +573,7 @@ final class ProjectModel: ObservableObject {
             if let h = OutputPlan.heavyWarning(width: plan.width, height: plan.height, fps: exporting.fps) { notices.append(h) }
         }
         let snapshot = project
-        let title = (chosen.map { $0.audioOnly ? "音声を書き出しています" : "\($0.name) で書き出しています" } ?? "MP4 を書き出しています")
+        let title = (chosen.map { $0.audioOnly ? "音声を書き出しています" : "\($0.name) で書き出しています" } ?? (plan.isProRes ? "\(OutputPlan.codecLabel(plan.codec)) の .mov を書き出しています" : "MP4 を書き出しています"))
         return await runJob(title: title, fileName: url.lastPathComponent, notices: notices,
                             success: "\(url.lastPathComponent) に書き出しました" + (plan.usesFallbackCodec && isVideo ? "(HEVC)" : ""), result: url) { progress in
             try await ExportJob.run(project: snapshot, preset: preset, spec: spec, bitrateMbps: bitrateMbps, range: range, to: url, progress: progress)

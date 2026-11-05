@@ -58,6 +58,7 @@ struct AppCommands: Commands {
                 MenuItemView(spec: AppMenuSpec.subtitleImport(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.mediaRelink(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.unusedMediaItem(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.restoreVersionItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.packageSave(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.addSubtitle(s), perform: run)
                 Divider()
@@ -151,6 +152,8 @@ struct AppCommands: Commands {
                     Menu("スタイルを適用") { items(AppMenuSpec.textStyleItems(s), run) }
                     Menu("スタイルを一括適用") { items(AppMenuSpec.textStyleAllItems(s), run) }
                     Menu("文字アニメーション") { items(AppMenuSpec.textAnimItems(s), run) }
+                    MenuItemView(spec: AppMenuSpec.textVerticalItem(s), perform: run)
+                    MenuItemView(spec: AppMenuSpec.textPerCharItem(s), perform: run)
                     MenuItemView(spec: AppMenuSpec.textCounterItem(s), perform: run)
                 }
                 Divider()
@@ -239,6 +242,7 @@ struct AppCommands: Commands {
                 items(AppMenuSpec.imageExportItems(s), run)
                 Divider()
                 MenuItemView(spec: AppMenuSpec.gifExport(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.apngExport(s), perform: run)
                 Divider()
                 MenuItemView(spec: AppMenuSpec.loudnessItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.clipListItem(s), perform: run)

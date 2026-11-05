@@ -19,7 +19,7 @@ extension AppMenuSpec {
         if s.isLocked { return "書き出し中・音声生成中は使えません" }
         switch spec.command {
         case .export, .exportPreset, .exportCustomPreset, .saveCustomPreset, .exportStill, .exportSequence,
-             .exportThumbnail, .exportThumbnailCandidates, .exportGIF, .queueExport, .measureLoudness:
+             .exportThumbnail, .exportThumbnailCandidates, .exportGIF, .exportAPNG, .queueExport, .measureLoudness:
             return "書き出せるクリップがありません"
         case .rangeIn, .rangeOut: return "書き出し範囲を指定できる状態ではありません"
         case .rangeClear: return "書き出し範囲が指定されていません"
@@ -41,6 +41,7 @@ extension AppMenuSpec {
         case .transcribeSubtitles: return "音のあるクリップを選んでください"
         case .relinkMedia: return "見つからない素材はありません"
         case .unusedMedia: return "未使用の素材はありません"
+        case .restoreVersion: return "先にプロジェクトを保存してください（保存のたびに世代が残ります）"
         case .toggleRangeLoop: return "書き出し範囲が指定されていません"
         case .toggleTrimLoop: return "タイムラインが空です"
         case .toggleClipLoop: return "クリップを選んでください"
@@ -88,7 +89,10 @@ extension AppMenuSpec {
         case .copyChaptersColor: return "その色のマーカーがありません"
         case .effectClear, .effectCopy: return "エフェクトがありません"
         case .effectPaste: return "コピーしたエフェクトがないか、貼り付け先を選んでいません"
-        case .textAnim, .toggleCounter: return "文字クリップを選んでください"
+        case .toggleCounter: return "文字クリップを選んでください"
+        case .textAnim(let k): return k.isScroll ? "文字クリップを選んでください（字幕はスクロールしません）" : "文字クリップか字幕を選んでください"
+        case .toggleVertical: return "文字クリップか字幕を選んでください"
+        case .togglePerChar: return "文字クリップか字幕を選び、先に文字アニメーション（スクロール以外）を付けてください"
         case .pip: return "画像か映像のクリップを選んでください"
         case .speed, .toggleReverse: return "速度を変えられるクリップを選んでください"
         case .freezeFrame: return "再生位置が映像クリップの上にありません"
