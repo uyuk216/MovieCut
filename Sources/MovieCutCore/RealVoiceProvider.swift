@@ -4,7 +4,6 @@ import AVFoundation
 /// キャラのエンジンに応じて VOICEVOX / AquesTalk(または say)で合成する本物の VoiceProvider。
 public final class RealVoiceProvider: VoiceProvider {
     public let voicevoxURL: String
-    public let aquestalkCommand: String
     public let voicevox: VoicevoxClient
     public let aquestalk: AquesTalkSynthesizer
     public let engine: VoicevoxEngine
@@ -12,27 +11,38 @@ public final class RealVoiceProvider: VoiceProvider {
     public private(set) var enginesUsed: Set<String> = []
     private let lock = NSLock()
 
-    public init(project: Project, cache: VoiceCache = .standard, engine: VoicevoxEngine = VoicevoxEngine(), aquestalk: AquesTalkSynthesizer? = nil, session: URLSession = .shared) {
+    public init(project: Project, cache: VoiceCache = .standard, engine: VoicevoxEngine = VoicevoxEngine(), aquestalk: AquesTalkSynthesizer? = nil, session: URLSession = .shared, policy: VoiceEndpointPolicy = .current) {
         self.voicevoxURL = project.voicevoxUrl
-        self.aquestalkCommand = project.aquestalkCommand
-        self.voicevox = VoicevoxClient(baseURL: project.voicevoxUrl, cache: cache, session: session)
-        self.aquestalk = aquestalk ?? AquesTalkSynthesizer(cache: cache)
+        self.voicevox = VoicevoxClient(baseURL: project.voicevoxUrl, cache: cache, session: session, policy: policy)
+        self.aquestalk = aquestalk ?? AquesTalkSynthesizer(cache: cache, forbiddenRoots: Self.mediaFolders(of: project))
         self.engine = engine
     }
 
+    /// プロジェクトの素材があるフォルダ(ここにある実行ファイルは使わない)。
+    static func mediaFolders(of project: Project) -> [URL] {
+        var seen = Set<String>(), out: [URL] = []
+        for c in project.allClips {
+            guard let src = c.src, src.hasPrefix("/") else { continue }
+            let dir = URL(fileURLWithPath: src).deletingLastPathComponent()
+            if dir.path != "/", seen.insert(dir.path).inserted { out.append(dir) }
+        }
+        return out
+    }
+
     /// say で代用しているか(UI の警告用)。
-    public var usingFallback: Bool { aquestalk.effectiveCommand(aquestalkCommand).usingFallback }
+    public var usingFallback: Bool { aquestalk.usingFallback }
 
     public func synthesize(character: Character, text: String, in directory: URL) async throws -> VoiceResult {
         let url: URL
         if character.engine == "voicevox" {
+            _ = try voicevox.validatedBaseURL()   // 送ってよい先か(だめなら日本語の理由で止める)
             guard await engine.ensureRunning(baseURL: voicevoxURL) else {
                 throw VoiceError.message("VOICEVOX に接続できません。VOICEVOX をインストールして起動してください(\(DependencyStatus.voicevoxURL))。")
             }
             url = try await voicevox.synthesize(text: text, speaker: character.speaker ?? 3, speed: character.speed, pitch: character.pitch, intonation: character.intonation)
             lock.withLock { _ = enginesUsed.insert("voicevox") }
         } else {
-            url = try await aquestalk.synthesize(text: text, voice: character.voice, speed: character.speed, commandTemplate: aquestalkCommand)
+            url = try await aquestalk.synthesize(text: text, voice: character.voice, speed: character.speed)
             lock.withLock { _ = enginesUsed.insert(usingFallback ? "say" : "aquestalk") }
         }
         return VoiceResult(url: url, duration: try wavDuration(url))

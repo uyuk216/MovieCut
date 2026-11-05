@@ -458,12 +458,41 @@ struct RenameMarkerSheet: View {
 // MARK: - 設定シート(動画設定ほか)
 
 struct SettingsSheet: View {
+    /// 音声サーバーの URL が送れない先なら、その理由(日本語)。
+    private var voiceEndpointProblem: String? {
+        do { try VoiceEndpointPolicy.current.validate(draft.voicevoxUrl); return nil }
+        catch { return error.localizedDescription }
+    }
+
+    private func chooseAquesTalk() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.treatsFilePackagesAsDirectories = true
+        panel.message = "AquesTalkPlayer の実行ファイルを選んでください"
+        panel.prompt = "選ぶ"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        switch ExecutableTrust.validate(path: url.path) {
+        case .success:
+            aquesPath = url.path; aquesMessage = ""
+            SecuritySettings.setAquestalkPath(url.path)
+        case .failure(let why):
+            aquesMessage = why.message
+        }
+    }
+
     @ObservedObject var model: ProjectModel
     @Environment(\.dismiss) private var dismiss
     @State private var draft: VideoSettingsDraft
     @State private var res: ResolutionInput
     @State private var fpsChoice: String
     @State private var fpsText: String
+    // 安全に関わる設定は、プロジェクトではなくアプリの設定(UserDefaults)に保存する
+    @State private var allowRemoteVoice = SecuritySettings.allowRemoteVoice()
+    @State private var remoteHosts = SecuritySettings.remoteVoiceHosts().joined(separator: ", ")
+    @State private var aquesPath = SecuritySettings.aquestalkPath() ?? ""
+    @State private var aquesMessage = ""
     private let original: VideoSettingsDraft
     private static let customFpsTag = "custom"
 
@@ -556,16 +585,38 @@ struct SettingsSheet: View {
                     TextField("エンジンのURL", text: $draft.voicevoxUrl)
                     Text("VOICEVOX は 50021、COEIROINK は 50031、SHAREVOX は 50025 が初期値です。")
                         .font(.caption).foregroundStyle(.secondary)
+                    if let reason = voiceEndpointProblem {
+                        Text(reason).font(.caption).foregroundStyle(.red)
+                    }
+                    Divider()
+                    Toggle("リモートの音声サーバーを許可", isOn: Binding(get: { allowRemoteVoice }, set: { on in
+                        allowRemoteVoice = on
+                        SecuritySettings.setAllowRemoteVoice(on)
+                    }))
+                    Text("警告: オンにすると、セリフの文章がこの Mac の外のサーバーへ送られます。信頼できるサーバーだけを下に書いてください。プロジェクトファイルに書かれた送信先は、ここで許可したホスト以外には送りません(この設定はプロジェクトには保存されません)。")
+                        .font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+                    if allowRemoteVoice {
+                        TextField("許可するホスト名(カンマ区切り。例: voice.example.com)", text: Binding(get: { remoteHosts }, set: { t in
+                            remoteHosts = t
+                            SecuritySettings.setRemoteVoiceHosts(t)
+                        }))
+                    }
                 }.padding(8)
             }
             GroupBox("ゆっくり（AquesTalk 系）") {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("実行コマンド").font(.caption)
-                    TextEditor(text: $draft.aquestalkCommand)
-                        .font(.system(size: 11, design: .monospaced))
-                        .frame(height: 54)
-                    Text("{text} {voice} {speed} {out} が置き換わります。{out} に WAV を書き出すコマンドにしてください。")
-                        .font(.caption).foregroundStyle(.secondary)
+                    let found = AquesTalkLocator.resolve()
+                    Text(found.map { "使う実行ファイル: \($0.path)" } ?? "AquesTalkPlayer が見つかりません(macOS の「Kyoko」で代用します)。")
+                        .font(.caption).textSelection(.enabled)
+                    HStack {
+                        Button("実行ファイルを選ぶ…") { chooseAquesTalk() }
+                        if !aquesPath.isEmpty {
+                            Button("選択を解除") { aquesPath = ""; aquesMessage = ""; SecuritySettings.setAquestalkPath(nil) }
+                        }
+                    }
+                    if !aquesMessage.isEmpty { Text(aquesMessage).font(.caption).foregroundStyle(.red) }
+                    Text("安全のため、実行するのは /Applications・アプリ内・Application Support の AquesTalk フォルダ・ここで選んだファイルだけです。プロジェクトファイルに書かれたコマンドは実行しません。")
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }.padding(8)
             }
             HStack {

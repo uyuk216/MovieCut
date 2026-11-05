@@ -291,3 +291,9 @@ Info.plist の `MovieCutEdition`(`personal` / `public`。無ければ `personal`
 - **作り方**: 個人版は `Scripts/make-app.sh [dmg]`(`build/`)。配布版は `Scripts/make-app.sh --edition public [dmg]`(`build/public/`、バンドル ID `jp.local.moviecut.public`、アプリ名は同じ「Movie Cut」)。
 - **分けているもの**: Application Support のフォルダ(個人版 `MovieCut`、配布版 `Movie Cut (Public)`)の下の Fonts・Proxies・voices・Templates・export-presets.json・Recovery(自動保存の復元)・QRCodes・AIImages・PSDCache・Cutouts と、設定(UserDefaults。最近使ったプロジェクト・素材フォルダ・文字スタイル・ドックの配置など)。保存先は Core の `DataLocations`(`AppEdition.swift`)だけが決めます。
 - **個人のデータを配布に入れない**: 配布版のビルドはビルド場所のパスを消し(`-file-prefix-map`)、`strip` したうえで、バンドルに `/Users/`・個人名・PSD/動画/音声・試験用ファイル・データフォルダが入っていないかを調べ、見つかるとビルドを失敗にします。ソースにも個人のパスや名前を書かないことを試験(`DistributionGuardTests`)で守っています。
+
+## セキュリティ(外部の実行ファイル・音声サーバー・外部入力)
+- **ゆっくり(AquesTalk)**: 実行するのは、/Applications・アプリ内・Application Support/MovieCut/AquesTalk・ファイルパネルで選んだ 1 本(アプリの設定に保存。プロジェクトには保存しない)だけ。通常のファイルで、実行でき、誰でも書き換えられず、リンクでなく、プロジェクト・素材のフォルダの外にあるものに限る。引数は配列で渡し、シェルを通さない。プロジェクトファイルの `aquestalkCommand` は読み書きだけで、実行には使わない(古いファイルはそのまま開ける)。
+- **VOICEVOX の送信先**: 既定は 127.0.0.1 / localhost だけ。それ以外は、プロジェクト設定の「リモートの音声サーバーを許可」をオンにして、許可するホスト名も書いたときだけ(どちらもアプリの設定。プロジェクトファイルに書かれた URL へは、許可したホスト以外に送らない)。
+- **外部入力の上限**: プロジェクト 64 MB・入れ子 64 段・レイヤー 2000・クリップ 10 万、復元の写し 96 MB(復元フォルダの中の通常のファイルだけ・名前は英数とハイフン)、字幕 8 MB・5 万件、フォント 64 MB(ttf / otf / ttc)、PSD は幅高さ・レイヤー数・画素数の合計・ZIP 展開後の大きさに上限。時間や大きさの常識外れの値は読み込み時に収める。
+- AI のコマンド(`ai.command`・`aiImage.command`)はアプリの設定だけから読み、引数は配列で渡す(初回の送信前に内容を確認する)。

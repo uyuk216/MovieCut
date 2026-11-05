@@ -74,11 +74,15 @@ extension ProjectModel {
     @discardableResult
     func importSubtitles(from url: URL, offset: Double) -> Bool {
         guard !isLocked else { return false }
-        guard let data = try? Data(contentsOf: url), let text = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .utf16) else {
-            statusText = "字幕ファイルを読めませんでした: \(url.lastPathComponent)"
+        let cues: [SubtitleCue]
+        do {
+            guard let c = try SubtitleFile.read(url) else { throw CocoaError(.fileReadInapplicableStringEncoding) }
+            cues = c
+        } catch {
+            statusText = "字幕ファイルを読めませんでした: \(url.lastPathComponent)(\(error.localizedDescription))"
             return false
         }
-        return importSubtitles(cues: SubtitleFile.parse(text), offset: offset)
+        return importSubtitles(cues: cues, offset: offset)
     }
 
     @discardableResult

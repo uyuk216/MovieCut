@@ -52,18 +52,7 @@ final class VoiceUnitTests: XCTestCase {
     }
     override func tearDownWithError() throws { try? FileManager.default.removeItem(at: tmp) }
 
-    func testShellQuote() {
-        XCTAssertEqual(shellQuote("abc"), "'abc'")
-        XCTAssertEqual(shellQuote("it's"), #"'it'\''s'"#)
-        XCTAssertEqual(shellQuote(""), "''")
-        XCTAssertEqual(shellQuote("$(rm -rf /) `x` \"y\""), #"'$(rm -rf /) `x` "y"'"#)
-    }
-
-    func testTemplateReplacement() {
-        let cmd = applyCommandTemplate(defaultAquesTalkCommand, text: "こんにちは'", voice: "れいむ", speed: "100", out: "/tmp/a b.wav")
-        XCTAssertEqual(cmd, #"/Applications/AquesTalkPlayer.app/Contents/MacOS/AquesTalkPlayer -P 'れいむ' -T 'こんにちは'\''' -W '/tmp/a b.wav'"#)
-        XCTAssertEqual(applyCommandTemplate("x {speed} {speed} {voice}", text: "", voice: nil, speed: "80", out: ""), "x '80' '80' ''")
-    }
+    static let fakePolicy = VoiceEndpointPolicy(allowRemote: true, allowedHosts: ["fake.local"])
 
     func testCacheKeyStableAndSensitive() {
         let base: [JSONValue] = [.string("vv"), .string("http://127.0.0.1:50021"), .string("テキスト"), .number(3), .number(1), .number(0), .number(1), .null]
@@ -156,26 +145,31 @@ final class VoiceUnitTests: XCTestCase {
 
     func testAquesTalkFallbackSelection() {
         let none = AquesTalkSynthesizer(cache: VoiceCache(directory: tmp), playerPath: "/nonexistent/aq")
-        XCTAssertTrue(none.effectiveCommand(defaultAquesTalkCommand).usingFallback)
-        XCTAssertEqual(none.effectiveCommand(defaultAquesTalkCommand).command, kyokoFallbackCommand)
-        XCTAssertFalse(none.effectiveCommand("echo {out}").usingFallback)   // 利用者が変えたコマンドは尊重
+        XCTAssertTrue(none.usingFallback)
         let have = AquesTalkSynthesizer(cache: VoiceCache(directory: tmp), playerPath: "/bin/ls")
-        XCTAssertFalse(have.effectiveCommand(defaultAquesTalkCommand).usingFallback)
+        XCTAssertFalse(have.usingFallback)
+        // 引数は配列(シェルを通さない)。セリフに何が入っていても 1 つの引数のまま
+        let inv = have.invocation(text: "$(rm -rf /); `x` 'y'", voice: "れいむ", out: URL(fileURLWithPath: "/tmp/a b.wav"))
+        XCTAssertEqual(inv.executable.lastPathComponent, "ls")
+        XCTAssertEqual(inv.arguments, ["-P", "れいむ", "-T", "$(rm -rf /); `x` 'y'", "-W", "/tmp/a b.wav"])
+        let say = none.invocation(text: "-v", voice: nil, out: URL(fileURLWithPath: "/tmp/o.wav"))
+        XCTAssertEqual(say.executable.path, "/usr/bin/say")
+        XCTAssertEqual(say.arguments.suffix(2), ["--", "-v"])
     }
 
-    func testAquesTalkFailureReportsStderr() async {
-        let aq = AquesTalkSynthesizer(cache: VoiceCache(directory: tmp), playerPath: "/bin/ls")
+    func testAquesTalkFailureReportsStderr() async throws {
+        // /bin/ls に存在しないオプションを渡すと、標準エラーつきで失敗する
+        let out = tmp.appendingPathComponent("o.wav")
         do {
-            _ = try await aq.synthesize(text: "x", voice: nil, speed: nil, commandTemplate: "echo oops-message 1>&2; exit 3 # {out}")
+            try await AquesTalkSynthesizer.run(executable: URL(fileURLWithPath: "/bin/ls"), arguments: ["--no-such-option-zz"], expecting: out)
             XCTFail("失敗するはず")
         } catch {
-            XCTAssertTrue(error.localizedDescription.contains("コマンド失敗 (3)"))
-            XCTAssertTrue(error.localizedDescription.contains("oops-message"))
+            XCTAssertTrue(error.localizedDescription.contains("コマンド失敗"))
         }
     }
 
     func testVoicevoxClientCalls() async throws {
-        let client = VoicevoxClient(baseURL: "http://fake.local:50021/", cache: VoiceCache(directory: tmp), session: FakeVoicevox.session())
+        let client = VoicevoxClient(baseURL: "http://fake.local:50021/", cache: VoiceCache(directory: tmp), session: FakeVoicevox.session(), policy: Self.fakePolicy)
         let url = try await client.synthesize(text: "ずんだ もん&=?", speaker: 3, speed: 1.2, pitch: 0.1, intonation: 1.5, volume: 0.8)
         let calls = FakeVoicevox.calls
         XCTAssertEqual(calls.count, 2)
@@ -198,7 +192,7 @@ final class VoiceUnitTests: XCTestCase {
     }
 
     func testVoicevoxDefaultsAndSpeakers() async throws {
-        let client = VoicevoxClient(baseURL: "http://fake.local:50021", cache: VoiceCache(directory: tmp), session: FakeVoicevox.session())
+        let client = VoicevoxClient(baseURL: "http://fake.local:50021", cache: VoiceCache(directory: tmp), session: FakeVoicevox.session(), policy: Self.fakePolicy)
         _ = try await client.synthesize(text: "あ", speaker: 1)
         let body = try JSONSerialization.jsonObject(with: FakeVoicevox.calls[1].body ?? Data()) as! [String: Any]
         XCTAssertEqual(body["speedScale"] as? Double, 1)
@@ -212,7 +206,7 @@ final class VoiceUnitTests: XCTestCase {
 
     func testVoicevoxHTTPError() async {
         FakeVoicevox.status = 500
-        let client = VoicevoxClient(baseURL: "http://fake.local:50021", cache: VoiceCache(directory: tmp), session: FakeVoicevox.session())
+        let client = VoicevoxClient(baseURL: "http://fake.local:50021", cache: VoiceCache(directory: tmp), session: FakeVoicevox.session(), policy: Self.fakePolicy)
         do { _ = try await client.synthesize(text: "あ", speaker: 1); XCTFail() }
         catch { XCTAssertTrue(error.localizedDescription.contains("audio_query")) }
     }
@@ -237,7 +231,7 @@ final class RealEngineTests: XCTestCase {
         // Electron 版で作った参照 WAV(Tests/MovieCutCoreTests/Fixtures/aq_reimu.wav)
         let ref = try XCTUnwrap(Bundle.module.url(forResource: "aq_reimu", withExtension: "wav", subdirectory: "Fixtures"))
         let aq = AquesTalkSynthesizer(cache: VoiceCache(directory: tmp))
-        let out = try await aq.synthesize(text: "ゆっくりしていってね", voice: "れいむ", speed: 100, commandTemplate: defaultAquesTalkCommand)
+        let out = try await aq.synthesize(text: "ゆっくりしていってね", voice: "れいむ", speed: 100)
         let a = try Data(contentsOf: out), b = try Data(contentsOf: ref)
         XCTAssertEqual(a.count, b.count, "サイズ")
         XCTAssertTrue(a == b, "Electron 版の WAV とバイト単位で同一")
@@ -246,7 +240,7 @@ final class RealEngineTests: XCTestCase {
 
     func testSayFallbackProducesWav() async throws {
         let aq = AquesTalkSynthesizer(cache: VoiceCache(directory: tmp), playerPath: "/nonexistent/aq")
-        let out = try await aq.synthesize(text: "ゆっくりしていってね", voice: "れいむ", speed: 100, commandTemplate: defaultAquesTalkCommand)
+        let out = try await aq.synthesize(text: "ゆっくりしていってね", voice: "れいむ", speed: 100)
         XCTAssertGreaterThan(try RealVoiceProvider.duration(of: out), 0.5)
     }
 

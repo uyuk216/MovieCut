@@ -481,8 +481,8 @@ case "speak":
             used = String(format: "voicevox (engine ready %.2fs, synth %.2fs)", t1.timeIntervalSince(t0), Date().timeIntervalSince(t1))
         } else if let voice = optValue("--voice") {
             let aq = AquesTalkSynthesizer()
-            url = try await aq.synthesize(text: text, voice: voice, speed: optValue("--speed").flatMap(Double.init) ?? 100, commandTemplate: proj.aquestalkCommand)
-            used = aq.effectiveCommand(proj.aquestalkCommand).usingFallback ? "say (fallback)" : "aquestalk"
+            url = try await aq.synthesize(text: text, voice: voice, speed: optValue("--speed").flatMap(Double.init) ?? 100)
+            used = aq.usingFallback ? "say (fallback)" : "aquestalk"
         } else { fail("--voicevox <話者ID> か --voice <プリセット> が必要です") }
         try? FileManager.default.removeItem(atPath: outPath)
         try FileManager.default.copyItem(at: url, to: URL(fileURLWithPath: outPath))

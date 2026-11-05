@@ -1,8 +1,13 @@
 import Foundation
 
 extension Project {
+    /// プロジェクトの JSON を読む。大きさ・入れ子の深さ・個数に上限があり、読めた値は安全な範囲に収める(`sanitizeLoaded`)。
     public static func decode(from data: Data) throws -> Project {
-        try JSONDecoder().decode(Project.self, from: data)
+        guard data.count <= InputLimits.maxProjectBytes else { throw InputLimits.Failure.tooLarge(what: "プロジェクトファイル", limit: InputLimits.maxProjectBytes) }
+        guard InputLimits.jsonDepthWithinLimit(data) else { throw InputLimits.Failure.tooDeep }
+        var p = try JSONDecoder().decode(Project.self, from: data)
+        try p.sanitizeLoaded()
+        return p
     }
 
     /// キーを並べ替え、整形して書き出す。"/" をエスケープしない(パスが読みやすい)。
@@ -13,7 +18,7 @@ extension Project {
     }
 
     public static func load(from url: URL) throws -> Project {
-        try decode(from: Data(contentsOf: url))
+        try decode(from: InputLimits.readFile(url, limit: InputLimits.maxProjectBytes, what: "プロジェクトファイル"))
     }
 
     public func save(to url: URL) throws {

@@ -95,8 +95,14 @@ public struct PSDDocument: Equatable, Sendable {
 public enum PSDParser {
     static let maxDimension = 30000
     static let maxPixels = 120_000_000
+    /// 全レイヤーの画素数の合計(RGBA で 4 倍のメモリになる)。
+    static let maxTotalLayerPixels = 400_000_000
+    static let maxLayers = 5_000
+    /// 1 回の ZIP 展開で確保してよい最大バイト数。
+    static let maxInflateBytes = 1_200_000_000
 
     public static func parse(_ data: Data) throws -> PSDDocument {
+        guard data.count <= InputLimits.maxPSDBytes else { throw PSDError.corrupt("ファイルが大きすぎます") }
         var r = PSDReader(bytes: [UInt8](data))
         guard try r.bytes4() == "8BPS" else { throw PSDError.notPSD }
         let version = try r.u16()
@@ -160,7 +166,7 @@ public enum PSDParser {
         var count = Int(try r.i16())
         if count < 0 { count = -count }   // 先頭のアルファは統合画像の透明度(レイヤー数には関係ない)
         if count == 0 { return [] }
-        guard count <= 20000 else { throw PSDError.corrupt("レイヤー数 \(count)") }
+        guard count <= maxLayers else { throw PSDError.corrupt("レイヤー数 \(count)") }
 
         var layers: [PSDLayer] = []
         var channelLists: [[ChannelInfo]] = []
@@ -224,10 +230,17 @@ public enum PSDParser {
         }
 
         // チャンネルの画素(レイヤーの順に、記録されたチャンネルの順に並んでいる)
+        // 画素を読む前に、全レイヤーの画素数の合計を調べる(巨大なレイヤーを並べた偽の PSD を、確保や復号の前に断る)
+        var totalPixels = 0
+        for l in layers where !l.isGroupMarker && l.width > 0 && l.height > 0 {
+            guard l.width <= maxDimension * 2, l.height <= maxDimension * 2, l.width * l.height <= maxPixels else { throw PSDError.corrupt("レイヤーの大きさ") }
+            totalPixels += l.width * l.height
+            guard totalPixels <= maxTotalLayerPixels else { throw PSDError.corrupt("レイヤーの画素数の合計") }
+        }
         for i in 0..<layers.count {
             var planes: [Int: [UInt8]] = [:]
             let w = layers[i].width, h = layers[i].height
-            guard w * h <= maxPixels else { throw PSDError.corrupt("レイヤーの大きさ") }
+            guard w <= maxDimension * 2, h <= maxDimension * 2, w * h <= maxPixels else { throw PSDError.corrupt("レイヤーの大きさ") }
             for ch in channelLists[i] {
                 let end = r.pos + ch.length
                 guard end <= r.count else { throw PSDError.truncated }
@@ -309,6 +322,7 @@ public enum PSDParser {
     static func inflate(_ data: [UInt8], expected: Int) throws -> [UInt8] {
         guard data.count > 2 else { throw PSDError.corrupt("ZIP のデータが短い") }
         guard expected > 0 else { return [] }
+        guard expected <= maxInflateBytes else { throw PSDError.corrupt("ZIP の展開後の大きさ") }
         var out = [UInt8](repeating: 0, count: expected)
         let n = data.withUnsafeBufferPointer { src -> Int in
             out.withUnsafeMutableBufferPointer { dst -> Int in

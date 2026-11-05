@@ -27,11 +27,11 @@ public struct DependencyStatus: Equatable {
         return n
     }
 
-    public static func check(project: Project, voicevoxBinary: String = VoicevoxEngine.defaultBinary, aquestalkPath: String = AquesTalkSynthesizer.playerPath) async -> DependencyStatus {
+    public static func check(project: Project, voicevoxBinary: String = VoicevoxEngine.defaultBinary, aquestalkPath: String? = nil) async -> DependencyStatus {
         let fm = FileManager.default
         return DependencyStatus(
             voicevoxInstalled: fm.fileExists(atPath: voicevoxBinary),
             voicevoxRunning: await VoicevoxEngine.isAlive(baseURL: project.voicevoxUrl),
-            aquestalkPlayerInstalled: fm.fileExists(atPath: aquestalkPath))
+            aquestalkPlayerInstalled: AquesTalkSynthesizer(cache: .standard, playerPath: aquestalkPath).playerInstalled)
     }
 }

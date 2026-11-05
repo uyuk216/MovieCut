@@ -84,12 +84,10 @@ public enum MissingMedia {
     static func findReplacement(for src: String, hint: MediaHint?, candidates: [String: [Candidate]],
                                 projectDir: String?, exists: (String) -> Bool) -> String? {
         // パッケージの中の参照(相対の src)は、プロジェクトのフォルダ基準で読む
-        if !src.hasPrefix("/"), let dir = projectDir {
-            let p = (dir as NSString).appendingPathComponent(src)
+        if !src.hasPrefix("/"), let dir = projectDir, let p = MediaPaths.contained(relative: src, in: dir) {
             if exists(p) { return p }
         }
-        if let rel = hint?.relative, let dir = projectDir, !rel.isEmpty {
-            let p = (dir as NSString).appendingPathComponent(rel)
+        if let rel = hint?.relative, let dir = projectDir, !rel.isEmpty, let p = MediaPaths.contained(relative: rel, in: dir) {
             if p != src, exists(p) { return p }
         }
         let name = (src as NSString).lastPathComponent
@@ -99,5 +97,27 @@ public enum MissingMedia {
             return c.path
         }
         return nil
+    }
+}
+
+/// プロジェクトのフォルダを基準にした相対パスの安全な解決。
+public enum MediaPaths {
+    /// `relative` を `dir` の下に置いたパス。絶対パス・「..」・NUL を含むもの、結果が `dir` の外(シンボリックリンクで抜ける場合を含む)になるものは nil。
+    public static func contained(relative: String, in dir: String) -> String? {
+        guard !relative.isEmpty, !relative.hasPrefix("/"), !relative.contains("\0") else { return nil }
+        let comps = relative.split(separator: "/", omittingEmptySubsequences: true)
+        guard !comps.isEmpty, !comps.contains("..") else { return nil }
+        let base = URL(fileURLWithPath: dir, isDirectory: true)
+        let joined = comps.reduce(base) { $0.appendingPathComponent(String($1)) }
+        let realBase = base.resolvingSymlinksInPath().standardizedFileURL.path
+        // まだ無いファイルでも、存在する一番深い親をシンボリックリンクごと解決して調べる
+        var existing = joined, rest: [String] = []
+        while !FileManager.default.fileExists(atPath: existing.path), existing.path != "/" {
+            rest.insert(existing.lastPathComponent, at: 0)
+            existing = existing.deletingLastPathComponent()
+        }
+        let realJoined = rest.reduce(existing.resolvingSymlinksInPath().standardizedFileURL) { $0.appendingPathComponent($1) }.path
+        guard realJoined == realBase || realJoined.hasPrefix(realBase.hasSuffix("/") ? realBase : realBase + "/") else { return nil }
+        return (dir as NSString).appendingPathComponent(relative)
     }
 }

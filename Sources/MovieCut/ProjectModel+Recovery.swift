@@ -12,19 +12,8 @@ enum RecoveryFolder {
         return dir
     }
 
-    /// 残っている写し(壊れたものは捨てる)。
-    static func list(in dir: URL) -> [(url: URL, entry: AutosaveRecovery.Entry)] {
-        let files = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
-        return files.filter { AutosaveRecovery.isRecoveryFileName($0.lastPathComponent) }
-            .compactMap { url in
-                guard let data = try? Data(contentsOf: url), let e = try? AutosaveRecovery.decode(data) else {
-                    try? FileManager.default.removeItem(at: url)
-                    return nil
-                }
-                return (url, e)
-            }
-            .sorted { $0.entry.savedAt < $1.entry.savedAt }
-    }
+    /// 残っている写し(壊れたもの・巨大なもの・リンクは出さない)。
+    static func list(in dir: URL) -> [(url: URL, entry: AutosaveRecovery.Entry)] { AutosaveRecovery.list(in: dir) }
 }
 
 /// 「復元」で開く新しい書類に、復元する中身を渡す箱。`ProjectDocument.init()` が先頭から 1 つずつ受け取る。
@@ -100,13 +89,8 @@ extension ProjectModel {
         guard AutosaveRecovery.shouldWrite(edited: edited, revision: projectRevision, lastWritten: recoveryWrittenRevision),
               let data = try? project.encoded() else { return }
         let entry = AutosaveRecovery.Entry(name: documentName, originalPath: fileURL?.path, savedAt: Date(), project: data)
-        guard let out = try? AutosaveRecovery.encode(entry) else { return }
-        do {
-            try out.write(to: directory.appendingPathComponent(AutosaveRecovery.fileName(sessionID: recoverySessionID)), options: .atomic)
-            recoveryWrittenRevision = projectRevision
-        } catch {
-            // 書けなくても編集は続けられる。次の周期で再度試す
-        }
+        // 書けなくても編集は続けられる。次の周期で再度試す(復元フォルダの外・リンク・大きすぎる中身は書かない)
+        if AutosaveRecovery.write(entry, sessionID: recoverySessionID, in: directory) { recoveryWrittenRevision = projectRevision }
     }
 
     func removeRecoveryFile() {
@@ -114,7 +98,7 @@ extension ProjectModel {
     }
 
     private func removeRecoveryFile(in dir: URL) {
-        try? FileManager.default.removeItem(at: dir.appendingPathComponent(AutosaveRecovery.fileName(sessionID: recoverySessionID)))
+        if let url = AutosaveRecovery.safeURL(sessionID: recoverySessionID, in: dir) { try? FileManager.default.removeItem(at: url) }
         recoveryWrittenRevision = nil
     }
 }

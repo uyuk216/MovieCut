@@ -90,11 +90,22 @@ public enum SubtitleFile {
 
     // MARK: 読み取り
 
+    /// 読み込む件数の上限。
+    public static let maxCues = 50_000
+
+    /// 字幕ファイルを読む(大きさの上限つき)。UTF-8 / UTF-16 以外は nil。
+    public static func read(_ url: URL) throws -> [SubtitleCue]? {
+        let data = try InputLimits.readFile(url, limit: InputLimits.maxSubtitleBytes, what: "字幕ファイル")
+        guard let text = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .utf16) else { return nil }
+        return parse(text)
+    }
+
     /// SRT でも VTT でも読む(形式は自動判定)。BOM・CRLF・CR・番号なし・VTT の WEBVTT/NOTE/STYLE/REGION・件の設定・
     /// HTML/VTT のタグ・ASS の `{\an8}`・ルビ(`<rt>` の読みは捨てる)に耐える。時刻が読めない件・本文が空の件は捨てる。
     /// 重なる件はそのまま返す。開始順に並べる(同じなら元の順)。
     public static func parse(_ raw: String) -> [SubtitleCue] {
-        var text = raw
+        // 大きすぎる入力は先頭だけ読む(件数にも上限)
+        var text = raw.utf8.count > InputLimits.maxSubtitleBytes ? String(decoding: Array(raw.utf8.prefix(InputLimits.maxSubtitleBytes)), as: UTF8.self) : raw
         if text.hasPrefix("\u{FEFF}") { text.removeFirst() }
         text = text.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
         let lines = text.components(separatedBy: "\n")
@@ -112,6 +123,7 @@ public enum SubtitleFile {
         var result: [(Int, SubtitleCue)] = []
         for b in blocks {
             guard let ti = b.firstIndex(where: { $0.contains("-->") }) else { continue }
+            if result.count >= maxCues { break }
             guard let (s, e) = parseTiming(b[ti]) else { continue }
             let body = stripMarkup(b[(ti + 1)...].joined(separator: "\n"))
             let cleaned = cleanBody(body)
@@ -141,7 +153,8 @@ public enum SubtitleFile {
         guard let mi = g(2).flatMap({ Double($0) }), let se = g(3).flatMap({ Double($0) }) else { return nil }
         var frac = 0.0
         if let f = g(4) { frac = Double("0." + f.prefix(9)) ?? 0 }
-        return h * 3600 + mi * 60 + se + frac
+        let t = h * 3600 + mi * 60 + se + frac
+        return t.isFinite ? min(t, InputLimits.maxSeconds) : nil
     }
 
     private static let tagPatterns: [NSRegularExpression] = [

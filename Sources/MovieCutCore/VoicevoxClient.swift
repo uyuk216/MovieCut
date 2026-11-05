@@ -21,8 +21,11 @@ public struct VoicevoxClient {
     public var baseURL: String
     public var cache: VoiceCache
     public var session: URLSession
+    /// 送ってよい先の方針(アプリの設定から。プロジェクトファイルでは変えられない)。
+    public var policy: VoiceEndpointPolicy
 
-    public init(baseURL: String = "http://127.0.0.1:50021", cache: VoiceCache = .standard, session: URLSession = .shared) {
+    public init(baseURL: String = "http://127.0.0.1:50021", cache: VoiceCache = .standard, session: URLSession = .shared, policy: VoiceEndpointPolicy = .current) {
+        self.policy = policy
         self.baseURL = baseURL.hasSuffix("/") ? String(baseURL.dropLast()) : baseURL
         self.cache = cache
         self.session = session
@@ -33,7 +36,11 @@ public struct VoicevoxClient {
         s.addingPercentEncoding(withAllowedCharacters: CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")) ?? s
     }
 
+    /// 送信先の検査(ローカル以外は、設定で許可したホストだけ)。
+    public func validatedBaseURL() throws -> URL { try policy.validate(baseURL) }
+
     private func url(_ path: String) throws -> URL {
+        try policy.validate(baseURL)
         guard let u = URL(string: baseURL + path) else { throw VoiceError.message("VOICEVOX の URL が正しくありません: \(baseURL)") }
         return u
     }
@@ -115,7 +122,8 @@ public final class VoicevoxEngine {
     }
 
     /// GET /version が通るか(短いタイムアウト)。
-    public static func isAlive(baseURL: String, timeout: TimeInterval = 0.8) async -> Bool {
+    public static func isAlive(baseURL: String, timeout: TimeInterval = 0.8, policy: VoiceEndpointPolicy = .current) async -> Bool {
+        guard (try? policy.validate(baseURL)) != nil else { return false }
         guard let u = URL(string: baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/version") else { return false }
         var req = URLRequest(url: u)
         req.timeoutInterval = timeout
@@ -130,7 +138,7 @@ public final class VoicevoxEngine {
     public func ensureRunning(baseURL: String) async -> Bool {
         if await Self.isAlive(baseURL: baseURL) { return true }
         guard let comps = URLComponents(string: baseURL), let host = comps.host,
-              ["127.0.0.1", "localhost", "::1"].contains(host) else { return false }
+              VoiceEndpointPolicy.isLocalHost(host) else { return false }
         guard FileManager.default.isExecutableFile(atPath: binaryPath) else { return false }
         let port = comps.port ?? 50021
         let alreadyStarted: Bool = lock.withLock { process?.isRunning == true }

@@ -33,6 +33,8 @@ public enum FontLibrary {
     /// フォントファイルとして読め、ファミリー名が取れるかを調べる。読めれば名前の一覧を返す。
     public static func familyNames(of url: URL) throws -> [String] {
         guard isFontFile(url) else { throw Failure.unsupportedType(url.pathExtension) }
+        guard let size = try? url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey]), size.isRegularFile == true,
+              let bytes = size.fileSize, bytes > 0, bytes <= InputLimits.maxFontBytes else { throw Failure.unreadable(url.lastPathComponent) }
         guard let descs = CTFontManagerCreateFontDescriptorsFromURL(url as CFURL) as? [CTFontDescriptor], !descs.isEmpty else {
             throw Failure.unreadable(url.lastPathComponent)
         }
@@ -50,7 +52,7 @@ public enum FontLibrary {
     public static func add(_ source: URL, to dir: URL, fileManager: FileManager = .default) throws -> Added {
         let names = try familyNames(of: source)
         try fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
-        let data = try Data(contentsOf: source)
+        let data = try InputLimits.readFile(source, limit: InputLimits.maxFontBytes, what: "フォントファイル")
         let base = source.deletingPathExtension().lastPathComponent
         let ext = source.pathExtension.lowercased()
         var candidate = dir.appendingPathComponent("\(base).\(ext)")

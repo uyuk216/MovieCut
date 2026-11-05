@@ -542,3 +542,9 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
 - **APNG**: `APNGExporter`(ImageIO、UTType.png の複数コマ。`kCGImagePropertyAPNGDelayTime` / `kCGImagePropertyAPNGLoopCount`)。出力 ▸ APNGとして書き出す…、`moviecut-cli apng`。背景色が「透明」(`Project.bg == "transparent"`)なら透明のまま残る。一時ファイルに書いてから置き換え、キャンセルでは既存を変えない(ImageIO の書きかけも消す。GIF も同じ後始末)。
 - **ProRes**: 書き出し形式 `prores422` / `prores4444`(`OutputPlan.isProRes`、.mov)。`Exporter` が AVAssetWriter で `.proRes422` / `.proRes4444` を書く(ビットレートの指定なし、音は 24 ビット PCM)。4444 は背景が透明のときアルファを残す(透明な背景は 422・H.264・HEVC では黒)。サイズの H.264 上限での HEVC への切り替えは ProRes では起きない。保存パネル・キューは .mov。CLI は `export --codec prores422|prores4444 [--bg transparent]`。
 - **世代バックアップ**: `ProjectVersions`(Core)。保存のたびに、保存した中身 `Data` を `DataLocations.versions/<名前>-<場所の印>/yyyyMMdd-HHmmss-SSS.mcpjc`(UTC)へ書き、新しい方から N 世代(既定 10、設定 `projectVersionsKeep`、1〜100)に間引く。世代でない名前のファイルは数えず・消さない。直前の世代と中身が同じなら何もせず、60 秒以内の続けての保存は直前の世代を置き換える(自動保存で世代が尽きないように)。利用者のファイルは読み書きしない。保存先のある書類だけ(無題の最初の保存は残らない)。`ProjectDocument.fileWrapper` から別キューで記録。ファイル ▸ 過去の版から復元…は世代を日付と大きさで並べ、選んだものを `TemplateInbox` 経由で無題の新しい書類として開く(上書きしない)。
+
+## セキュリティ(2026-11-05。Codex の静的調査への対応)
+- `ExternalToolSecurity.swift`: `SecuritySettings`(アプリの設定: リモート音声の許可・許可ホスト・AquesTalk の場所)、`VoiceEndpointPolicy`(送信先の検査)、`ExecutableTrust`(通常ファイル・非リンク・実行可・他人が書けない・所有者・禁止フォルダの外)、`AquesTalkLocator`(固定の場所だけを探す)。
+- `InputLimits.swift`: 読み込みの上限(ファイルサイズ・JSON の深さ・個数)と `Project.sanitizeLoaded`(正常な値は変えず、常識外れの時間・大きさ・非数だけ収める)。`Project.decode` / `load`、`AutosaveRecovery`(`write` / `load` / `list`)、`SubtitleFile.read`、`FontLibrary`、`PSDParser`、`MediaPaths.contained`(相対パスはプロジェクトのフォルダの中だけ)が通る。
+- ファイル形式は変えない。`voicevoxUrl` / `aquestalkCommand` は今までどおり読み書きし、送信・実行の側で断る。
+- 試験: `SecurityHardeningTests`(乱数で壊した PSD・プロジェクト・字幕・復元の写しがクラッシュ・停止しないことを含む)。
