@@ -32,6 +32,8 @@ extension ProjectModel {
         selectedClipId = nil
         selectedCharId = id
         characterPanelActive = true
+        // 設定は「プロパティ」に出る。キャラクターのタブを見たままだと何も起きないように見えるので、プロパティへ切り替える。
+        _ = AppServices.panelDock.setActive(.inspector)
     }
 
     func clip(_ id: String) -> Clip? { project.allClips.first { $0.id == id } }

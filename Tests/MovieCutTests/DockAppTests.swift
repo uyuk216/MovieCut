@@ -297,3 +297,20 @@ final class DockAppTests: XCTestCase {
         m.shutdown()
     }
 }
+
+@MainActor
+final class SelectCharacterShowsPropertiesTests: XCTestCase {
+    /// キャラクターのタブを見たままキャラを選んでも、設定(プロパティ)が見えるようにタブが切り替わる。
+    func testSelectingACharacterActivatesTheInspectorTab() {
+        let saved = AppServices.panelDock
+        defer { AppServices.panelDock = saved }
+        let store = DockStore(defaults: nil)
+        AppServices.panelDock = store
+        XCTAssertTrue(store.mutate { $0.setActive(.characters) })
+        XCTAssertEqual(store.layout.group(containing: .characters)?.active, .characters)
+        let m = ProjectModel()
+        let id = m.project.characters[0].id
+        m.selectCharacter(id)
+        XCTAssertEqual(store.layout.group(containing: .inspector)?.active, .inspector)
+    }
+}
