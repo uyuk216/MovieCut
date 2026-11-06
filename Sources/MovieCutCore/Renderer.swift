@@ -626,7 +626,7 @@ public struct Renderer {
         let build = { () -> Stabilization? in
             Stabilizer.analyze(duration: c.duration, strength: c.stabilizeStrength,
                                frame: { r in self.videoFrame(c, src: src, at: c.start + r) },
-                               estimator: VisionMotionEstimator())
+                               estimator: VisionMotionEstimator(), rotationZoom: c.stabilizeRollOn)
         }
         let st: Stabilization?
         if let onStabilized {
@@ -635,8 +635,8 @@ public struct Renderer {
             st = StabilizationCache.shared.value(key: key, build: build)
         }
         guard let s = st else { return frame }
-        let (dx, dy) = s.correction(atClipTime: t - c.start)
-        return Stabilizer.warp(frame, dx: dx, dy: dy, zoom: s.zoom) ?? frame
+        let k = s.similarityCorrection(atClipTime: t - c.start)
+        return Stabilizer.warp(frame, dx: k.dx, dy: k.dy, zoom: s.zoom, angle: k.angle, scale: k.scale) ?? frame
     }
 
     /// 顔の検出枠(0〜1・左上原点)。鍵は クリップ・時刻(ms)・配置・素材・画像の大きさ。配置や素材が変われば別の鍵になる。

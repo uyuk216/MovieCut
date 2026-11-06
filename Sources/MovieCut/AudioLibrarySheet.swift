@@ -71,14 +71,17 @@ struct AudioLibrarySheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("素材ブラウザ").font(.title3.bold())
+            Text(L10n.t("素材ブラウザ")).font(.title3.bold())
             HStack(spacing: 8) {
-                Text(folder?.path ?? "フォルダが選ばれていません")
+                Text(BuiltInLibrary.isBuiltIn(folder) ? "\(BuiltInLibrary.title)(\(BuiltInLibrary.licenseNote))" : (folder?.path ?? "フォルダが選ばれていません"))
                     .foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                     .accessibilityIdentifier("audio-library-folder")
                 Spacer(minLength: 8)
-                Button("フォルダを選ぶ…") { chooseFolder() }
-                Button("再読み込み") { reload() }.disabled(folder == nil)
+                Button(BuiltInLibrary.title) { useBuiltIn() }
+                    .help(L10n.t("効果音・背景・図形を、このアプリが作ったものから選べます(ライセンス自由)"))
+                    .accessibilityIdentifier("media-browser-builtin")
+                Button(L10n.t("フォルダを選ぶ…")) { chooseFolder() }
+                Button(L10n.t("再読み込み")) { reload() }.disabled(folder == nil)
             }
             if folder != nil && !items.isEmpty {
                 HStack(spacing: 8) {
@@ -86,17 +89,17 @@ struct AudioLibrarySheet: View {
                         .textFieldStyle(.roundedBorder)
                         .frame(maxWidth: 220)
                         .accessibilityIdentifier("media-browser-search")
-                    Picker("種類", selection: $kind) {
+                    Picker(L10n.t("種類"), selection: $kind) {
                         ForEach(MediaBrowser.KindFilter.allCases, id: \.self) { Text($0.title).tag($0) }
                     }
                     .pickerStyle(.segmented).labelsHidden().frame(width: 260)
                     Spacer(minLength: 8)
-                    Picker("並べ方", selection: $sort) {
+                    Picker(L10n.t("並べ方"), selection: $sort) {
                         ForEach(MediaBrowser.SortKey.allCases, id: \.self) { Text($0.title).tag($0) }
                     }
                     .labelsHidden().frame(width: 110)
                     .accessibilityIdentifier("media-browser-sort")
-                    Picker("表示", selection: $gridMode) {
+                    Picker(L10n.t("表示"), selection: $gridMode) {
                         Image(systemName: "list.bullet").tag(false)
                         Image(systemName: "square.grid.2x2").tag(true)
                     }
@@ -104,15 +107,15 @@ struct AudioLibrarySheet: View {
                 }
             }
             if folder == nil {
-                Text("動画・音声・画像を入れたフォルダを選ぶと、中の素材がここに並びます。")
+                Text(L10n.t("動画・音声・画像を入れたフォルダを選ぶと、中の素材がここに並びます。"))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 240, alignment: .center)
             } else if items.isEmpty {
-                Text("このフォルダに対象の素材(動画・音声・画像)はありません。")
+                Text(L10n.t("このフォルダに対象の素材(動画・音声・画像)はありません。"))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 240, alignment: .center)
             } else if shown.isEmpty {
-                Text("一致する素材はありません。").foregroundStyle(.secondary)
+                Text(L10n.t("一致する素材はありません。")).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 240, alignment: .center)
             } else {
                 HStack(alignment: .top, spacing: 14) {
@@ -126,7 +129,7 @@ struct AudioLibrarySheet: View {
                 Text("ダブルクリック・Return・ドラッグで追加。再生ヘッド(\(String(format: "%.2f", model.currentTime)) 秒)の位置か、ドロップした位置とレイヤーに置き、1 回の取り消しで戻せます。")
                     .font(.caption).foregroundStyle(.secondary)
                 Spacer(minLength: 8)
-                Button("閉じる") { preview.stop(); model.showAudioLibrary = false }
+                Button(L10n.t("閉じる")) { preview.stop(); model.showAudioLibrary = false }
                     .keyboardShortcut(.cancelAction)
             }
         }
@@ -199,10 +202,10 @@ struct AudioLibrarySheet: View {
                               systemImage: preview.playingURL == s.url ? "stop.fill" : "play.fill")
                     }
                 }
-                Button("タイムラインに追加") { add(s) }
+                Button(L10n.t("タイムラインに追加")) { add(s) }
                     .disabled(model.isLocked || s.unreadable)
             } else {
-                Text("素材を選ぶと、ここにプレビューが出ます。").font(.caption).foregroundStyle(.secondary)
+                Text(L10n.t("素材を選ぶと、ここにプレビューが出ます。")).font(.caption).foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
         }
@@ -227,6 +230,12 @@ struct AudioLibrarySheet: View {
             folder = url
             reload()
         }
+    }
+
+    /// 同梱素材を一覧にする(初回は作る)。選んだフォルダの記憶は変えない。
+    private func useBuiltIn() {
+        folder = BuiltInLibrary.ensureInstalled()
+        reload()
     }
 
     /// 一覧を読み直す。長さと読めるかは後から 1 件ずつ確かめて、確かめたものから行に反映する(読み込み中も操作できる)。

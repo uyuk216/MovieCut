@@ -9,7 +9,7 @@ struct InspectorSection: View {
     let title: String
     var body: some View {
         HStack(spacing: 8) {
-            Text(title)
+            Text(L10n.t(title))
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.secondary)
             Rectangle().fill(Color(nsColor: .separatorColor)).frame(height: 1)
@@ -600,12 +600,17 @@ struct ClipInspector: View {
     /// 手ぶれ補正(映像クリップ)。オンオフは強さ 0 と同じ(0 はファイルに書かない)。つまみは 1 回の Undo。
     @ViewBuilder private func stabilizeSections(_ c: Clip) -> some View {
         InspectorSection(title: "手ぶれ補正")
-        Toggle("映像を滑らかにする（移動のみ・縁は少し拡大して隠す）", isOn: Binding(get: { c.stabilizeStrength > 0 }, set: { on in
+        Toggle("映像を滑らかにする（縁は少し拡大して隠す）", isOn: Binding(get: { c.stabilizeStrength > 0 }, set: { on in
             model.setStabilizeStrength(on ? StabilizeEditing.defaultStrength : 0, clipId: clipId)
         }))
         .toggleStyle(.checkbox)
         .help("解析は初回の表示のあいだに背景で行い、終わるまでは補正なしで表示します")
         if c.stabilizeStrength > 0 {
+            Toggle("傾きと拡大縮小も補正する", isOn: Binding(get: { c.stabilizeRollOn }, set: { on in
+                model.setStabilizeRotationZoom(on, clipId: clipId)
+            }))
+            .toggleStyle(.checkbox)
+            .help("回転とズームのぶれも直します。オフのときは平行移動だけ直します(解析は軽くなります)")
             LiveSlider(label: "強さ", value: c.stabilizeStrength, range: 0...1, step: 0.05, format: Self.pct,
                        begin: { model.beginGesture() },
                        change: { model.liveStabilizeStrength($0, clipId: clipId) },

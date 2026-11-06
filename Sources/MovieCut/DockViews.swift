@@ -57,10 +57,10 @@ struct DockHost: View {
             }
         } else {
             VStack(spacing: 10) {
-                Text("パネルがありません").font(.headline)
-                Text("別ウインドウに出しているか、閉じています。表示メニューの「パネル」から開けます。")
+                Text(L10n.t("パネルがありません")).font(.headline)
+                Text(L10n.t("別ウインドウに出しているか、閉じています。表示メニューの「パネル」から開けます。"))
                     .font(.callout).foregroundStyle(.secondary)
-                Button("初期配置に戻す") { store.apply(.initial) }
+                Button(L10n.t("初期配置に戻す")) { store.apply(.initial) }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -192,7 +192,7 @@ struct DockTab: View {
     @ObservedObject var store: DockStore
 
     var body: some View {
-        Text(panel.title)
+        Text(L10n.t(panel.title))
             .font(.system(size: 12, weight: active ? .semibold : .regular))
             .foregroundStyle(active ? Color.primary : Color.secondary)
             .lineLimit(1)
@@ -204,10 +204,10 @@ struct DockTab: View {
             // タブの上にドロップ → この位置に差し込む(同じグループなら並べ替え)
             .onDrop(of: [DockDrag.type], delegate: DockTabDropDelegate(panel: panel, index: index, store: store))
             .contextMenu {
-                Button("別ウインドウで開く") { store.detach(panel) }
-                Button("閉じる") { store.close(panel) }
+                Button(L10n.t("別ウインドウで開く")) { store.detach(panel) }
+                Button(L10n.t("閉じる")) { store.close(panel) }
             }
-            .help("\(panel.title)(ドラッグして他のグループへ。右クリックで別ウインドウ / 閉じる)")
+            .help("\(L10n.t(panel.title))(\(L10n.t("ドラッグして他のグループへ。右クリックで別ウインドウ / 閉じる"))")
     }
 }
 

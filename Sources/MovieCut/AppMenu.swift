@@ -116,7 +116,7 @@ enum MenuCommand: Hashable {
     // 動きに追従させる(文字・図形・画像。ショートカットは持たない)
     case motionTrack
     // 複合クリップ: まとめる・解除(ショートカットは持たない)
-    case compoundGroup, compoundUngroup
+    case compoundGroup, compoundUngroup, compoundEnter, compoundExit
     // 編集 ▸ 検索と置換(テロップとセリフの一括置換。ショートカットは持たない)
     case findReplace
     case zoomIn, zoomOut, zoomFit, zoomSelection
@@ -188,6 +188,8 @@ struct MenuItemSpec: Equatable {
 
     /// メニューに出す題(ヒントつき)。
     var displayTitle: String { hint.map { "\(title)  (\($0))" } ?? title }
+    /// 画面に出す名前(言語に合わせる。日本語のときは `displayTitle` と同じ)。訳の無いヒントは日本語のまま。
+    var localizedTitle: String { hint.map { "\(L10n.t(title))  (\(L10n.t($0)))" } ?? L10n.t(title) }
 
     static func == (a: MenuItemSpec, b: MenuItemSpec) -> Bool {
         a.command == b.command && a.title == b.title && a.shortcut == b.shortcut && a.enabled == b.enabled && a.checked == b.checked && a.hint == b.hint
@@ -357,6 +359,8 @@ struct MenuState: Equatable {
     var canMotionTrack = false       // 文字・図形・画像を選んでいて、下に映像・画像のレイヤーがある(動きに追従できる)
     var canCompoundGroup = false     // 2 つ以上のクリップを選んでいる(まとめられる)
     var canCompoundUngroup = false   // 選択が複合クリップ(解除できる)
+    var canCompoundEnter = false     // 選択が中身のある複合クリップ(中に入って編集できる)
+    var isInsideCompound = false     // いま複合クリップの中を編集している(出られる)
     /// 表示 ▸ プレビューの背景(アプリ全体の設定)。
     var previewBackground = PreviewBackground.default
     /// 表示 ▸ ガイド線: 出しているガイド(アプリ全体の設定)。
@@ -496,8 +500,10 @@ struct MenuState: Equatable {
             canAutoReframe = m.canAutoReframe(c)
             canMotionTrack = m.canTrackMotion(c)
             canCompoundUngroup = CompoundEditing.supports(c)
+            canCompoundEnter = CompoundEditing.supports(c) && c.tracks != nil
         }
         canCompoundGroup = m.selectedClipIDs.count >= 2
+        isInsideCompound = m.isInsideCompound
         canAudioAutoSync = AudioSyncEditing.isAvailable(in: p, ids: m.selectedClipIDs)
         canPasteEffects = !m.effectClipboard.isEmpty
         textStyleChoices = m.textStyles.all.map { TextStyleChoice(id: $0.id, name: $0.name, builtin: $0.isBuiltin) }
@@ -820,7 +826,9 @@ enum AppMenuSpec {
          MenuItemSpec(command: .autoReframe, title: "縦動画に自動リフレーム", shortcut: nil, enabled: s.canEdit && s.canAutoReframe, checked: nil),
          MenuItemSpec(command: .motionTrack, title: "動きに追従させる", shortcut: nil, enabled: s.canEdit && s.canMotionTrack, checked: nil),
          MenuItemSpec(command: .compoundGroup, title: "複合クリップにまとめる", shortcut: nil, enabled: s.canEdit && s.canCompoundGroup, checked: nil),
-         MenuItemSpec(command: .compoundUngroup, title: "複合クリップを解除", shortcut: nil, enabled: s.canEdit && s.canCompoundUngroup, checked: nil)]
+         MenuItemSpec(command: .compoundUngroup, title: "複合クリップを解除", shortcut: nil, enabled: s.canEdit && s.canCompoundUngroup, checked: nil),
+         MenuItemSpec(command: .compoundEnter, title: "複合クリップの中を編集", shortcut: nil, enabled: s.canEdit && s.canCompoundEnter, checked: nil, hint: "タイムラインで複合クリップをダブルクリックしても入れます"),
+         MenuItemSpec(command: .compoundExit, title: "複合クリップから出る", shortcut: nil, enabled: s.hasDocument && s.isInsideCompound, checked: nil)]
     }
 
     /// クリップ ▸ クリップをロック / ロックを解除(選択の状態でラベルが変わる。ショートカットなし)。
@@ -1469,6 +1477,8 @@ enum AppMenu {
             case .motionTrack: m.trackMotionSelected()
             case .compoundGroup: m.groupSelectedCompound()
             case .compoundUngroup: m.ungroupSelectedCompound()
+            case .compoundEnter: m.enterCompound()
+            case .compoundExit: m.exitCompound()
             case .silenceCut: m.openSilenceSheet()
             case .audioAutoSync: m.autoSyncSelectedClips()
             case .beatMarkers: m.addBeatMarkersToSelectedClip()

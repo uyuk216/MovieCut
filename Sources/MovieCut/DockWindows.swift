@@ -177,7 +177,7 @@ final class DockWindowManager {
     private func open(_ p: DockPanel) {
         guard let model else { return }
         let w = DockPanelWindow(panel: p, model: model)
-        w.title = "\(p.title) — \(model.window?.title ?? "Movie Cut")"
+        w.title = "\(L10n.t(p.title)) — \(model.window?.title ?? "Movie Cut")"
         w.contentView = NSHostingView(rootView: DockPanelWindowRoot(model: model, panel: p, store: store))
         if presents {
             w.setFrameAutosaveName("MovieCut.dock.\(p.rawValue)")

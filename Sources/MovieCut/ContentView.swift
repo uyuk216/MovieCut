@@ -99,12 +99,12 @@ struct ContentView: View {
         }
         .sheet(isPresented: Binding(get: { model.renamingMarkerId != nil }, set: { if !$0 { model.renamingMarkerId = nil } })) { RenameMarkerSheet(model: model) }
         .sheet(isPresented: Binding(get: { model.isExporting }, set: { _ in })) { ExportSheet(model: model) }
-        .alert(model.errorTitle, isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {
-            Button("OK") { model.errorMessage = nil }
+        .alert(L10n.t(model.errorTitle), isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {
+            Button(L10n.t("OK")) { model.errorMessage = nil }
         } message: { Text(model.errorMessage ?? "") }
         .alert(model.pendingDeleteCharId.flatMap { model.deleteConfirmation(for: $0)?.title } ?? "", isPresented: Binding(get: { model.pendingDeleteCharId != nil }, set: { if !$0 { model.pendingDeleteCharId = nil } })) {
-            Button("消す", role: .destructive) { if let id = model.pendingDeleteCharId { model.deleteCharacter(id) } }
-            Button("キャンセル", role: .cancel) { model.pendingDeleteCharId = nil }
+            Button(L10n.t("消す"), role: .destructive) { if let id = model.pendingDeleteCharId { model.deleteCharacter(id) } }
+            Button(L10n.t("キャンセル"), role: .cancel) { model.pendingDeleteCharId = nil }
         } message: { Text(model.pendingDeleteCharId.flatMap { model.deleteConfirmation(for: $0)?.message } ?? "") }
         .background(WindowAccessor { w in AppWindowPolicy.apply(to: w); model.window = w; if w.isMainWindow { ActiveDocument.shared.activate(model) } })
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
@@ -161,21 +161,21 @@ struct ToolbarBar: View {
         HStack(spacing: 8) {
             Group {
                 Button(Title.addMedia) { model.chooseAndAddMedia() }
-                    .help("画像・動画・音声を再生ヘッドの位置に追加(Finder からのドラッグ&ドロップも可)")
+                    .help(L10n.t("画像・動画・音声を再生ヘッドの位置に追加(Finder からのドラッグ&ドロップも可)"))
                 Button(Title.text) { model.addTextClip() }
-                    .help("一番上のレイヤーに文字を追加")
+                    .help(L10n.t("一番上のレイヤーに文字を追加"))
                 Button(Title.blur) { model.addBlurClip() }
-                    .help("一番上のレイヤーにぼかし範囲を追加")
+                    .help(L10n.t("一番上のレイヤーにぼかし範囲を追加"))
             }
             .disabled(model.isLocked)
             Divider().frame(height: 18)
             Group {
                 Button(Title.split) { model.splitSelected() }
                     .disabled(model.isLocked || !model.canSplit)
-                    .help("選択中のクリップを再生ヘッドで分割(S)")
+                    .help(L10n.t("選択中のクリップを再生ヘッドで分割(S)"))
                 Button(Title.delete) { model.deleteSelected() }
                     .disabled(model.isLocked || model.selectedClip == nil)
-                    .help("選択中のクリップを削除(Delete)")
+                    .help(L10n.t("選択中のクリップを削除(Delete)"))
             }
             Divider().frame(height: 18)
             // 再生コントロール(⏮ ▶ 時刻 解像度·fps)は、プレビューの下ではなくここに置く
@@ -220,10 +220,10 @@ struct LeftPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("キャラクター").font(.headline)
+                Text(L10n.t("キャラクター")).font(.headline)
                 Spacer()
-                Button("＋") { model.addCharacter() }
-                    .help("キャラクターを追加")
+                Button(L10n.t("＋")) { model.addCharacter() }
+                    .help(L10n.t("キャラクターを追加"))
             }
             .padding(.bottom, 8)
             ScrollView {
@@ -231,7 +231,7 @@ struct LeftPanel: View {
                     ForEach(model.project.characters) { ch in
                         CharacterRow(ch: ch, speakerName: ch.speaker.flatMap { speakers.label(for: $0) }, selected: ch.id == model.effectiveSelectedCharId) { model.selectCharacter(ch.id) }
                             .contextMenu {
-                                Button("このキャラを消す", role: .destructive) { model.requestDeleteCharacter(ch.id) }
+                                Button(L10n.t("このキャラを消す"), role: .destructive) { model.requestDeleteCharacter(ch.id) }
                                     .disabled(model.project.characters.count <= 1)
                             }
                     }
@@ -240,7 +240,7 @@ struct LeftPanel: View {
             .frame(maxHeight: 176)
             .fixedSize(horizontal: false, vertical: model.project.characters.count <= 3)
             TachieListSection(model: model).padding(.top, 10)
-            Text("台本").font(.headline).padding(.top, 14).padding(.bottom, 4)
+            Text(L10n.t("台本")).font(.headline).padding(.top, 14).padding(.bottom, 4)
             Text(ScriptHelp.caption)
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -267,12 +267,12 @@ struct LeftPanel: View {
                     .font(.caption).foregroundStyle(.red)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 6)
-                    .help("表情の画像を差し替えるか、表情を消してください(キャラのパネルの「表情」)")
+                    .help(L10n.t("表情の画像を差し替えるか、表情を消してください(キャラのパネルの「表情」)"))
             }
             Button {
                 Task { await model.generateVoicesFromScript() }
             } label: {
-                Text("台本から音声を作ってタイムラインに並べる")
+                Text(L10n.t("台本から音声を作ってタイムラインに並べる"))
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity, minHeight: 32)
             }
@@ -346,9 +346,9 @@ struct TransportBar: View {
     var body: some View {
         HStack(spacing: 10) {
             Button(Title.toStart) { model.playback.goToStart() }
-                .help("先頭へ(Home)")
+                .help(L10n.t("先頭へ(Home)"))
             Button(model.isPlaying ? Title.pause : Title.play) { model.playback.togglePlay() }
-                .help("再生 / 一時停止(Space)")
+                .help(L10n.t("再生 / 一時停止(Space)"))
                 .disabled(model.isLocked)
             Text("\(timecode(model.currentTime)) / \(timecode(model.project.endTime))")
                 .monospacedDigit()
@@ -361,7 +361,7 @@ struct TransportBar: View {
                     .font(.system(size: 11))
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
-                    .help("プロジェクトの解像度とフレームレート(出力メニューで変えられます)")
+                    .help(L10n.t("プロジェクトの解像度とフレームレート(出力メニューで変えられます)"))
             }
         }
     }
@@ -380,7 +380,7 @@ struct BusyOverlay: View {
                 VStack(spacing: 12) {
                     ProgressView().controlSize(.large)
                     Text(message).multilineTextAlignment(.center).font(.system(size: 14))
-                    if let onCancel { Button("キャンセル", action: onCancel).keyboardShortcut(.cancelAction) }
+                    if let onCancel { Button(L10n.t("キャンセル"), action: onCancel).keyboardShortcut(.cancelAction) }
                 }
                 .padding(24)
                 .frame(minWidth: 280)
@@ -403,7 +403,7 @@ struct ExportSheet: View {
             HStack {
                 Text("\(Int((model.exportProgress * 100).rounded()))%").monospacedDigit().foregroundStyle(.secondary)
                 Spacer()
-                Button("キャンセル") { model.cancelExport() }
+                Button(L10n.t("キャンセル")) { model.cancelExport() }
                     .keyboardShortcut(.cancelAction)
             }
         }
@@ -423,7 +423,7 @@ struct JumpToTimeSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("時間を指定して移動").font(.headline)
+            Text(L10n.t("時間を指定して移動")).font(.headline)
             TextField("例: 12.5 / 1:23 / 1:23.5 / 00:01:23.50", text: $text)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 340)
@@ -431,15 +431,15 @@ struct JumpToTimeSheet: View {
                 .onSubmit { commit() }
                 .onChange(of: text) { _, _ in failed = false }
             if failed {
-                Text("時間を読み取れませんでした。例: 12.5(秒)・1:23(分:秒)・00:01:23.50(時:分:秒)").font(.caption).foregroundStyle(.red)
+                Text(L10n.t("時間を読み取れませんでした。例: 12.5(秒)・1:23(分:秒)・00:01:23.50(時:分:秒)")).font(.caption).foregroundStyle(.red)
             } else {
                 Text("全体の長さ \(timecode(model.project.endTime))。範囲を超えた値は先頭か末尾に収めます。").font(.caption).foregroundStyle(.secondary)
             }
             HStack {
                 Spacer()
-                Button("キャンセル") { model.showJumpSheet = false }
+                Button(L10n.t("キャンセル")) { model.showJumpSheet = false }
                     .keyboardShortcut(.cancelAction)
-                Button("移動") { commit() }
+                Button(L10n.t("移動")) { commit() }
                     .buttonStyle(.borderedProminent)
             }
         }
@@ -458,7 +458,7 @@ struct RenameMarkerSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("マーカーの名前").font(.headline)
+            Text(L10n.t("マーカーの名前")).font(.headline)
             TextField("名前", text: $name)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 300)
@@ -466,9 +466,9 @@ struct RenameMarkerSheet: View {
                 .onSubmit { commit() }
             HStack {
                 Spacer()
-                Button("キャンセル") { model.renamingMarkerId = nil }
+                Button(L10n.t("キャンセル")) { model.renamingMarkerId = nil }
                     .keyboardShortcut(.cancelAction)
-                Button("変更") { commit() }
+                Button(L10n.t("変更")) { commit() }
                     .buttonStyle(.borderedProminent)
             }
         }
@@ -541,6 +541,7 @@ struct SettingsSheet: View {
         let k = "\(res.width ?? 0)x\(res.height ?? 0)"
         return ResolutionPresets.isPreset(k) ? k : ResolutionPresets.customKey
     }
+    @State private var language: AppLanguage = L10n.storedOverride()
     private var fpsValid: Bool { if case .success = FrameRateInput.parse(fpsText) { return true } else { return false } }
     private var bgPreset: String {
         let b = draft.bg.lowercased()
@@ -549,30 +550,30 @@ struct SettingsSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("設定").font(.title3.bold())
-            GroupBox("動画") {
+            Text(L10n.t("設定")).font(.title3.bold())
+            GroupBox(L10n.t("動画")) {
                 Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 10) {
                     GridRow(alignment: .top) {
-                        Text("サイズ")
+                        Text(L10n.t("サイズ"))
                         VStack(alignment: .leading, spacing: 8) {
                             Picker("", selection: Binding(get: { sizeKey }, set: { k in
                                 if let sz = ResolutionInput.parseSize(k) { res.set(width: sz.width, height: sz.height) }
                             })) {
                                 ForEach(ResolutionPresets.items, id: \.key) { Text($0.label).tag($0.key) }
-                                Text("カスタム").tag(ResolutionPresets.customKey)
+                                Text(L10n.t("カスタム")).tag(ResolutionPresets.customKey)
                             }.labelsHidden().frame(width: 200)
                             ResolutionFields(input: $res)
                         }
                     }
                     GridRow(alignment: .top) {
-                        Text("FPS")
+                        Text(L10n.t("FPS"))
                         VStack(alignment: .leading, spacing: 8) {
                             Picker("", selection: Binding(get: { fpsChoice }, set: { k in
                                 fpsChoice = k
                                 if k != Self.customFpsTag { fpsText = k }
                             })) {
                                 ForEach(FrameRate.presets, id: \.self) { Text("\(FrameRate.label($0)) fps").tag(FrameRate.label($0)) }
-                                Text("カスタム").tag(Self.customFpsTag)
+                                Text(L10n.t("カスタム")).tag(Self.customFpsTag)
                             }.labelsHidden().frame(width: 200)
                             if fpsChoice == Self.customFpsTag {
                                 FrameRateFields(text: $fpsText)
@@ -580,50 +581,60 @@ struct SettingsSheet: View {
                         }
                     }
                     GridRow {
-                        Text("背景色")
+                        Text(L10n.t("背景色"))
                         HStack {
                             ColorPicker("", selection: Binding(get: { Color(hex: draft.bg) }, set: { draft.bg = $0.hexString }), supportsOpacity: false)
                                 .labelsHidden()
                             Picker("", selection: Binding(get: { bgPreset }, set: { v in if v != "custom" { draft.bg = v } })) {
-                                Text("黒").tag("#000000")
-                                Text("白").tag("#ffffff")
-                                Text("緑（クロマキー）").tag("#00b140")
-                                Text("透明（ProRes 4444・APNG 用）").tag(Project.transparentBackground)
-                                Text("自由").tag("custom")
+                                Text(L10n.t("黒")).tag("#000000")
+                                Text(L10n.t("白")).tag("#ffffff")
+                                Text(L10n.t("緑（クロマキー）")).tag("#00b140")
+                                Text(L10n.t("透明（ProRes 4444・APNG 用）")).tag(Project.transparentBackground)
+                                Text(L10n.t("自由")).tag("custom")
                             }.labelsHidden().frame(width: 170)
                         }
                     }
                     GridRow {
-                        Text("書き出し形式")
+                        Text(L10n.t("書き出し形式"))
                         VStack(alignment: .leading, spacing: 4) {
                             Picker("", selection: $draft.codec) {
-                                Text("H.264（どこでも再生できる）").tag("h264")
-                                Text("HEVC（同じ画質で小さい・4K向け）").tag("hevc")
-                                Text("ProRes 422（編集用・.mov）").tag(OutputPlan.proRes422)
-                                Text("ProRes 4444（透明を残せる・.mov）").tag(OutputPlan.proRes4444)
+                                Text(L10n.t("H.264（どこでも再生できる）")).tag("h264")
+                                Text(L10n.t("HEVC（同じ画質で小さい・4K向け）")).tag("hevc")
+                                Text(L10n.t("ProRes 422（編集用・.mov）")).tag(OutputPlan.proRes422)
+                                Text(L10n.t("ProRes 4444（透明を残せる・.mov）")).tag(OutputPlan.proRes4444)
                             }.labelsHidden().frame(width: 260)
                             if draft.codec == "h264", let w = res.width, let h = res.height, !OutputPlan.h264Supports(width: w, height: h) {
-                                Text("注意: このサイズは H.264 で書き出せないので、書き出しは HEVC になります").font(.caption).foregroundStyle(.orange)
+                                Text(L10n.t("注意: このサイズは H.264 で書き出せないので、書き出しは HEVC になります")).font(.caption).foregroundStyle(.orange)
                             }
                         }
                     }
                 }
                 .padding(8)
             }
-            GroupBox("VOICEVOX（互換エンジンも可）") {
+            GroupBox(L10n.t("言語")) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Picker("", selection: Binding(get: { language }, set: { v in language = v; L10n.setOverride(v) })) {
+                        ForEach(AppLanguage.allCases, id: \.self) { Text($0.label).tag($0) }
+                    }
+                    .labelsHidden().frame(width: 320)
+                    .accessibilityIdentifier("settings-language")
+                    Text(L10n.t("言語の切り替えは、メニューなどを開き直すと反映されます。")).font(.caption).foregroundStyle(.secondary)
+                }.padding(8)
+            }
+            GroupBox(L10n.t("VOICEVOX（互換エンジンも可）")) {
                 VStack(alignment: .leading, spacing: 4) {
                     TextField("エンジンのURL", text: $draft.voicevoxUrl)
-                    Text("VOICEVOX は 50021、COEIROINK は 50031、SHAREVOX は 50025 が初期値です。")
+                    Text(L10n.t("VOICEVOX は 50021、COEIROINK は 50031、SHAREVOX は 50025 が初期値です。"))
                         .font(.caption).foregroundStyle(.secondary)
                     if let reason = voiceEndpointProblem {
                         Text(reason).font(.caption).foregroundStyle(.red)
                     }
                     Divider()
-                    Toggle("リモートの音声サーバーを許可", isOn: Binding(get: { allowRemoteVoice }, set: { on in
+                    Toggle(L10n.t("リモートの音声サーバーを許可"), isOn: Binding(get: { allowRemoteVoice }, set: { on in
                         allowRemoteVoice = on
                         SecuritySettings.setAllowRemoteVoice(on)
                     }))
-                    Text("警告: オンにすると、セリフの文章がこの Mac の外のサーバーへ送られます。信頼できるサーバーだけを下に書いてください。プロジェクトファイルに書かれた送信先は、ここで許可したホスト以外には送りません(この設定はプロジェクトには保存されません)。")
+                    Text(L10n.t("警告: オンにすると、セリフの文章がこの Mac の外のサーバーへ送られます。信頼できるサーバーだけを下に書いてください。プロジェクトファイルに書かれた送信先は、ここで許可したホスト以外には送りません(この設定はプロジェクトには保存されません)。"))
                         .font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
                     if allowRemoteVoice {
                         TextField("許可するホスト名(カンマ区切り。例: voice.example.com)", text: Binding(get: { remoteHosts }, set: { t in
@@ -633,26 +644,26 @@ struct SettingsSheet: View {
                     }
                 }.padding(8)
             }
-            GroupBox("ゆっくり（AquesTalk 系）") {
+            GroupBox(L10n.t("ゆっくり（AquesTalk 系）")) {
                 VStack(alignment: .leading, spacing: 4) {
                     let found = AquesTalkLocator.resolve()
                     Text(found.map { "使う実行ファイル: \($0.path)" } ?? "AquesTalkPlayer が見つかりません(macOS の「Kyoko」で代用します)。")
                         .font(.caption).textSelection(.enabled)
                     HStack {
-                        Button("実行ファイルを選ぶ…") { chooseAquesTalk() }
+                        Button(L10n.t("実行ファイルを選ぶ…")) { chooseAquesTalk() }
                         if !aquesPath.isEmpty {
-                            Button("選択を解除") { aquesPath = ""; aquesMessage = ""; SecuritySettings.setAquestalkPath(nil) }
+                            Button(L10n.t("選択を解除")) { aquesPath = ""; aquesMessage = ""; SecuritySettings.setAquestalkPath(nil) }
                         }
                     }
                     if !aquesMessage.isEmpty { Text(aquesMessage).font(.caption).foregroundStyle(.red) }
-                    Text("安全のため、実行するのは /Applications・アプリ内・Application Support の AquesTalk フォルダ・ここで選んだファイルだけです。プロジェクトファイルに書かれたコマンドは実行しません。")
+                    Text(L10n.t("安全のため、実行するのは /Applications・アプリ内・Application Support の AquesTalk フォルダ・ここで選んだファイルだけです。プロジェクトファイルに書かれたコマンドは実行しません。"))
                         .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }.padding(8)
             }
             HStack {
                 Spacer()
-                Button("キャンセル") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("適用") {
+                Button(L10n.t("キャンセル")) { dismiss() }.keyboardShortcut(.cancelAction)
+                Button(L10n.t("適用")) {
                     guard res.isValid, let w = res.width, let h = res.height, case .success(let f) = FrameRateInput.parse(fpsText) else { return }
                     draft.width = w; draft.height = h; draft.fps = f
                     model.applySettings(draft, original: original)

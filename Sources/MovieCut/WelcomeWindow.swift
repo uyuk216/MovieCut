@@ -82,11 +82,11 @@ struct WelcomeView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Text("Movie Cut へようこそ").font(.title2.bold()).padding(.top, 18)
-            Text("最近使ったプロジェクト").font(.subheadline).foregroundStyle(.secondary).padding(.bottom, 8)
+            Text(L10n.t("Movie Cut へようこそ")).font(.title2.bold()).padding(.top, 18)
+            Text(L10n.t("最近使ったプロジェクト")).font(.subheadline).foregroundStyle(.secondary).padding(.bottom, 8)
             if controller.recents.entries.isEmpty {
                 Spacer()
-                Text("最近使ったプロジェクトはありません").foregroundStyle(.secondary)
+                Text(L10n.t("最近使ったプロジェクトはありません")).foregroundStyle(.secondary)
                 Spacer()
             } else {
                 List(selection: $selection) {
@@ -95,21 +95,21 @@ struct WelcomeView: View {
                             .contentShape(Rectangle())
                             .onTapGesture(count: 2) { if !controller.isMissing(e) { WelcomeActions.open(path: e.path) } }
                             .contextMenu {
-                                Button("一覧から削除") { controller.remove(path: e.path) }
+                                Button(L10n.t("一覧から削除")) { controller.remove(path: e.path) }
                             }
                     }
                 }
             }
             Divider()
             HStack {
-                Toggle("起動時にこの画面を表示", isOn: $showAtLaunch)
+                Toggle(L10n.t("起動時にこの画面を表示"), isOn: $showAtLaunch)
                     .onChange(of: showAtLaunch) { _, v in
                         WelcomeSettings.setShowAtLaunch(v)
                         ActiveDocument.shared.refresh()
                     }
                 Spacer()
-                Button("新規") { NSDocumentController.shared.newDocument(nil); WelcomeWindow.close() }
-                Button("開く…") { WelcomeWindow.close(); NSDocumentController.shared.openDocument(nil) }
+                Button(L10n.t("新規")) { NSDocumentController.shared.newDocument(nil); WelcomeWindow.close() }
+                Button(L10n.t("開く…")) { WelcomeWindow.close(); NSDocumentController.shared.openDocument(nil) }
                     .keyboardShortcut(.defaultAction)
             }
             .padding(12)

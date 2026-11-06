@@ -40,4 +40,15 @@ extension ProjectModel {
         _ = StabilizeEditing.setStrength(&p.tracks[loc.track].clips[loc.index], v)
         if gestureBase != nil { updateGesture(p) } else if p != project { edit(Self.stabilizeStrengthUndoName) { $0 = p } }
     }
+
+    /// 傾き・拡大縮小も補正するかどうか(インスペクタのチェック)。1 回の Undo。補正がオフのときは何もしない。
+    @discardableResult
+    func setStabilizeRotationZoom(_ on: Bool, clipId: String? = nil) -> Bool {
+        guard let c = stabilizeTarget(clipId) else { return false }
+        var probe = c
+        guard StabilizeEditing.setRotationZoom(&probe, on) else { return false }
+        flushCoalesced()
+        setClipProperty({ _ = StabilizeEditing.setRotationZoom(&$0, on) }, name: on ? "手ぶれ補正の傾き補正をオン" : "手ぶれ補正の傾き補正をオフ", clipId: c.id)
+        return true
+    }
 }

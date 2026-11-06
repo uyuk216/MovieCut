@@ -69,10 +69,12 @@ public struct DataLocations: Sendable {
     public var cutouts: URL { root.appendingPathComponent("Cutouts", isDirectory: true) }
     /// 世代バックアップ(保存のたびの写し)。プロジェクトごとのフォルダがこの下に作られる。
     public var versions: URL { root.appendingPathComponent("Versions", isDirectory: true) }
+    /// 同梱素材ライブラリ(アプリが合成・描画した効果音・背景・図形のキャッシュ)。
+    public var builtinMedia: URL { root.appendingPathComponent("Bundled", isDirectory: true) }
 
     /// 版が持つフォルダ・ファイルの全部(重なり検査・説明用)。
     public var allPaths: [URL] {
-        [fonts, proxies, voices, templates, exportPresets, recovery, qrCodes, aiImages, psdCache, cutouts, versions]
+        [fonts, proxies, voices, templates, exportPresets, recovery, qrCodes, aiImages, psdCache, cutouts, versions, builtinMedia]
     }
 
     /// 設定(UserDefaults)の置き場。personal は従来の `.standard`。

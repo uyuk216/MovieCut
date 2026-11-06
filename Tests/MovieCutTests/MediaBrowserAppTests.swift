@@ -131,3 +131,26 @@ final class MediaBrowserAppTests: XCTestCase {
         XCTAssertEqual(AudioLibrarySheet.kindText(.image), "画像")
     }
 }
+
+/// 同梱素材: 素材ブラウザの「Movie Cut 同梱」から、他の素材と同じ経路で置ける。
+@MainActor
+final class BuiltInLibraryAppTests: XCTestCase {
+    func testBuiltInItemPlacesLikeOtherMedia() async throws {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("builtin-app-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let items = BuiltInLibrary.items(in: DataLocations(edition: .personal, applicationSupport: tmp))
+        let sound = try XCTUnwrap(items.first { $0.name == "効果音-ポップ.wav" })
+        let bg = try XCTUnwrap(items.first { $0.name == "背景-夕焼け.png" })
+        let m = ProjectModel(project: .new()); m.notices = OneTimeNotices()
+        m.currentTime = 1
+        let a = await AudioLibrarySheet.addToTimeline(url: sound.url, model: m)
+        let b = await AudioLibrarySheet.addToTimeline(url: bg.url, model: m)
+        XCTAssertEqual(a.count, 1); XCTAssertEqual(b.count, 1)
+        let c = try XCTUnwrap(m.clip(a[0]))
+        XCTAssertEqual(c.type, .audio)
+        XCTAssertEqual(c.start, 1, accuracy: 1e-9)
+        XCTAssertEqual(c.duration, 0.15, accuracy: 0.01)
+        XCTAssertEqual(m.clip(b[0])?.type, .image)
+        XCTAssertEqual(m.effectiveUndoManager.canUndo, true)
+    }
+}

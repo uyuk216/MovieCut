@@ -11,15 +11,15 @@ struct MenuItemView: View {
 
     var body: some View {
         if let checked = spec.checked {
-            Toggle(spec.displayTitle, isOn: Binding(get: { checked }, set: { _ in perform(spec.command) }))
+            Toggle(spec.localizedTitle, isOn: Binding(get: { checked }, set: { _ in perform(spec.command) }))
                 .keyboardShortcut(spec.shortcut?.keyboardShortcut)
                 .disabled(!spec.enabled)
-                .help(reason ?? "")
+                .help(reason.map(L10n.t) ?? "")
         } else {
-            Button(spec.displayTitle) { perform(spec.command) }
+            Button(spec.localizedTitle) { perform(spec.command) }
                 .keyboardShortcut(spec.shortcut?.keyboardShortcut)
                 .disabled(!spec.enabled)
-                .help(reason ?? "")
+                .help(reason.map(L10n.t) ?? "")
         }
     }
 }
@@ -62,9 +62,9 @@ struct AppCommands: Commands {
                 MenuItemView(spec: AppMenuSpec.packageSave(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.addSubtitle(s), perform: run)
                 Divider()
-                Menu("最近使った項目") {
+                Menu(L10n.t("最近使った項目")) {
                     if s.recentItems.isEmpty {
-                        Text("履歴はありません")
+                        Text(L10n.t("履歴はありません"))
                     } else {
                         items(AppMenuSpec.recentItems(s), run)
                     }
@@ -74,9 +74,9 @@ struct AppCommands: Commands {
                 MenuItemView(spec: AppMenuSpec.welcomeToggle(s), perform: run)
                 Divider()
                 MenuItemView(spec: AppMenuSpec.templateSave(s), perform: run)
-                Menu("テンプレートから新規作成") {
+                Menu(L10n.t("テンプレートから新規作成")) {
                     if s.templateNames.isEmpty {
-                        Text("テンプレートはありません")
+                        Text(L10n.t("テンプレートはありません"))
                     } else {
                         items(AppMenuSpec.templateNewItems(s), run)
                     }
@@ -100,7 +100,7 @@ struct AppCommands: Commands {
         }
 
         // クリップ / 再生 / 移動 / 出力。SwiftUI は CommandMenu を「表示」の後ろへ置くので、順番は MenuOrder が起動後に直す。
-        CommandMenu("クリップ") {
+        CommandMenu(L10n.t("クリップ")) {
             MenuSection { s, run in
                 let groups = AppMenuSpec.clipMenu(s)
                 ForEach(Array(groups.enumerated()), id: \.offset) { i, g in
@@ -108,38 +108,38 @@ struct AppCommands: Commands {
                     items(g, run)
                 }
                 Divider()
-                Menu("図形を追加") { items(AppMenuSpec.shapeItems(s), run) }
-                Menu("スタンプを追加") { items(AppMenuSpec.stampItems(s), run) }
+                Menu(L10n.t("図形を追加")) { items(AppMenuSpec.shapeItems(s), run) }
+                Menu(L10n.t("スタンプを追加")) { items(AppMenuSpec.stampItems(s), run) }
                 Divider()
-                Menu("マルチカメラ") { items(AppMenuSpec.multicamItems(s), run) }
+                Menu(L10n.t("マルチカメラ")) { items(AppMenuSpec.multicamItems(s), run) }
                 Divider()
-                Menu("レイヤー") {
+                Menu(L10n.t("レイヤー")) {
                     items(AppMenuSpec.layerItems(s), run)
                     items([AppMenuSpec.layerDeleteItem(s)], run)
                     Divider()
                     items(AppMenuSpec.layerHeightItems(s), run)
                 }
                 Divider()
-                Menu("キーフレーム") { items(AppMenuSpec.keyframeItems(s), run) }
-                Menu("アニメーション") { items(AppMenuSpec.animationItems(s), run) }
-                Menu("配置") { items(AppMenuSpec.pipItems(s), run) }
+                Menu(L10n.t("キーフレーム")) { items(AppMenuSpec.keyframeItems(s), run) }
+                Menu(L10n.t("アニメーション")) { items(AppMenuSpec.animationItems(s), run) }
+                Menu(L10n.t("配置")) { items(AppMenuSpec.pipItems(s), run) }
                 Divider()
-                Menu("トランジション") {
-                    Menu("開始") { items(AppMenuSpec.transitionKindItems(s, edge: .in), run) }
-                    Menu("終了") { items(AppMenuSpec.transitionKindItems(s, edge: .out), run) }
+                Menu(L10n.t("トランジション")) {
+                    Menu(L10n.t("開始")) { items(AppMenuSpec.transitionKindItems(s, edge: .in), run) }
+                    Menu(L10n.t("終了")) { items(AppMenuSpec.transitionKindItems(s, edge: .out), run) }
                     Divider()
                     items(AppMenuSpec.transitionActions(s), run)
                 }
                 items(AppMenuSpec.transitionQuick(s), run)
                 Divider()
-                Menu("速度") {
+                Menu(L10n.t("速度")) {
                     items(AppMenuSpec.speedItems(s), run)
                     Divider()
                     MenuItemView(spec: AppMenuSpec.freezeFrameItem(s), perform: run)
                 }
                 MenuItemView(spec: AppMenuSpec.freezeFrameItem(s), perform: run)
                 Divider()
-                Menu("音声") { items(AppMenuSpec.audioItems(s), run) }
+                Menu(L10n.t("音声")) { items(AppMenuSpec.audioItems(s), run) }
                 MenuItemView(spec: AppMenuSpec.silenceCutItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.audioAutoSyncItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.beatMarkersItem(s), perform: run)
@@ -148,19 +148,19 @@ struct AppCommands: Commands {
                 MenuItemView(spec: AppMenuSpec.fillerCutItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.transcriptEditItem(s), perform: run)
                 Divider()
-                Menu("テキスト") {
-                    Menu("スタイルを適用") { items(AppMenuSpec.textStyleItems(s), run) }
-                    Menu("スタイルを一括適用") { items(AppMenuSpec.textStyleAllItems(s), run) }
-                    Menu("文字アニメーション") { items(AppMenuSpec.textAnimItems(s), run) }
+                Menu(L10n.t("テキスト")) {
+                    Menu(L10n.t("スタイルを適用")) { items(AppMenuSpec.textStyleItems(s), run) }
+                    Menu(L10n.t("スタイルを一括適用")) { items(AppMenuSpec.textStyleAllItems(s), run) }
+                    Menu(L10n.t("文字アニメーション")) { items(AppMenuSpec.textAnimItems(s), run) }
                     MenuItemView(spec: AppMenuSpec.textVerticalItem(s), perform: run)
                     MenuItemView(spec: AppMenuSpec.textPerCharItem(s), perform: run)
                     MenuItemView(spec: AppMenuSpec.textCounterItem(s), perform: run)
                 }
                 Divider()
-                Menu("エフェクト") {
+                Menu(L10n.t("エフェクト")) {
                     items(AppMenuSpec.effectKindItems(s), run)
                     Divider()
-                    Menu("プリセット") { items(AppMenuSpec.effectPresetItems(s), run) }
+                    Menu(L10n.t("プリセット")) { items(AppMenuSpec.effectPresetItems(s), run) }
                     Divider()
                     items(AppMenuSpec.effectActions(s), run)
                 }
@@ -170,14 +170,14 @@ struct AppCommands: Commands {
             }
         }
 
-        CommandMenu("再生") {
+        CommandMenu(L10n.t("再生")) {
             MenuSection { s, run in
                 items(AppMenuSpec.playback(s), run)
-                Menu("反復再生の幅") { items(AppMenuSpec.trimLoopWidthItems(s), run) }
+                Menu(L10n.t("反復再生の幅")) { items(AppMenuSpec.trimLoopWidthItems(s), run) }
             }
         }
 
-        CommandMenu("移動") {
+        CommandMenu(L10n.t("移動")) {
             MenuSection { s, run in
                 items(AppMenuSpec.gotoEnds(s), run)
                 Divider()
@@ -186,10 +186,10 @@ struct AppCommands: Commands {
                 MenuItemView(spec: AppMenuSpec.gotoTime(s), perform: run)
                 Divider()
                 items(AppMenuSpec.markerItems(s), run)
-                Menu("マーカーの色") { items(AppMenuSpec.markerColorItems(s), run) }
-                Menu("マーカー一覧") {
+                Menu(L10n.t("マーカーの色")) { items(AppMenuSpec.markerColorItems(s), run) }
+                Menu(L10n.t("マーカー一覧")) {
                     if s.markers.isEmpty {
-                        Text("マーカーはありません")
+                        Text(L10n.t("マーカーはありません"))
                     } else {
                         items(AppMenuSpec.markerList(s), run)
                     }
@@ -198,36 +198,36 @@ struct AppCommands: Commands {
         }
 
         // 出力(解像度・FPS・書き出し形式・背景色・動画の設定・書き出し)
-        CommandMenu("出力") {
+        CommandMenu(L10n.t("出力")) {
             MenuSection { s, run in
-                Menu("解像度") {
+                Menu(L10n.t("解像度")) {
                     items(AppMenuSpec.resolutions(s), run)
                     Divider()
                     if !AppMenuSpec.recentResolutions(s).isEmpty {
-                        Text("最近使ったカスタム")
+                        Text(L10n.t("最近使ったカスタム"))
                         items(AppMenuSpec.recentResolutions(s), run)
                         Divider()
                     }
                     MenuItemView(spec: AppMenuSpec.customResolution(s), perform: run)
                     MenuItemView(spec: AppMenuSpec.swapResolution(s), perform: run)
                 }
-                Menu("FPS") {
+                Menu(L10n.t("FPS")) {
                     items(AppMenuSpec.fpsItems(s), run)
                     Divider()
                     if !AppMenuSpec.recentFpsItems(s).isEmpty {
-                        Text("最近使ったカスタム")
+                        Text(L10n.t("最近使ったカスタム"))
                         items(AppMenuSpec.recentFpsItems(s), run)
                         Divider()
                     }
                     MenuItemView(spec: AppMenuSpec.customFps(s), perform: run)
                 }
-                Menu("書き出し形式") { items(AppMenuSpec.codecItems(s), run) }
-                Menu("背景色") { items(AppMenuSpec.backgroundItems(s), run) }
+                Menu(L10n.t("書き出し形式")) { items(AppMenuSpec.codecItems(s), run) }
+                Menu(L10n.t("背景色")) { items(AppMenuSpec.backgroundItems(s), run) }
                 Divider()
                 MenuItemView(spec: AppMenuSpec.videoSettings(s), perform: run)
                 Divider()
                 MenuItemView(spec: AppMenuSpec.exportCurrent(s), perform: run)
-                Menu("書き出しプリセット") {
+                Menu(L10n.t("書き出しプリセット")) {
                     items(AppMenuSpec.exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())), run)
                     Divider()
                     MenuItemView(spec: AppMenuSpec.saveCustomPreset(s), perform: run)
@@ -254,7 +254,7 @@ struct AppCommands: Commands {
                 MenuItemView(spec: AppMenuSpec.subtitleGenerate(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.transcribeSubtitles(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.chapterCopy(s), perform: run)
-                Menu("チャプターを色でコピー") { items(AppMenuSpec.chapterColorItems(s), run) }
+                Menu(L10n.t("チャプターを色でコピー")) { items(AppMenuSpec.chapterColorItems(s), run) }
                 MenuItemView(spec: AppMenuSpec.aiChapters(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.aiTitles(s), perform: run)
             }
@@ -265,11 +265,11 @@ struct AppCommands: Commands {
             MenuSection { s, run in
                 items(AppMenuSpec.zoom(s), run)
                 Divider()
-                Menu("パネル") { items(AppMenuSpec.dockPanels(s), run) }
-                Menu("レイアウト") { items(AppMenuSpec.dockLayouts(s), run) }
+                Menu(L10n.t("パネル")) { items(AppMenuSpec.dockPanels(s), run) }
+                Menu(L10n.t("レイアウト")) { items(AppMenuSpec.dockLayouts(s), run) }
                 Divider()
-                Menu("プレビューの背景") { items(AppMenuSpec.previewBackgroundItems(s), run) }
-                Menu("ガイド線") { items(AppMenuSpec.guideItems(s), run) }
+                Menu(L10n.t("プレビューの背景")) { items(AppMenuSpec.previewBackgroundItems(s), run) }
+                Menu(L10n.t("ガイド線")) { items(AppMenuSpec.guideItems(s), run) }
                 MenuItemView(spec: AppMenuSpec.previewProxy(s), perform: run)
                 Divider()
                 MenuItemView(spec: AppMenuSpec.scopeItem(s), perform: run)

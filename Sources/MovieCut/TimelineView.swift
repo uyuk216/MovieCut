@@ -60,14 +60,15 @@ struct TimelineSection: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if model.isInsideCompound { compoundBar }
             HStack(spacing: 10) {
-                Button("＋レイヤー") { model.addTrack() }
+                Button(L10n.t("＋レイヤー")) { model.addTrack() }
                     .disabled(model.isLocked)
-                Text("拡大")
+                Text(L10n.t("拡大"))
                 Slider(value: $model.pps, in: TimelineLayout.minPps...TimelineLayout.maxPps).frame(width: 140)
-                Button("全体表示") { model.onFitTimeline() }
-                Toggle("ぴったり揃える", isOn: $model.snapEnabled)
-                    .help("クリップを動かすとき、ほかのクリップの端・再生ヘッド・0秒に自動で揃えます")
+                Button(L10n.t("全体表示")) { model.onFitTimeline() }
+                Toggle(L10n.t("ぴったり揃える"), isOn: $model.snapEnabled)
+                    .help(L10n.t("クリップを動かすとき、ほかのクリップの端・再生ヘッド・0秒に自動で揃えます"))
                 Spacer()
             }
             .controlSize(.small)
@@ -77,7 +78,7 @@ struct TimelineSection: View {
                 .overlay {
                     // 空の書類: 素材の入れ方を出す(ドロップは下のキャンバスが受ける。文字は操作を奪わない)
                     if model.project.allClips.isEmpty {
-                        Text("ここに素材をドラッグ、またはファイル ▸ 素材を追加…")
+                        Text(L10n.t("ここに素材をドラッグ、またはファイル ▸ 素材を追加…"))
                             .font(.callout)
                             .foregroundStyle(.secondary)
                             .allowsHitTesting(false)
@@ -85,6 +86,31 @@ struct TimelineSection: View {
                 }
         }
         .clipped()
+    }
+
+    /// 複合クリップの中を編集しているときのパンくず(「プロジェクト ▸ 複合クリップ 1」)と戻るボタン。
+    private var compoundBar: some View {
+        let names = model.compoundBreadcrumb
+        return VStack(spacing: 0) {
+            HStack(spacing: 6) {
+                Button(L10n.t("◀ 戻る")) { model.exitCompound() }
+                    .help(L10n.t("複合クリップから出る(クリップ ▸ 複合クリップから出る)"))
+                ForEach(Array(names.enumerated()), id: \.offset) { i, name in
+                    if i > 0 { Text(L10n.t("▸")).foregroundStyle(.secondary) }
+                    if i < names.count - 1 {
+                        Button(name) { model.exitCompound(toDepth: i) }.buttonStyle(.link)
+                    } else {
+                        Text(name).fontWeight(.semibold)
+                    }
+                }
+                Text(L10n.t("の中を編集しています")).foregroundStyle(.secondary)
+                Spacer()
+            }
+            .controlSize(.small)
+            .padding(.horizontal, 10).padding(.vertical, 3)
+            .background(Color.accentColor.opacity(0.12))
+            Divider()
+        }
     }
 }
 
@@ -1357,6 +1383,7 @@ final class TimelineCanvas: NSView {
                 m.toggleTachieExpanded(id); needsDisplay = true      // ▸ か、本体のダブルクリック: 中身(表情の切り替わり)を開閉する
                 return
             }
+            if clickCount >= 2, zone == .body, c.type == .compound, m.enterCompound(id) { needsDisplay = true; return }   // 複合クリップのダブルクリック: 中に入る
             let mode: DragMode = zone == .left ? .trimLeft : (zone == .right ? .trimRight : .move)
             if clickCount >= 2, zone == .body, TimelineHit.editsTextOnDoubleClick(c.type) { m.textFocusRequest += 1 }   // ダブルクリック: 文字の入力欄へ
             if mode != .move && collapse != nil { m.selectOnly(id); collapse = nil }     // 端のトリムは 1 つのクリップだけ

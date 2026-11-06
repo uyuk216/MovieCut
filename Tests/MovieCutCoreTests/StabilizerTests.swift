@@ -294,3 +294,104 @@ final class StabilizerTests: XCTestCase {
         XCTAssertEqual(builds, 1)
     }
 }
+
+/// 相似変換(回転・ズーム)の手ぶれ補正: 合成の回転・拡大フレーム列で、Vision の推定が角度 0.5°・拡大 1% 以内で合うかを確かめる。
+final class StabilizerSimilarityTests: XCTestCase {
+    let base = StabilizerTests()
+
+    /// 絵を中心まわりに、見た目の時計回りに `deg` 度、`scale` 倍して、(dx, dy) 動かす(左上原点・下向き正)。はみ出しは黒。
+    func transformed(_ img: CGImage, deg: Double, scale: Double, dx: Double = 0, dy: Double = 0) -> CGImage {
+        let w = img.width, h = img.height
+        let c = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
+                          space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        c.setFillColor(CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 1))
+        c.fill(CGRect(x: 0, y: 0, width: w, height: h))
+        c.translateBy(x: Double(w) / 2 + dx, y: Double(h) / 2 - dy)
+        c.rotate(by: -deg * .pi / 180)
+        c.scaleBy(x: scale, y: scale)
+        c.draw(img, in: CGRect(x: -Double(w) / 2, y: -Double(h) / 2, width: Double(w), height: Double(h)))
+        return c.makeImage()!
+    }
+
+    func testFitRecoversKnownSimilarity() throws {
+        let truth = SimilarityMotion(angle: 0.1, scale: 1.05, dx: 3, dy: -2)
+        let pts = [CGPoint(x: -50, y: -30), CGPoint(x: 60, y: -20), CGPoint(x: 10, y: 40), CGPoint(x: -20, y: 25)]
+        let q = pts.map { p in
+            CGPoint(x: truth.scale * (cos(truth.angle) * p.x - sin(truth.angle) * p.y) + truth.dx,
+                    y: truth.scale * (sin(truth.angle) * p.x + cos(truth.angle) * p.y) + truth.dy)
+        }
+        let f = try XCTUnwrap(SimilarityMotion.fit(from: pts, to: q))
+        XCTAssertEqual(f.angle, 0.1, accuracy: 1e-9); XCTAssertEqual(f.scale, 1.05, accuracy: 1e-9)
+        XCTAssertEqual(f.dx, 3, accuracy: 1e-9); XCTAssertEqual(f.dy, -2, accuracy: 1e-9)
+        let inv = f.inverse
+        XCTAssertEqual(inv.angle, -0.1, accuracy: 1e-9); XCTAssertEqual(inv.scale, 1 / 1.05, accuracy: 1e-9)
+        XCTAssertNil(SimilarityMotion.fit(from: [CGPoint(x: 1, y: 1)], to: [CGPoint(x: 1, y: 1)]))
+    }
+
+    /// 回転だけ・拡大だけ・両方(と少しの平行移動): 推定の角度は 0.5° 以内、拡大は 1% 以内。符号は「見た目の時計回りが正」。
+    func testVisionRecoversRotationAndScale() throws {
+        let a = base.noiseImage(w: 480, h: 320, seed: 11)
+        for (deg, sc) in [(2.0, 1.0), (-1.5, 1.0), (0.0, 1.03), (0.0, 0.97), (2.0, 1.04), (-3.0, 0.98)] {
+            let b = transformed(a, deg: deg, scale: sc)
+            let m = try XCTUnwrap(VisionMotionEstimator().similarity(from: a, to: b), "\(deg) \(sc)")
+            XCTAssertEqual(m.angle * 180 / .pi, deg, accuracy: 0.5, "角度 \(deg) \(sc)")
+            XCTAssertEqual(m.scale, sc, accuracy: 0.01, "拡大 \(deg) \(sc)")
+        }
+        let b = transformed(a, deg: 1.0, scale: 1.0, dx: 8, dy: -5)
+        let m = try XCTUnwrap(VisionMotionEstimator().similarity(from: a, to: b))
+        XCTAssertEqual(m.dx, 8, accuracy: 2.0); XCTAssertEqual(m.dy, -5, accuracy: 2.0)
+    }
+
+    /// 揺れる回転・ズームの列を解析して補正すると、補正後の推定(基準フレームとの角度・拡大)の分散が大きく減る。
+    func testAnalysisRemovesRotationAndZoomJitter() throws {
+        let n = 24
+        let a = base.noiseImage(w: 360, h: 240, seed: 5)
+        let degs = (0..<n).map { $0 % 2 == 0 ? 2.0 : -2.0 }
+        let scs = (0..<n).map { $0 % 2 == 0 ? 1.03 : 0.97 }
+        let frames = (0..<n).map { transformed(a, deg: degs[$0], scale: scs[$0]) }
+        let st = try XCTUnwrap(Stabilizer.analyze(duration: Double(n - 1) / Stabilizer.sampleRate, strength: 1, frame: { r in
+            frames[min(n - 1, Int((r * Stabilizer.sampleRate).rounded()))]
+        }, estimator: VisionMotionEstimator(), rotationZoom: true))
+        XCTAssertFalse(st.rot.isEmpty)
+        XCTAssertGreaterThan(st.zoom, 1, "縁を隠す拡大")
+        var rawA: [Double] = [], fixA: [Double] = [], rawS: [Double] = [], fixS: [Double] = []
+        for k in 4..<(n - 4) {
+            let c = st.similarityCorrection(atClipTime: Double(k) / Stabilizer.sampleRate)
+            let out = try XCTUnwrap(Stabilizer.warp(frames[k], dx: c.dx, dy: c.dy, zoom: 1, angle: c.angle, scale: c.scale))
+            rawA.append(degs[k]); rawS.append(scs[k])
+            let m = try XCTUnwrap(VisionMotionEstimator().similarity(from: a, to: out))
+            fixA.append(m.angle * 180 / .pi); fixS.append(m.scale)
+        }
+        XCTAssertLessThan(base.variance(fixA), base.variance(rawA) * 0.25)
+        XCTAssertLessThan(base.variance(fixS), base.variance(rawS) * 0.25)
+    }
+
+    func testRequiredZoomCoversBordersAndMatchesTranslationOnly() {
+        // 平行移動だけなら従来の 1 / (1 − 2m)
+        let z0 = Stabilizer.requiredZoom(width: 400, height: 200, dx: [20], dy: [0], angle: [0], logScale: [0])
+        XCTAssertEqual(z0, 1 / (1 - 2 * 20 / 400.0), accuracy: 1e-9)
+        // 回転があれば大きくなる
+        let z1 = Stabilizer.requiredZoom(width: 400, height: 200, dx: [0], dy: [0], angle: [3 * .pi / 180], logScale: [0])
+        XCTAssertGreaterThan(z1, 1.0)
+        // 補正なしは 1
+        XCTAssertEqual(Stabilizer.requiredZoom(width: 400, height: 200, dx: [0], dy: [0], angle: [0], logScale: [0]), 1, accuracy: 1e-12)
+    }
+
+    /// ファイル: 傾き補正は true のときだけ書く。旧ファイル(キー無し)は変わらない。補正オフで指定も消える。
+    func testRollFlagIsOnlyWrittenWhenOn() throws {
+        var c = Clip(); c.type = .video; c.duration = 3
+        c.src = "/a.mp4"
+        XCTAssertFalse(StabilizeEditing.setRotationZoom(&c, true), "補正オフのときは何もしない")
+        StabilizeEditing.setStrength(&c, 0.8)
+        let off = String(data: try JSONEncoder().encode(c), encoding: .utf8)!
+        XCTAssertFalse(off.contains("stabilizeRoll"))
+        XCTAssertTrue(StabilizeEditing.setRotationZoom(&c, true))
+        let on = try JSONEncoder().encode(c)
+        XCTAssertTrue(String(data: on, encoding: .utf8)!.contains("\"stabilizeRoll\":true"))
+        let back = try JSONDecoder().decode(Clip.self, from: on)
+        XCTAssertEqual(back.stabilizeRoll, true)
+        XCTAssertNotEqual(c.stabilizeCacheKey(src: "/a.mp4"), { var d = c; d.stabilizeRoll = nil; return d.stabilizeCacheKey(src: "/a.mp4") }())
+        StabilizeEditing.setStrength(&c, 0)
+        XCTAssertNil(c.stabilizeRoll)
+    }
+}

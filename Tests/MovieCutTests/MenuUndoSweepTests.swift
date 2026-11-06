@@ -78,7 +78,8 @@ final class MenuUndoSweepTests: XCTestCase {
              .measureLoudness, .showScopes, .saveTemplate, .newFromTemplate, .makeProxies, .lutLoad, .autoWhiteBalance, .regenerateVoice,
              .makeVoices, .layerDelete, .copyChapters, .copyChaptersColor(.red), .jumpToTime, .renameMarker, .fpsCustom, .addQRCode, .aiImage, .generateSubtitles,
              .helpShortcuts, .helpVoicevox, .helpAquestalk, .helpLicense, .helpThirdParty, .previewBackground, .guide,
-             .dockPanel, .dockLayout, .previewProxyToggle, .fullScreen, .exportScript, .exportStoryboard:
+             .dockPanel, .dockLayout, .previewProxyToggle, .fullScreen, .exportScript, .exportStoryboard,
+             .compoundEnter, .compoundExit:   // 中に入る・出るは画面の切り替え(書類は変わらない・取り消しにも載らない。専用の試験は CompoundScopeAppTests)
             return true
         default:
             return false

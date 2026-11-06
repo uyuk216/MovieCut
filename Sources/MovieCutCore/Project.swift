@@ -413,6 +413,8 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var visualizer: Visualizer? = nil
     /// 手ぶれ補正の強さ(映像クリップ。0〜1)。無い・0 のときはファイルに書かない(オフ)。
     public var stabilize: Double? = nil
+    /// 手ぶれ補正で傾き・拡大縮小も直す(true のときだけ書く。`stabilize` がオンのときだけ働く)。
+    public var stabilizeRoll: Bool? = nil
     /// 複合クリップの中のレイヤー(type が compound のときだけ。無いときは書かない)。子の `start` は複合クリップの頭からの秒。
     public var tracks: [Track]? = nil
     /// 形のマスク(キャンバスの矩形・楕円。省いたときは何もしない)。
@@ -435,7 +437,7 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var followsProjectEnd: Bool? = nil
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["id", "type", "subtitleText", "tachieId", "mouthDrive", "speakingOnly", "followsProjectEnd", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "bokehShape", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "frameFlow", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "valueRef", "duck", "visualizer", "stabilize", "tracks", "mask", "figure", "note", "locked"]
+    static let knownKeys: Set<String> = ["id", "type", "subtitleText", "tachieId", "mouthDrive", "speakingOnly", "followsProjectEnd", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "bokehShape", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "frameFlow", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "valueRef", "duck", "visualizer", "stabilize", "stabilizeRoll", "tracks", "mask", "figure", "note", "locked"]
 
     public init() {}
 
@@ -577,6 +579,9 @@ public struct Clip: Codable, Equatable, Identifiable {
         if let raw: JSONValue = l.value("stabilize") {
             if let v: Double = l.value("stabilize"), v.isFinite { stabilize = v > 0 ? min(v, 1) : nil } else { extra["stabilize"] = raw }
         }
+        if let raw: JSONValue = l.value("stabilizeRoll") {
+            if let v: Bool = l.value("stabilizeRoll") { stabilizeRoll = v ? true : nil } else { extra["stabilizeRoll"] = raw }
+        }
         if let raw: JSONValue = l.value("mask") {
             if let v: ClipMask = l.value("mask") { mask = v } else { extra["mask"] = raw }
         }
@@ -699,6 +704,7 @@ public struct Clip: Codable, Equatable, Identifiable {
         if let t = tracks { try c.encode(t, forKey: AnyKey("tracks")) }
         try c.encodeIfPresent(mask, forKey: AnyKey("mask"))
         if let s = stabilize, s > 0 { try c.encode(min(s, 1), forKey: AnyKey("stabilize")) }
+        if stabilizeRoll == true { try c.encode(true, forKey: AnyKey("stabilizeRoll")) }
     }
 }
 

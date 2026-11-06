@@ -99,8 +99,20 @@ final class ProjectMirror: @unchecked Sendable {
 final class ProjectModel: ObservableObject {
     @Published var project: Project {
         // タイムラインが「変わったか」を安く調べるための通し番号
-        didSet { projectRevision &+= 1; mirror.set(project); schedulePrewarm() }
+        // 複合クリップの中に入っているあいだ、`project` は「中身を見せるための見え方」。根(書類全体)へ戻して写す
+        didSet {
+            projectRevision &+= 1
+            if !compoundPath.isEmpty, let r = scopeRoot, let e = CompoundScope.embed(view: project, into: r, path: compoundPath) { scopeRoot = e }
+            mirror.set(compoundPath.isEmpty ? project : (scopeRoot ?? project))
+            schedulePrewarm()
+        }
     }
+    /// 「複合クリップの中を編集」で入っている複合クリップの id(外側から順)。空なら書類の一番上。
+    @Published var compoundPath: [String] = []
+    /// 中に入っているあいだの書類全体(根)。入っていないときは nil。
+    var scopeRoot: Project?
+    /// 書類全体(中に入っていても根を返す。保存・Undo・書き出しの単位)。
+    var rootProject: Project { compoundPath.isEmpty ? project : (scopeRoot ?? project) }
     nonisolated let mirror: ProjectMirror
     private(set) var projectRevision = 0
     /// 自動保存(復元の写し)の持ち主の番号と、最後に写したときの版・タイマー。
@@ -344,6 +356,11 @@ final class ProjectModel: ObservableObject {
         var p = project
         body(&p)
         guard p != project else { return false }
+        // 中に入っている複合クリップ(またはそのレイヤー)がロックされていれば、中の編集は断る
+        if enforcesLock, !compoundPath.isEmpty, let r = scopeRoot, CompoundScope.ancestorLocked(r, path: compoundPath) {
+            statusText = Self.lockedNotice
+            return false
+        }
         p = TachieEditing.syncProjectEnd(p, old: project)   // 「プロジェクトの長さに合わせる」立ち絵クリップは、同じ Undo 1 回の中で終わりを合わせ直す
         UnusedMedia.adoptRemoved(from: project, into: &p)
         if enforcesLock, LayerEditing.violatesLock(old: project, new: p) {
@@ -356,8 +373,22 @@ final class ProjectModel: ObservableObject {
 
     static let lockedNotice = "ロックされたレイヤー・クリップは編集できません"
 
-    private func replace(with new: Project, name: String) {
+    private func replace(with newView: Project, name: String) {
+        guard let rootNew = compoundPath.isEmpty ? newView : scopeRoot.flatMap({ CompoundScope.embed(view: newView, into: $0, path: compoundPath) }) else { return }
+        applyRoot(rootNew, name: name)
+    }
+
+    /// 書類全体(根)を差し替える入口(編集・Undo・Redo の共通)。中に入っている複合クリップが無くなったら、その分だけ外へ出る。
+    /// Undo には「差し替える前の根」を登録するので、中に入った編集も、出た後の Undo でも 1 回で戻る(Undo の列は 1 本)。
+    func applyRoot(_ rootNew: Project, name: String) {
         let old = project
+        let oldRoot = rootProject
+        var path = compoundPath
+        while !path.isEmpty, CompoundScope.view(of: rootNew, path: path) == nil { path.removeLast() }
+        let newView = path.isEmpty ? rootNew : (CompoundScope.view(of: rootNew, path: path) ?? rootNew)
+        let new = newView
+        scopeRoot = path.isEmpty ? nil : rootNew
+        if path != compoundPath { compoundPath = path }
         project = new
         // Undo / Redo でクリップが無くなったら、選択も外す
         if let id = selectedClipId, !new.allClips.contains(where: { $0.id == id }) {
@@ -376,7 +407,7 @@ final class ProjectModel: ObservableObject {
         let um = effectiveUndoManager
         um.beginUndoGrouping()
         um.registerUndo(withTarget: self) { m in
-            MainActor.assumeIsolated { m.replace(with: old, name: name) }
+            MainActor.assumeIsolated { m.applyRoot(oldRoot, name: name) }
         }
         um.setActionName(name)
         um.endUndoGrouping()
@@ -604,6 +635,7 @@ final class ProjectModel: ObservableObject {
 
     /// 直接の書き出しを始めてよいか。書き出し中、またはキューの件が動いている間は始めない(同時に 2 つ走らせない)。
     func directExportBlocked() -> Bool {
+        exitAllCompoundScopes()   // 書き出しは書類全体。複合クリップの中にいるときは、先に一番上へ戻る
         if isExporting { return true }
         if (exportQueueOverride ?? AppServices.exportQueue).queue.isBusy {
             statusText = "書き出しキューが動いています。終わってから書き出してください"

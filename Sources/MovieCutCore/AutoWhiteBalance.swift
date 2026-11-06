@@ -147,7 +147,7 @@ public enum AutoWhiteBalance {
         var c = clip
         c.effects = []
         c.keyframes = c.keyframes.filter { EffectKey.parse($0.key) == nil && $0.key != "opacity" }
-        c.opacity = nil; c.transitionIn = nil; c.transitionOut = nil; c.mask = nil; c.blur = nil; c.stabilize = nil
+        c.opacity = nil; c.transitionIn = nil; c.transitionOut = nil; c.mask = nil; c.blur = nil; c.stabilize = nil; c.stabilizeRoll = nil
         var p = project
         let aspect = Double(max(1, project.height)) / Double(max(1, project.width))
         p.width = width
