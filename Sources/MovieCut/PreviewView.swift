@@ -31,7 +31,7 @@ struct PreviewView: NSViewRepresentable {
     @MainActor
     static func overlayTarget(model: ProjectModel, project: Project, time: Double, assets: RenderAssets) -> PreviewOverlayTarget? {
         guard !model.isPlaying, !model.isLocked, let c = model.selectedClip,
-              [ClipType.image, .video, .text].contains(c.type), time >= c.start, time < c.start + c.duration,
+              [ClipType.image, .video, .text, .tachie].contains(c.type), time >= c.start, time < c.start + c.duration,
               let size = Renderer(project: project, assets: assets).objectSize(of: c, at: time) else { return nil }
         let canvas = CGSize(width: project.width, height: project.height)
         return PreviewOverlayTarget(clipId: c.id, box: TransformBox.make(clip: c, objectSize: size, at: time - c.start, canvas: canvas), canvas: canvas)
@@ -305,7 +305,25 @@ final class PreviewCanvasView: NSView {
         let v = convert(event.locationInWindow, from: nil)
         // ⌥ クリック: その場所に重なったクリップを手前から奥へ巡回して選ぶ(ドラッグは始めない)
         if event.modifierFlags.contains(.option), pickOverlapping(atViewPoint: v) { return }
+        // 選んでいる枠の上なら、そのままドラッグ(移動・拡大・回転)。外なら、押した場所のいちばん手前が立ち絵(絵のある所)のとき、それを選び、続けてドラッグできる
+        if beginManipulation(atViewPoint: v) { return }
+        selectTopmost(atViewPoint: v)
+    }
+
+    /// 押した場所のいちばん手前が立ち絵なら、それを選び、その枠でドラッグを始める。何も無ければ選択は変えない。
+    @discardableResult
+    func selectTopmost(atViewPoint v: CGPoint) -> Bool {
+        guard let m = model, !m.isLocked, frameLayer.frame.contains(v) else { return false }
+        let canvas = CGSize(width: m.project.width, height: m.project.height)
+        // 押しただけで選ぶのは立ち絵だけ(画像・動画・文字は従来どおり、選んだ枠の上か ⌥ クリックで操作する)。いちばん手前が立ち絵のときに限る
+        guard canvas.width > 0, canvas.height > 0,
+              let id = PreviewPicking.hits(in: m.project, at: canvasPoint(v, canvas: canvas), time: m.currentTime, assets: m.assets).first,
+              m.clip(id)?.type == .tachie else { return false }
+        if m.selectedClipId != id || m.selectedClipIDs.count > 1 { m.selectOnly(id) }
+        overlay = PreviewView.overlayTarget(model: m, project: m.project, time: m.currentTime, assets: m.assets)
+        redrawOverlay()
         beginManipulation(atViewPoint: v)
+        return true
     }
 
     /// ⌥ クリック: 押した場所(映像の枠の中)に重なるクリップを巡回して選ぶ。選べたら true(重なりが無ければ false で、通常のクリックに戻る)。

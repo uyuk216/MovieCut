@@ -279,6 +279,8 @@ struct InspectorView: View {
                         ClipInspector(model: model, clipId: id).id(id)
                     case .multi(let n):
                         MultiSelectionInspector(model: model, count: n)
+                    case .tachie(let id):
+                        TachieInspector(model: model, tachieId: id).id(id)
                     case .character(let id):
                         CharacterInspector(model: model, speakers: speakers, charId: id).id(id)
                     case .none:
@@ -440,6 +442,7 @@ struct ClipInspector: View {
         case .visualizer: return "音声ビジュアライザ"
         case .shape: return "図形"
         case .compound: return "複合クリップ"
+        case .tachie: return "立ち絵"
         default: return t.rawValue
         }
     }
@@ -471,8 +474,9 @@ struct ClipInspector: View {
                 ClipNoteField(model: model, clipId: clipId, note: c.note ?? "").id(clipId)
                 if c.type == .voice { voiceSections(c) }
                 if c.type == .text { textSections(c) }
+                if c.type == .tachie { TachieClipSection(model: model, clip: c) }
                 if TextStyleEditing.supports(c.type) { TextStyleInspector(model: model, store: model.textStyles, clipId: clipId) }
-                if [ClipType.image, .video, .text, .compound].contains(c.type) { placeSections(c) }
+                if [ClipType.image, .video, .text, .compound, .tachie].contains(c.type) { placeSections(c) }
                 if c.type == .compound { compoundSection(c) }
                 if EffectEditing.supports(c.type) { effectSections(c) }
                 if TransitionEditing.supportsVideo(c.type) { transitionSections(c) }
@@ -502,9 +506,17 @@ struct ClipInspector: View {
             }
             .labelsHidden()
         }
-        MultilineField(label: "セリフ", value: c.text ?? "", focusRequest: model.textFocusRequest, onLive: { _ in }, onCommit: { t in Task { await model.setVoiceText(t, clipId: clipId) } })
-        Text("入力欄を離れるか Cmd+Return で、音声を作り直します。")
+        MultilineField(label: "読み上げ文", value: c.text ?? "", focusRequest: model.textFocusRequest, onLive: { _ in }, onCommit: { t in Task { await model.setVoiceText(t, clipId: clipId) } })
+        Text("入力欄を離れるか Cmd+Return で、音声を作り直します。口パクは読み上げ文の音に合わせます。")
             .font(.system(size: 11)).foregroundStyle(.secondary)
+        let noSubtitle = c.subtitleText == ""
+        Toggle("字幕なし", isOn: Binding(get: { noSubtitle }, set: { v in model.setVoiceSubtitleText(clipId: clipId, text: v ? "" : nil) }))
+            .toggleStyle(.checkbox)
+            .disabled(model.isLocked)
+            .help("このセリフには字幕を出しません（読み上げだけ）")
+        MultilineField(label: "字幕文（空なら読み上げ文と同じ）", value: noSubtitle ? "" : (c.subtitleText ?? ""), focusRequest: 0, onLive: { _ in },
+                       onCommit: { t in model.setVoiceSubtitleText(clipId: clipId, text: t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : t) })
+            .disabled(noSubtitle || model.isLocked)
         InspectorSection(title: "字幕")
         Toggle("字幕を出す", isOn: Binding(get: { c.subtitleOrDefault }, set: { v in model.setClipProperty({ $0.subtitle = v }, name: "字幕の切り替え", clipId: clipId) }))
             .toggleStyle(.checkbox)
@@ -879,14 +891,16 @@ struct ClipInspector: View {
             rotationField()
         }
         flipToggles(c)
-        InspectorSection(title: "切り抜き")
-        HStack(alignment: .top, spacing: 10) {
-            cropField(.left, c)
-            cropField(.top, c)
-        }
-        HStack(alignment: .top, spacing: 10) {
-            cropField(.right, c)
-            cropField(.bottom, c)
+        if c.type != .tachie {
+            InspectorSection(title: "切り抜き")
+            HStack(alignment: .top, spacing: 10) {
+                cropField(.left, c)
+                cropField(.top, c)
+            }
+            HStack(alignment: .top, spacing: 10) {
+                cropField(.right, c)
+                cropField(.bottom, c)
+            }
         }
         Button { model.resetTransform(clipId: clipId) } label: { Text("変形をリセット").frame(maxWidth: .infinity) }
             .controlSize(.small)
@@ -1095,118 +1109,12 @@ struct CharacterInspector: View {
         }
     }
 
-    private func check(_ title: String, _ c: Character, name: String, get: @escaping (Character) -> Bool, set: @escaping (inout Character, Bool) -> Void) -> some View {
-        Toggle(title, isOn: Binding(get: { get(c) }, set: { v in model.setCharacterProperty({ set(&$0, v) }, name: name, charId: charId) }))
-            .toggleStyle(.checkbox)
-    }
-
-    private func fileName(_ p: String?) -> String { p.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "未設定" }
-
-    private func portraitRow(_ c: Character, closed: Bool) -> some View {
-        let path = closed ? c.imgClosed : c.imgOpen
-        return HStack(alignment: .center, spacing: 10) {
-            PortraitThumb(path: path)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(closed ? "立ち絵（口閉じ）" : "立ち絵（口開き）").font(.system(size: 12)).foregroundStyle(.secondary)
-                Text(fileName(path)).font(.system(size: 12)).lineLimit(1).truncationMode(.middle)
-                HStack(spacing: 6) {
-                    Button("選ぶ…") { model.choosePortrait(charId: charId, closed: closed) }
-                        .help(closed ? "口を閉じたときの立ち絵の画像を選ぶ" : "口を開いたときの立ち絵の画像を選ぶ")
-                    Button { model.setPortrait(charId: charId, closed: closed, url: nil) } label: { Image(systemName: "xmark") }
-                        .disabled(path == nil)
-                        .help("画像を外す")
-                }
-                .controlSize(.small)
-            }
-            Spacer(minLength: 0)
-        }
-    }
-
-    /// あいうえお口パク: 母音ごとの画像。1 つでも設定すると、セリフの読みに合わせて口の形が変わる(無い母音は「口開き」で代用)。
-    @ViewBuilder private func vowelSection(_ c: Character) -> some View {
-        Text("口パク（あいうえお）: 1 つでも選ぶと、セリフの読みに合わせて口の形が変わります。選んでいない母音は「口開き」の画像になります")
-            .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-        ForEach(["a", "i", "u", "e", "o"], id: \.self) { key in
-            let path = c.imgVowels?[key]
-            let label = ProjectModel.vowelLabel(key)
-            HStack(alignment: .center, spacing: 8) {
-                PortraitThumb(path: path)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("口「\(label)」").font(.system(size: 12)).foregroundStyle(.secondary)
-                    Text(fileName(path)).font(.system(size: 11)).lineLimit(1).truncationMode(.middle)
-                    HStack(spacing: 6) {
-                        Button("選ぶ…") { model.chooseImage(title: "口「\(label)」の画像を選ぶ") { model.setVowelImage(charId: charId, key: key, url: $0) } }
-                            .help("「\(label)」と発音するときの立ち絵の画像を選ぶ")
-                        Button { model.setVowelImage(charId: charId, key: key, url: nil) } label: { Image(systemName: "xmark") }
-                            .disabled(path == nil)
-                            .help("画像を外す")
-                    }
-                    .controlSize(.small)
-                }
-                Spacer(minLength: 0)
-            }
-        }
-    }
-
-    private func blinkRow(_ c: Character) -> some View {
-        HStack(alignment: .center, spacing: 10) {
-            PortraitThumb(path: c.imgBlink)
-            VStack(alignment: .leading, spacing: 4) {
-                Text("まばたき（目を閉じた画像）").font(.system(size: 12)).foregroundStyle(.secondary)
-                Text(fileName(c.imgBlink)).font(.system(size: 12)).lineLimit(1).truncationMode(.middle)
-                HStack(spacing: 6) {
-                    Button("選ぶ…") { model.chooseImage(title: "まばたき画像を選ぶ") { model.setBlinkImage(charId: charId, url: $0) } }
-                        .help("目を閉じたときに一瞬だけ出す画像を選ぶ")
-                    Button { model.setBlinkImage(charId: charId, url: nil) } label: { Image(systemName: "xmark") }
-                        .disabled(c.imgBlink == nil)
-                        .help("画像を外す")
-                }
-                .controlSize(.small)
-            }
-            Spacer(minLength: 0)
-        }
-    }
-
-    /// 表情: 名前(セリフの先頭 [名前] に使う)と画像の一覧。名前の変更は確定したときに 1 回の Undo。
-    @ViewBuilder private func expressionSection(_ c: Character) -> some View {
-        let items = (c.expressions ?? [:]).sorted { $0.key < $1.key }
-        Text("表情（セリフの先頭に [名前] と書くと、その行の間この画像になります）")
-            .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-        ForEach(items, id: \.key) { key, path in
-            HStack(alignment: .center, spacing: 8) {
-                PortraitThumb(path: path)
-                VStack(alignment: .leading, spacing: 4) {
-                    NameField(value: key) { model.renameExpression(charId: charId, from: key, to: $0) }
-                    Text(fileName(path)).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
-                    HStack(spacing: 6) {
-                        Button("差し替え…") { model.chooseImage(title: "表情「\(key)」の画像を選ぶ") { model.setExpressionImage(charId: charId, name: key, url: $0) } }
-                        Button { model.setExpressionImage(charId: charId, name: key, url: nil) } label: { Image(systemName: "minus.circle") }
-                            .help("この表情を消す")
-                    }
-                    .controlSize(.small)
-                }
-                Spacer(minLength: 0)
-            }
-        }
-        let missing = CharacterPartCheck.missingExpressionTags(c.expressions ?? [:]) { FileManager.default.fileExists(atPath: $0) }
-        if !missing.isEmpty {
-            Text("画像が見つからない表情: " + missing.joined(separator: "、"))
-                .font(.system(size: 11, weight: .semibold)).foregroundStyle(.red)
-                .fixedSize(horizontal: false, vertical: true)
-                .help("画像のファイルが移動・削除されています。「差し替え…」で選び直してください")
-        }
-        Button { model.chooseImage(title: "表情の画像を選ぶ") { model.addExpression(charId: charId, url: $0) } } label: {
-            Label("表情を追加…", systemImage: "plus.circle").frame(maxWidth: .infinity)
-        }
-        .controlSize(.small)
-        .disabled(model.isLocked)
-        .help("セリフの先頭に [名前] と書くと、その行の間にこの画像が出ます")
-    }
-
     var body: some View {
         if let c = ch {
             VStack(alignment: .leading, spacing: 8) {
                 InspectorSection(title: "基本")
+                Text("キャラクターは声と字幕の設定だけを持ちます。立ち絵は「立ち絵素材」とタイムラインの立ち絵クリップで扱います。")
+                    .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 InspectorField(label: "名前") {
                     NameField(value: c.name) { n in model.setCharacterProperty({ $0.name = n }, name: "キャラの名前の変更", charId: charId) }
                 }
@@ -1236,22 +1144,6 @@ struct CharacterInspector: View {
                     .labelsHidden()
                 }
                 if c.engine == "voicevox" { voicevoxFields(c) } else { aquestalkFields(c) }
-                InspectorSection(title: "立ち絵")
-                portraitRow(c, closed: true)
-                portraitRow(c, closed: false)
-                vowelSection(c)
-                if let rig = c.rig { RigInspectorSection(model: model, charId: charId, rig: rig) }
-                InspectorSection(title: "演出")
-                blinkRow(c)
-                check("バウンス（話し中に上下に揺れる）", c, name: "バウンスの切り替え", get: { $0.bounce == true }, set: { $0.bounce = $1 ? true : nil })
-                expressionSection(c)
-                HStack(alignment: .top, spacing: 10) {
-                    num("横位置", .x, step: 0.01, decimals: 2)
-                    num("縦位置", .y, step: 0.01, decimals: 2)
-                }
-                num("大きさ", .scale, step: 0.05, decimals: 2)
-                check("左右反転", c, name: "左右反転の切り替え", get: { $0.flip }, set: { $0.flip = $1 })
-                check("いつも表示", c, name: "いつも表示の切り替え", get: { $0.alwaysShow }, set: { $0.alwaysShow = $1 })
                 InspectorSection(title: "操作")
                 Button { Task { await model.testSpeak(charId: charId) } } label: { Text("試しに読み上げる").frame(maxWidth: .infinity) }
                     .disabled(model.isLocked)

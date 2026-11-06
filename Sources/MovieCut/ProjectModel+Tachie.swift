@@ -38,11 +38,11 @@ extension ProjectModel {
         edit("立ち絵パーツの位置合わせ") { $0 = TachieEditing.autoAlignParts($0, tachieId: tachieId, base: base) }
     }
 
-    /// 立ち絵クリップを足して選ぶ(いちばん上のレイヤー。重なるなら新しいレイヤー)。素材が無い・長さが 0 以下なら nil。
+    /// 立ち絵クリップを足して選ぶ(トラックターゲットのレイヤーが空いていればそこ、無ければいちばん上のレイヤー。重なるなら新しいレイヤー)。素材が無い・長さが 0 以下なら nil。
     @discardableResult
     func addTachieClip(tachieId: String, start: Double? = nil, duration: Double = 5, drive: MouthDrive = .all) -> String? {
         guard !isLocked, let c = TachieEditing.makeClip(project, tachieId: tachieId, start: start ?? currentTime, duration: duration, drive: drive) else { return nil }
-        guard edit("立ち絵クリップの追加", { ClipEditing.appendToTopLayer(c, in: &$0) }) else { return nil }
+        guard edit("立ち絵クリップの追加", { ClipEditing.appendToTopLayer(c, in: &$0, useTarget: true) }) else { return nil }
         selectedClipId = c.id
         return c.id
     }
@@ -63,5 +63,55 @@ extension ProjectModel {
     func setVoiceSubtitleText(clipId: String, text: String?) {
         guard !isLocked else { return }
         edit("字幕の文の変更") { $0 = TachieEditing.setSubtitleText($0, clipId: clipId, text: text) }
+    }
+}
+
+extension ProjectModel {
+    /// 話している間に上下へ揺れる(素材の設定)。
+    func setTachieBounce(tachieId: String, _ on: Bool) {
+        guard !isLocked else { return }
+        edit("バウンスの切り替え") { $0 = TachieEditing.update($0, id: tachieId) { $0.bounce = on ? true : nil } }
+    }
+
+    /// 立ち絵クリップを、連動する声の範囲に合わせる(Undo 1 回)。声が無い・他のクリップと重なる・もう合っているときは何もしない。
+    func fitTachieClipToVoice(clipId: String? = nil) {
+        guard !isLocked, let id = clipId ?? selectedClipId else { return }
+        let before = project
+        guard edit("立ち絵クリップを声の長さに合わせる", { $0 = TachieEditing.fitToVoice($0, clipId: id) }) else {
+            if let c = clip(id), c.type == .tachie {
+                statusText = TachieEditing.voiceSpan(before, clip: c) == nil ? "連動する声がありません" : "声の長さに合わせられません(他のクリップと重なる、またはもう合っています)"
+            }
+            return
+        }
+        statusText = "立ち絵クリップを声の長さに合わせました"
+    }
+
+    /// 選んでいるクリップが立ち絵クリップか(メニューの有効条件)。
+    var selectedIsTachie: Bool { selectedClip?.type == .tachie }
+
+    /// 声の長さに合わせられるか(立ち絵クリップを選んでいて、連動する声がある)。
+    var canFitTachieToVoice: Bool {
+        guard let c = selectedClip, c.type == .tachie else { return false }
+        return TachieEditing.voiceSpan(project, clip: c) != nil
+    }
+}
+
+extension ProjectModel {
+    /// クリップ ▸ 立ち絵を追加…(シートを開く)。
+    func openAddTachie() {
+        guard !isLocked else { return }
+        showTachieSheet = true
+    }
+
+    /// シートで選んだ素材を再生位置に置き、シートを閉じる。
+    func placeTachie(_ id: String) {
+        if addTachieClip(tachieId: id) != nil { showTachieSheet = false }
+    }
+}
+
+extension ProjectModel {
+    /// タイムラインで立ち絵クリップの中身(表情の切り替わり)を開閉する。表示だけの状態で、保存も Undo もしない。
+    func toggleTachieExpanded(_ clipId: String) {
+        if expandedTachieClipIds.contains(clipId) { expandedTachieClipIds.remove(clipId) } else { expandedTachieClipIds.insert(clipId) }
     }
 }

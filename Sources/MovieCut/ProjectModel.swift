@@ -114,7 +114,7 @@ final class ProjectModel: ObservableObject {
     @Published var selectedClipId: String? {
         // クリップを選んだら、プロパティ欄はキャラの表示をやめてクリップの表示にする
         didSet {
-            if selectedClipId != nil { characterPanelActive = false; selectedLayerIndex = nil }
+            if selectedClipId != nil { characterPanelActive = false; selectedLayerIndex = nil; selectedTachieId = nil }
             if selectedClipId != oldValue { focusedAnimatableKey = nil }
             // A6: 複数選択。主(selectedClipId)を直接入れ替えたときは単一選択に戻す(setSelection は先に集合を入れるので、含まれていれば残す)
             if let id = selectedClipId {
@@ -143,6 +143,10 @@ final class ProjectModel: ObservableObject {
     @Published var selectedCharId: String?
     /// 左の一覧でキャラを選んだ状態(クリップが選ばれていなければ、プロパティ欄にキャラの設定が出る)。
     @Published var characterPanelActive = false
+    /// 左の一覧で選んだ立ち絵素材(クリップもキャラも選ばれていなければ、プロパティ欄に立ち絵の設定が出る)。
+    @Published var selectedTachieId: String?
+    /// タイムラインで中身を開いている立ち絵クリップ(表示だけの状態。保存しない)。
+    @Published var expandedTachieClipIds: Set<String> = []
     /// 「このキャラを消す」の確認待ち(確認の警告を出す)。
     @Published var pendingDeleteCharId: String?
     @Published var currentTime: Double = 0
@@ -168,6 +172,8 @@ final class ProjectModel: ObservableObject {
     @Published var showJumpSheet = false
     /// 「字幕を追加…」のシート。直すときは対象の文字クリップの id を入れる(新規なら nil)。
     @Published var showSubtitleSheet = false
+    /// クリップ ▸ 立ち絵を追加… のシート。
+    @Published var showTachieSheet = false
     var subtitleSheetTargetId: String?
     /// クリップ ▸ ロール編集… / スリップ編集… のシート(コマ数で境界・素材の区間をずらす)。
     @Published var showRollSheet = false

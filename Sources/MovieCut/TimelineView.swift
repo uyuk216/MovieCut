@@ -15,6 +15,7 @@ enum TimelinePalette {
     static let unknown = rgb(0x3c4050)
     /// 複合クリップ(中身をまとめた 1 本)。
     static let compound = rgb(0x4f8f8f)
+    static let tachie = rgb(0xa8527f)
     static let voiceBase: (r: CGFloat, g: CGFloat, b: CGFloat) = (0x16 / 255.0, 0x17 / 255.0, 0x1c / 255.0)
     static let areaBG = rgb(0x191a1e), panel = rgb(0x26282f), line = rgb(0x383b45), rowLine = rgb(0x2a2c33)
     static let rulerBG = rgb(0x22242a), tick = rgb(0x5a5d6a), tickText = rgb(0xcfd1da), label = rgb(0xb9bcc8), text0 = rgb(0xe6e6ea)
@@ -34,6 +35,7 @@ enum TimelinePalette {
         case .text: return text
         case .blur: return blur
         case .compound: return compound
+        case .tachie: return tachie
         default: return unknown
         }
     }
@@ -68,7 +70,8 @@ struct TimelineSection: View {
                     .help("クリップを動かすとき、ほかのクリップの端・再生ヘッド・0秒に自動で揃えます")
                 Spacer()
             }
-            .padding(.horizontal, 10).padding(.vertical, 4)
+            .controlSize(.small)
+            .padding(.horizontal, 10).padding(.vertical, 2)
             Divider()
             TimelineRepresentable(model: model)
                 .overlay {
@@ -712,6 +715,7 @@ final class TimelineCanvas: NSView {
         case .text: return "T \(c.text ?? "")"
         case .blur: return "ぼかし範囲"
         case .compound: return "複合 (\(c.tracks?.reduce(0) { $0 + $1.clips.count } ?? 0)クリップ)"
+        case .tachie: return tachieLabel(c)
         default: return (c.src as NSString?)?.lastPathComponent ?? ""
         }
     }
@@ -803,7 +807,12 @@ final class TimelineCanvas: NSView {
             ctx.restoreGState()
             textLeft += 3
         }
-        let hasMedia = drawMedia(c, rect: r, path: path, ctx: ctx)
+        var hasMedia = drawMedia(c, rect: r, path: path, ctx: ctx)
+        if c.type == .tachie {
+            let used = drawTachieDecor(c, rect: r, textLeft: textLeft, path: path, ctx: ctx)
+            textLeft = used
+            hasMedia = false
+        }
         let missingMark = missingMark(for: c, width: Double(r.width))
         if let mk = missingMark, mk.hatch { drawMissingHatch(rect: r, path: path, badge: mk.showsBadge, ctx: ctx) }
         drawTransitionWedges(c, rect: r, selected: selected, path: path, ctx: ctx)
@@ -857,6 +866,84 @@ final class TimelineCanvas: NSView {
             ctx.restoreGState()
         }
         ctx.restoreGState()
+    }
+
+    // MARK: 立ち絵クリップ(キャラクターのサムネイル・展開)
+
+    /// ▸/▾ の三角と、立ち絵のサムネイル(正方形)。展開しているときは、表情の切り替わりの印と名前の帯を下に描く。描いたあとの文字の左端を返す。
+    private func drawTachieDecor(_ c: Clip, rect r: CGRect, textLeft: CGFloat, path: NSBezierPath, ctx: CGContext) -> CGFloat {
+        var left = textLeft
+        let expanded = model?.expandedTachieClipIds.contains(c.id) ?? false
+        ctx.saveGState()
+        ctx.clip(to: r.insetBy(dx: 1, dy: 1))
+        if r.width >= 34 {
+            let g = Self.tachieDisclosureRect(r)
+            ((expanded ? "▾" : "▸") as NSString).draw(at: NSPoint(x: g.minX, y: g.minY - 1),
+                withAttributes: [.font: NSFont.systemFont(ofSize: 11, weight: .bold), .foregroundColor: NSColor(white: 1, alpha: 0.9)])
+            left = max(left, g.maxX + 2)
+        }
+        // サムネイル(上の 1 行ぶんの高さの正方形)
+        if r.width >= 60, let t = project.tachie(c.tachieId), let p = Self.thumbnailPath(of: t) {
+            let side = min(r.height - 6, 34)
+            let box = NSRect(x: left, y: r.minY + 3, width: side, height: side)
+            NSColor(white: 0, alpha: 0.25).setFill(); NSBezierPath(roundedRect: box, xRadius: 3, yRadius: 3).fill()
+            if let img = RigThumbCache.cachedThumbnail(p) {
+                let s = min(box.width / img.size.width, box.height / img.size.height)
+                let w = img.size.width * s, h = img.size.height * s
+                img.draw(in: NSRect(x: box.midX - w / 2, y: box.midY - h / 2, width: w, height: h), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: [.interpolation: NSImageInterpolation.low.rawValue])
+            } else {
+                RigThumbCache.prefetch(p) { [weak self] in self?.needsDisplay = true }
+            }
+            left = box.maxX + 4
+        }
+        // 展開: 連動する声の表情の切り替わり(読み取り専用)
+        if expanded, r.height >= 36, r.width > 40 {
+            let changes = TachieEditing.expressionChanges(project, clip: c)
+            let end = c.start + c.duration
+            let y = r.maxY - 14
+            NSColor(white: 0, alpha: 0.35).setFill(); NSRect(x: r.minX, y: y - 1, width: r.width, height: 15).fill()
+            let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 9, weight: .medium), .foregroundColor: NSColor.white]
+            if changes.isEmpty {
+                (c.mouthDriveOrDefault == .none ? "口は動かしません" : "連動する声がありません" as NSString).draw(at: NSPoint(x: left, y: y), withAttributes: attrs)
+            }
+            for ch in changes {
+                let x = r.minX + CGFloat((ch.time - c.start) / max(0.001, c.duration)) * r.width
+                guard x >= r.minX - 1, ch.time < end else { continue }
+                let mark = max(r.minX, x)
+                NSColor(srgbRed: 1, green: 0.85, blue: 0.3, alpha: 1).setFill()
+                NSRect(x: mark, y: y, width: 2, height: 13).fill()
+                ((ch.tag ?? "通常") as NSString).draw(at: NSPoint(x: mark + 4, y: y), withAttributes: attrs)
+            }
+        }
+        ctx.restoreGState()
+        return left
+    }
+
+    static func tachieDisclosureRect(_ r: CGRect) -> NSRect { NSRect(x: r.minX + 4, y: r.minY + 4, width: 12, height: 14) }
+
+    /// タイムラインのサムネイルに使う画像(口閉じ、無ければ体のパーツ、無ければ最初のパーツ)。
+    static func thumbnailPath(of t: Tachie) -> String? {
+        if let rig = t.rig, rig.hasParts {
+            let body = rig.slot("体")
+            if let b = body, b.active >= 0, b.active < b.parts.count { return b.parts[b.active] }
+            for s in rig.slots where s.active >= 0 && s.active < s.parts.count { return s.parts[s.active] }
+            return rig.allPaths.first
+        }
+        return t.imgClosed ?? t.imgOpen ?? t.allPaths.first
+    }
+
+    /// 立ち絵クリップの名前札: 「素材名 ← 連動する声」。
+    private func tachieLabel(_ c: Clip) -> String {
+        let name = project.tachie(c.tachieId)?.name ?? "(消えた素材)"
+        let drive = c.mouthDriveOrDefault
+        let who: String
+        switch drive {
+        case .all: who = "すべての声"
+        case .none: who = "口は動かさない"
+        case .character(let id): who = "「\(charNames[id] ?? "?")」の声"
+        case .voiceClip: who = "指定の声"
+        }
+        return "\(name.isEmpty ? "立ち絵" : name) ← \(who)"
     }
 
     // MARK: サムネイルと波形(A6)
@@ -1266,6 +1353,10 @@ final class TimelineCanvas: NSView {
             let c = project.tracks[loc.track].clips[loc.index]
             let r = geometry.clipRect(start: c.start, duration: c.duration, track: loc.track)
             let zone = TimelineHit.zone(x: p.x, minX: r.minX, maxX: r.maxX, edgeZone: Self.edgeZone)
+            if c.type == .tachie, r.width >= 34, collapse == nil, (Self.tachieDisclosureRect(r).insetBy(dx: -2, dy: -2).contains(p) || (clickCount >= 2 && zone == .body)) {
+                m.toggleTachieExpanded(id); needsDisplay = true      // ▸ か、本体のダブルクリック: 中身(表情の切り替わり)を開閉する
+                return
+            }
             let mode: DragMode = zone == .left ? .trimLeft : (zone == .right ? .trimRight : .move)
             if clickCount >= 2, zone == .body, TimelineHit.editsTextOnDoubleClick(c.type) { m.textFocusRequest += 1 }   // ダブルクリック: 文字の入力欄へ
             if mode != .move && collapse != nil { m.selectOnly(id); collapse = nil }     // 端のトリムは 1 つのクリップだけ

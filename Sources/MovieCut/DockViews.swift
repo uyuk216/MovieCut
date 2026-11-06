@@ -151,7 +151,7 @@ struct DockGroupView: View {
     @ObservedObject var store: DockStore
     @Environment(\.dockDropState) private var dropState
     @State private var zone: DockDropTarget?
-    static let tabBarHeight = 26.0
+    static let tabBarHeight = 22.0
 
     var body: some View {
         GeometryReader { geo in
@@ -196,7 +196,7 @@ struct DockTab: View {
             .font(.system(size: 12, weight: active ? .semibold : .regular))
             .foregroundStyle(active ? Color.primary : Color.secondary)
             .lineLimit(1)
-            .padding(.horizontal, 10).padding(.vertical, 3)
+            .padding(.horizontal, 10).padding(.vertical, 1)
             .background(RoundedRectangle(cornerRadius: 5).fill(active ? Color.accentColor.opacity(0.35) : Color.clear))
             .contentShape(Rectangle())
             .onTapGesture { store.setActive(panel) }

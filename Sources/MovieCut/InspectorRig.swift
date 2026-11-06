@@ -33,6 +33,24 @@ struct RigPartThumb: View {
 enum RigThumbCache {
     private static let cache = NSCache<NSString, NSImage>()
 
+    /// 読み込み済みなら返す(描画中に重い読み込みをしない)。
+    static func cachedThumbnail(_ path: String) -> NSImage? { cache.object(forKey: path as NSString) }
+
+    private static let pending = NSMutableSet()
+
+    /// 背景で読んでキャッシュに入れ、終わったら主スレッドで `done` を呼ぶ(同じパスの二重読みはしない)。
+    static func prefetch(_ path: String, done: @escaping @MainActor () -> Void) {
+        let key = path as NSString
+        guard cache.object(forKey: key) == nil else { return }
+        objc_sync_enter(pending); let fresh = !pending.contains(key); if fresh { pending.add(key) }; objc_sync_exit(pending)
+        guard fresh else { return }
+        DispatchQueue.global(qos: .utility).async {
+            _ = thumbnail(path)
+            objc_sync_enter(pending); pending.remove(key); objc_sync_exit(pending)
+            DispatchQueue.main.async { MainActor.assumeIsolated { done() } }
+        }
+    }
+
     /// 長辺 384 で読み、透明でない範囲に切り詰めた見本。
     static func thumbnail(_ path: String) -> NSImage? {
         if let c = cache.object(forKey: path as NSString) { return c }
@@ -62,7 +80,7 @@ enum RigThumbCache {
 /// 立ち絵パーツの欄(スロットごとの見本の一覧・まばたき・口・表情)。
 struct RigInspectorSection: View {
     @ObservedObject var model: ProjectModel
-    let charId: String
+    let tachieId: String
     let rig: CharacterRig
 
     private func fileName(_ p: String?) -> String { p.map { URL(fileURLWithPath: $0).deletingPathExtension().lastPathComponent } ?? "なし" }
@@ -84,11 +102,11 @@ struct RigInspectorSection: View {
             }
             ScrollView(.horizontal, showsIndicators: true) {
                 LazyHStack(spacing: 4) {
-                    Button { model.rigSelect(charId: charId, slot: slot.name, index: -1) } label: {
+                    Button { model.rigSelect(tachieId: tachieId, slot: slot.name, index: -1) } label: {
                         RigPartThumb(path: nil, selected: slot.active == -1)
                     }.buttonStyle(.plain).help("\(slot.name)を出さない")
                     ForEach(Array(slot.parts.enumerated()), id: \.offset) { i, p in
-                        Button { model.rigSelect(charId: charId, slot: slot.name, index: i) } label: {
+                        Button { model.rigSelect(tachieId: tachieId, slot: slot.name, index: i) } label: {
                             RigPartThumb(path: p, selected: slot.active == i, label: badge(slot.name, i))
                         }.buttonStyle(.plain).help("\(i + 1) 番: \(fileName(p))")
                     }
@@ -96,10 +114,34 @@ struct RigInspectorSection: View {
                 .padding(.vertical, 2)
             }
             .frame(height: 66)
+            offsetRow(slot)
             if slot.name == CharacterRig.eyeSlot { blinkRow() }
             if slot.name == CharacterRig.mouthSlot { mouthRows() }
         }
         .disabled(model.isLocked)
+    }
+
+    /// 今選んでいるパーツの位置の補正(基準キャンバスの画素。x が右、y が下)。数値で直接入れるか、◀▶ で 1 ずつ動かす。
+    @ViewBuilder private func offsetRow(_ slot: RigSlot) -> some View {
+        if slot.active >= 0, slot.active < slot.parts.count {
+            let path = slot.parts[slot.active]
+            let off = rig.partOffsets?[path] ?? PartOffset()
+            HStack(spacing: 6) {
+                Text("位置の補正").font(.system(size: 11)).foregroundStyle(.secondary)
+                offsetField("x", value: off.dx) { model.setTachiePartOffset(tachieId: tachieId, path: path, offset: PartOffset(dx: $0, dy: off.dy)) }
+                offsetField("y", value: off.dy) { model.setTachiePartOffset(tachieId: tachieId, path: path, offset: PartOffset(dx: off.dx, dy: $0)) }
+                Button { model.setTachiePartOffset(tachieId: tachieId, path: path, offset: PartOffset()) } label: { Image(systemName: "arrow.counterclockwise") }
+                    .disabled(off.isZero).help("このパーツの位置の補正を 0 に戻す")
+            }
+            .controlSize(.small)
+        }
+    }
+
+    private func offsetField(_ label: String, value: Double, set: @escaping (Double) -> Void) -> some View {
+        HStack(spacing: 2) {
+            Text(label).font(.system(size: 11)).foregroundStyle(.secondary)
+            NumField(value: value, step: 1, decimals: 0, clamp: { max(-4000, min(4000, $0.rounded())) }, onCommit: set, onStep: set)
+        }
     }
 
     /// 見本に出す印(まばたき・口の割り当て)。
@@ -116,10 +158,10 @@ struct RigInspectorSection: View {
 
     private func blinkRow() -> some View {
         HStack(spacing: 6) {
-            Button("これを まばたき") { model.rigAssignBlink(charId: charId) }
+            Button("これを まばたき") { model.rigAssignBlink(tachieId: tachieId) }
                 .help("今選んでいる目を「閉じた目」にして、ときどき一瞬だけ出します")
                 .disabled(rig.slot(CharacterRig.eyeSlot)?.active ?? -1 < 0)
-            Button { model.rigClearBlink(charId: charId) } label: { Image(systemName: "xmark") }
+            Button { model.rigClearBlink(tachieId: tachieId) } label: { Image(systemName: "xmark") }
                 .disabled(rig.blink == nil).help("まばたきを外す")
             Text(rig.blink.map { "まばたき: \($0 + 1) 番" } ?? "まばたきなし").font(.system(size: 11)).foregroundStyle(.secondary)
         }
@@ -136,12 +178,12 @@ struct RigInspectorSection: View {
             Text("今の口を割り当てる（話していない間は「閉じ」、話している間は「開き」か あいうえお）").font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 4) {
                 ForEach(roles, id: \.0) { r, label in
-                    Button(label) { model.rigAssignMouth(charId: charId, role: r) }
+                    Button(label) { model.rigAssignMouth(tachieId: tachieId, role: r) }
                         .help("口: \(label) に今の口を割り当てる" + (assigned(r).map { "（今は \($0 + 1) 番）" } ?? ""))
                         .disabled(cur < 0)
                         .overlay(alignment: .topTrailing) { if assigned(r) != nil { Circle().fill(Color.accentColor).frame(width: 6, height: 6).offset(x: 2, y: -2) } }
                 }
-                Button { for (r, _) in roles { model.rigAssignMouth(charId: charId, role: r, use: false) } } label: { Image(systemName: "xmark") }
+                Button { for (r, _) in roles { model.rigAssignMouth(tachieId: tachieId, role: r, use: false) } } label: { Image(systemName: "xmark") }
                     .help("口の割り当てをすべて外す")
                     .disabled(roles.allSatisfy { assigned($0.0) == nil })
             }
@@ -156,15 +198,15 @@ struct RigInspectorSection: View {
             .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         ForEach(items, id: \.key) { key, picks in
             HStack(spacing: 6) {
-                NameField(value: key) { model.rigRenameExpression(charId: charId, from: key, to: $0) }
-                Button("選ぶ") { model.rigApplyExpression(charId: charId, name: key) }.help("この表情のパーツを今の選択にする")
-                Button("更新") { model.rigRecaptureExpression(charId: charId, name: key) }.help("今の選択でこの表情を上書きする")
-                Button { model.rigDeleteExpression(charId: charId, name: key) } label: { Image(systemName: "minus.circle") }.help("この表情を消す")
+                NameField(value: key) { model.rigRenameExpression(tachieId: tachieId, from: key, to: $0) }
+                Button("選ぶ") { model.rigApplyExpression(tachieId: tachieId, name: key) }.help("この表情のパーツを今の選択にする")
+                Button("更新") { model.rigRecaptureExpression(tachieId: tachieId, name: key) }.help("今の選択でこの表情を上書きする")
+                Button { model.rigDeleteExpression(tachieId: tachieId, name: key) } label: { Image(systemName: "minus.circle") }.help("この表情を消す")
             }
             .controlSize(.small)
             .disabled(model.isLocked)
         }
-        Button { _ = model.rigAddExpression(charId: charId) } label: {
+        Button { _ = model.rigAddExpression(tachieId: tachieId) } label: {
             Label("今の選択を表情に追加", systemImage: "plus.circle").frame(maxWidth: .infinity)
         }
         .controlSize(.small)

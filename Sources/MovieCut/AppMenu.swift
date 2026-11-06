@@ -25,6 +25,8 @@ enum MenuCommand: Hashable {
     case packageSave
     case addFont
     case addSubtitle
+    // クリップ ▸ 立ち絵を追加…(シート)/ 立ち絵クリップを声の長さに合わせる(ショートカットは持たない)
+    case addTachie, fitTachieToVoice
     case removeBackground
     case imageChroma
     // 範囲ループ再生(再生メニュー)
@@ -231,6 +233,8 @@ struct MenuState: Equatable {
     var hasGaps = false
     /// 再生位置に画面で重なって見えているクリップの数(巡回選択は 2 つ以上で使える)
     var overlapCount = 0
+    /// 立ち絵クリップを選んでいて、連動する声がある。
+    var canFitTachie = false
     var hasShortClips = false
     /// 統合できる分割点がある(選んでいればその周り、無ければ全体)
     var hasMergeableSplits = false
@@ -406,6 +410,7 @@ struct MenuState: Equatable {
         hasSavedFile = m.fileURL != nil
         hasGaps = !TimelineQuery.gapStarts(in: m.project).isEmpty
         overlapCount = PreviewPicking.stack(in: m.project, at: m.currentTime).count
+        canFitTachie = m.canFitTachieToVoice
         hasShortClips = !TimelineQuery.shortClipIds(in: m.project).isEmpty
         hasMergeableSplits = ClipMerge.hasMergeable(in: m.project, scope: m.mergeScope)
         hasTakeGroups = !TakeCompare.groups(in: m.project).isEmpty
@@ -760,13 +765,24 @@ enum AppMenuSpec {
     static func addQRCode(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .addQRCode, title: "QRコードを追加…", shortcut: nil, enabled: s.canEdit, checked: nil)
     }
+    /// クリップ ▸ 立ち絵を追加…(立ち絵素材を選ぶ / フォルダ・PSD を取り込む。再生位置に立ち絵クリップを置く。ショートカットなし)
+    static func addTachie(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .addTachie, title: "立ち絵を追加…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "再生位置に立ち絵クリップ")
+    }
+
+    /// クリップ ▸ 立ち絵クリップを声の長さに合わせる(連動する声の最初〜最後に。ショートカットなし)
+    static func fitTachie(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .fitTachieToVoice, title: "立ち絵クリップを声の長さに合わせる", shortcut: nil, enabled: s.canEdit && s.canFitTachie, checked: nil, hint: "連動する声の範囲に")
+    }
+
     static func clipAdd(_ s: MenuState) -> [MenuItemSpec] {
         [MenuItemSpec(command: .addText, title: "テキストを追加", shortcut: cmd("t", shift: true), enabled: s.canEdit, checked: nil),
          MenuItemSpec(command: .addBlur, title: "ぼかし範囲を追加", shortcut: cmd("b", shift: true), enabled: s.canEdit, checked: nil),
          MenuItemSpec(command: .addAdjustment, title: "調整レイヤーを追加", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "下の全レイヤーに効く"),
          MenuItemSpec(command: .addVisualizer, title: "音声ビジュアライザを追加", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "合成音声の大きさで動く"),
          addQRCode(s),
-         aiImage(s)]
+         aiImage(s),
+         addTachie(s)]
     }
 
     /// クリップ ▸ 図形を追加 ▸ 四角形・楕円・線・矢印・星(ショートカットは持たない)。
@@ -793,6 +809,7 @@ enum AppMenuSpec {
         [MenuItemSpec(command: .split, title: "クリップを分割", shortcut: nil, enabled: s.canEdit && s.canSplit, checked: nil, hint: "S"),
          MenuItemSpec(command: .duplicate, title: "クリップを複製", shortcut: cmd("d"), enabled: s.canEdit && s.hasSelection, checked: nil),
          clipLockItem(s),
+         fitTachie(s),
          MenuItemSpec(command: .delete, title: "クリップを削除", shortcut: nil, enabled: s.canEdit && s.hasSelection, checked: nil, hint: "⌫"),
          MenuItemSpec(command: .rippleDelete, title: "すき間を詰めて削除", shortcut: MenuShortcut(key: .delete, modifiers: [.option, .command]), enabled: s.canEdit && s.hasSelection, checked: nil),
          MenuItemSpec(command: .alignToPlayhead, title: "選択クリップを再生ヘッドに揃える", shortcut: nil, enabled: s.canEdit && s.hasSelection, checked: nil, hint: "一番手前の頭を再生ヘッドへ"),
@@ -1315,6 +1332,8 @@ enum AppMenu {
             case .packageSave: m.saveAsPackage()
             case .addFont: m.chooseAndAddFonts()
             case .addSubtitle: m.openSubtitleSheet()
+            case .addTachie: m.openAddTachie()
+            case .fitTachieToVoice: m.fitTachieClipToVoice()
             case .rollEdit: m.openRollSheet()
             case .rippleTrimHead: m.rippleTrimSelectedToPlayhead(edge: .head)
             case .rippleTrimTail: m.rippleTrimSelectedToPlayhead(edge: .tail)

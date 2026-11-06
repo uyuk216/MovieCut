@@ -223,7 +223,7 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
 - **計測(1920×1080・1 コマ・文字 64px・雲・単一測定の平均 20 回)**: 吹き出しなし 0.52〜0.56 ms、吹き出しあり 1.81〜1.85 ms。環境差があるので目安。
 - **未対応**: 吹き出しの縁の角の丸み(形ごとの固定)、吹き出しの不透明度・フェード、文字の回転に合わせた吹き出しの回転、縦書き、尾の根元を形に合わせた細かい調整、矢印・図形(B-2 の残り)。
 
-## 立ち絵とキャラクターの分離(2026-11-06・段階 1〜4。UI の段階 5〜7 は未着手)
+## 立ち絵とキャラクターの分離(2026-11-06・段階 1〜7)
 - **方針**: 立ち絵(画像・パーツ式リグ)は「素材」、キャラクターは「声と字幕」だけ。`Character` は声(エンジン・話者・速さ・高さ・抑揚)と字幕の色・名前を持つ。旧項目(`imgClosed` `imgOpen` `imgBlink` `imgVowels` `expressions` `bounce` `rig` `x` `y` `scale` `flip` `alwaysShow`)は読み込みと旧経路の描画のために型に残してある。
 - **モデル**(`Core/Tachie.swift`、すべて任意項目で使ったときだけ書く。未知のキーは保持、読めない型は `extra` に残して書き戻す): `Project.tachies`(立ち絵素材 `Tachie`: id・name・画像一式・`rig`)、クリップの種類 `tachie`(`tachieId`・通常のクリップの x/y/scale/回転/反転/不透明度/キーフレーム/トランジション/エフェクト・`mouthDrive`・`speakingOnly`)、ボイスの `subtitleText`、リグの `partOffsets`(パーツ画像のパス → `[dx, dy]`、基準キャンバスの画素・右下が正)。
   - `mouthDrive`(`MouthDrive`): `all`(既定・書かない)/ `none` / `character:ID` / `voice:ID`。口・まばたき・表情・バウンスはこの指定の声に従う。1 つの声に複数の立ち絵を連動できる。別のキャラの声にも連動できる。`all` はその時刻に出ている声のうち最後のもの(旧経路の「最後に見つかったボイス」と同じ)。
@@ -564,3 +564,11 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
 - `InputLimits.swift`: 読み込みの上限(ファイルサイズ・JSON の深さ・個数)と `Project.sanitizeLoaded`(正常な値は変えず、常識外れの時間・大きさ・非数だけ収める)。`Project.decode` / `load`、`AutosaveRecovery`(`write` / `load` / `list`)、`SubtitleFile.read`、`FontLibrary`、`PSDParser`、`MediaPaths.contained`(相対パスはプロジェクトのフォルダの中だけ)が通る。
 - ファイル形式は変えない。`voicevoxUrl` / `aquestalkCommand` は今までどおり読み書きし、送信・実行の側で断る。
 - 試験: `SecurityHardeningTests`(乱数で壊した PSD・プロジェクト・字幕・復元の写しがクラッシュ・停止しないことを含む)。
+
+### 段階 5〜7: 画面(2026-11-06)
+- **プレビュー**: `PreviewCanvasView.selectTopmost`(押した所のいちばん手前を `PreviewPicking.hits` で選び、そのまま移動・拡大・回転のドラッグを始める)。立ち絵は `Renderer.tachieOpaque` で、回転・反転を逆に当てた画素の不透明度を見て、枠の中の透明な所は選ばない。ドラッグは `DirectManipulation`(キーがあればキー、無ければ設定値)で、1 ドラッグ = 1 回の Undo、ロックされたレイヤーは `updateGesture` が断る。
+- **タイムライン**: 立ち絵クリップの色・サムネイル(`TimelineCanvas.thumbnailPath`、`RigThumbCache.prefetch` で背景読み)・「素材 ← 声」の札。▸ かダブルクリックで `expandedTachieClipIds`(表示だけ。保存も Undo もしない)を切り替え、`TachieEditing.expressionChanges` の切り替わりを帯に描く。読み取り専用で、サブ行の編集は未実装。
+- **メニュー**: クリップ ▸ 立ち絵を追加…(`.addTachie`、`TachieAddSheet`)、立ち絵クリップを声の長さに合わせる(`.fitTachieToVoice`、`TachieEditing.fitToVoice`: 連動する声の最初〜最後。重なる・声なし・合っているときは変えない)。
+- **パネル**: `InspectorMode.tachie`(左の一覧 `TachieListSection` で選ぶ)、`TachieClipSection`(素材・`MouthDrivePicker`・声が出ている間だけ表示・声の長さに合わせる)、`RigInspectorSection` はパーツの位置の補正(`setTachiePartOffset`)つき。取り込み(フォルダ・PSD)は立ち絵素材を作る(キャラは作らない)。キャラクターのインスペクタは声と字幕だけ。
+- **台本・ボイス**: `ScriptHelp`(`キャラ名: 読み上げ文 | 字幕文`)、ボイスのインスペクタは「読み上げ文」「字幕なし」「字幕文」。
+- **レイアウト**: `ToolbarBar` が `TransportBar` を持ち(幅 1280 未満は解像度·fps を省いて時刻の .help へ)、`CenterPanel` はプレビューだけ。見出し行 26→22pt、タイムラインの操作行の余白を縮小。`TachieUIAppTests` が幅 1100/1456 で、プレビューとタイムラインの重なり・はみ出し・右パネル 300pt 以上を検査する。

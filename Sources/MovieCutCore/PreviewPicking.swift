@@ -27,7 +27,11 @@ public enum PreviewPicking {
                   let size = renderer.objectSize(of: c, at: t) else { continue }
             let box = TransformBox.make(clip: c, objectSize: size, at: rel, canvas: canvas)
             switch box.hitTest(point, radius: 0) {
-            case .body, .corner: out.append(id)
+            case .body:
+                // 立ち絵は枠の中でも透明な所は選ばない(奥のクリップを選べるように)。絵が描けないときは枠で判定する
+                if c.type == .tachie, renderer.tachieOpaque(c, at: t, point: point) == false { break }
+                out.append(id)
+            case .corner: out.append(id)
             case .rotation, .none: break
             }
         }

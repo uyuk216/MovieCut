@@ -74,6 +74,7 @@ struct ContentView: View {
         .sheet(isPresented: $model.showScopeSheet) { ScopeSheet(model: model) }
         .sheet(isPresented: $model.showJumpSheet) { JumpToTimeSheet(model: model) }
         .sheet(isPresented: $model.showSubtitleSheet) { SubtitleQuickSheet(model: model) }
+        .sheet(isPresented: $model.showTachieSheet) { TachieAddSheet(model: model) }
         .sheet(isPresented: $model.showRollSheet) { RollSlipSheet(model: model, slip: false) }
         .sheet(isPresented: $model.showSlipSheet) { RollSlipSheet(model: model, slip: true) }
         .modifier(MulticamSheets(model: model))
@@ -142,6 +143,12 @@ struct ContentView: View {
 
 struct ToolbarBar: View {
     @ObservedObject var model: ProjectModel
+    /// ツールバーの幅(解像度・fps は狭いときに省く)。測るまでは広い扱い。
+    @State private var width: CGFloat = 10_000
+
+    /// 解像度・fps の表示を出す最小のツールバー幅。これより狭いときは時刻の .help に回す。
+    static let resolutionMinWidth: CGFloat = 1280
+    static func showsResolution(forWidth w: CGFloat) -> Bool { w >= resolutionMinWidth }
 
     /// ツールバーのボタンの題(試験が「解像度・設定・書き出しがウィンドウに無い」ことを確かめるための一覧。解像度・設定・書き出しはメニューバーの「出力」へ移した)。
     enum Title {
@@ -169,15 +176,24 @@ struct ToolbarBar: View {
                     .disabled(model.isLocked || model.selectedClip == nil)
                     .help("選択中のクリップを削除(Delete)")
             }
+            Divider().frame(height: 18)
+            // 再生コントロール(⏮ ▶ 時刻 解像度·fps)は、プレビューの下ではなくここに置く
+            TransportBar(model: model, showsResolution: Self.showsResolution(forWidth: width))
             Spacer(minLength: 12)
             Text(statusLine)
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
+                .truncationMode(.tail)
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 5)
+        .padding(.vertical, 3)
         .background(Color(nsColor: .underPageBackgroundColor).opacity(0.5))
+        .background(GeometryReader { g in
+            Color.clear
+                .onAppear { width = g.size.width }
+                .onChange(of: g.size.width) { _, w in width = w }
+        })
     }
 
     private var statusLine: String {
@@ -188,6 +204,12 @@ struct ToolbarBar: View {
 }
 
 // MARK: - 左パネル
+
+/// 台本欄の説明と書き方の例(試験が内容を確かめる)。
+enum ScriptHelp {
+    static let caption = "1行に1セリフ。「キャラ名: 読み上げ文」でそのキャラが読み上げます。「キャラ名: 読み上げ文 | 字幕文」と書くと、字幕だけ別の文にできます（| のあとを空にすると字幕なし）。"
+    static let placeholder = "霊夢: ゆっくりしていってね！\nずんだもん: 今日はよろしくなのだ | 今日はよろしく！\n霊夢: （効果音だけ） |"
+}
 
 struct LeftPanel: View {
     @ObservedObject var model: ProjectModel
@@ -216,8 +238,9 @@ struct LeftPanel: View {
             }
             .frame(maxHeight: 176)
             .fixedSize(horizontal: false, vertical: model.project.characters.count <= 3)
+            TachieListSection(model: model).padding(.top, 10)
             Text("台本").font(.headline).padding(.top, 14).padding(.bottom, 4)
-            Text("1行に1セリフ。「キャラ名: セリフ」の形で書くと、そのキャラで読み上げます。")
+            Text(ScriptHelp.caption)
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.bottom, 6)
@@ -230,7 +253,7 @@ struct LeftPanel: View {
                     .clipShape(RoundedRectangle(cornerRadius: 6))
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(nsColor: .separatorColor)))
                 if scriptText.isEmpty {
-                    Text("霊夢: ゆっくりしていってね！\nずんだもん: ずんだもんなのだ")
+                    Text(ScriptHelp.placeholder)
                         .font(.system(size: 13))
                         .foregroundStyle(.tertiary)
                         .padding(.horizontal, 9).padding(.vertical, 5)
@@ -301,21 +324,23 @@ struct CenterPanel: View {
     var body: some View {
         VStack(spacing: 0) {
             PreviewView(project: model.project, time: model.currentTime, assets: model.assets, model: model, epoch: model.previewEpoch)
-            .padding(6)
-            TransportBar(model: model)
-                .padding(.bottom, 6)
+            .padding(4)
         }
     }
 }
 
 struct TransportBar: View {
     @ObservedObject var model: ProjectModel
+    /// false なら解像度・fps を行に出さず、時刻の .help に回す(狭い幅)。
+    var showsResolution = true
 
     /// 再生バーの固定の題(解像度ピッカーは「出力」メニューへ移した)。
     enum Title {
         static let toStart = "⏮", play = "▶", pause = "⏸"
         static let all = [toStart, play, pause]
     }
+
+    static func chipText(_ model: ProjectModel) -> String { VideoText.chip(width: model.project.width, height: model.project.height, fps: model.project.fps) }
 
     var body: some View {
         HStack(spacing: 10) {
@@ -327,12 +352,16 @@ struct TransportBar: View {
             Text("\(timecode(model.currentTime)) / \(timecode(model.project.endTime))")
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
-            // 解像度・fps は映像の上に重ねず、再生バーの時刻の右に小さく出す
-            Text(VideoText.chip(width: model.project.width, height: model.project.height, fps: model.project.fps))
-                .font(.system(size: 11))
-                .foregroundStyle(.tertiary)
                 .lineLimit(1)
-                .help("プロジェクトの解像度とフレームレート(出力メニューで変えられます)")
+                .help(showsResolution ? "現在の時刻 / 全体の長さ" : "現在の時刻 / 全体の長さ。" + Self.chipText(model))
+            // 解像度・fps は映像の上に重ねず、再生コントロールの時刻の右に小さく出す(狭い幅では省く)
+            if showsResolution {
+                Text(Self.chipText(model))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    .help("プロジェクトの解像度とフレームレート(出力メニューで変えられます)")
+            }
         }
     }
 }

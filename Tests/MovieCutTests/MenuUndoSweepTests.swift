@@ -73,7 +73,7 @@ final class MenuUndoSweepTests: XCTestCase {
         switch c {
         case .about, .settings, .videoSettings, .addMedia, .importPSD, .importRigFolder, .importRigPSD, .export, .exportPreset, .exportCustomPreset, .saveCustomPreset,
              .importSubtitles, .exportSubtitles, .translateSubtitles,
-             .transcribeSubtitles, .relinkMedia, .packageSave, .addFont, .addSubtitle, .rollEdit, .slipEdit, .multicamCreate, .multicamSwitch, .removeBackground, .toggleRangeLoop, .toggleTrimLoop, .toggleClipLoop, .toggleAudition, .cycleAudition, .toggleVoiceRipple, .transferClips, .subclipBatch, .trimLoopWidth(0.5), .trimLoopWidth(1), .trimLoopWidth(2), .aiScript, .aiChapters, .aiTitles, .aiRewrite, .aiSettings,
+             .transcribeSubtitles, .relinkMedia, .packageSave, .addFont, .addSubtitle, .addTachie, .rollEdit, .slipEdit, .multicamCreate, .multicamSwitch, .removeBackground, .toggleRangeLoop, .toggleTrimLoop, .toggleClipLoop, .toggleAudition, .cycleAudition, .toggleVoiceRipple, .transferClips, .subclipBatch, .trimLoopWidth(0.5), .trimLoopWidth(1), .trimLoopWidth(2), .aiScript, .aiChapters, .aiTitles, .aiRewrite, .aiSettings,
              .restoreVersion, .exportStill, .exportSequence, .exportThumbnail, .exportThumbnailCandidates, .exportGIF, .exportAPNG, .queueExport, .showExportQueue, .audioLibrary,
              .measureLoudness, .showScopes, .saveTemplate, .newFromTemplate, .makeProxies, .lutLoad, .autoWhiteBalance, .regenerateVoice,
              .makeVoices, .layerDelete, .copyChapters, .copyChaptersColor(.red), .jumpToTime, .renameMarker, .fpsCustom, .addQRCode, .aiImage, .generateSubtitles,

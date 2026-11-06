@@ -10,6 +10,8 @@ enum InspectorMode: Equatable {
     /// A6: 複数のクリップを選んでいる(個数)。
     case multi(Int)
     case character(String)
+    /// 立ち絵素材(左の一覧で選んだとき)。
+    case tachie(String)
     case none
 }
 
@@ -22,6 +24,7 @@ extension ProjectModel {
         if selectedClipIDs.count > 1 { return .multi(selectedClipIDs.count) }
         if let c = selectedClip { return .clip(c.id) }
         if characterPanelActive, let id = effectiveSelectedCharId { return .character(id) }
+        if let id = selectedTachieId, project.tachies.contains(where: { $0.id == id }) { return .tachie(id) }
         return .none
     }
 
@@ -30,9 +33,20 @@ extension ProjectModel {
         guard project.characters.contains(where: { $0.id == id }) else { return }
         flushCoalesced()
         selectedClipId = nil
+        selectedTachieId = nil
         selectedCharId = id
         characterPanelActive = true
         // 設定は「プロパティ」に出る。キャラクターのタブを見たままだと何も起きないように見えるので、プロパティへ切り替える。
+        _ = AppServices.panelDock.setActive(.inspector)
+    }
+
+    /// 左の一覧で立ち絵素材を選ぶ。クリップの選択は外し、プロパティ欄は立ち絵の設定になる(プロパティのタブへ切り替える)。
+    func selectTachie(_ id: String) {
+        guard project.tachies.contains(where: { $0.id == id }) else { return }
+        flushCoalesced()
+        selectedClipId = nil
+        characterPanelActive = false
+        selectedTachieId = id
         _ = AppServices.panelDock.setActive(.inspector)
     }
 
