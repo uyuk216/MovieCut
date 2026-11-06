@@ -99,7 +99,7 @@ final class ProjectMirror: @unchecked Sendable {
 final class ProjectModel: ObservableObject {
     @Published var project: Project {
         // タイムラインが「変わったか」を安く調べるための通し番号
-        didSet { projectRevision &+= 1; mirror.set(project) }
+        didSet { projectRevision &+= 1; mirror.set(project); schedulePrewarm() }
     }
     nonisolated let mirror: ProjectMirror
     private(set) var projectRevision = 0
@@ -174,6 +174,8 @@ final class ProjectModel: ObservableObject {
     @Published var showSubtitleSheet = false
     /// クリップ ▸ 立ち絵を追加… のシート。
     @Published var showTachieSheet = false
+    /// 立ち絵パーツのフォルダに大きさの違う画像のグループが複数あるときの、取り込みシート(nil = 出さない)
+    @Published var rigGroupPlan: RigGroupPlan?
     var subtitleSheetTargetId: String?
     /// クリップ ▸ ロール編集… / スリップ編集… のシート(コマ数で境界・素材の区間をずらす)。
     @Published var showRollSheet = false
@@ -249,6 +251,9 @@ final class ProjectModel: ObservableObject {
     }()
     /// プレビューと共有する素材キャッシュ(書き出しは別に作る: 書き出し専用モードがあるため)。
     let assets = RenderAssets()
+    /// 立ち絵パーツの先読み(`ProjectModel+Prewarm`): 先読み済みの指紋と、主スレッドでの予約の有無
+    var prewarmSignature: Int?
+    var prewarmScheduled = false
     /// AI 連携の画面部品(テストで差し替える)と、問い合わせ中のキャンセル。
     var aiUI = AIUI()
     var aiCancel: (() -> Void)?
@@ -306,6 +311,7 @@ final class ProjectModel: ObservableObject {
         self.selectedCharId = project.characters.first?.id
         self.playback = PlaybackController(model: self)
         OpenProjects.register(self)
+        schedulePrewarm()
         // プロキシ編集の設定(アプリ全体)を、この書類の素材キャッシュへ。設定が変わったら付け直す。
         assets.setPreviewProxies(ProxySettings.enabled(), lookup: ProjectModel.previewProxyPath)
         nonisolated(unsafe) weak let a: RenderAssets? = assets
@@ -338,6 +344,7 @@ final class ProjectModel: ObservableObject {
         var p = project
         body(&p)
         guard p != project else { return false }
+        p = TachieEditing.syncProjectEnd(p, old: project)   // 「プロジェクトの長さに合わせる」立ち絵クリップは、同じ Undo 1 回の中で終わりを合わせ直す
         UnusedMedia.adoptRemoved(from: project, into: &p)
         if enforcesLock, LayerEditing.violatesLock(old: project, new: p) {
             statusText = Self.lockedNotice

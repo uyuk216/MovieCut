@@ -199,7 +199,7 @@ public enum TachieEditing {
     }
 
     /// 立ち絵クリップを作る(置き場所はまだ決めない)。素材が無ければ nil。
-    public static func makeClip(_ project: Project, tachieId: String, start: Double, duration: Double, drive: MouthDrive = .all) -> Clip? {
+    public static func makeClip(_ project: Project, tachieId: String, start: Double, duration: Double, drive: MouthDrive = .all, followsProjectEnd: Bool = false) -> Clip? {
         guard project.tachies.contains(where: { $0.id == tachieId }), start.isFinite, duration.isFinite, duration > 0 else { return nil }
         var c = Clip()
         c.type = .tachie
@@ -208,6 +208,7 @@ public enum TachieEditing {
         c.duration = duration
         c.x = 0.5; c.y = 0.72
         c.mouthDrive = drive == .all ? nil : drive
+        if followsProjectEnd { c.followsProjectEnd = true }
         return c
     }
 
@@ -294,6 +295,7 @@ public enum TachieMigration {
             if ch.flip { c.flipH = true }
             c.mouthDrive = .character(ch.id)
             if !ch.alwaysShow { c.speakingOnly = true }
+            c.followsProjectEnd = true   // 後から足した声にも届くよう、プロジェクトの終わりに合わせ続ける
             var tr = Track(name: "立ち絵: " + (ch.name.isEmpty ? "キャラ" : ch.name))
             tr.id = unique("tlayer-" + ch.id, taken: Set(p.tracks.map(\.id)))   // 同じ入力からは同じ結果にする
             tr.clips = [c]

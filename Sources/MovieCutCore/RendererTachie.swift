@@ -51,7 +51,7 @@ extension Renderer {
             let tag = v.flatMap { ExpressionTag.split($0.text ?? "").tag }
             let active = rig.resolvedActive(expression: tag, mouth: mouth, blinking: isBlink)
             let paths = rig.paths(active: active)
-            guard let f = assets.rigCache.frame(paths: paths, height: max(16, Int(h.rounded())), offsets: rig.offsets(for: paths)) else { return nil }
+            guard let f = assets.rigCache.frame(paths: paths, height: max(16, Int(h.rounded())), offsets: rig.offsets(for: paths), alignment: rig.alignmentOrDefault) else { return nil }
             img = f
         } else {
             guard let p = path, let i = assets.image(at: p), i.height > 0 else { return nil }
@@ -86,5 +86,28 @@ extension Renderer {
         let h = H * 0.6 * pose.scale
         guard h > 0, let (img, _) = tachieFrame(c, t: t, height: h) else { return nil }
         return CGSize(width: Double(img.width) * (h / Double(img.height)), height: h)
+    }
+}
+
+public extension RenderAssets {
+    /// 立ち絵クリップが使うパーツ式の立ち絵を、描く高さ(画面の高さ × 0.6 × クリップの拡大)で先読みする(同期処理。背景のキューから呼ぶ)。
+    /// 先読みした枚数を返す。同じ素材・同じ高さは 1 回だけ。
+    @discardableResult
+    func prewarmTachies(project: Project, limitPerTachie: Int = 12) -> Int {
+        var heights: [String: Set<Int>] = [:]
+        let H = Double(project.height)
+        for tr in project.tracks where !tr.isHidden {
+            for c in tr.clips where c.type == .tachie {
+                guard let id = c.tachieId, project.tachie(id)?.rig?.hasParts == true else { continue }
+                let h = Int((H * 0.6 * ClipPose(c, at: c.start).scale).rounded())
+                if h > 0 { heights[id, default: []].insert(max(16, h)) }
+            }
+        }
+        var n = 0
+        for (id, hs) in heights.sorted(by: { $0.key < $1.key }) {
+            guard let rig = project.tachie(id)?.rig else { continue }
+            for h in hs.sorted() { n += rigCache.prewarm(rig: rig, height: h, limit: limitPerTachie) }
+        }
+        return n
     }
 }

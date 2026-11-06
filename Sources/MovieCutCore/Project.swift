@@ -431,9 +431,11 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var mouthDrive: MouthDrive? = nil
     /// 立ち絵クリップ: true のとき、連動する声が出ている間だけ描く(旧キャラクターの「常に表示」オフの移行用)。true のときだけ書く。
     public var speakingOnly: Bool? = nil
+    /// 立ち絵クリップ: true のとき、終わりをプロジェクトの終わり(ほかのクリップの終わりの最大)に合わせ続ける(後から足した声にも届く)。true のときだけ書く。
+    public var followsProjectEnd: Bool? = nil
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["id", "type", "subtitleText", "tachieId", "mouthDrive", "speakingOnly", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "bokehShape", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "frameFlow", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "valueRef", "duck", "visualizer", "stabilize", "tracks", "mask", "figure", "note", "locked"]
+    static let knownKeys: Set<String> = ["id", "type", "subtitleText", "tachieId", "mouthDrive", "speakingOnly", "followsProjectEnd", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "bokehShape", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "frameFlow", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "valueRef", "duck", "visualizer", "stabilize", "tracks", "mask", "figure", "note", "locked"]
 
     public init() {}
 
@@ -599,6 +601,9 @@ public struct Clip: Codable, Equatable, Identifiable {
         if let raw: JSONValue = l.value("speakingOnly") {
             if l.bool("speakingOnly") == true { speakingOnly = true } else { extra["speakingOnly"] = raw }
         }
+        if let raw: JSONValue = l.value("followsProjectEnd") {
+            if l.bool("followsProjectEnd") == true { followsProjectEnd = true } else { extra["followsProjectEnd"] = raw }
+        }
         for (key, ok) in [("subtitleText", subtitleText != nil), ("tachieId", tachieId != nil)] where !ok {
             if let raw: JSONValue = l.value(key) { extra[key] = raw }
         }
@@ -690,6 +695,7 @@ public struct Clip: Codable, Equatable, Identifiable {
         try c.encodeIfPresent(tachieId, forKey: AnyKey("tachieId"))
         if let d = mouthDrive, d != .all { try c.encode(d.raw, forKey: AnyKey("mouthDrive")) }
         if speakingOnly == true { try c.encode(true, forKey: AnyKey("speakingOnly")) }
+        if followsProjectEnd == true { try c.encode(true, forKey: AnyKey("followsProjectEnd")) }
         if let t = tracks { try c.encode(t, forKey: AnyKey("tracks")) }
         try c.encodeIfPresent(mask, forKey: AnyKey("mask"))
         if let s = stabilize, s > 0 { try c.encode(min(s, 1), forKey: AnyKey("stabilize")) }

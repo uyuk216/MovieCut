@@ -228,6 +228,7 @@ final class PlaybackController {
     func play() {
         guard let model, !isPlaying, !isPreparing, !model.isLocked else { return }
         model.auditionPlayer.stop()                 // 試聴の短い音は止めて、全体を鳴らす(試聴のオンオフはそのまま)
+        model.prewarmTachies()                      // 立ち絵パーツの先読み(済みなら何もしない)
         armed = true
         shuttleState = .normal
         let end = model.project.endTime

@@ -89,8 +89,23 @@ struct RigInspectorSection: View {
         InspectorSection(title: "立ち絵パーツ")
         Text("見本を押すと、そのパーツに切り替わります。目と口は、まばたき・口パク・表情で自動で切り替わります")
             .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        alignmentRow()
         ForEach(rig.slots, id: \.name) { slot in slotView(slot) }
         expressionsView()
+    }
+
+    /// 大きさが違うパーツ(体より縦に長い髪など)を、縦のどこに揃えるか。
+    private func alignmentRow() -> some View {
+        HStack(spacing: 6) {
+            Text("大きさが違うパーツの揃え").font(.system(size: 11)).foregroundStyle(.secondary)
+            Picker("", selection: Binding(get: { rig.alignmentOrDefault }, set: { model.rigSetAlignment(tachieId: tachieId, $0) })) {
+                ForEach(PartAlignment.allCases, id: \.self) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.segmented).labelsHidden().frame(maxWidth: 200)
+            .help("体と大きさが違う髪などの縦の置き方。中央揃えは元のキャンバスを中央から広げた画像向け。細かい位置は各パーツの「位置の補正」で")
+        }
+        .controlSize(.small)
+        .disabled(model.isLocked)
     }
 
     @ViewBuilder private func slotView(_ slot: RigSlot) -> some View {
@@ -115,6 +130,9 @@ struct RigInspectorSection: View {
             }
             .frame(height: 66)
             offsetRow(slot)
+            Toggle("体の後ろに置く", isOn: Binding(get: { slot.isBehind }, set: { model.rigSetSlotBehind(tachieId: tachieId, slot: slot.name, behind: $0) }))
+                .controlSize(.small).font(.system(size: 11))
+                .help("後ろ髪など、体より奥に見せたいスロットをいちばん下に重ねます(オフ: 体の前。従来の順)")
             if slot.name == CharacterRig.eyeSlot { blinkRow() }
             if slot.name == CharacterRig.mouthSlot { mouthRows() }
         }

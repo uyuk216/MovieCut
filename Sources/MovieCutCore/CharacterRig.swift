@@ -13,9 +13,11 @@ public struct RigSlot: Codable, Equatable {
     public var name: String
     public var parts: [String]
     public var active: Int
+    /// 体より後ろ(ほかの全スロットより下)に重ねる。例: 後ろ髪。false は書かない(nil = 前に重ねる従来の順)。
+    public var behindBody: Bool?
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["name", "parts", "active"]
+    static let knownKeys: Set<String> = ["name", "parts", "active", "behindBody"]
 
     public init(name: String, parts: [String] = [], active: Int = 0) {
         self.name = name; self.parts = parts; self.active = active
@@ -27,6 +29,9 @@ public struct RigSlot: Codable, Equatable {
         parts = l.value("parts") ?? []
         active = l.int("active") ?? 0
         extra = l.extra()
+        if let raw: JSONValue = l.value("behindBody") {
+            if l.bool("behindBody") == true { behindBody = true } else if l.bool("behindBody") == nil { extra["behindBody"] = raw }   // false は既定と同じ、読めない形は書き戻す
+        }
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -35,7 +40,10 @@ public struct RigSlot: Codable, Equatable {
         try c.encode(name, forKey: AnyKey("name"))
         try c.encode(parts, forKey: AnyKey("parts"))
         try c.encode(active, forKey: AnyKey("active"))
+        if behindBody == true { try c.encode(true, forKey: AnyKey("behindBody")) }
     }
+
+    public var isBehind: Bool { behindBody == true }
 
     /// 添字が使えるか(-1 = 出さない も含む)。
     public func isValid(_ index: Int) -> Bool { index >= -1 && index < parts.count }
@@ -73,6 +81,17 @@ public struct PartOffset: Codable, Equatable, Hashable {
     }
 }
 
+/// 大きさが違うパーツ(例: 体より縦に長い髪)を、基準キャンバスの縦のどこに揃えて置くか。左右は常に中央。
+/// 既定(ファイルに書かない)は下揃え。フォルダ取り込みは、パーツの大きさが違うとき中央揃えにする(実データの調査: DESIGN.md「立ち絵パーツの位置」)。
+public enum PartAlignment: String, Codable, Equatable, CaseIterable, Sendable {
+    case top, center, bottom
+    public var label: String { switch self { case .top: return "上揃え"; case .center: return "中央揃え"; case .bottom: return "下揃え" } }
+    /// パーツの高さ `h` を基準の高さ `base` に置くときの上端の位置(下に向かって正)。
+    public func topY(base: Double, h: Double) -> Double {
+        switch self { case .top: return 0; case .center: return (base - h) / 2; case .bottom: return base - h }
+    }
+}
+
 public struct CharacterRig: Codable, Equatable {
     public static let eyeSlot = "目"
     public static let mouthSlot = "口"
@@ -90,15 +109,20 @@ public struct CharacterRig: Codable, Equatable {
     public var expressions: [String: [String: Int]]?
     /// パーツ画像のパス → 位置の補正。大きさの違うパーツのずれを直す。無い・ゼロは書かない。
     public var partOffsets: [String: PartOffset]?
+    /// 大きさが違うパーツの縦の揃え方。nil = 下揃え(従来)。下揃えは書かない。
+    public var alignment: PartAlignment?
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["slots", "blink", "mouthClosed", "mouthOpen", "vowels", "expressions", "partOffsets"]
+    static let knownKeys: Set<String> = ["slots", "blink", "mouthClosed", "mouthOpen", "vowels", "expressions", "partOffsets", "alignment"]
+
+    public var alignmentOrDefault: PartAlignment { alignment ?? .bottom }
 
     public init(slots: [RigSlot] = []) { self.slots = slots }
 
     public init(from decoder: Decoder) throws {
         let l = Lenient(c: try decoder.container(keyedBy: AnyKey.self), known: Self.knownKeys)
         slots = l.value("slots") ?? []
+        extra = l.extra()   // 読めない形の既知キーは、下で extra に足す(先に集めないと上書きされる)
         blink = l.int("blink")
         mouthClosed = l.int("mouthClosed")
         mouthOpen = l.int("mouthOpen")
@@ -110,13 +134,17 @@ public struct CharacterRig: Codable, Equatable {
                 partOffsets = nz.isEmpty ? nil : nz
             } else { extra["partOffsets"] = raw }   // 読めない形は捨てずに書き戻す
         }
-        extra = l.extra()
+        if let raw: JSONValue = l.value("alignment") {
+            if let a: PartAlignment = l.value("alignment") { alignment = a == .bottom ? nil : a }
+            else { extra["alignment"] = raw }
+        }
     }
 
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: AnyKey.self)
         for (k, v) in extra { try c.encode(v, forKey: AnyKey(k)) }
         try c.encode(slots, forKey: AnyKey("slots"))
+        if let a = alignment, a != .bottom { try c.encode(a, forKey: AnyKey("alignment")) }
         try c.encodeIfPresent(blink, forKey: AnyKey("blink"))
         try c.encodeIfPresent(mouthClosed, forKey: AnyKey("mouthClosed"))
         try c.encodeIfPresent(mouthOpen, forKey: AnyKey("mouthOpen"))
@@ -161,13 +189,16 @@ public struct CharacterRig: Codable, Equatable {
     public func offsets(for paths: [String]) -> [PartOffset] { paths.map { partOffsets?[$0] ?? PartOffset() } }
 
     /// 重ねるパーツのパス(下から順)。
+    /// 「体の後ろ」にしたスロットが先(一番下)、残りはスロットの並び順。
     public func paths(active: [Int]) -> [String] {
-        var out: [String] = []
+        var back: [String] = [], front: [String] = []
         for (i, s) in slots.enumerated() {
             let a = active.indices.contains(i) ? active[i] : s.active
-            if s.parts.indices.contains(a), !s.parts[a].isEmpty { out.append(s.parts[a]) }
+            if s.parts.indices.contains(a), !s.parts[a].isEmpty {
+                if s.isBehind { back.append(s.parts[a]) } else { front.append(s.parts[a]) }
+            }
         }
-        return out
+        return back + front
     }
 
     // MARK: 編集(値を返すだけ。変わらなければ同じ値になる)
@@ -216,6 +247,12 @@ public enum RigNaming {
         return nil
     }
 
+    /// ファイル名が「後ろ・奥」のパーツを指すか(後ろ髪など)。
+    public static func isBackPart(_ fileName: String) -> Bool {
+        let t = fileName.lowercased()
+        return ["後ろ", "後髪", "うしろ", "奥", "back"].contains { t.contains($0) } && !t.contains("背面")
+    }
+
     /// 標準の並びでの順位(標準にないスロットは最後、名前順)。
     public static func order(_ name: String) -> Int { CharacterRig.standardOrder.firstIndex(of: name) ?? CharacterRig.standardOrder.count }
 }
@@ -260,6 +297,79 @@ public enum RigFolderImporter {
         }
         walk(folder, depth: 0)
         return group(files: files, sizeOf: sizeOf)
+    }
+
+    /// 大きさのグループ 1 つ(= 別の立ち絵素材 1 つ)。
+    public struct SizeGroup: Equatable {
+        public var name: String
+        public var width: Int
+        public var height: Int
+        /// このグループの画像の数(使う・使わないを問わず、大きさがこのグループに属するもの)
+        public var imageCount: Int
+        public var report: Report
+    }
+
+    /// フォルダの画像を、キャンバスの大きさでグループに分け、グループごとに別のリグを作る(顔A系 2344×2500 と 体 3000×3000 は別の立ち絵素材)。
+    /// グループの並びは、眉・目・口が多い順(最初が `scan` と同じ基準の大きさ)。パーツを作れないグループは含めない。
+    public static func scanGroups(folder: URL, maxDepth: Int = 2, sizeOf: (String) -> (w: Int, h: Int)? = imageSize) -> [SizeGroup] {
+        let fm = FileManager.default
+        var files: [(path: String, parent: String)] = []
+        func walk(_ dir: URL, depth: Int) {
+            guard let items = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]) else { return }
+            for u in items {
+                let isDir = (try? u.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+                if isDir { if depth < maxDepth { walk(u, depth: depth + 1) } }
+                else if imageExts.contains(u.pathExtension.lowercased()) { files.append((u.path, dir.lastPathComponent)) }
+            }
+        }
+        walk(folder, depth: 0)
+        return groups(files: files, rootName: folder.lastPathComponent, sizeOf: sizeOf)
+    }
+
+    /// 同じ幅で高さが基準の 1/6 以内の画像は同じグループ(体より縦に長い髪は体と同じグループ)。テスト用に分けてある。
+    static func groups(files: [(path: String, parent: String)], rootName: String, sizeOf: (String) -> (w: Int, h: Int)?) -> [SizeGroup] {
+        struct F { var file: (path: String, parent: String); var size: (w: Int, h: Int); var isFace: Bool }
+        var all: [F] = []
+        for f in files {
+            guard let sz = sizeOf(f.path), sz.w > 0, sz.h > 0 else { continue }
+            let base = ((f.path as NSString).lastPathComponent as NSString).deletingPathExtension
+            if base.contains("加工用") { continue }
+            let slot: String? = (base.contains("顔") && base.contains("体")) ? nil : RigNaming.slotName(for: base) ?? (RigNaming.prefix(of: base) == base ? nil : RigNaming.slotName(for: f.parent))
+            all.append(F(file: f, size: sz, isFace: slot == "眉" || slot == "目" || slot == "口"))
+        }
+        // 大きさごとの数 → 種になる順(顔のパーツが多い、次に枚数が多い、次に面積が大きい)
+        var bySize: [String: [F]] = [:]
+        for f in all { bySize["\(f.size.w)x\(f.size.h)", default: []].append(f) }
+        let order = bySize.values.sorted { a, b in
+            let fa = a.filter(\.isFace).count, fb = b.filter(\.isFace).count
+            if fa != fb { return fa > fb }
+            if a.count != b.count { return a.count > b.count }
+            return a[0].size.w * a[0].size.h > b[0].size.w * b[0].size.h
+        }
+        var taken: Set<String> = []
+        var out: [SizeGroup] = []
+        var clusters: [(base: (w: Int, h: Int), members: [F])] = []
+        for seedList in order {
+            let key = "\(seedList[0].size.w)x\(seedList[0].size.h)"
+            if taken.contains(key) { continue }
+            let base = seedList[0].size
+            var members: [F] = []
+            for (k, list) in bySize where !taken.contains(k) {
+                let sz = list[0].size
+                if sz.w == base.w && abs(sz.h - base.h) * 6 <= base.h { members += list; taken.insert(k) }
+            }
+            clusters.append((base, members))
+        }
+        for cl in clusters {
+            guard let rep = group(files: cl.members.map(\.file), sizeOf: sizeOf) else { continue }
+            let parents = Set(cl.members.map(\.file.parent))
+            out.append(SizeGroup(name: "", width: rep.width, height: rep.height, imageCount: cl.members.count, report: rep))
+            // 名前: 1 グループだけならフォルダ名のまま。複数なら「フォルダ名 縦横」(全部が 1 つのサブフォルダにあるならその名前)
+            if parents.count == 1, let p = parents.first, p != rootName { out[out.count - 1].name = "\(p) \(rep.width)×\(rep.height)" }
+            else { out[out.count - 1].name = "\(rootName) \(rep.width)×\(rep.height)" }
+        }
+        if out.count == 1 { out[0].name = rootName }
+        return out
     }
 
     /// 与えられた (パス, 親フォルダ名) の並びを振り分ける。テスト用に分けてある。
@@ -308,6 +418,12 @@ public enum RigFolderImporter {
             slots.append(RigSlot(name: name, parts: parts, active: off ? -1 : 0))
         }
         var rig = CharacterRig(slots: slots)
+        // 大きさが違うパーツ(体 3000×3000 に対して髪 3000×3200 など)は中央揃え。PSD(体の上下の余白がほぼ同じ)と同じ置き方になる
+        let allSizes = items.filter { $0.size.w == base.w && abs($0.size.h - base.h) * 6 <= base.h }
+        if allSizes.contains(where: { $0.size.w != base.w || $0.size.h != base.h }) { rig.alignment = .center }
+        // 「後ろ髪」「奥の髪」のようなパーツだけのスロットは、体の後ろに置く
+        for i in rig.slots.indices where rig.slots[i].name == "髪" && !rig.slots[i].parts.isEmpty
+            && rig.slots[i].parts.allSatisfy({ RigNaming.isBackPart(($0 as NSString).lastPathComponent) }) { rig.slots[i].behindBody = true }
         var notes: [String] = []
         if !skipped.isEmpty { notes.append("大きさが違う画像 \(skipped.count) 枚は使っていません(基準 \(base.w)×\(base.h))") }
         RigHeuristics.guessRoles(&rig)
@@ -397,7 +513,7 @@ public enum RigHeuristics {
 
 public enum RigAlignment {
     /// 基準より大きさが違うパーツの位置の補正を推測する。
-    /// 既定の置き方(下と左右の中央に揃える)でパーツの不透明な部分が基準キャンバスからはみ出すとき、はみ出さない最小の移動量を返す
+    /// 既定の置き方(リグの揃え方。下揃えと左右の中央が従来)でパーツの不透明な部分が基準キャンバスからはみ出すとき、はみ出さない最小の移動量を返す
     /// (大きさが同じパーツ・はみ出さないパーツは含めない)。不透明な部分は縮小画像で測るので、誤差は数画素〜十数画素。
     /// - Parameters:
     ///   - canvas: パーツの元の大きさ(画素)
@@ -409,7 +525,7 @@ public enum RigAlignment {
         for path in rig.allPaths where !path.isEmpty && out[path] == nil {
             guard let size = canvas(path), size.w != base.w || size.h != base.h, let f = opaque(path) else { continue }
             // 既定の置き方での左上(基準キャンバスの画素)
-            let x0 = (Double(base.w) - Double(size.w)) / 2, y0 = Double(base.h) - Double(size.h)
+            let x0 = (Double(base.w) - Double(size.w)) / 2, y0 = rig.alignmentOrDefault.topY(base: Double(base.h), h: Double(size.h))
             let left = x0 + f.minX * Double(size.w), right = x0 + f.maxX * Double(size.w)
             let top = y0 + f.minY * Double(size.h), bottom = y0 + f.maxY * Double(size.h)
             func shift(_ lo: Double, _ hi: Double, _ limit: Double) -> Double {
@@ -445,6 +561,19 @@ public enum RigEditing {
     public static func select(_ rig: CharacterRig, slot: String, index: Int) -> CharacterRig {
         guard let i = rig.slotIndex(slot), rig.slots[i].isValid(index), rig.slots[i].active != index else { return rig }
         var r = rig; r.slots[i].active = index; return r
+    }
+
+    /// 大きさが違うパーツの縦の揃え方を変える。同じ値のときは変えない(下揃えは「未設定」に戻す)。
+    public static func setAlignment(_ rig: CharacterRig, _ a: PartAlignment) -> CharacterRig {
+        let new: PartAlignment? = a == .bottom ? nil : a
+        guard rig.alignment != new else { return rig }
+        var r = rig; r.alignment = new; return r
+    }
+
+    /// スロットを体の後ろ(一番下)に置くか。無いスロット・同じ値のときは変えない。
+    public static func setSlotBehind(_ rig: CharacterRig, slot: String, behind: Bool) -> CharacterRig {
+        guard let i = rig.slotIndex(slot), rig.slots[i].isBehind != behind else { return rig }
+        var r = rig; r.slots[i].behindBody = behind ? true : nil; return r
     }
 
     /// 「これをまばたき」: 目スロットの今の選択を閉じた目にする。選択なし(-1)・同じ値のときは変えない。
@@ -516,6 +645,43 @@ public enum RigEditing {
     }
 }
 
+// MARK: - 先読み(初回のパーツ使用の 25〜40ms のカクつきをなくす)
+
+public enum RigPrewarm {
+    /// 再生中に出てくる状態の組み合わせ(スロットごとの添字)。同じ組み合わせは 1 つにまとめる。
+    /// 優先順: 今の選択(口は閉じ)→ 口の開き・あいうえお → まばたき(口と組み合わせ)→ 表情(閉じ・開き)。
+    public static func combinations(of rig: CharacterRig, limit: Int = 24) -> [[Int]] {
+        var mouths: [RigMouth] = [.closed]
+        if rig.mouthOpen != nil { mouths.append(.open) }
+        for k in ["a", "i", "u", "e", "o"] where rig.vowels?[k] != nil { mouths.append(.vowel(k)) }
+        var out: [[Int]] = []
+        var seen: Set<[Int]> = []
+        func add(_ a: [Int]) { if out.count < limit, seen.insert(a).inserted { out.append(a) } }
+        for m in mouths { add(rig.resolvedActive(mouth: m)) }
+        if rig.blink != nil { for m in mouths { add(rig.resolvedActive(mouth: m, blinking: true)) } }
+        for e in (rig.expressions ?? [:]).keys.sorted() {
+            for m in [RigMouth.closed, .open] { add(rig.resolvedActive(expression: e, mouth: m)) }
+        }
+        return out
+    }
+}
+
+public extension RigFrameCache {
+    /// リグの主な状態(上の組み合わせ)のパーツを読み、高さ `height` の立ち絵を合成してキャッシュに入れる。背景のキューから呼ぶ(同期処理)。
+    /// 描画側が `frame(paths:height:offsets:alignment:)` を同じ引数で呼ぶので、初回に読み込み・合成を待たなくなる。作った枚数を返す。
+    @discardableResult
+    func prewarm(rig: CharacterRig, height: Int, limit: Int = 24) -> Int {
+        guard rig.hasParts, height > 0 else { return 0 }
+        var n = 0
+        for act in RigPrewarm.combinations(of: rig, limit: limit) {
+            let paths = rig.paths(active: act)
+            let before = composeCount
+            if frame(paths: paths, height: height, offsets: rig.offsets(for: paths), alignment: rig.alignmentOrDefault) != nil, composeCount > before { n += 1 }
+        }
+        return n
+    }
+}
+
 // MARK: - 画像の読み込みと合成のキャッシュ
 
 public enum RigImageLoader {
@@ -559,11 +725,12 @@ public final class RigFrameCache {
     /// 高さ `height` の立ち絵(重ねるパス = 下から順)。パーツが 1 枚も読めなければ nil。
     /// 画像の大きさは最初に読めたパーツのもの。他のパーツは同じ大きさに合わせて描く。
     /// `offsets` は `paths` と同じ並びの位置の補正(基準キャンバスの画素単位、右・下が正)。空(または全部ゼロ)なら従来の置き方。
-    public func frame(paths: [String], height: Int, offsets: [PartOffset] = []) -> CGImage? {
+    public func frame(paths: [String], height: Int, offsets: [PartOffset] = [], alignment: PartAlignment = .bottom) -> CGImage? {
         guard !paths.isEmpty, height > 0 else { return nil }
         let offs = offsets.count == paths.count && offsets.contains(where: { !$0.isZero }) ? offsets : []
         var key = paths.joined(separator: "\u{1f}") + "\u{1e}\(height)"
         if !offs.isEmpty { key += "\u{1e}" + offs.map { "\($0.dx),\($0.dy)" }.joined(separator: ";") }
+        if alignment != .bottom { key += "\u{1e}" + alignment.rawValue }
         lock.lock()
         if let f = frames[key] { touch(&frameOrder, key); lock.unlock(); return f }
         lock.unlock()
@@ -577,12 +744,15 @@ public final class RigFrameCache {
         ctx.interpolationQuality = .high
         var drew = false
         for (pi, p) in paths.enumerated() {
-            guard let img = part(p, maxPixel: max(cw, ch)) else { continue }
-            // 大きさが違うパーツ(同じ幅で高さだけ違う など)は拡大縮小せず、下と左右の中央に揃えて置く(同じ立ち絵の別キャンバスは足元が揃っていることが多い)
+            // 読む大きさは、そのパーツを描く大きさ(基準より大きいパーツを縮めすぎて、描くときに引き伸ばさない)
+            let pm = nativeSize(p).map { Int((Double(max($0.w, $0.h)) * scale).rounded(.up)) } ?? max(cw, ch)
+            guard let img = part(p, maxPixel: max(cw, ch, pm)) else { continue }
+            // 大きさが違うパーツ(同じ幅で高さだけ違う など)は拡大縮小せず、左右は中央・縦は `alignment`(既定は下)に揃えて置く
             var rect = CGRect(x: 0, y: 0, width: cw, height: ch)
             if let ns = nativeSize(p), ns.w != first.w || ns.h != first.h {
                 let pw = Double(ns.w) * scale, ph = Double(ns.h) * scale
-                rect = CGRect(x: (Double(cw) - pw) / 2, y: 0, width: pw, height: ph)
+                // CGContext は下が原点: 上端の位置 topY から、下端の y = ch - topY - ph
+                rect = CGRect(x: (Double(cw) - pw) / 2, y: Double(ch) - alignment.topY(base: Double(ch), h: ph) - ph, width: pw, height: ph)
             }
             if !offs.isEmpty {
                 // 補正は基準キャンバスの画素単位。縮小して使うので scale を掛ける(CGContext は下が原点なので y は逆向き)

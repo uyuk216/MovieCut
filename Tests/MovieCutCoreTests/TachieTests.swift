@@ -159,8 +159,10 @@ final class TachieTests: XCTestCase {
             // 画像を持たないキャラだけの旧ファイルは、移行しても何も変わらない
             if !TachieMigration.needsMigration(p) { XCTAssertEqual(TachieMigration.migrated(p), p, f.lastPathComponent) }
             // 旧キャラの書き方(null 含む)は従来のまま
-            XCTAssertEqual(String(decoding: try JSONEncoder().encode(p.characters), as: UTF8.self),
-                           String(decoding: try JSONEncoder().encode(try Project.decode(from: try p.encoded()).characters), as: UTF8.self))
+            // JSONEncoder は既定ではキーの順が不定(別の辞書から作ると並びが変わる)ので、sortedKeys で比べる
+            let enc = JSONEncoder(); enc.outputFormatting = .sortedKeys
+            XCTAssertEqual(String(decoding: try enc.encode(p.characters), as: UTF8.self),
+                           String(decoding: try enc.encode(try Project.decode(from: try p.encoded()).characters), as: UTF8.self))
             n += 1
         }
         XCTAssertGreaterThan(n, 5)
@@ -571,8 +573,14 @@ final class TachieTests: XCTestCase {
         let hair = try png("髪 (1).png", w: 40, h: 44, color: (200, 0, 0), box: CGRect(x: 0, y: 0, width: 40, height: 10))   // 上端まで描かれた、縦に長い髪
         let r = try XCTUnwrap(RigFolderImporter.group(files: ([(body, "t"), (hair, "t")] + eyes.map { ($0, "t") }), sizeOf: RigFolderImporter.imageSize))
         let off = try XCTUnwrap(r.rig.partOffsets?[hair])
-        XCTAssertEqual(off.dx, 0, accuracy: 0.5); XCTAssertEqual(off.dy, 4, accuracy: 1.5, "上へはみ出す 4 画素ぶん下げる")
+        // 体と大きさが違うので取り込みは中央揃え(上下に 2 画素ずつはみ出す)。上端まで描かれているので 2 画素ぶん下げる
+        XCTAssertEqual(r.rig.alignment, .center)
+        XCTAssertEqual(off.dx, 0, accuracy: 0.5); XCTAssertEqual(off.dy, 2, accuracy: 1.5, "上へはみ出す 2 画素ぶん下げる")
         XCTAssertNil(r.rig.partOffsets?[body])
+        // 従来の下揃えなら 4 画素
+        var bottom = r.rig; bottom.alignment = nil; bottom.partOffsets = nil
+        let old = RigAlignment.suggestOffsets(for: bottom, base: (r.width, r.height))
+        XCTAssertEqual(try XCTUnwrap(old[hair]).dy, 4, accuracy: 1.5)
     }
 
     // MARK: 実データ(無ければ飛ばす)

@@ -19,6 +19,16 @@ extension ProjectModel {
         editRig(tachieId: tachieId, name: "立ち絵パーツの切り替え(\(slot))") { RigEditing.select($0, slot: slot, index: index) }
     }
 
+    /// 大きさが違うパーツの縦の揃え方(上・中央・下)。
+    func rigSetAlignment(tachieId: String, _ a: PartAlignment) {
+        editRig(tachieId: tachieId, name: "立ち絵パーツの揃え方(\(a.label))") { RigEditing.setAlignment($0, a) }
+    }
+
+    /// スロットを体の後ろ(一番下)に置くか、前に重ねるか。
+    func rigSetSlotBehind(tachieId: String, slot: String, behind: Bool) {
+        editRig(tachieId: tachieId, name: behind ? "\(slot)を体の後ろへ" : "\(slot)を体の前へ") { RigEditing.setSlotBehind($0, slot: slot, behind: behind) }
+    }
+
     func rigAssignBlink(tachieId: String) {
         editRig(tachieId: tachieId, name: "まばたきの目を設定") { RigEditing.assignBlink($0) }
     }
@@ -100,20 +110,51 @@ extension ProjectModel {
     }
 
     /// フォルダのパーツをスロットに分けて、新しい立ち絵素材(パーツ式)を足す。Undo 1 回。足した素材の id を返す。
+    /// 画像の大きさが違うグループが複数あるときは、取り込みシート(`rigGroupPlan`)を出して nil を返す(選んだグループを `importRigGroups` で足す)。
     @discardableResult
     func importRigFolder(url: URL) async -> String? {
         guard !isLocked else { return nil }
         statusText = "立ち絵パーツを読み込んでいます…"
-        let report = await Task.detached(priority: .userInitiated) { RigFolderImporter.scan(folder: url) }.value
-        guard let report else {
+        let groups = await Task.detached(priority: .userInitiated) { RigFolderImporter.scanGroups(folder: url) }.value
+        guard let first = groups.first else {
             statusText = "立ち絵パーツの画像(PNG)が見つかりませんでした"
             errorTitle = "立ち絵パーツを読み込めませんでした"
             errorMessage = "「\(url.lastPathComponent)」に眉・目・口・髪・体などの PNG が見つかりません。"
             return nil
         }
+        if groups.count > 1 {
+            rigGroupPlan = RigGroupPlan(folderName: url.lastPathComponent, groups: groups)
+            statusText = "「\(url.lastPathComponent)」には大きさの違う画像が \(groups.count) グループあります。取り込むものを選んでください"
+            return nil
+        }
+        return addRigTachie(rig: first.report.rig, name: url.lastPathComponent, detail: Self.rigNotes(first.report), undoName: "立ち絵パーツの読み込み")
+    }
+
+    static func rigNotes(_ report: RigFolderImporter.Report) -> [String] {
         var notes = report.notes
         if report.unclassified > 0 { notes.append("振り分けられなかった画像 \(report.unclassified) 枚") }
-        return addRigTachie(rig: report.rig, name: url.lastPathComponent, detail: notes, undoName: "立ち絵パーツの読み込み")
+        return notes
+    }
+
+    /// 取り込みシートで選んだグループを、それぞれ別の立ち絵素材として足す(Undo 1 回)。足した素材の id を返す。
+    @discardableResult
+    func importRigGroups(_ groups: [RigFolderImporter.SizeGroup]) -> [String] {
+        guard !isLocked, !groups.isEmpty else { rigGroupPlan = nil; return [] }
+        var added: [Tachie] = []
+        let taken = Set(project.tachies.map(\.name))
+        for g in groups {
+            var t = Tachie(name: g.name)
+            var n = 2; while taken.contains(t.name) || added.contains(where: { $0.name == t.name }) { t.name = g.name + " (\(n))"; n += 1 }
+            t.rig = g.report.rig
+            added.append(t)
+        }
+        let ids = added.map(\.id)
+        guard edit("立ち絵パーツの読み込み(\(added.count) 件)", { p in for t in added { p = TachieEditing.add(p, tachie: t) } }) else { rigGroupPlan = nil; return [] }
+        selectedTachieId = ids.first
+        selectedClipId = nil
+        rigGroupPlan = nil
+        statusText = "立ち絵素材を \(added.count) 件追加しました(" + added.map(\.name).joined(separator: "・") + ")"
+        return ids
     }
 
     /// PSD のレイヤーをスロットに分け(キャンバス全面の PNG を PSDCache に書く)、新しい立ち絵素材を足す。
@@ -148,4 +189,24 @@ extension ProjectModel {
         statusText = "立ち絵「\(name)」を追加しました(" + rig.slots.map { "\($0.name) \($0.parts.count)" }.joined(separator: "・") + ")。" + detail.joined(separator: "。")
         return id
     }
+}
+
+/// 大きさの違う画像のグループが複数あるフォルダの、取り込みの計画(シートに出す)。
+struct RigGroupPlan: Identifiable, Equatable {
+    let id = UUID()
+    var folderName: String
+    var groups: [RigFolderImporter.SizeGroup]
+    /// 取り込むグループ(`groups` の添字)。初期は、目か口を持つグループと 10 枚以上のグループ(手だけの小さな画像などは外す)。
+    var selected: Set<Int>
+
+    init(folderName: String, groups: [RigFolderImporter.SizeGroup]) {
+        self.folderName = folderName; self.groups = groups
+        let main = groups.indices.filter { i in
+            let r = groups[i].report.rig
+            return r.slot(CharacterRig.eyeSlot) != nil || r.slot(CharacterRig.mouthSlot) != nil || groups[i].imageCount >= 10
+        }
+        self.selected = Set(main.isEmpty ? [0] : main)
+    }
+
+    var chosen: [RigFolderImporter.SizeGroup] { groups.indices.filter { selected.contains($0) }.map { groups[$0] } }
 }

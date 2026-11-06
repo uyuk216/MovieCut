@@ -224,7 +224,7 @@ public struct Renderer {
                 let isBlink = rig.blink != nil && Blink.isClosed(seed: v?.id ?? ch.id, t: t - (v?.start ?? 0))
                 let tag = v.flatMap { ExpressionTag.split($0.text ?? "").tag }
                 let active = rig.resolvedActive(expression: tag, mouth: mouth, blinking: isBlink)
-                guard let f = assets.rigCache.frame(paths: rig.paths(active: active), height: max(16, Int(h.rounded()))) else { continue }
+                guard let f = assets.rigCache.frame(paths: rig.paths(active: active), height: max(16, Int(h.rounded())), alignment: rig.alignmentOrDefault) else { continue }
                 img = f
             } else {
                 guard let p = path, let i = assets.image(at: p), i.height > 0 else { continue }

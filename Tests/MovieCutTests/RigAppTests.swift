@@ -40,6 +40,162 @@ final class RigAppTests: XCTestCase {
         return (m, id)
     }
 
+    func testAlignmentAndBehindEditsAreOneUndoAndNoOpsLeaveNoHistory() async throws {
+        let (m, id) = try await modelWithRig()
+        let base = undoSteps(m)
+        m.rigSetAlignment(tachieId: id, .bottom)   // 既に下揃え(未設定)
+        m.rigSetSlotBehind(tachieId: id, slot: "眉", behind: false)
+        XCTAssertEqual(undoSteps(m), base, "何も変わらない編集は履歴に載せない")
+        m.rigSetAlignment(tachieId: id, .center)
+        XCTAssertEqual(m.tachie(id)?.rig?.alignment, .center)
+        m.rigSetSlotBehind(tachieId: id, slot: "眉", behind: true)
+        XCTAssertEqual(m.tachie(id)?.rig?.slot("眉")?.behindBody, true)
+        XCTAssertEqual(undoSteps(m), base + 2)
+        m.effectiveUndoManager.undo(); XCTAssertNil(m.tachie(id)?.rig?.slot("眉")?.behindBody)
+        m.effectiveUndoManager.undo(); XCTAssertNil(m.tachie(id)?.rig?.alignment)
+    }
+
+    /// 20×20 の体・眉・目・口と、30×30 の別サイズの眉・目・口を置いたフォルダ(2 グループ)
+    private func twoSizeFolder() throws -> URL {
+        let d = try folder()
+        func big(_ name: String) throws {
+            let ctx = CGContext(data: nil, width: 30, height: 30, bitsPerComponent: 8, bytesPerRow: 120, space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+            ctx.setFillColor(CGColor(red: 0, green: 0, blue: 1, alpha: 1)); ctx.fill(CGRect(x: 4, y: 4, width: 10, height: 10))
+            let sub = d.appendingPathComponent("別サイズ"); try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
+            let dest = CGImageDestinationCreateWithURL(sub.appendingPathComponent(name) as CFURL, UTType.png.identifier as CFString, 1, nil)!
+            CGImageDestinationAddImage(dest, ctx.makeImage()!, nil); XCTAssertTrue(CGImageDestinationFinalize(dest))
+        }
+        for n in ["眉 (1).png", "眉 (2).png", "目 (1).png", "目 (2).png", "口 (1).png", "口 (2).png"] { try big(n) }
+        return d
+    }
+
+    func testMultiSizeFolderOpensGroupSheetAndImportsSeparateTachiesInOneUndo() async throws {
+        let m = ProjectModel(project: Project.new())
+        let first = await m.importRigFolder(url: try twoSizeFolder())
+        XCTAssertNil(first, "グループが複数あるときはシートを出して、まだ足さない")
+        XCTAssertTrue(m.project.tachies.isEmpty)
+        let plan = try XCTUnwrap(m.rigGroupPlan)
+        XCTAssertEqual(plan.groups.count, 2)
+        XCTAssertEqual(plan.selected.count, 2)
+        XCTAssertEqual(Set(plan.groups.map { "\($0.width)×\($0.height)" }), ["20×20", "30×30"])
+        let before = undoSteps(m)
+        let ids = m.importRigGroups(plan.chosen)
+        XCTAssertEqual(ids.count, 2)
+        XCTAssertNil(m.rigGroupPlan)
+        XCTAssertEqual(m.project.tachies.count, 2)
+        XCTAssertEqual(Set(m.project.tachies.map(\.name)).count, 2, "名前は重ならない")
+        XCTAssertEqual(undoSteps(m), before + 1)
+        m.effectiveUndoManager.undo()
+        XCTAssertTrue(m.project.tachies.isEmpty)
+    }
+
+    func testGroupSheetCanImportOnlyChosenAndCancelAddsNothing() async throws {
+        let m = ProjectModel(project: Project.new())
+        _ = await m.importRigFolder(url: try twoSizeFolder())
+        var plan = try XCTUnwrap(m.rigGroupPlan)
+        plan.selected = [1]
+        XCTAssertEqual(plan.chosen.count, 1)
+        _ = m.importRigGroups(plan.chosen)
+        XCTAssertEqual(m.project.tachies.count, 1)
+        _ = await m.importRigFolder(url: try twoSizeFolder())
+        m.rigGroupPlan = nil   // キャンセル
+        XCTAssertEqual(m.project.tachies.count, 1)
+    }
+
+    func testPrewarmSignatureOnlyChangesWithTachiesInUseAndPrewarmFillsTheModelCache() async throws {
+        let (m, id) = try await modelWithRig()
+        XCTAssertNil(ProjectModel.prewarmSignature(m.project), "立ち絵クリップが無ければ先読みしない")
+        XCTAssertNotNil(m.addTachieClip(tachieId: id))
+        let s1 = try XCTUnwrap(ProjectModel.prewarmSignature(m.project))
+        // 立ち絵と関係ない編集では変わらない
+        var p = m.project; p.bg = "#123456"
+        XCTAssertEqual(ProjectModel.prewarmSignature(p), s1)
+        // パーツの選択・揃え・位置の補正が変わると変わる
+        XCTAssertNotEqual(ProjectModel.prewarmSignature(TachieEditing.update(m.project, id: id) { $0.rig = RigEditing.setAlignment($0.rig!, .center) }), s1)
+        // 先読み(背景)で、モデルの素材キャッシュに合成が入る。同じ指紋では 2 回目は何もしない
+        XCTAssertEqual(m.assets.rigCache.cachedFrameCount, 0)
+        m.prewarmTachies()
+        let deadline = Date().addingTimeInterval(10)
+        while m.assets.rigCache.cachedFrameCount == 0 && Date() < deadline { try await Task.sleep(nanoseconds: 20_000_000) }
+        XCTAssertGreaterThan(m.assets.rigCache.cachedFrameCount, 0)
+        let sig = m.prewarmSignature
+        m.prewarmTachies()
+        XCTAssertEqual(m.prewarmSignature, sig)
+    }
+
+    private func voiceClip(_ id: String, start: Double, duration: Double) -> Clip {
+        var c = Clip(); c.id = id; c.type = .voice; c.start = start; c.duration = duration; return c
+    }
+
+    func testFollowProjectEndExtendsOnLaterEditsInTheSameUndoAndStopsOnManualTrim() async throws {
+        let (m, id) = try await modelWithRig()
+        m.edit("声") { $0.tracks.append({ var t = Track(name: "声"); t.clips = [self.voiceClip("v0", start: 0, duration: 4)]; return t }()) }
+        m.currentTime = 0
+        m.placeTachie(id, followsEnd: true)
+        let cid = try XCTUnwrap(m.selectedClipId)
+        var c = try XCTUnwrap(m.project.allClips.first { $0.id == cid })
+        XCTAssertEqual(c.followsProjectEnd, true)
+        XCTAssertEqual(c.duration, 4, accuracy: 1e-9, "再生位置からプロジェクトの終わりまで")
+        // 後から声を足すと、同じ編集(Undo 1 回)で立ち絵クリップも伸びる
+        let steps = undoSteps(m)
+        m.edit("声を足す") { p in
+            let vi = p.tracks.firstIndex { $0.clips.contains { $0.id == "v0" } }!
+            p.tracks[vi].clips.append(self.voiceClip("v1", start: 6, duration: 3))
+        }
+        c = try XCTUnwrap(m.project.allClips.first { $0.id == cid })
+        XCTAssertEqual(c.duration, 9, accuracy: 1e-9)
+        XCTAssertEqual(undoSteps(m), steps + 1)
+        m.effectiveUndoManager.undo()
+        XCTAssertEqual(m.project.allClips.first { $0.id == cid }?.duration ?? 0, 4, accuracy: 1e-9, "Undo 1 回で声も伸びも戻る")
+        m.effectiveUndoManager.redo()
+        // インスペクタの切り替え
+        m.setTachieFollowsProjectEnd(clipId: cid, false)
+        XCTAssertNil(m.project.allClips.first { $0.id == cid }?.followsProjectEnd)
+        m.edit("声を足す") { $0.tracks[1].clips.append(self.voiceClip("v2", start: 9, duration: 2)) }
+        XCTAssertEqual(m.project.allClips.first { $0.id == cid }?.duration ?? 0, 9, accuracy: 1e-9, "やめたら伸びない")
+        m.setTachieFollowsProjectEnd(clipId: cid, true)
+        XCTAssertEqual(m.project.allClips.first { $0.id == cid }?.duration ?? 0, 11, accuracy: 1e-9, "オンにするとその場で合わせる")
+        // 長さを手で変えるとやめる
+        m.edit("トリム") { p in for ti in p.tracks.indices { for ci in p.tracks[ti].clips.indices where p.tracks[ti].clips[ci].id == cid { p.tracks[ti].clips[ci].duration = 3 } } }
+        let t = try XCTUnwrap(m.project.allClips.first { $0.id == cid })
+        XCTAssertEqual(t.duration, 3); XCTAssertNil(t.followsProjectEnd)
+    }
+
+    func testPlaceWithoutFollowingKeepsFiveSecondsAndWritesNothingNew() async throws {
+        let (m, id) = try await modelWithRig()
+        m.placeTachie(id)
+        let c = try XCTUnwrap(m.project.allClips.first { $0.type == .tachie })
+        XCTAssertEqual(c.duration, 5); XCTAssertNil(c.followsProjectEnd)
+        let text = String(decoding: try m.project.encoded(), as: UTF8.self)
+        XCTAssertFalse(text.contains("followsProjectEnd"))
+    }
+
+    func testExpressionAtPlayheadIsOneUndoAndNoOpsLeaveNoHistory() async throws {
+        let (m, id) = try await modelWithRig()
+        _ = m.rigAddExpression(tachieId: id, name: "笑顔")
+        m.edit("声") { $0.tracks.append({ var t = Track(name: "声"); t.clips = [self.voiceClip("v0", start: 0, duration: 4)]; return t }()) }
+        m.edit("声2") { $0.tracks[$0.tracks.count - 1].clips[0].text = "こんにちは" }
+        m.currentTime = 0
+        let cid = try XCTUnwrap(m.addTachieClip(tachieId: id, start: 0, duration: 4))
+        m.currentTime = 1
+        let steps = undoSteps(m)
+        m.setTachieExpressionAtPlayhead(clipId: cid, tag: nil)   // もともと通常
+        m.currentTime = 9
+        m.setTachieExpressionAtPlayhead(clipId: cid, tag: "笑顔")  // 声が無い
+        XCTAssertEqual(undoSteps(m), steps, "何も変わらない編集は履歴に載せない")
+        XCTAssertTrue(m.statusText.contains("連動する声がありません"))
+        m.currentTime = 1
+        m.setTachieExpressionAtPlayhead(clipId: cid, tag: "笑顔")
+        XCTAssertEqual(m.project.allClips.first { $0.id == "v0" }?.text, "[笑顔]こんにちは")
+        XCTAssertEqual(undoSteps(m), steps + 1)
+        m.setTachieExpressionAtPlayhead(clipId: cid, tag: nil)
+        XCTAssertEqual(m.project.allClips.first { $0.id == "v0" }?.text, "こんにちは")
+        m.effectiveUndoManager.undo()
+        XCTAssertEqual(m.project.allClips.first { $0.id == "v0" }?.text, "[笑顔]こんにちは")
+        m.effectiveUndoManager.undo()
+        XCTAssertEqual(m.project.allClips.first { $0.id == "v0" }?.text, "こんにちは")
+    }
+
     func testImportFolderAddsTachieWithRigAsOneUndoStep() async throws {
         let m = ProjectModel(project: Project.new())
         let chars = m.project.characters.count

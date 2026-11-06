@@ -50,6 +50,62 @@ public extension TachieEditing {
         return p
     }
 
+    /// 「プロジェクトの長さに合わせる」立ち絵クリップ(`followsProjectEnd`)の長さを、プロジェクトの終わりに合わせ直す。
+    /// 終わり = それらのクリップを除いた全クリップの終わりの最大。同じレイヤーの次のクリップの頭は越えない。
+    /// `old` は編集前のプロジェクト: 編集でこのクリップの頭・長さが(自動ではなく)変わっていたら、ユーザーが長さを決めたので合わせ続けるのをやめる(印を外す)。
+    /// 印のあるクリップが無ければ入力と同じ値。何度かけても同じ。
+    static func syncProjectEnd(_ project: Project, old: Project? = nil) -> Project {
+        guard project.tracks.contains(where: { $0.clips.contains { $0.followsProjectEnd == true } }) else { return project }
+        var p = project
+        var end = 0.0
+        for tr in p.tracks { for c in tr.clips where c.followsProjectEnd != true { end = max(end, c.start + c.duration) } }
+        let eps = ClipEditing.timeEpsilon
+        for ti in p.tracks.indices {
+            for ci in p.tracks[ti].clips.indices where p.tracks[ti].clips[ci].followsProjectEnd == true {
+                let c = p.tracks[ti].clips[ci]
+                if let o = old.flatMap({ ClipEditing.locate(c.id, in: $0) }).map({ old!.tracks[$0.track].clips[$0.index] }),
+                   abs(o.start - c.start) > eps || abs(o.duration - c.duration) > eps, o.followsProjectEnd == true {
+                    p.tracks[ti].clips[ci].followsProjectEnd = nil   // 手で長さを変えた
+                    continue
+                }
+                var target = end
+                if let next = p.tracks[ti].clips.filter({ $0.id != c.id && $0.start >= c.start + eps }).map(\.start).min() { target = min(target, next) }
+                let d = target - c.start
+                guard d > eps, abs(d - c.duration) > eps else { continue }
+                p.tracks[ti].clips[ci].duration = d
+            }
+        }
+        return p
+    }
+
+    /// 立ち絵素材が持つ表情の名前(パーツ式の表情・画像式の表情。名前順、重複なし)。
+    static func expressionNames(of tachie: Tachie) -> [String] {
+        Array(Set((tachie.rig?.expressions ?? [:]).keys).union((tachie.expressions ?? [:]).keys)).sorted()
+    }
+
+    /// 時刻 `time` に出ている、立ち絵クリップが連動する声(重なるときは頭が遅い方)。無ければ nil。
+    /// 表情の切り替えは声のセリフの先頭の `[表情名]` なので、切り替えの単位はこの声(切り替わる時刻 = 声の頭)。
+    static func driverVoice(_ project: Project, clip: Clip, at time: Double) -> Clip? {
+        driverVoices(project, clip: clip).filter { $0.start <= time + 1e-9 && time < $0.start + $0.duration - 1e-9 }.max { $0.start < $1.start }
+    }
+
+    /// 再生位置の声の表情を決める(`tag` = nil で外して通常に戻す)。展開した行の「表情の切り替えを足す・外す」の本体で、Undo 1 回で済むよう 1 つのクリップだけを書き換える。
+    /// 声が出ていない・立ち絵クリップでない・名前が使えない([ ] を含む・空)・同じ値のときは変えない。タグは本文の先頭に付け、字幕の文(subtitleText)は触らない。
+    static func setExpression(_ project: Project, clipId: String, at time: Double, tag: String?) -> Project {
+        guard let loc = ClipEditing.locate(clipId, in: project) else { return project }
+        let tc = project.tracks[loc.track].clips[loc.index]
+        guard tc.type == .tachie, let v = driverVoice(project, clip: tc, at: time) else { return project }
+        let name = tag?.trimmingCharacters(in: .whitespaces)
+        if let n = name, n.isEmpty || n.contains("[") || n.contains("]") { return project }
+        let body = ExpressionTag.split(v.text ?? "").body
+        let new = (name.map { "[\($0)]" } ?? "") + body
+        guard new != (v.text ?? "") else { return project }
+        guard let vl = ClipEditing.locate(v.id, in: project) else { return project }
+        var p = project
+        p.tracks[vl.track].clips[vl.index].text = new
+        return p
+    }
+
     /// 立ち絵クリップの区間で、連動する声ごとの表情タグの切り替わり(前の声と同じタグは省く)。
     static func expressionChanges(_ project: Project, clip: Clip) -> [TachieExpressionChange] {
         let end = clip.start + clip.duration

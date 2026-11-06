@@ -5,6 +5,7 @@ import MovieCutCore
 struct TachieAddSheet: View {
     @ObservedObject var model: ProjectModel
     @State private var chosen: String?
+    @State private var followsEnd = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -22,6 +23,9 @@ struct TachieAddSheet: View {
                 }
                 .frame(width: 340, height: 140)
             }
+            Toggle("プロジェクトの長さに合わせる", isOn: $followsEnd)
+                .controlSize(.small)
+                .help("再生位置からプロジェクトの終わりまで置き、あとから声を足しても終わりに合わせ続けます（長さを手で変えるとやめます）")
             HStack {
                 Button("フォルダから取り込む…") { model.chooseAndImportRigFolder() }
                 Button("PSDから取り込む…") { model.chooseAndImportRigPSD() }
@@ -31,7 +35,7 @@ struct TachieAddSheet: View {
                 Spacer()
                 Button("キャンセル") { model.showTachieSheet = false }.keyboardShortcut(.cancelAction)
                 Button("追加") {
-                    if let id = chosen { model.placeTachie(id) }
+                    if let id = chosen { model.placeTachie(id, followsEnd: followsEnd) }
                 }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
@@ -85,5 +89,40 @@ struct TachieListSection: View {
                 }
             }
         }
+    }
+}
+
+/// 立ち絵パーツのフォルダに、大きさの違う画像のグループが複数あるときの取り込みシート。グループごとに別の立ち絵素材になる。
+struct RigGroupSheet: View {
+    @ObservedObject var model: ProjectModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("立ち絵パーツの取り込み").font(.headline)
+            if let plan = model.rigGroupPlan {
+                Text("「\(plan.folderName)」には、画像の大きさが違うグループが \(plan.groups.count) つあります。グループごとに別の立ち絵素材として取り込みます。")
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                ForEach(Array(plan.groups.enumerated()), id: \.offset) { i, g in
+                    Toggle(isOn: Binding(get: { model.rigGroupPlan?.selected.contains(i) ?? false }, set: { on in
+                        if on { model.rigGroupPlan?.selected.insert(i) } else { model.rigGroupPlan?.selected.remove(i) }
+                    })) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(g.name).font(.system(size: 13, weight: .semibold))
+                            Text("\(g.width)×\(g.height) ・ 画像 \(g.imageCount) 枚 ・ " + g.report.rig.slots.map { "\($0.name) \($0.parts.count)" }.joined(separator: "・"))
+                                .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+            }
+            HStack {
+                Spacer()
+                Button("キャンセル") { model.rigGroupPlan = nil }.keyboardShortcut(.cancelAction)
+                Button("取り込む") { if let plan = model.rigGroupPlan { _ = model.importRigGroups(plan.chosen) } }
+                    .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
+                    .disabled(model.isLocked || (model.rigGroupPlan?.selected.isEmpty ?? true))
+            }
+        }
+        .padding(16)
+        .frame(width: 440)
     }
 }

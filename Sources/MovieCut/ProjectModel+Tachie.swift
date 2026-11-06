@@ -40,8 +40,8 @@ extension ProjectModel {
 
     /// 立ち絵クリップを足して選ぶ(トラックターゲットのレイヤーが空いていればそこ、無ければいちばん上のレイヤー。重なるなら新しいレイヤー)。素材が無い・長さが 0 以下なら nil。
     @discardableResult
-    func addTachieClip(tachieId: String, start: Double? = nil, duration: Double = 5, drive: MouthDrive = .all) -> String? {
-        guard !isLocked, let c = TachieEditing.makeClip(project, tachieId: tachieId, start: start ?? currentTime, duration: duration, drive: drive) else { return nil }
+    func addTachieClip(tachieId: String, start: Double? = nil, duration: Double = 5, drive: MouthDrive = .all, followsProjectEnd: Bool = false) -> String? {
+        guard !isLocked, let c = TachieEditing.makeClip(project, tachieId: tachieId, start: start ?? currentTime, duration: duration, drive: drive, followsProjectEnd: followsProjectEnd) else { return nil }
         guard edit("立ち絵クリップの追加", { ClipEditing.appendToTopLayer(c, in: &$0, useTarget: true) }) else { return nil }
         selectedClipId = c.id
         return c.id
@@ -51,6 +51,17 @@ extension ProjectModel {
     func setTachieMouthDrive(clipId: String, drive: MouthDrive) {
         guard !isLocked else { return }
         edit("口を動かす声の変更") { $0 = TachieEditing.setMouthDrive($0, clipId: clipId, drive: drive) }
+    }
+
+    /// 立ち絵クリップの再生位置の声の表情を決める(nil = 通常に戻す)。展開した行の表情の切り替えの追加・削除。Undo 1 回。
+    func setTachieExpressionAtPlayhead(clipId: String, tag: String?) {
+        guard !isLocked else { return }
+        let t = currentTime
+        if edit(tag == nil ? "表情の切り替えを外す" : "表情の切り替えを足す", { $0 = TachieEditing.setExpression($0, clipId: clipId, at: t, tag: tag) }) {
+            statusText = tag == nil ? "再生位置の声の表情を通常に戻しました" : "再生位置の声の表情を「\(tag ?? "")」にしました"
+        } else if TachieEditing.driverVoice(project, clip: project.allClips.first { $0.id == clipId } ?? Clip(), at: t) == nil {
+            statusText = "再生位置に、この立ち絵が連動する声がありません"
+        }
     }
 
     /// 立ち絵クリップの素材を差し替える。
@@ -104,8 +115,22 @@ extension ProjectModel {
     }
 
     /// シートで選んだ素材を再生位置に置き、シートを閉じる。
-    func placeTachie(_ id: String) {
-        if addTachieClip(tachieId: id) != nil { showTachieSheet = false }
+    /// `followsEnd` のとき、クリップはプロジェクトの終わりまで(無ければ 5 秒)で、あとから声を足しても終わりに合わせ続ける。
+    func placeTachie(_ id: String, followsEnd: Bool = false) {
+        let end = project.endTime
+        let d = followsEnd && end > currentTime + 0.05 ? end - currentTime : 5
+        if addTachieClip(tachieId: id, duration: d, followsProjectEnd: followsEnd) != nil { showTachieSheet = false }
+    }
+
+    /// 立ち絵クリップの「プロジェクトの長さに合わせる」を切り替える(オンにすると、その場で終わりを合わせる)。Undo 1 回。
+    func setTachieFollowsProjectEnd(clipId: String, _ on: Bool) {
+        guard !isLocked else { return }
+        edit(on ? "立ち絵クリップをプロジェクトの長さに合わせる" : "プロジェクトの長さに合わせるをやめる") { p in
+            for ti in p.tracks.indices {
+                guard let ci = p.tracks[ti].clips.firstIndex(where: { $0.id == clipId }), p.tracks[ti].clips[ci].type == .tachie else { continue }
+                p.tracks[ti].clips[ci].followsProjectEnd = on ? true : nil
+            }
+        }
     }
 }
 

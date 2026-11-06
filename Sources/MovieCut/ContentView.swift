@@ -75,6 +75,7 @@ struct ContentView: View {
         .sheet(isPresented: $model.showJumpSheet) { JumpToTimeSheet(model: model) }
         .sheet(isPresented: $model.showSubtitleSheet) { SubtitleQuickSheet(model: model) }
         .sheet(isPresented: $model.showTachieSheet) { TachieAddSheet(model: model) }
+        .sheet(item: $model.rigGroupPlan) { _ in RigGroupSheet(model: model) }
         .sheet(isPresented: $model.showRollSheet) { RollSlipSheet(model: model, slip: false) }
         .sheet(isPresented: $model.showSlipSheet) { RollSlipSheet(model: model, slip: true) }
         .modifier(MulticamSheets(model: model))

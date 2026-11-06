@@ -69,6 +69,10 @@ struct TachieClipSection: View {
         }))
         .toggleStyle(.checkbox)
         .disabled(model.isLocked)
+        Toggle("プロジェクトの長さに合わせる", isOn: Binding(get: { clip.followsProjectEnd == true }, set: { model.setTachieFollowsProjectEnd(clipId: clip.id, $0) }))
+            .toggleStyle(.checkbox)
+            .disabled(model.isLocked)
+            .help("終わりをプロジェクトの終わりに合わせ続けます。あとから声を足しても届きます（クリップの長さを手で変えるとやめます）")
         HStack(spacing: 6) {
             Button("声の長さに合わせる") { model.fitTachieClipToVoice(clipId: clip.id) }
                 .disabled(model.isLocked || TachieEditing.voiceSpan(model.project, clip: clip) == nil)
@@ -81,8 +85,43 @@ struct TachieClipSection: View {
         }
         .controlSize(.small)
         if let t = model.tachie(clip.tachieId) {
+            TachieExpressionRow(model: model, clip: clip, tachie: t)
             TachieAssetBody(model: model, tachie: t)
         }
+    }
+}
+
+/// 展開した立ち絵クリップの表情の切り替えを、再生位置で足す・外す(声のセリフの先頭の [表情名] を書き換える。Undo 1 回)。
+struct TachieExpressionRow: View {
+    @ObservedObject var model: ProjectModel
+    let clip: Clip
+    let tachie: Tachie
+    @State private var pick = ""
+
+    var body: some View {
+        let names = TachieEditing.expressionNames(of: tachie)
+        let voice = TachieEditing.driverVoice(model.project, clip: clip, at: model.currentTime)
+        let current = voice.flatMap { ExpressionTag.split($0.text ?? "").tag }
+        InspectorSection(title: "表情の切り替え（再生位置）")
+        Text(voice == nil ? "再生位置に連動する声がありません"
+             : "再生位置の声の表情: \(current ?? "通常")（切り替わるのは声の頭。声のセリフの先頭に [表情名] が付きます）")
+            .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        HStack(spacing: 6) {
+            Picker("", selection: $pick) {
+                Text("表情を選ぶ").tag("")
+                ForEach(names, id: \.self) { Text($0).tag($0) }
+            }
+            .labelsHidden().frame(maxWidth: 160)
+            Button("足す") { model.setTachieExpressionAtPlayhead(clipId: clip.id, tag: pick) }
+                .disabled(pick.isEmpty || voice == nil)
+                .help("再生位置の声の表情をこれにします")
+            Button("外す") { model.setTachieExpressionAtPlayhead(clipId: clip.id, tag: nil) }
+                .disabled(current == nil)
+                .help("再生位置の声の表情を通常に戻します")
+        }
+        .controlSize(.small)
+        .disabled(model.isLocked)
+        .onAppear { if pick.isEmpty, let f = names.first { pick = f } }
     }
 }
 
