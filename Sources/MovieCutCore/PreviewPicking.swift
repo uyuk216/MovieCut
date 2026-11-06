@@ -10,7 +10,7 @@ import CoreGraphics
 public enum PreviewPicking {
     /// 枠で選べる種類。
     public static func isPickable(_ type: ClipType) -> Bool {
-        type == .image || type == .video || type == .text || type == .compound
+        type == .image || type == .video || type == .text || type == .compound || type == .tachie
     }
 
     /// 時刻 `t`、キャンバスの画素 `point`(左上原点)に重なるクリップの id(手前から奥)。
@@ -41,7 +41,7 @@ public enum PreviewPicking {
         project.tracks.filter { !$0.isHidden }.flatMap { tr in
             tr.clips.filter {
                 $0.duration > 0 && t >= $0.start - ClipEditing.timeEpsilon && t < $0.start + $0.duration - ClipEditing.timeEpsilon
-                    && ($0.type == .image || $0.type == .video || $0.type == .text || $0.type == .compound || $0.type == .shape || $0.type == .visualizer)
+                    && ($0.type == .image || $0.type == .video || $0.type == .text || $0.type == .compound || $0.type == .tachie || $0.type == .shape || $0.type == .visualizer)
             }.map(\.id)
         }
     }

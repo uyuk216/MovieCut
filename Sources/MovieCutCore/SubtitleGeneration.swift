@@ -17,7 +17,7 @@ public enum SubtitleGeneration {
         var out: [(track: Int, clip: Int, cue: SubtitleCue)] = []
         for (ti, tr) in project.tracks.enumerated() where !tr.isHidden && !tr.isLocked {
             for (ci, c) in tr.clips.enumerated() where c.type == .voice && c.subtitle != false && c.duration > 0 {
-                let body = SubtitleFile.cleanBody(c.text ?? "")
+                let body = SubtitleFile.cleanBody(c.subtitleBody)   // 字幕の文を優先(無ければ読み上げ文。表情タグは除く)
                 guard !body.isEmpty else { continue }
                 out.append((ti, ci, SubtitleCue(start: c.start, end: c.start + c.duration, text: body)))
             }

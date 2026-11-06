@@ -35,7 +35,8 @@ final class ProjectDocument: ReferenceFileDocument {
         guard let data = configuration.file.regularFileContents else {
             throw CocoaError(.fileReadCorruptFile)
         }
-        let p = try Project.decode(from: data)
+        // 旧形式(キャラクターが立ち絵を持つ)は、立ち絵素材 + 立ち絵クリップへ移して開く(保存すると新形式)
+        let p = try Project.decodeMigrating(from: data)
         model = onMain { ProjectModel(project: p) }
         onMain { model.startAutosave() }
     }

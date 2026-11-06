@@ -18,7 +18,7 @@ public enum UnusedMedia {
         }
     }
 
-    /// 使われているファイルのパス(クリップとキャラクターの画像)。
+    /// 使われているファイルのパス(クリップ、キャラクターと立ち絵素材の画像)。
     public static func usedPaths(in p: Project) -> Set<String> {
         var out = Set<String>()
         for tr in p.tracks { collect(tr.clips, into: &out) }
@@ -27,6 +27,7 @@ public enum UnusedMedia {
             for s in (ch.expressions ?? [:]).values where !s.isEmpty { out.insert(s) }
             for s in ch.rig?.allPaths ?? [] where !s.isEmpty { out.insert(s) }
         }
+        for t in p.tachies { for s in t.allPaths where !s.isEmpty { out.insert(s) } }   // 立ち絵素材の画像
         return out
     }
 

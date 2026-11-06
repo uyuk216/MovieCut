@@ -12,9 +12,47 @@ public enum ScriptTimeline {
         line.trimmingCharacters(in: .whitespaces).hasPrefix("※")
     }
 
+    /// 台本の 1 行を読んだ結果。
+    public struct Line: Equatable {
+        public var who: Character
+        /// 読み上げる文(先頭に表情タグ `[表情]` があってもよい)。口パクの母音もこの文で決まる。
+        public var spoken: String
+        /// 字幕の文。nil = 読み上げる文と同じ(`|` なし)、空 = 字幕なし(`|` のあとが空)。
+        public var subtitle: String?
+        public static func == (a: Line, b: Line) -> Bool { a.who.id == b.who.id && a.spoken == b.spoken && a.subtitle == b.subtitle }
+    }
+
+    /// 読み上げる文と字幕の区切り(半角 `|` と全角 `｜`)。
+    static let subtitleSeparators: Set<Swift.Character> = ["|", "｜"]
+
+    /// 「読み上げ文 | 字幕文」を分ける。最初の区切りだけで分け、前後の空白は除く。区切りが無ければ字幕は nil。
+    public static func splitSubtitle(_ rest: String) -> (spoken: String, subtitle: String?) {
+        guard let sep = rest.firstIndex(where: { subtitleSeparators.contains($0) }) else { return (rest.trimmingCharacters(in: .whitespaces), nil) }
+        let spoken = rest[rest.startIndex..<sep].trimmingCharacters(in: .whitespaces)
+        let sub = rest[rest.index(after: sep)...].trimmingCharacters(in: .whitespaces)
+        return (spoken, sub)
+    }
+
+    /// 1 行を (話すキャラ, 読み上げ文, 字幕文) に分ける。キャラの決め方は `parse(line:)` と同じ。
+    /// 読み上げ文が空(「| 字幕」だけの行など)の行は声を作れないので nil。
+    public static func parseLine(_ rawLine: String, characters: [Character], selectedCharId: String?) -> Line? {
+        guard let (who, rest) = splitSpeaker(rawLine, characters: characters, selectedCharId: selectedCharId) else { return nil }
+        let (spoken, subtitle) = splitSubtitle(rest)
+        guard !spoken.isEmpty else { return nil }
+        return Line(who: who, spoken: spoken, subtitle: subtitle)
+    }
+
     /// 1 行を (話すキャラ, セリフ) に分ける。最初の ":" か "：" で区切り、名前が既知のキャラならその声、
     /// 不明なら selectedCharId のキャラ(無ければ先頭)で行全体がセリフ(renderer.js scriptToTimeline と同じ)。
+    /// セリフは読み上げる文だけ(`| 字幕文` があれば除く)。字幕の文も要るときは `parseLine`。
     public static func parse(line rawLine: String, characters: [Character], selectedCharId: String?) -> (Character, String)? {
+        guard let (who, rest) = splitSpeaker(rawLine, characters: characters, selectedCharId: selectedCharId) else { return nil }
+        let spoken = splitSubtitle(rest).spoken
+        return (who, spoken.isEmpty ? rest : spoken)
+    }
+
+    /// 話し手とそのあとの全部(字幕の区切りを含む)。
+    static func splitSpeaker(_ rawLine: String, characters: [Character], selectedCharId: String?) -> (Character, String)? {
         let line = rawLine.trimmingCharacters(in: .whitespaces)
         guard !line.isEmpty, !isNote(line: line) else { return nil }
         if let sep = line.firstIndex(where: { $0 == ":" || $0 == "：" }), sep != line.startIndex {
@@ -42,7 +80,8 @@ public enum ScriptTimeline {
         var cursor = max(0, project.tracks[trackIndex].clips.map { $0.start + $0.duration }.max() ?? 0)
         var added: [Clip] = []
         for line in lines {
-            guard let (who, text) = parse(line: line, characters: project.characters, selectedCharId: selectedCharId) else { continue }
+            guard let parsed = parseLine(line, characters: project.characters, selectedCharId: selectedCharId) else { continue }
+            let who = parsed.who, text = parsed.spoken
             let r = try await voice.synthesize(character: who, text: ExpressionTag.body(text), in: directory)
             var clip = Clip()
             clip.type = .voice
@@ -51,6 +90,8 @@ public enum ScriptTimeline {
             clip.offset = 0
             clip.src = r.url.path
             clip.text = text
+            // 字幕の文が読み上げる文と同じなら書かない(`|` なしと同じ)
+            if let sub = parsed.subtitle, sub != text { clip.subtitleText = sub }
             clip.charId = who.id
             clip.volume = 1
             clip.subtitle = true

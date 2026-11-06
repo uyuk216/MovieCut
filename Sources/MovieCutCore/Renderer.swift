@@ -145,7 +145,7 @@ public struct Renderer {
                     drawVisualizer(c, t: t, ctx: ctx, W: W, H: H)
                 case .shape:
                     drawShape(c, t: t, ctx: ctx, W: W, H: H)
-                case .image, .video, .text, .compound:
+                case .image, .video, .text, .compound, .tachie:
                     var pose = ClipPose(c, at: t)
                     var mask: TransitionMask?
                     if c.hasTransition {
@@ -386,6 +386,8 @@ public struct Renderer {
                 drawCG(ctx, im, CGRect(x: -w / 2, y: -h / 2, width: w, height: h))
                 ctx.restoreGState()
             }
+        case .tachie:
+            drawTachie(c, pose: pose, t: t, ctx: ctx, W: W, H: H)
         case .text:
             let size = c.fontSize ?? 80
             let blurred = pose.blur > 0
@@ -527,6 +529,8 @@ public struct Renderer {
             let fit = min(W / s.width, H / s.height) * pose.scale
             let crop = c.cropOrDefault
             return CGSize(width: s.width * crop.keptWidth * fit, height: s.height * crop.keptHeight * fit)
+        case .tachie:
+            return tachieSize(c, at: t)
         case .text:
             let box = textBlockSize(c.text ?? "", size: c.fontSize ?? 80, font: c.fontOrDefault, style: c.textStyle)
             let crop = c.cropOrDefault

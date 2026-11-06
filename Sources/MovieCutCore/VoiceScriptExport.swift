@@ -2,7 +2,7 @@ import Foundation
 
 // MARK: - 台本の書き出し(声のクリップ → 「キャラ名: セリフ」の行)
 //
-// 書いた行は `ScriptTimeline.parse` で読み直せる。始まりの時刻の順に並べる(同じ時刻は並びの順)。
+// 書いた行は `ScriptTimeline.parseLine` で読み直せる(字幕の文が別にあれば「名前: 読み上げ文 | 字幕文」)。始まりの時刻の順に並べる(同じ時刻は並びの順)。
 // キャラが無い・名前が空・セリフが空のクリップは書かず、その数を `skipped` で返す。
 
 public enum VoiceScriptExport {
@@ -23,7 +23,9 @@ public enum VoiceScriptExport {
                 skipped += 1
                 continue
             }
-            lines.append("\(who.name): \(body)")
+            // 字幕の文が別にあるときは「読み上げ文 | 字幕文」(空 = 字幕なし)
+            if let sub = c.subtitleText { lines.append(sub.isEmpty ? "\(who.name): \(body) |" : "\(who.name): \(body) | \(sub)") }
+            else { lines.append("\(who.name): \(body)") }
         }
         return Result(text: lines.joined(separator: "\n"), lineCount: lines.count, skipped: skipped)
     }

@@ -205,7 +205,7 @@ public enum EffectKey {
 
 extension Clip {
     /// エフェクトを付けられる種類。
-    public static func supportsEffects(_ type: ClipType) -> Bool { [.image, .video, .text, .compound].contains(type) }
+    public static func supportsEffects(_ type: ClipType) -> Bool { [.image, .video, .text, .compound, .tachie].contains(type) }
 
     /// 描くエフェクトが 1 つでもあるか(有効で、知っている種類)。描画の速い道の判定。
     public var hasActiveEffects: Bool { effects.contains { $0.enabled && $0.known != nil } }

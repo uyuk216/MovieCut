@@ -4,7 +4,7 @@ import Foundation
 /// 変えたときだけ true を返す(何も変わらない編集は Undo に登録しない)。
 public enum TransitionEditing {
     /// 映像のトランジションを付けられるクリップの種類。
-    public static func supportsVideo(_ type: ClipType) -> Bool { [.image, .video, .text, .compound].contains(type) }
+    public static func supportsVideo(_ type: ClipType) -> Bool { [.image, .video, .text, .compound, .tachie].contains(type) }
     /// 音声のフェードを付けられるクリップの種類。
     public static func supportsAudio(_ type: ClipType) -> Bool { [.audio, .voice, .video].contains(type) }
     /// クイック操作の既定の長さ(秒)。

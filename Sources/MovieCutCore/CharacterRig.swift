@@ -53,6 +53,26 @@ public enum RigMouth: Equatable {
     case vowel(String)
 }
 
+/// パーツ画像の位置の補正(基準キャンバスの画素単位。右・下が正)。大きさが違うパーツ(例: 体より縦に長い髪)を、
+/// 既定の置き方(下と左右の中央に揃える)からどれだけずらすか。ファイルでは `[dx, dy]` の 2 つ組。
+public struct PartOffset: Codable, Equatable, Hashable {
+    public var dx: Double
+    public var dy: Double
+    public init(dx: Double = 0, dy: Double = 0) { self.dx = dx; self.dy = dy }
+    public var isZero: Bool { dx == 0 && dy == 0 }
+
+    public init(from decoder: Decoder) throws {
+        var c = try decoder.unkeyedContainer()
+        let a = try c.decode(Double.self), b = try c.decode(Double.self)
+        guard a.isFinite, b.isFinite else { throw DecodingError.dataCorruptedError(in: c, debugDescription: "offset") }
+        dx = a; dy = b
+    }
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.unkeyedContainer()
+        try c.encode(dx); try c.encode(dy)
+    }
+}
+
 public struct CharacterRig: Codable, Equatable {
     public static let eyeSlot = "目"
     public static let mouthSlot = "口"
@@ -68,9 +88,11 @@ public struct CharacterRig: Codable, Equatable {
     public var vowels: [String: Int]?
     /// 表情名 → (スロット名 → 添字)。セリフの先頭の [表情名] で切り替える。
     public var expressions: [String: [String: Int]]?
+    /// パーツ画像のパス → 位置の補正。大きさの違うパーツのずれを直す。無い・ゼロは書かない。
+    public var partOffsets: [String: PartOffset]?
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["slots", "blink", "mouthClosed", "mouthOpen", "vowels", "expressions"]
+    static let knownKeys: Set<String> = ["slots", "blink", "mouthClosed", "mouthOpen", "vowels", "expressions", "partOffsets"]
 
     public init(slots: [RigSlot] = []) { self.slots = slots }
 
@@ -82,6 +104,12 @@ public struct CharacterRig: Codable, Equatable {
         mouthOpen = l.int("mouthOpen")
         vowels = l.value("vowels").flatMap { (d: [String: Int]) in d.isEmpty ? nil : d }
         expressions = l.value("expressions").flatMap { (d: [String: [String: Int]]) in d.isEmpty ? nil : d }
+        if let raw: JSONValue = l.value("partOffsets") {
+            if let d: [String: PartOffset] = l.value("partOffsets") {
+                let nz = d.filter { !$0.value.isZero }
+                partOffsets = nz.isEmpty ? nil : nz
+            } else { extra["partOffsets"] = raw }   // 読めない形は捨てずに書き戻す
+        }
         extra = l.extra()
     }
 
@@ -94,6 +122,7 @@ public struct CharacterRig: Codable, Equatable {
         try c.encodeIfPresent(mouthOpen, forKey: AnyKey("mouthOpen"))
         if let v = vowels, !v.isEmpty { try c.encode(v, forKey: AnyKey("vowels")) }
         if let e = expressions, !e.isEmpty { try c.encode(e, forKey: AnyKey("expressions")) }
+        if let o = partOffsets?.filter({ !$0.value.isZero }), !o.isEmpty { try c.encode(o, forKey: AnyKey("partOffsets")) }
     }
 
     /// 描けるパーツが 1 つでもあるか。
@@ -127,6 +156,9 @@ public struct CharacterRig: Codable, Equatable {
         if blinking { set(Self.eyeSlot, blink) }
         return act
     }
+
+    /// `paths` の各パーツの位置の補正(無ければゼロ)。
+    public func offsets(for paths: [String]) -> [PartOffset] { paths.map { partOffsets?[$0] ?? PartOffset() } }
 
     /// 重ねるパーツのパス(下から順)。
     public func paths(active: [Int]) -> [String] {
@@ -279,6 +311,8 @@ public enum RigFolderImporter {
         var notes: [String] = []
         if !skipped.isEmpty { notes.append("大きさが違う画像 \(skipped.count) 枚は使っていません(基準 \(base.w)×\(base.h))") }
         RigHeuristics.guessRoles(&rig)
+        // 大きさが違うパーツ(体より縦に長い髪など)の位置を、不透明な部分が基準キャンバスに収まるよう補正する
+        rig = RigAlignment.applySuggestions(rig, base: base, canvas: sizeOf)
         return Report(rig: rig, width: base.w, height: base.h, skippedSize: skipped, unclassified: max(0, unclassified), notes: notes)
     }
 }
@@ -286,8 +320,10 @@ public enum RigFolderImporter {
 // MARK: - 閉じた目・口の推測
 
 public enum RigHeuristics {
-    /// 不透明な画素の外接枠(正規化前の画素)。小さく読んで数えるので速い。
-    public static func opaqueBox(_ path: String, maxPixel: Int = 192) -> (w: Int, h: Int, area: Int)? {
+    /// 不透明な画素の外接枠の位置・大きさ・面積(縮小した画像の画素。上が原点)と、縮小した画像の大きさ。何も描かれていなければ nil の枠(幅 0)。
+    struct Scan { var minX: Int, minY: Int, w: Int, h: Int, area: Int, imageW: Int, imageH: Int }
+
+    static func scan(_ path: String, maxPixel: Int) -> Scan? {
         guard let img = RigImageLoader.thumbnail(path, maxPixel: maxPixel) else { return nil }
         let w = img.width, h = img.height
         var px = [UInt8](repeating: 0, count: w * h * 4)
@@ -307,27 +343,39 @@ public enum RigHeuristics {
                 if y < minY { minY = y }; if y > maxY { maxY = y }
             }
         }
-        guard maxX >= 0 else { return (0, 0, 0) }
-        return (maxX - minX + 1, maxY - minY + 1, area)
+        guard maxX >= 0 else { return Scan(minX: 0, minY: 0, w: 0, h: 0, area: 0, imageW: w, imageH: h) }
+        return Scan(minX: minX, minY: minY, w: maxX - minX + 1, h: maxY - minY + 1, area: area, imageW: w, imageH: h)
     }
 
-    /// 閉じた目(外接枠の高さが小さいもの)、閉じた口(面積が小さいもの)、開いた口(面積が大きいもの)を推測する。
-    /// 自信が無い(差が小さい)ときは何も設定しない。
+    /// 不透明な画素の外接枠(正規化前の画素)。小さく読んで数えるので速い。
+    public static func opaqueBox(_ path: String, maxPixel: Int = 192) -> (w: Int, h: Int, area: Int)? {
+        scan(path, maxPixel: maxPixel).map { ($0.w, $0.h, $0.area) }
+    }
+
+    /// 不透明な画素の外接枠を、画像全体に対する割合(0〜1、上が原点)で返す。何も描かれていなければ nil。
+    public static func opaqueFraction(_ path: String, maxPixel: Int = 384) -> CGRect? {
+        guard let s = scan(path, maxPixel: maxPixel), s.w > 0 else { return nil }
+        return CGRect(x: Double(s.minX) / Double(s.imageW), y: Double(s.minY) / Double(s.imageH),
+                      width: Double(s.w) / Double(s.imageW), height: Double(s.h) / Double(s.imageH))
+    }
+
+    /// 閉じた目・閉じた口・開いた口を推測する(自信が無いときは何も設定しない)。
+    /// - まばたき: 目スロットのうち、両目ぶんの幅がある(幅が中央値の 6 割以上)画像で、不透明な面積が最も小さいもの
+    ///   (開いた目より閉じた目の方が面積が小さい)。候補が 2 つ以上あり、最小が中央値の 9 割未満のときだけ。
+    /// - 口: 閉じ = 描かれている画像で面積が最小、開き・「あ」= 面積が最大(最大が最小の 1.5 倍を超えるときだけ)。
     public static func guessRoles(_ rig: inout CharacterRig, box: (String) -> (w: Int, h: Int, area: Int)? = { opaqueBox($0) }) {
         if let i = rig.slotIndex(CharacterRig.eyeSlot), rig.slots[i].parts.count >= 2 {
-            // 何も描かれていない画像(高さ 0)は除く。残りの中で外接枠が極端に低いものを閉じた目とみなす
             let boxes = rig.slots[i].parts.map { box($0) }
             let areas = boxes.compactMap { $0 }.filter { $0.area > 0 }.map { Double($0.area) }.sorted()
             let medArea = areas.isEmpty ? 0 : areas[areas.count / 2]
-            // ほぼ空(面積が中央値の 1 割ほど未満)の画像は目ではないので除く
             let ws = boxes.compactMap { $0 }.filter { $0.w > 0 }.map { Double($0.w) }.sorted()
             let medW = ws.isEmpty ? 0 : ws[ws.count / 2]
-            // 両目ぶんの幅がある(中央値の 6 割以上)ことも条件にする
-            let drawn = boxes.indices.filter { (boxes[$0]?.h ?? 0) > 0 && Double(boxes[$0]?.area ?? 0) >= medArea * 0.12 && Double(boxes[$0]?.w ?? 0) >= medW * 0.6 }
-            let heights = drawn.map { Double(boxes[$0]!.h) }.sorted()
-            if let minIdx = drawn.min(by: { boxes[$0]!.h < boxes[$1]!.h }), heights.count >= 2 {
-                let median = heights[heights.count / 2]
-                if median > 0, Double(boxes[minIdx]!.h) < median * 0.6 { rig.blink = minIdx }
+            // ほぼ空(面積が中央値の 1 割ほど未満)の画像と、片目だけの細い画像は候補にしない
+            let wide = boxes.indices.filter { (boxes[$0]?.h ?? 0) > 0 && Double(boxes[$0]?.area ?? 0) >= medArea * 0.12 && Double(boxes[$0]?.w ?? 0) >= medW * 0.6 }
+            if wide.count >= 2, let minIdx = wide.min(by: { boxes[$0]!.area < boxes[$1]!.area }) {
+                let wideAreas = wide.map { Double(boxes[$0]!.area) }.sorted()
+                let median = wideAreas[wideAreas.count / 2]
+                if median > 0, Double(boxes[minIdx]!.area) < median * 0.9 { rig.blink = minIdx }
             }
         }
         if let i = rig.slotIndex(CharacterRig.mouthSlot), rig.slots[i].parts.count >= 2 {
@@ -336,8 +384,57 @@ public enum RigHeuristics {
                let hi = areas.indices.max(by: { areas[$0] < areas[$1] }), areas[hi] > areas[lo] * 1.5 {
                 rig.mouthClosed = lo
                 rig.mouthOpen = hi
+                // 「あ」= 最も大きく開いた口。あいうえおの他の母音は、割り当てるまで「開き」で代用される
+                var v = rig.vowels ?? [:]
+                if v["a"] == nil { v["a"] = hi }
+                rig.vowels = v
             }
         }
+    }
+}
+
+// MARK: - 大きさが違うパーツの位置合わせ
+
+public enum RigAlignment {
+    /// 基準より大きさが違うパーツの位置の補正を推測する。
+    /// 既定の置き方(下と左右の中央に揃える)でパーツの不透明な部分が基準キャンバスからはみ出すとき、はみ出さない最小の移動量を返す
+    /// (大きさが同じパーツ・はみ出さないパーツは含めない)。不透明な部分は縮小画像で測るので、誤差は数画素〜十数画素。
+    /// - Parameters:
+    ///   - canvas: パーツの元の大きさ(画素)
+    ///   - opaque: 不透明な部分の外接枠(パーツの大きさに対する割合、上が原点)。描かれていなければ nil
+    public static func suggestOffsets(for rig: CharacterRig, base: (w: Int, h: Int),
+                                      canvas: (String) -> (w: Int, h: Int)? = RigFolderImporter.imageSize,
+                                      opaque: (String) -> CGRect? = { RigHeuristics.opaqueFraction($0) }) -> [String: PartOffset] {
+        var out: [String: PartOffset] = [:]
+        for path in rig.allPaths where !path.isEmpty && out[path] == nil {
+            guard let size = canvas(path), size.w != base.w || size.h != base.h, let f = opaque(path) else { continue }
+            // 既定の置き方での左上(基準キャンバスの画素)
+            let x0 = (Double(base.w) - Double(size.w)) / 2, y0 = Double(base.h) - Double(size.h)
+            let left = x0 + f.minX * Double(size.w), right = x0 + f.maxX * Double(size.w)
+            let top = y0 + f.minY * Double(size.h), bottom = y0 + f.maxY * Double(size.h)
+            func shift(_ lo: Double, _ hi: Double, _ limit: Double) -> Double {
+                if hi - lo > limit { return 0 }   // キャンバスより大きく描かれているときは動かさない
+                if lo < 0 { return -lo }
+                if hi > limit { return limit - hi }
+                return 0
+            }
+            let off = PartOffset(dx: shift(left, right, Double(base.w)).rounded(), dy: shift(top, bottom, Double(base.h)).rounded())
+            if !off.isZero { out[path] = off }
+        }
+        return out
+    }
+
+    /// リグにパーツの位置の補正を推測して入れる(既に手で決めた補正は残す)。変わらなければ入力と同じ値。
+    public static func applySuggestions(_ rig: CharacterRig, base: (w: Int, h: Int),
+                                        canvas: (String) -> (w: Int, h: Int)? = RigFolderImporter.imageSize,
+                                        opaque: (String) -> CGRect? = { RigHeuristics.opaqueFraction($0) }) -> CharacterRig {
+        let s = suggestOffsets(for: rig, base: base, canvas: canvas, opaque: opaque)
+        guard !s.isEmpty else { return rig }
+        var r = rig
+        var o = r.partOffsets ?? [:]
+        for (k, v) in s where o[k] == nil { o[k] = v }
+        r.partOffsets = o
+        return r == rig ? rig : r
     }
 }
 
@@ -461,9 +558,12 @@ public final class RigFrameCache {
 
     /// 高さ `height` の立ち絵(重ねるパス = 下から順)。パーツが 1 枚も読めなければ nil。
     /// 画像の大きさは最初に読めたパーツのもの。他のパーツは同じ大きさに合わせて描く。
-    public func frame(paths: [String], height: Int) -> CGImage? {
+    /// `offsets` は `paths` と同じ並びの位置の補正(基準キャンバスの画素単位、右・下が正)。空(または全部ゼロ)なら従来の置き方。
+    public func frame(paths: [String], height: Int, offsets: [PartOffset] = []) -> CGImage? {
         guard !paths.isEmpty, height > 0 else { return nil }
-        let key = paths.joined(separator: "\u{1f}") + "\u{1e}\(height)"
+        let offs = offsets.count == paths.count && offsets.contains(where: { !$0.isZero }) ? offsets : []
+        var key = paths.joined(separator: "\u{1f}") + "\u{1e}\(height)"
+        if !offs.isEmpty { key += "\u{1e}" + offs.map { "\($0.dx),\($0.dy)" }.joined(separator: ";") }
         lock.lock()
         if let f = frames[key] { touch(&frameOrder, key); lock.unlock(); return f }
         lock.unlock()
@@ -476,13 +576,17 @@ public final class RigFrameCache {
                                   bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue) else { return nil }
         ctx.interpolationQuality = .high
         var drew = false
-        for p in paths {
+        for (pi, p) in paths.enumerated() {
             guard let img = part(p, maxPixel: max(cw, ch)) else { continue }
             // 大きさが違うパーツ(同じ幅で高さだけ違う など)は拡大縮小せず、下と左右の中央に揃えて置く(同じ立ち絵の別キャンバスは足元が揃っていることが多い)
             var rect = CGRect(x: 0, y: 0, width: cw, height: ch)
             if let ns = nativeSize(p), ns.w != first.w || ns.h != first.h {
                 let pw = Double(ns.w) * scale, ph = Double(ns.h) * scale
                 rect = CGRect(x: (Double(cw) - pw) / 2, y: 0, width: pw, height: ph)
+            }
+            if !offs.isEmpty {
+                // 補正は基準キャンバスの画素単位。縮小して使うので scale を掛ける(CGContext は下が原点なので y は逆向き)
+                rect = rect.offsetBy(dx: offs[pi].dx * scale, dy: -offs[pi].dy * scale)
             }
             ctx.draw(img, in: rect)
             drew = true

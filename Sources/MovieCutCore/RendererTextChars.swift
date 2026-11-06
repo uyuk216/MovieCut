@@ -102,7 +102,8 @@ extension Renderer {
 
     /// 字幕(ボイスの文字)。画面下の中央、縦書きのときは右端に寄せる。文字クリップと同じアニメーション(1 文字ずつも)が使える。
     func drawSubtitle(_ c: Clip, t: Double, outline: String, ctx: CGContext, W: Double, H: Double) {
-        let text = ExpressionTag.body(c.text ?? "")
+        let text = c.subtitleBody   // 字幕の文を優先(無ければ読み上げ文)。空なら字幕なし
+        guard !text.isEmpty else { return }
         let size = c.fontSize ?? 64
         let style = c.textStyle
         var x = W / 2, y = H * 0.88

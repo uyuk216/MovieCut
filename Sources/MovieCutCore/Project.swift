@@ -41,10 +41,12 @@ public struct Project: Codable, Equatable {
     public var targetTrackId: String? = nil
     /// マルチカメラのグループ(使ったときだけ。空のときはファイルに書かない)。切り替えた結果は普通のクリップで、ここには角度と同期のずれだけを持つ。
     public var multicams: [MulticamGroup] = []
+    /// 立ち絵素材(キャラクターの声・字幕とは別の「素材」。タイムラインの立ち絵クリップ `Clip.tachieId` から参照する)。空のときはファイルに書かない。
+    public var tachies: [Tachie] = []
     /// 知らないキー(保持して書き戻す)
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["width", "height", "fps", "bg", "codec", "voicevoxUrl", "aquestalkCommand", "characters", "tracks", "markers", "rangeIn", "rangeOut", "mediaHints", "mediaPool", "targetTrackId", "multicams"]
+    static let knownKeys: Set<String> = ["width", "height", "fps", "bg", "codec", "voicevoxUrl", "aquestalkCommand", "characters", "tracks", "markers", "rangeIn", "rangeOut", "mediaHints", "mediaPool", "targetTrackId", "multicams", "tachies"]
 
     public init() {}
 
@@ -69,10 +71,12 @@ public struct Project: Codable, Equatable {
         mediaPool = l.value("mediaPool") ?? []
         targetTrackId = l.string("targetTrackId")
         multicams = l.value("multicams") ?? []
+        tachies = l.value("tachies") ?? []
         extra = l.extra()
         // 型が違って読めなかったときは、捨てずにそのまま書き戻す
         if targetTrackId == nil, let raw: JSONValue = l.value("targetTrackId") { extra["targetTrackId"] = raw }
         if multicams.isEmpty, let raw: JSONValue = l.value("multicams"), raw != .array([]) { extra["multicams"] = raw }
+        if tachies.isEmpty, let raw: JSONValue = l.value("tachies"), raw != .array([]) { extra["tachies"] = raw }
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -96,6 +100,7 @@ public struct Project: Codable, Equatable {
         if !mediaPool.isEmpty { try c.encode(mediaPool, forKey: AnyKey("mediaPool")) }
         try c.encodeIfPresent(targetTrackId, forKey: AnyKey("targetTrackId"))
         if !multicams.isEmpty { try c.encode(multicams, forKey: AnyKey("multicams")) }
+        if !tachies.isEmpty { try c.encode(tachies, forKey: AnyKey("tachies")) }
     }
 
     /// fps を Int / Double / "29.97" / "30000/1001" のどれからでも読む。読めない・欠けているときは 60、範囲外は 1〜240 に収める。
@@ -139,8 +144,14 @@ public struct Character: Codable, Equatable, Identifiable {
     public var scale: Double = 1
     public var flip: Bool = false
     public var alwaysShow: Bool = true
+    /// 旧形式の立ち絵まわりの項目(imgClosed・imgOpen・x・y・scale・flip・alwaysShow)のうち、ファイルに書く(または読んだ)キー。
+    /// 新しく作ったキャラ・旧ファイルは全部(従来どおり全部書く = バイト一致)。立ち絵素材への移行(`TachieMigration`)のあとは空
+    /// (値が既定でないものだけ書く。x・y は吹き出しの尾の向き先に使われるので残す)。項目が無いファイルを読んだときは、ある項目だけ。
+    public var legacyKeys: Set<String> = Character.legacyPoseKeys
+
     public var extra: [String: JSONValue] = [:]
 
+    static let legacyPoseKeys: Set<String> = ["imgClosed", "imgOpen", "x", "y", "scale", "flip", "alwaysShow"]
     static let knownKeys: Set<String> = ["id", "name", "engine", "speaker", "voice", "speed", "pitch", "intonation", "color", "imgClosed", "imgOpen", "imgBlink", "imgVowels", "expressions", "bounce", "rig", "subtitleColor", "x", "y", "scale", "flip", "alwaysShow"]
 
     public init() {}
@@ -189,6 +200,7 @@ public struct Character: Codable, Equatable, Identifiable {
         scale = l.double("scale") ?? scale
         flip = l.bool("flip") ?? flip
         alwaysShow = l.bool("alwaysShow") ?? alwaysShow
+        legacyKeys = Set(l.c.allKeys.map(\.stringValue)).intersection(Self.legacyPoseKeys)
         extra = l.extra()
     }
 
@@ -204,20 +216,20 @@ public struct Character: Codable, Equatable, Identifiable {
         try c.encodeIfPresent(pitch, forKey: AnyKey("pitch"))
         try c.encodeIfPresent(intonation, forKey: AnyKey("intonation"))
         try c.encode(color, forKey: AnyKey("color"))
-        // Electron 版は未設定を null で書く
-        if let s = imgClosed { try c.encode(s, forKey: AnyKey("imgClosed")) } else { try c.encodeNil(forKey: AnyKey("imgClosed")) }
-        if let s = imgOpen { try c.encode(s, forKey: AnyKey("imgOpen")) } else { try c.encodeNil(forKey: AnyKey("imgOpen")) }
+        // Electron 版は未設定を null で書く(旧形式のまま持っているときだけ。移行後は書かない)
+        if let s = imgClosed { try c.encode(s, forKey: AnyKey("imgClosed")) } else if legacyKeys.contains("imgClosed") { try c.encodeNil(forKey: AnyKey("imgClosed")) }
+        if let s = imgOpen { try c.encode(s, forKey: AnyKey("imgOpen")) } else if legacyKeys.contains("imgOpen") { try c.encodeNil(forKey: AnyKey("imgOpen")) }
         try c.encodeIfPresent(imgBlink, forKey: AnyKey("imgBlink"))
         if let v = imgVowels, !v.isEmpty { try c.encode(v, forKey: AnyKey("imgVowels")) }
         if let e = expressions, !e.isEmpty { try c.encode(e, forKey: AnyKey("expressions")) }
         if bounce == true { try c.encode(true, forKey: AnyKey("bounce")) }
         if let r = rig { try c.encode(r, forKey: AnyKey("rig")) }
         if let s = subtitleColor { try c.encode(s, forKey: AnyKey("subtitleColor")) }
-        try c.encode(x, forKey: AnyKey("x"))
-        try c.encode(y, forKey: AnyKey("y"))
-        try c.encode(scale, forKey: AnyKey("scale"))
-        try c.encode(flip, forKey: AnyKey("flip"))
-        try c.encode(alwaysShow, forKey: AnyKey("alwaysShow"))
+        if legacyKeys.contains("x") || x != 0.5 { try c.encode(x, forKey: AnyKey("x")) }
+        if legacyKeys.contains("y") || y != 0.72 { try c.encode(y, forKey: AnyKey("y")) }
+        if legacyKeys.contains("scale") || scale != 1 { try c.encode(scale, forKey: AnyKey("scale")) }
+        if legacyKeys.contains("flip") || flip { try c.encode(flip, forKey: AnyKey("flip")) }
+        if legacyKeys.contains("alwaysShow") || !alwaysShow { try c.encode(alwaysShow, forKey: AnyKey("alwaysShow")) }
     }
 }
 
@@ -300,7 +312,9 @@ public struct ClipType: RawRepresentable, Codable, Hashable, Sendable {
     public static let compound = ClipType(rawValue: "compound")
     /// 図形: 素材を持たず、四角・楕円・線・矢印・星を描く(`Figure`)。位置・大きさは x・y・w・h でキーフレームにできる。
     public static let shape = ClipType(rawValue: "shape")
-    public static let known: [ClipType] = [.image, .video, .audio, .text, .voice, .blur, .adjustment, .visualizer, .compound, .shape]
+    /// 立ち絵クリップ: 立ち絵素材(`Clip.tachieId`)を、口・まばたき・表情・バウンスを声に連動させて描く。位置・大きさ・キーフレーム・トランジション・エフェクトは普通のクリップと同じ。
+    public static let tachie = ClipType(rawValue: "tachie")
+    public static let known: [ClipType] = [.image, .video, .audio, .text, .voice, .blur, .adjustment, .visualizer, .compound, .shape, .tachie]
     public var isKnown: Bool { Self.known.contains(self) }
 
     public init(from decoder: Decoder) throws {
@@ -409,9 +423,17 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var note: String? = nil
     /// クリップ単位のロック。true のときだけファイルに書く(移動・トリム・分割・削除・プロパティ編集を断る。`LayerEditing`)。
     public var locked: Bool? = nil
+    /// 字幕に出す文(ボイスクリップ)。無いときは読み上げる文 `text` が字幕。空文字は「字幕なし」。読み上げ(口パクの母音判定を含む)は常に `text`。
+    public var subtitleText: String? = nil
+    /// 立ち絵クリップの素材(`Project.tachies` の id)。
+    public var tachieId: String? = nil
+    /// 立ち絵クリップの「口を動かす声」。無いときは `.all`(ファイルには書かない)。
+    public var mouthDrive: MouthDrive? = nil
+    /// 立ち絵クリップ: true のとき、連動する声が出ている間だけ描く(旧キャラクターの「常に表示」オフの移行用)。true のときだけ書く。
+    public var speakingOnly: Bool? = nil
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["id", "type", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "bokehShape", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "frameFlow", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "valueRef", "duck", "visualizer", "stabilize", "tracks", "mask", "figure", "note", "locked"]
+    static let knownKeys: Set<String> = ["id", "type", "subtitleText", "tachieId", "mouthDrive", "speakingOnly", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "bokehShape", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "frameFlow", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "valueRef", "duck", "visualizer", "stabilize", "tracks", "mask", "figure", "note", "locked"]
 
     public init() {}
 
@@ -567,6 +589,19 @@ public struct Clip: Codable, Equatable, Identifiable {
         if let raw: JSONValue = l.value("figure") {
             if let v: Figure = l.value("figure") { figure = v } else { extra["figure"] = raw }
         }
+        // 字幕の文・立ち絵クリップの項目: 型が違って読めなければ捨てずに書き戻す
+        subtitleText = l.string("subtitleText")
+        tachieId = l.string("tachieId")
+        if let raw: JSONValue = l.value("mouthDrive") {
+            if let s: String = l.value("mouthDrive"), let d = MouthDrive(raw: s) { mouthDrive = d == .all ? nil : d }
+            else { extra["mouthDrive"] = raw }
+        }
+        if let raw: JSONValue = l.value("speakingOnly") {
+            if l.bool("speakingOnly") == true { speakingOnly = true } else { extra["speakingOnly"] = raw }
+        }
+        for (key, ok) in [("subtitleText", subtitleText != nil), ("tachieId", tachieId != nil)] where !ok {
+            if let raw: JSONValue = l.value(key) { extra[key] = raw }
+        }
         if let raw: JSONValue = l.value("visualizer") {
             if let v: Visualizer = l.value("visualizer") { visualizer = v } else { extra["visualizer"] = raw }
         }
@@ -651,6 +686,10 @@ public struct Clip: Codable, Equatable, Identifiable {
         if let f = figure?.normalized { try c.encode(f, forKey: AnyKey("figure")) }
         if let n = note, !n.isEmpty { try c.encode(n, forKey: AnyKey("note")) }
         if locked == true { try c.encode(true, forKey: AnyKey("locked")) }
+        try c.encodeIfPresent(subtitleText, forKey: AnyKey("subtitleText"))
+        try c.encodeIfPresent(tachieId, forKey: AnyKey("tachieId"))
+        if let d = mouthDrive, d != .all { try c.encode(d.raw, forKey: AnyKey("mouthDrive")) }
+        if speakingOnly == true { try c.encode(true, forKey: AnyKey("speakingOnly")) }
         if let t = tracks { try c.encode(t, forKey: AnyKey("tracks")) }
         try c.encodeIfPresent(mask, forKey: AnyKey("mask"))
         if let s = stabilize, s > 0 { try c.encode(min(s, 1), forKey: AnyKey("stabilize")) }
