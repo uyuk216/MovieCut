@@ -99,7 +99,7 @@ case "project-info" where args.count == 2:
     // project-info <file>: プロジェクトの中身(クリップ・長さ・キャラ・セリフ)を JSON で出す。読み取り専用(外部の AI が中身を見る用)
     do { print(try ProjectInfo.json(try Project.load(from: URL(fileURLWithPath: args[1])))) } catch { fail("読めませんでした: \(error)") }
 case "ai" where args.count >= 2 && args[1] == "script":
-    // ai script --theme T [--chars 霊夢,魔理沙] [--lines 12] --provider-cmd "claude -p" [--timeout 120] [--out file] [--show-prompt]
+    // ai script --theme T [--chars キャラ1,キャラ3] [--lines 12] --provider-cmd "claude -p" [--timeout 120] [--out file] [--show-prompt]
     // 実行したときだけ 1 回問い合わせる。クラウドの鍵は扱わない。台本の行(「名前: セリフ」)を stdout か --out に出す。
     guard let theme = optValue("--theme"), !theme.trimmingCharacters(in: .whitespaces).isEmpty else { fail("--theme が必要です") }
     let names = optValue("--chars").map { $0.split(whereSeparator: { $0 == "," || $0 == "、" }).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty } } ?? Project.new().characters.map(\.name)
@@ -512,7 +512,7 @@ case "deps":
     print("voicevoxInstalled: \(st.voicevoxInstalled)\nvoicevoxRunning: \(st.voicevoxRunning)\naquestalkPlayerInstalled: \(st.aquestalkPlayerInstalled)")
     for n in st.notice { print("notice: " + n) }
 case "script" where args.count >= 2:
-    // script <script.txt> --out <out.ymproj>: 台本ファイルから実際の声でプロジェクトを作る(既定キャラ=霊夢)
+    // script <script.txt> --out <out.ymproj>: 台本ファイルから実際の声でプロジェクトを作る(既定キャラ=キャラ1)
     guard let outPath = optValue("--out") else { fail("--out が必要です") }
     do {
         var p = Project.new()
@@ -548,7 +548,7 @@ case "genclips" where args.count == 3:
     guard let n = Int(args[1]), n > 0 else { fail("N は正の整数") }
     var p = Project.new()
     for _ in 0..<5 { p.tracks.append(Track(name: "レイヤー\(p.tracks.count + 1)")) }
-    let names = ["霊夢", "魔理沙", "ずんだもん"]
+    let names = ["キャラ1", "キャラ3", "キャラ2"]
     for i in 0..<n {
         var c = Clip()
         let lane = i % p.tracks.count
@@ -666,5 +666,5 @@ case "smoke":
         try await runExport(p, to: URL(fileURLWithPath: outPath))
     } catch { fail("書き出せませんでした: \(error.localizedDescription)") }
 default:
-    fail("usage:\n  moviecut-cli info <file.ymproj>\n  moviecut-cli new <out.ymproj>\n  moviecut-cli export <in.mcpjc> <out.mp4|out.m4a> [--range a:b|project] [--preset youtube1080|youtube1080p60|youtube4k|short|shorts|tiktok|reels|x720|x1080|light|audio|<保存したプリセット名>] [--bitrate 8(Mbps)] [--size WxH] [--fps 29.97] [--codec h264|hevc|prores422|prores4444] [--bg #rrggbb|transparent]\n  moviecut-cli smoke --out <mp4> [--size WxH] [--fps 23.976] [--codec h264|hevc] [--blur] [--tone] [--save-project p.ymproj]\n  moviecut-cli speak (--voicevox <id> [--speed --pitch --intonation] | --voice <preset> [--speed]) --text <t> --out <wav>\n  moviecut-cli speakers | deps | script <script.txt> --out <p.ymproj>\n  moviecut-cli rig-frame <フォルダ|.psd> --out <png> [--mouth あ|い|う|え|お|open|closed] [--blink] [--pick 眉=2,目=5] [--expr 名前] [--height 1080] [--bench N] [--list]\n  moviecut-cli migrate <旧形式.mcpjc> <出力.mcpjc>   (キャラの立ち絵を立ち絵素材+クリップへ移す)\n  moviecut-cli psd-info <file.psd>\n  moviecut-cli frame <in.ymproj> --t <sec> --out <png|jpg> [--size WxH] [--bench N]\n  moviecut-cli gif <in.mcpjc> --out <x.gif> [--fps 10] [--width 480] [--range a:b|project]\n  moviecut-cli apng <in.mcpjc> --out <x.png> [--fps 15] [--width 480] [--loop 0] [--bg transparent] [--range a:b|project]\n  moviecut-cli sequence <in.mcpjc> --out <dir> [--format png|jpeg] [--name base] [--range a:b|project] [--fps 30] [--size WxH]\n  moviecut-cli addvideo <in.ymproj> <clip.mp4> <out.ymproj>\n  moviecut-cli genclips <N> <out.ymproj>\n  moviecut-cli silence <project|media> [--threshold -40] [--min 0.4] [--pad 0.1]\n  moviecut-cli beats <project|media> [--all]\n  moviecut-cli subs <project> --out <x.srt|x.vtt>\n  moviecut-cli transcribe <media|project> --out <x.srt|x.vtt> [--clip 0] [--locale ja-JP]\n  moviecut-cli chapters <project> [--color red|orange|yellow|green|blue|purple|gray|teal]\n  moviecut-cli loudness <project> [--range a:b|project]\n  moviecut-cli project-info <project>   (JSON。読み取り専用)\n  moviecut-cli ai script --theme <t> [--chars 霊夢,魔理沙] [--lines 12] --provider-cmd \"claude -p\" [--timeout 120] [--out x.txt] [--show-prompt]")
+    fail("usage:\n  moviecut-cli info <file.ymproj>\n  moviecut-cli new <out.ymproj>\n  moviecut-cli export <in.mcpjc> <out.mp4|out.m4a> [--range a:b|project] [--preset youtube1080|youtube1080p60|youtube4k|short|shorts|tiktok|reels|x720|x1080|light|audio|<保存したプリセット名>] [--bitrate 8(Mbps)] [--size WxH] [--fps 29.97] [--codec h264|hevc|prores422|prores4444] [--bg #rrggbb|transparent]\n  moviecut-cli smoke --out <mp4> [--size WxH] [--fps 23.976] [--codec h264|hevc] [--blur] [--tone] [--save-project p.ymproj]\n  moviecut-cli speak (--voicevox <id> [--speed --pitch --intonation] | --voice <preset> [--speed]) --text <t> --out <wav>\n  moviecut-cli speakers | deps | script <script.txt> --out <p.ymproj>\n  moviecut-cli rig-frame <フォルダ|.psd> --out <png> [--mouth あ|い|う|え|お|open|closed] [--blink] [--pick 眉=2,目=5] [--expr 名前] [--height 1080] [--bench N] [--list]\n  moviecut-cli migrate <旧形式.mcpjc> <出力.mcpjc>   (キャラの立ち絵を立ち絵素材+クリップへ移す)\n  moviecut-cli psd-info <file.psd>\n  moviecut-cli frame <in.ymproj> --t <sec> --out <png|jpg> [--size WxH] [--bench N]\n  moviecut-cli gif <in.mcpjc> --out <x.gif> [--fps 10] [--width 480] [--range a:b|project]\n  moviecut-cli apng <in.mcpjc> --out <x.png> [--fps 15] [--width 480] [--loop 0] [--bg transparent] [--range a:b|project]\n  moviecut-cli sequence <in.mcpjc> --out <dir> [--format png|jpeg] [--name base] [--range a:b|project] [--fps 30] [--size WxH]\n  moviecut-cli addvideo <in.ymproj> <clip.mp4> <out.ymproj>\n  moviecut-cli genclips <N> <out.ymproj>\n  moviecut-cli silence <project|media> [--threshold -40] [--min 0.4] [--pad 0.1]\n  moviecut-cli beats <project|media> [--all]\n  moviecut-cli subs <project> --out <x.srt|x.vtt>\n  moviecut-cli transcribe <media|project> --out <x.srt|x.vtt> [--clip 0] [--locale ja-JP]\n  moviecut-cli chapters <project> [--color red|orange|yellow|green|blue|purple|gray|teal]\n  moviecut-cli loudness <project> [--range a:b|project]\n  moviecut-cli project-info <project>   (JSON。読み取り専用)\n  moviecut-cli ai script --theme <t> [--chars キャラ1,キャラ3] [--lines 12] --provider-cmd \"claude -p\" [--timeout 120] [--out x.txt] [--show-prompt]")
 }

@@ -104,8 +104,8 @@ enum MenuCommand: Hashable {
     case pip(PipCorner)
     // 速度・逆再生・フリーズフレーム
     case speed(Double), toggleReverse, freezeFrame
-    // 音声(ノーマライズ・音量の段階・ボイス向けプリセット・エフェクトを外す)
-    case audioNormalize, audioVolumeUp, audioVolumeDown, audioVoicePreset, audioClear
+    // 音声(ノーマライズ・音量の段階・エフェクトを外す)
+    case audioNormalize, audioVolumeUp, audioVolumeDown, audioClear
     // 無音カット(シートを開く)と、BGM の自動ダッキングの切り替え
     case silenceCut, fillerCut, transcriptEdit, audioDuckToggle, audioAutoSync
     // ビートにマーカーを打つ(選んでいる音のクリップ。ショートカットは持たない)
@@ -1142,7 +1142,6 @@ enum AppMenuSpec {
         return [MenuItemSpec(command: .audioNormalize, title: "ノーマライズ（ピーク −1 dB）", shortcut: nil, enabled: on, checked: nil),
                 MenuItemSpec(command: .audioVolumeUp, title: "音量を上げる（+3 dB）", shortcut: nil, enabled: on, checked: nil),
                 MenuItemSpec(command: .audioVolumeDown, title: "音量を下げる（−3 dB）", shortcut: nil, enabled: on, checked: nil),
-                MenuItemSpec(command: .audioVoicePreset, title: "ボイス向けプリセット（EQ + コンプレッサー）", shortcut: nil, enabled: on, checked: nil),
                 MenuItemSpec(command: .audioDuckToggle, title: "自動ダッキングを切り替え（声があるとき BGM を下げる）", shortcut: nil, enabled: s.canEdit && s.canDuck, checked: s.canDuck ? s.isDucking : nil),
                 MenuItemSpec(command: .audioClear, title: "音声エフェクトをすべて外す", shortcut: nil, enabled: s.canEdit && s.hasAudioFx, checked: nil)]
     }
@@ -1474,7 +1473,6 @@ enum AppMenu {
             case .audioNormalize: m.normalizePeakSelected()
             case .audioVolumeUp: m.stepVolumeSelected(db: 3)
             case .audioVolumeDown: m.stepVolumeSelected(db: -3)
-            case .audioVoicePreset: m.applyVoicePresetSelected()
             case .audioClear: m.clearAudioFxSelected()
             case .audioDuckToggle: m.toggleDuckSelected()
             case .stabilizeToggle: m.toggleStabilizeSelected()

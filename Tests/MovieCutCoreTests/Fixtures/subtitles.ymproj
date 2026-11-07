@@ -4,7 +4,7 @@
   "fps": 30,
   "bg": "#000000",
   "codec": "h264",
-  "characters": [{ "id": "c1", "name": "霊夢", "engine": "aquestalk", "color": "#e8384f" }],
+  "characters": [{ "id": "c1", "name": "キャラ1", "engine": "aquestalk", "color": "#e8384f" }],
   "tracks": [
     {
       "id": "t1",

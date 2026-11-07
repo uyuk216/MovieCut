@@ -111,7 +111,7 @@ final class ProjectModelTests: XCTestCase {
         let m = makeModel()
         var fitted = 0
         m.onFitTimeline = { fitted += 1 }
-        await m.generateVoices(from: "霊夢: こんにちは\nずんだもん: こんばんは\n\n   \n名無し: 誰が読む")
+        await m.generateVoices(from: "キャラ1: こんにちは\nキャラ2: こんばんは\n\n   \n名無し: 誰が読む")
         let clips = m.project.allClips.filter { $0.type == .voice }
         XCTAssertEqual(clips.count, 3)
         XCTAssertEqual(m.statusText, "3 個のセリフを並べました")
@@ -140,7 +140,7 @@ final class ProjectModelTests: XCTestCase {
         }
         let m = makeModel()
         m.voiceProviderFactory = { _ in Failing() }
-        await m.generateVoices(from: "霊夢: だめ")
+        await m.generateVoices(from: "キャラ1: だめ")
         XCTAssertEqual(m.errorMessage, "テスト失敗")
         XCTAssertEqual(m.project.allClips.count, 0)
         XCTAssertFalse(m.effectiveUndoManager.canUndo)
@@ -151,7 +151,7 @@ final class ProjectModelTests: XCTestCase {
         let m = makeModel()
         m.applyVideoSize(640, 360)
         m.edit("fps") { $0.fps = 30 }
-        await m.generateVoices(from: "霊夢: 一つ目\nずんだもん: 二つ目")
+        await m.generateVoices(from: "キャラ1: 一つ目\nキャラ2: 二つ目")
         XCTAssertFalse(m.project.allClips.isEmpty)
         let out = FileManager.default.temporaryDirectory.appendingPathComponent("ye-model-\(UUID().uuidString).mp4")
         defer { try? FileManager.default.removeItem(at: out) }

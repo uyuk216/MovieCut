@@ -173,9 +173,9 @@ final class TimelineQueryTests: XCTestCase {
     func testScriptNoteLinesAreNotSpoken() {
         let chars = Character.defaults()
         XCTAssertTrue(ScriptTimeline.isNote(line: "  ※ 間を長めに"))
-        XCTAssertFalse(ScriptTimeline.isNote(line: "霊夢: ※はセリフの中でも普通の文字"))
+        XCTAssertFalse(ScriptTimeline.isNote(line: "キャラ1: ※はセリフの中でも普通の文字"))
         XCTAssertNil(ScriptTimeline.parse(line: "※ ここは作業メモ", characters: chars, selectedCharId: chars[0].id))
-        let spoken = ScriptTimeline.parse(line: "ずんだもん: こんにちは", characters: chars, selectedCharId: chars[0].id)
+        let spoken = ScriptTimeline.parse(line: "キャラ2: こんにちは", characters: chars, selectedCharId: chars[0].id)
         XCTAssertEqual(spoken?.1, "こんにちは")
     }
 }

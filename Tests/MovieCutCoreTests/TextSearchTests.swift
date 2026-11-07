@@ -15,7 +15,7 @@ final class TextSearchTests: XCTestCase {
     /// 1 レイヤーに文字とボイス、もう 1 レイヤーにも文字。
     private func project() -> Project {
         var p = Project.new()
-        p.tracks[0].clips = [text("t1", "霊夢と魔理沙"), voice("v1", "霊夢です。よろしく霊夢", start: 3)]
+        p.tracks[0].clips = [text("t1", "キャラ1とキャラ3"), voice("v1", "キャラ1です。よろしくキャラ1", start: 3)]
         p.tracks[1].clips = [text("t2", "Reimu and reimu", start: 0), text("t3", "なし")]
         return p
     }
@@ -28,11 +28,11 @@ final class TextSearchTests: XCTestCase {
     }
 
     func testMatchesCountAcrossTextAndVoiceClipsWithoutOverlap() {
-        let ms = TextSearch.matches("霊夢", in: project())
-        // t1 に 1 つ、v1 に 2 つ(「霊夢です」「よろしく霊夢」)
+        let ms = TextSearch.matches("キャラ1", in: project())
+        // t1 に 1 つ、v1 に 2 つ(「キャラ1です」「よろしくキャラ1」)
         XCTAssertEqual(ms.map(\.clipId), ["t1", "v1", "v1"])
-        XCTAssertEqual(ms[1], TextSearch.Match(clipId: "v1", location: 0, length: 2))
-        XCTAssertEqual(ms[2], TextSearch.Match(clipId: "v1", location: 9, length: 2))
+        XCTAssertEqual(ms[1], TextSearch.Match(clipId: "v1", location: 0, length: 4))
+        XCTAssertEqual(ms[2], TextSearch.Match(clipId: "v1", location: 11, length: 4))
     }
 
     func testNonOverlappingLeftToRight() {
@@ -56,16 +56,16 @@ final class TextSearchTests: XCTestCase {
         XCTAssertEqual(TextSearch.matches("reimu", in: project(), scope: scope).map(\.clipId), ["t2", "t2"])
         let r = TextSearch.replaceAll("reimu", with: "Ruby", in: project(), scope: scope)
         XCTAssertEqual(r.changes.map(\.clipId), ["t2"])
-        XCTAssertEqual(r.project.allClips.first { $0.id == "t1" }?.text, "霊夢と魔理沙")
-        XCTAssertEqual(r.project.allClips.first { $0.id == "v1" }?.text, "霊夢です。よろしく霊夢")
+        XCTAssertEqual(r.project.allClips.first { $0.id == "t1" }?.text, "キャラ1とキャラ3")
+        XCTAssertEqual(r.project.allClips.first { $0.id == "v1" }?.text, "キャラ1です。よろしくキャラ1")
     }
 
     func testReplaceAllMarksVoiceChangesAndKeepsOthers() {
-        let r = TextSearch.replaceAll("霊夢", with: "霊夢さん", in: project())
+        let r = TextSearch.replaceAll("キャラ1", with: "キャラ1さん", in: project())
         XCTAssertEqual(r.count, 3)
         XCTAssertEqual(r.changes, [
-            TextSearch.Change(clipId: "t1", text: "霊夢さんと魔理沙", isVoice: false),
-            TextSearch.Change(clipId: "v1", text: "霊夢さんです。よろしく霊夢さん", isVoice: true),
+            TextSearch.Change(clipId: "t1", text: "キャラ1さんとキャラ3", isVoice: false),
+            TextSearch.Change(clipId: "v1", text: "キャラ1さんです。よろしくキャラ1さん", isVoice: true),
         ])
         XCTAssertEqual(r.project.allClips.first { $0.id == "t3" }?.text, "なし")
     }
@@ -73,7 +73,7 @@ final class TextSearchTests: XCTestCase {
     func testNoOpReplacementChangesNothing() {
         // 同じ文字に置き換えても、何も変わらない(Undo に載せない判定の元)
         let p = project()
-        let r = TextSearch.replaceAll("霊夢", with: "霊夢", in: p)
+        let r = TextSearch.replaceAll("キャラ1", with: "キャラ1", in: p)
         XCTAssertTrue(r.changes.isEmpty)
         XCTAssertEqual(r.count, 0)
         XCTAssertEqual(r.project, p)

@@ -238,7 +238,7 @@ public enum RigNaming {
         ("尻尾", ["尻尾", "しっぽ", "シッポ", "tail"]),
         ("腕", ["腕", "手", "arm", "hand"]),
         ("エフェクト", ["エフェクト", "effect"]),
-        ("体", ["体", "身体", "body", "霊夢正面", "ver"]),
+        ("体", ["体", "身体", "body", "正面", "ver"]),
     ]
 
     public static func slotName(for text: String) -> String? {

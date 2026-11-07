@@ -56,15 +56,6 @@ extension ProjectModel {
     }
 
     @discardableResult
-    func applyVoicePresetSelected() -> Bool {
-        guard let c = audioTarget(nil) else { return false }
-        var probe = c
-        guard AudioFxEditing.applyVoicePreset(&probe) else { return false }
-        setClipProperty({ _ = AudioFxEditing.applyVoicePreset(&$0) }, name: "ボイス向けプリセット", clipId: c.id)
-        return true
-    }
-
-    @discardableResult
     func clearAudioFxSelected() -> Bool {
         guard let c = audioTarget(nil), AudioFxEditing.hasAnyFx(c) else { return false }
         setClipProperty({ _ = AudioFxEditing.clearAll(&$0) }, name: "音声エフェクトをすべて外す", clipId: c.id)

@@ -87,20 +87,20 @@ final class PartAWiringTests: XCTestCase {
     // MARK: 表情画像の欠落(台本)
 
     func testMissingInScriptWarnsOnlyForUsedAbsentTags() {
-        var reimu = MovieCutCore.Character(); reimu.id = "r"; reimu.name = "霊夢"
+        var reimu = MovieCutCore.Character(); reimu.id = "r"; reimu.name = "キャラ1"
         reimu.expressions = ["笑顔": "/c/smile.png", "怒り": "/c/angry.png"]
-        var marisa = MovieCutCore.Character(); marisa.id = "m"; marisa.name = "魔理沙"
+        var marisa = MovieCutCore.Character(); marisa.id = "m"; marisa.name = "キャラ3"
         marisa.expressions = ["喜び": "/c/joy.png"]
-        let text = "霊夢: [笑顔]こんにちは\n霊夢: [怒り]待って\n魔理沙: [喜び]やった\n霊夢: [怒り]もう一回\n霊夢: [未登録]ふつう\n※ 霊夢: [怒り]メモ"
+        let text = "キャラ1: [笑顔]こんにちは\nキャラ1: [怒り]待って\nキャラ3: [喜び]やった\nキャラ1: [怒り]もう一回\nキャラ1: [未登録]ふつう\n※ キャラ1: [怒り]メモ"
         let present: Set<String> = ["/c/smile.png", "/c/joy.png"]
-        XCTAssertEqual(CharacterPartCheck.missingInScript(text, characters: [reimu, marisa]) { present.contains($0) }, ["霊夢: 怒り"],
+        XCTAssertEqual(CharacterPartCheck.missingInScript(text, characters: [reimu, marisa]) { present.contains($0) }, ["キャラ1: 怒り"],
                        "同じ表情は 1 回、登録の無い表情・メモ行は警告しない")
     }
 
     func testMissingInScriptUsesFirstCharacterWhenNoName() {
-        var reimu = MovieCutCore.Character(); reimu.id = "r"; reimu.name = "霊夢"
+        var reimu = MovieCutCore.Character(); reimu.id = "r"; reimu.name = "キャラ1"
         reimu.expressions = ["怒り": "/c/angry.png"]
-        XCTAssertEqual(CharacterPartCheck.missingInScript("[怒り]名前なし", characters: [reimu]) { _ in false }, ["霊夢: 怒り"])
+        XCTAssertEqual(CharacterPartCheck.missingInScript("[怒り]名前なし", characters: [reimu]) { _ in false }, ["キャラ1: 怒り"])
         XCTAssertEqual(CharacterPartCheck.missingInScript("", characters: [reimu]) { _ in false }, [])
         XCTAssertEqual(CharacterPartCheck.missingInScript("[怒り]x", characters: []) { _ in false }, [])
     }

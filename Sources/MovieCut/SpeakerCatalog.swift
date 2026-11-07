@@ -23,7 +23,7 @@ final class SpeakerCatalog: ObservableObject {
         self.fetch = fetch
     }
 
-    /// 「ずんだもん（ノーマル）」。一覧に無ければ nil。
+    /// 「キャラ2（ノーマル）」。一覧に無ければ nil。
     func label(for speaker: Int) -> String? { labels[speaker] }
 
     /// 読み込む。同じ URL で読み込み済み・読み込み中なら何もしない。つながらなかったときは次に呼ばれたとき再挑戦する。

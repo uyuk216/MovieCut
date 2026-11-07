@@ -9,7 +9,7 @@ final class TachieAppTests: XCTestCase {
 
     private func model() -> (ProjectModel, String) {
         let m = ProjectModel(project: Project.new())
-        var t = Tachie(name: "霊夢"); t.id = "t1"; t.imgClosed = "/a.png"
+        var t = Tachie(name: "キャラ1"); t.id = "t1"; t.imgClosed = "/a.png"
         t.rig = CharacterRig(slots: [RigSlot(name: "体", parts: ["/b.png"], active: 0)])
         _ = m.addTachie(t)
         return (m, "t1")
@@ -18,8 +18,8 @@ final class TachieAppTests: XCTestCase {
     func testAddRenameRemoveAreOneUndoStepEach() {
         let (m, id) = model()
         XCTAssertEqual(m.project.tachies.count, 1); XCTAssertEqual(undoSteps(m), 1)
-        m.renameTachie(id: id, to: "霊夢"); XCTAssertEqual(undoSteps(m), 1, "同じ名前は履歴に載せない")
-        m.renameTachie(id: id, to: "霊夢2"); XCTAssertEqual(undoSteps(m), 2)
+        m.renameTachie(id: id, to: "キャラ1"); XCTAssertEqual(undoSteps(m), 1, "同じ名前は履歴に載せない")
+        m.renameTachie(id: id, to: "キャラ12"); XCTAssertEqual(undoSteps(m), 2)
         var dup = Tachie(name: "x"); dup.id = id
         XCTAssertNil(m.addTachie(dup)); XCTAssertEqual(undoSteps(m), 2)
         let cid = m.addTachieClip(tachieId: id, start: 1, duration: 2)

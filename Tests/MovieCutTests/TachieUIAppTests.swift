@@ -24,7 +24,7 @@ final class TachieUIAppTests: XCTestCase {
     private func model(locked: Bool = false) throws -> ProjectModel {
         var p = Project.new()
         p.width = 1280; p.height = 720
-        var t = Tachie(name: "霊夢"); t.id = "t"; t.imgClosed = try writePNG()
+        var t = Tachie(name: "キャラ1"); t.id = "t"; t.imgClosed = try writePNG()
         p.tachies = [t]
         var c = TachieEditing.makeClip(p, tachieId: "t", start: 0, duration: 4)!
         c.id = "tc"; c.x = 0.5; c.y = 0.5

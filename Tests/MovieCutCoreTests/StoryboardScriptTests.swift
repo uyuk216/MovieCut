@@ -101,19 +101,19 @@ final class StoryboardScriptTests: XCTestCase {
 
     func testVoiceScriptSortsByStartAndSkipsIncomplete() {
         var p = Project.new()
-        p.characters = [character("a", "霊夢"), character("b", "魔理沙")]
+        p.characters = [character("a", "キャラ1"), character("b", "キャラ3")]
         var text = Clip(); text.id = "x"; text.type = .text; text.text = "字幕ではない"; text.start = 0; text.duration = 1; text.fontSize = 40
         p.tracks[0].clips = [voice("v2", 2, char: "a", text: "[笑顔]こんにちは"), voice("v1", 0, char: "b", text: "やあ"),
                              voice("v3", 3, char: "zz", text: "知らない人"), voice("v4", 4, char: "a", text: "   "), text]
         let r = VoiceScriptExport.make(p)
-        XCTAssertEqual(r.text, "魔理沙: やあ\n霊夢: [笑顔]こんにちは")
+        XCTAssertEqual(r.text, "キャラ3: やあ\nキャラ1: [笑顔]こんにちは")
         XCTAssertEqual(r.lineCount, 2)
         XCTAssertEqual(r.skipped, 2, "キャラが無いものと、セリフが空のもの")
     }
 
     func testVoiceScriptLinesReadBackToSameCharactersAndText() {
         var p = Project.new()
-        p.characters = [character("a", "霊夢"), character("b", "魔理沙")]
+        p.characters = [character("a", "キャラ1"), character("b", "キャラ3")]
         p.tracks[0].clips = [voice("v1", 0, char: "b", text: "やあ"), voice("v2", 2, char: "a", text: "[笑顔]こんにちは")]
         let r = VoiceScriptExport.make(p)
         let lines = r.text.components(separatedBy: "\n")

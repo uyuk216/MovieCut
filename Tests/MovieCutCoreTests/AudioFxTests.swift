@@ -447,8 +447,6 @@ final class AudioFxTests: XCTestCase {
         // 対応しないクリップ
         var img = Clip(); img.type = .image
         XCTAssertFalse(AudioFxEditing.setPan(&img, 0.5)); XCTAssertFalse(AudioFxEditing.normalizePeak(&img))
-        var fr = clip("/v.mp4", duration: 1, type: .video); fr.freeze = true
-        XCTAssertFalse(AudioFxEditing.applyVoicePreset(&fr))
     }
 
     func testVolumeStepAndPresetsAndClear() {
@@ -464,9 +462,6 @@ final class AudioFxTests: XCTestCase {
         XCTAssertTrue(AudioFxEditing.stepVolume(&c, db: 6))
         XCTAssertEqual(c.keyframes["volume"]!.map(\.v)[0], 0.998, accuracy: 0.002)
         XCTAssertEqual(c.volume, 1)                                                // キーがあるときは設定値を触らない
-        XCTAssertTrue(AudioFxEditing.applyVoicePreset(&c))
-        XCTAssertFalse(AudioFxEditing.applyVoicePreset(&c))
-        XCTAssertTrue(c.audioFx!.eq!.isActive); XCTAssertTrue(c.audioFx!.compressor!.isActive)
         AudioFxEditing.setPan(&c, 0.5)
         XCTAssertTrue(AudioFxEditing.clearAll(&c))
         XCTAssertNil(c.audioFx); XCTAssertNil(c.pan)

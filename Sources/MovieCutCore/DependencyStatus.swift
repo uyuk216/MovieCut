@@ -19,7 +19,7 @@ public struct DependencyStatus: Equatable {
     public var notice: [String] {
         var n: [String] = []
         if !voicevoxInstalled && !voicevoxRunning {
-            n.append("VOICEVOX が見つかりません。ずんだもんなどの声を使うには VOICEVOX をインストールしてください: \(Self.voicevoxURL)")
+            n.append("VOICEVOX が見つかりません。キャラ2などの声を使うには VOICEVOX をインストールしてください: \(Self.voicevoxURL)")
         }
         if !aquestalkPlayerInstalled {
             n.append("AquesTalkPlayer が見つかりません。ゆっくり音声は macOS の「Kyoko」で代用します。本物のゆっくり音声を使うには AquesTalkPlayer をインストールしてください: \(Self.aquestalkURL)")

@@ -133,7 +133,7 @@ Unless the permit expressly allows it, a modified version or fork must not use t
 
 The software does not include any third-party engines. It only calls software that you install separately, including VOICEVOX and AquesTalkPlayer (A-quest). These are not covered by this license. You must follow their own terms yourself. In particular:
 - Commercial or monetized use of AquesTalk voices requires a commercial license that you buy from A-quest.
-- VOICEVOX characters require credit such as "VOICEVOX:ずんだもん", and each character has its own terms.
+- VOICEVOX characters require credit such as "VOICEVOX:キャラクター名", and each character has its own terms.
 - Check the official terms of every engine and voice you use. See docs/第三者の規約.md.
 
 ## A6. No warranty

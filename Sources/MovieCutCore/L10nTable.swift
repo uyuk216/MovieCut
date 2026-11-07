@@ -119,7 +119,6 @@ enum L10nTable {
         "フリーズフレーム（静止画にする）": "Freeze Frame",
         "プロキシで編集": "Edit with Proxies",
         "プロキシを作成": "Create Proxies",
-        "ボイス向けプリセット（EQ + コンプレッサー）": "Voice Preset (EQ + Compressor)",
         "マルチカメラを作る…": "Create Multicam…",
         "マルチカメラ切替…": "Switch Multicam…",
         "マーカーを削除": "Delete Marker",

@@ -48,7 +48,7 @@ final class CharacterRigTests: XCTestCase {
     // MARK: 保存形式
 
     func testRigRoundTripKeepsUnknownKeysAndOmitsWhenAbsent() throws {
-        var c = Character(); c.name = "霊夢"
+        var c = Character(); c.name = "キャラ1"
         XCTAssertFalse(String(decoding: try JSONEncoder().encode(c), as: UTF8.self).contains("\"rig\""), "リグが無ければ書かない")
         c.rig = sampleRig()
         c.rig?.extra["future"] = .string("x")
@@ -92,7 +92,7 @@ final class CharacterRigTests: XCTestCase {
         XCTAssertEqual(RigNaming.slotName(for: "正面A：眉 (1)"), "眉")
         XCTAssertEqual(RigNaming.slotName(for: "正面A口"), "口")
         XCTAssertEqual(RigNaming.slotName(for: "正面：頬"), "頬")
-        XCTAssertEqual(RigNaming.slotName(for: "霊夢正面ver1 (2)"), "体")
+        XCTAssertEqual(RigNaming.slotName(for: "キャラ1正面ver1 (2)"), "体")
         XCTAssertEqual(RigNaming.slotName(for: "尻尾 (3)"), "尻尾")
         XCTAssertNil(RigNaming.slotName(for: "ふつうの名前"))
     }
@@ -269,7 +269,7 @@ final class CharacterRigTests: XCTestCase {
 
     func rigProject(rig: CharacterRig, h: Int = 100) -> Project {
         var p = Project(); p.width = 200; p.height = h; p.bg = "#000000"; p.tracks = []
-        var c = Character(); c.id = "reimu"; c.name = "霊夢"; c.x = 0.5; c.y = 0.5; c.scale = 1; c.rig = rig
+        var c = Character(); c.id = "reimu"; c.name = "キャラ1"; c.x = 0.5; c.y = 0.5; c.scale = 1; c.rig = rig
         p.characters = [c]
         return p
     }

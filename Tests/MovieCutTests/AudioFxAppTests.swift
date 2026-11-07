@@ -134,15 +134,14 @@ final class AudioFxAppTests: XCTestCase {
     func testMenuSpec() {
         let on = state { $0.canAudioFx = true; $0.hasAudioFx = true; $0.canDuck = true }
         let items = AppMenuSpec.audioItems(on)
-        XCTAssertEqual(items.map(\.title), ["ノーマライズ（ピーク −1 dB）", "音量を上げる（+3 dB）", "音量を下げる（−3 dB）", "ボイス向けプリセット（EQ + コンプレッサー）", "自動ダッキングを切り替え（声があるとき BGM を下げる）", "音声エフェクトをすべて外す"])
-        XCTAssertEqual(items.map(\.command), [.audioNormalize, .audioVolumeUp, .audioVolumeDown, .audioVoicePreset, .audioDuckToggle, .audioClear])
+        XCTAssertEqual(items.map(\.title), ["ノーマライズ（ピーク −1 dB）", "音量を上げる（+3 dB）", "音量を下げる（−3 dB）", "自動ダッキングを切り替え（声があるとき BGM を下げる）", "音声エフェクトをすべて外す"])
+        XCTAssertEqual(items.map(\.command), [.audioNormalize, .audioVolumeUp, .audioVolumeDown, .audioDuckToggle, .audioClear])
         XCTAssertTrue(items.allSatisfy { $0.enabled && $0.shortcut == nil })
-        XCTAssertEqual(AppMenuSpec.audioItems(state()).map(\.enabled), [false, false, false, false, false, false])
-        XCTAssertEqual(AppMenuSpec.audioItems(state { $0.canAudioFx = true }).map(\.enabled), [true, true, true, true, false, false], "外すものが無いときは外せない")
+        XCTAssertEqual(AppMenuSpec.audioItems(state()).map(\.enabled), [false, false, false, false, false])
+        XCTAssertEqual(AppMenuSpec.audioItems(state { $0.canAudioFx = true }).map(\.enabled), [true, true, true, false, false], "外すものが無いときは外せない")
         XCTAssertTrue(AppMenuSpec.audioItems(state { $0.canAudioFx = true; $0.hasAudioFx = true; $0.isLocked = true }).allSatisfy { !$0.enabled })
         // 全項目の表に入っていて、ショートカットが衝突しない
         let all = AppMenuSpec.all(on)
-        XCTAssertTrue(all.contains { $0.command == .audioVoicePreset })
         let used = all.compactMap(\.shortcut)
         XCTAssertEqual(used.count, Set(used).count)
     }
@@ -167,9 +166,6 @@ final class AudioFxAppTests: XCTestCase {
         XCTAssertEqual(u.undoActionName, "音量を上げる")
         AppMenu.perform(.audioVolumeDown, model: m); AppMenu.perform(.audioVolumeDown, model: m)
         XCTAssertEqual(m.clip("m")!.volumeOrDefault, pow(10, -3.0 / 20), accuracy: 0.002)
-        AppMenu.perform(.audioVoicePreset, model: m)
-        XCTAssertNotNil(m.clip("m")?.audioFx?.eq); XCTAssertNotNil(m.clip("m")?.audioFx?.compressor)
-        XCTAssertEqual(u.undoActionName, "ボイス向けプリセット")
         s = MenuState(model: m)
         XCTAssertTrue(s.hasAudioFx)
         AppMenu.perform(.audioClear, model: m)
@@ -177,9 +173,9 @@ final class AudioFxAppTests: XCTestCase {
         XCTAssertEqual(u.undoActionName, "音声エフェクトをすべて外す")
         XCTAssertFalse(MenuState(model: m).hasAudioFx)
         u.undo()
-        XCTAssertNotNil(m.clip("m")?.audioFx?.eq)                       // 1 回の Undo で戻る
+        XCTAssertNotNil(m.clip("m")?.audioFx?.normalize)                // 1 回の Undo で戻る
         // 動画・ボイスにも効く / フリーズフレームには効かない
-        m.selectedClipId = "k"; AppMenu.perform(.audioVoicePreset, model: m)
+        m.selectedClipId = "k"; AppMenu.perform(.audioNormalize, model: m)
         XCTAssertNotNil(m.clip("k")?.audioFx)
         m.selectedClipId = "v"; AppMenu.perform(.audioNormalize, model: m)
         XCTAssertNotNil(m.clip("v")?.audioFx?.normalize)

@@ -7,7 +7,7 @@ import UniformTypeIdentifiers
 
 /// 全部入りのプロジェクト(統合確認)。ほぼ全種類のクリップ・エフェクト・音声処理・マーカー・書き出し範囲を 1 つに入れ、
 /// (a) Renderer で 5 コマ描けること、(c) 保存・読み直し・保存で同じバイト列になること、を速く確かめる。
-/// 実際の MP4 書き出しは `moviecut-cli export` で行う(手順は docs/Codex引き継ぎ.md)。
+/// 実際の MP4 書き出しは `moviecut-cli export` で行う。
 /// 環境変数 `MC_KITCHEN_SINK_DIR` を指定すると、そのフォルダに `kitchen-sink.mcpjc` と素材を残す(CLI の書き出し用)。
 final class KitchenSinkTests: XCTestCase {
     let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("kitchen-sink-\(UUID().uuidString)")
@@ -113,10 +113,10 @@ final class KitchenSinkTests: XCTestCase {
         p.tracks = [Track(name: "声")]
         let voice = ToneVoiceProvider(durations: [1.7, 1.6], frequencies: [220, 330])
         let voiceClips = try await ScriptTimeline.add(lines: [
-            "霊夢: [笑顔]ゆっくりしていってね",
-            "ずんだもん: [怒り]ずんだもんなのだ",
-            "霊夢: [まばたき]つぎのせりふ",
-            "霊夢: 最後の行",
+            "キャラ1: [笑顔]ゆっくりしていってね",
+            "キャラ2: [怒り]キャラ2なのだ",
+            "キャラ1: [まばたき]つぎのせりふ",
+            "キャラ1: 最後の行",
         ], to: &p, voice: voice, directory: dir, selectedCharId: p.characters[0].id)
         XCTAssertFalse(voiceClips.isEmpty)
         for i in p.tracks[0].clips.indices {

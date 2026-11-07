@@ -152,7 +152,7 @@ final class RigHairAlignmentTests: XCTestCase {
         XCTAssertEqual(rep.rig.alignment, .center, "髪(3200)が体(3000)より長いので、取り込みは中央揃えにする")
         XCTAssertNil(rep.rig.slot("髪")?.behindBody, "髪(1)〜(5)は前髪・側面の房なので体の前")
         // 体の不透明部分の上下の余白(3000 の画像上)。中央揃えで髪キャンバス(3200)に置くと、PSD(体の余白が上 226 / 下 208)と同じようにほぼ対称になる
-        let body = try XCTUnwrap(RigHeuristics.opaqueFraction(dir + "/霊夢正面ver1 (1).png", maxPixel: 750))
+        let body = try XCTUnwrap(RigHeuristics.opaqueFraction(dir + "/キャラ1正面ver1 (1).png", maxPixel: 750))
         let top = body.minY * 3000, bottom = (1 - body.maxY) * 3000
         func asym(_ shift: Double) -> Double { abs((top + shift) - (bottom + 200 - shift)) }
         print("体の余白 上 \(Int(top)) / 下 \(Int(bottom)); 非対称(上揃え/中央/下揃え) = \(Int(asym(0))) / \(Int(asym(100))) / \(Int(asym(200)))")

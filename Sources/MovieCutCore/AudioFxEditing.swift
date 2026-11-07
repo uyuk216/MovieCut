@@ -251,15 +251,6 @@ public enum AudioFxEditing {
         edit(&c) { fx in fx.normalize = AudioFx.Normalize(targetDb: targetDb, mode: .peak) }
     }
 
-    /// ボイス向け: 低域の抑え(−3 dB)+ 中域の明瞭さ(+2 dB)+ 高域の抜け(+2 dB)+ 軽いコンプレッサー(−20 dB・3:1・メイクアップ +3 dB)。
-    public static let voicePreset = AudioFx(eq: AudioFx.EQ(low: -3, mid: 2, high: 2),
-                                            compressor: AudioFx.Compressor(threshold: -20, ratio: 3, attack: 8, release: 120, makeup: 3))
-
-    @discardableResult
-    public static func applyVoicePreset(_ c: inout Clip) -> Bool {
-        edit(&c) { fx in fx.eq = voicePreset.eq; fx.compressor = voicePreset.compressor }
-    }
-
     /// 音声エフェクト(EQ・コンプレッサー・リバーブ・ノーマライズ)とパンをすべて外す。音量・フェードはそのまま。
     @discardableResult
     public static func clearAll(_ c: inout Clip) -> Bool {

@@ -126,16 +126,17 @@ final class InspectorModelTests: XCTestCase {
 
     func testEngineSwitchViaModelIsUndoable() {
         let m = makeModel()
-        let id = m.project.characters[0].id    // 霊夢: aquestalk / 100
+        let id = m.project.characters[0].id    // 既定は声未設定
+        m.characterEngineChanged(charId: id, to: "aquestalk")
         m.characterEngineChanged(charId: id, to: "voicevox")
         let c = m.character(id)!
         XCTAssertEqual(c.engine, "voicevox"); XCTAssertEqual(c.speed, 1); XCTAssertEqual(c.pitch, 0); XCTAssertEqual(c.intonation, 1); XCTAssertEqual(c.speaker, 3)
         m.characterEngineChanged(charId: id, to: "aquestalk")
         XCTAssertEqual(m.character(id)?.speed, 100)
-        XCTAssertEqual(undoAll(m), 2)
-        XCTAssertEqual(m.character(id)?.engine, "aquestalk")
+        XCTAssertEqual(undoAll(m), 3)
+        XCTAssertEqual(m.character(id)?.engine, "voicevox")
         // 速さの範囲(エンジンごと)
-        m.setCharacterField(.speed, 999, charId: id); XCTAssertEqual(m.character(id)?.speed, 300)
+        m.setCharacterField(.speed, 999, charId: id); XCTAssertEqual(m.character(id)?.speed, 2)
     }
 
     func testPortraitSetAndClear() {
@@ -262,14 +263,14 @@ final class InspectorModelTests: XCTestCase {
         let before = m.project
         XCTAssertTrue(m.deleteCharacter(reimu))
         XCTAssertEqual(m.project.characters.count, 2)
-        XCTAssertEqual(m.project.allClips.map(\.id), ["v1"])           // 霊夢のセリフ(v0, v2)は消え、魔理沙のものは残る
+        XCTAssertEqual(m.project.allClips.map(\.id), ["v1"])           // キャラ1のセリフ(v0, v2)は消え、キャラ3のものは残る
         XCTAssertNil(m.selectedClipId)                                 // 消えたクリップの選択は外れる
         XCTAssertEqual(m.selectedCharId, m.project.characters.first?.id)
         XCTAssertNotEqual(m.selectedCharId, reimu)
         XCTAssertFalse(m.isPlaying)
         XCTAssertEqual(undoAll(m), 1)                                  // 1 回の Undo で、キャラもクリップも戻る
         XCTAssertEqual(m.project, before)
-        XCTAssertEqual(m.character(marisa)?.name, "魔理沙")
+        XCTAssertEqual(m.character(marisa)?.name, "キャラ3")
     }
 
     func testCannotDeleteLastCharacter() {
@@ -289,7 +290,7 @@ final class InspectorModelTests: XCTestCase {
         m.requestDeleteCharacter(reimu)
         XCTAssertEqual(m.pendingDeleteCharId, reimu)
         let conf = m.deleteConfirmation(for: reimu)!
-        XCTAssertEqual(conf.title, "霊夢 を消しますか？")
+        XCTAssertEqual(conf.title, "キャラ1 を消しますか？")
         XCTAssertTrue(conf.message.contains("セリフ 2 個"))
     }
 
@@ -347,7 +348,7 @@ final class InspectorModelTests: XCTestCase {
         let (m, reimu, _) = await modelWithVoices()
         let before = m.project
         let n = await m.regenerateAllVoices(charId: reimu)
-        XCTAssertEqual(n, 2)                                    // 霊夢のセリフ(v0, v2)だけ
+        XCTAssertEqual(n, 2)                                    // キャラ1のセリフ(v0, v2)だけ
         for id in ["v0", "v2"] {
             let c = m.clip(id)!
             XCTAssertNotEqual(c.src, before.allClips.first { $0.id == id }?.src)
@@ -385,14 +386,14 @@ final class InspectorModelTests: XCTestCase {
 
     func testSpeakerCatalogParsesLabelsViaURLProtocolStub() async {
         SpeakersStub.status = 200; SpeakersStub.requests = 0
-        SpeakersStub.body = Data(#"[{"name":"ずんだもん","styles":[{"id":3,"name":"ノーマル"},{"id":1,"name":"あまあま"}]},{"name":"四国めたん","styles":[{"id":2,"name":"ノーマル"}]}]"#.utf8)
+        SpeakersStub.body = Data(#"[{"name":"キャラ2","styles":[{"id":3,"name":"ノーマル"},{"id":1,"name":"あまあま"}]},{"name":"四国めたん","styles":[{"id":2,"name":"ノーマル"}]}]"#.utf8)
         let session = SpeakersStub.session()
         let cat = SpeakerCatalog(ensureRunning: { _ in true }, fetch: { try await VoicevoxClient(baseURL: $0, session: session).speakers() })
         XCTAssertEqual(cat.state, .idle)
         await cat.load(baseURL: "http://127.0.0.1:50021")
         XCTAssertEqual(cat.state, .loaded)
-        XCTAssertEqual(cat.label(for: 3), "ずんだもん（ノーマル）")
-        XCTAssertEqual(cat.label(for: 1), "ずんだもん（あまあま）")
+        XCTAssertEqual(cat.label(for: 3), "キャラ2（ノーマル）")
+        XCTAssertEqual(cat.label(for: 1), "キャラ2（あまあま）")
         XCTAssertNil(cat.label(for: 99))
         XCTAssertEqual(cat.choices.count, 3)
         await cat.load(baseURL: "http://127.0.0.1:50021")           // 一度だけ読む
@@ -412,10 +413,10 @@ final class InspectorModelTests: XCTestCase {
         XCTAssertEqual(down.state, .unavailable)
         // 直ったら次の読み込みで一覧になる
         SpeakersStub.status = 200
-        SpeakersStub.body = Data(#"[{"name":"ずんだもん","styles":[{"id":3,"name":"ノーマル"}]}]"#.utf8)
+        SpeakersStub.body = Data(#"[{"name":"キャラ2","styles":[{"id":3,"name":"ノーマル"}]}]"#.utf8)
         await cat.load(baseURL: "http://127.0.0.1:50021")
         XCTAssertEqual(cat.state, .loaded)
-        XCTAssertEqual(cat.label(for: 3), "ずんだもん（ノーマル）")
+        XCTAssertEqual(cat.label(for: 3), "キャラ2（ノーマル）")
     }
 
     // MARK: キー操作の分離(入力欄で S / Delete / Space が効かない)

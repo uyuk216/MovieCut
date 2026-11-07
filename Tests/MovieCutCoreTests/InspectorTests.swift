@@ -72,10 +72,10 @@ final class InspectorCoreTests: XCTestCase {
 
     func testSpeakerChoiceLabelsAndFonts() {
         let list = SpeakerChoice.flatten([
-            VoicevoxSpeaker(name: "ずんだもん", styles: [VoicevoxStyle(id: 3, name: "ノーマル"), VoicevoxStyle(id: 1, name: "あまあま")]),
+            VoicevoxSpeaker(name: "キャラ2", styles: [VoicevoxStyle(id: 3, name: "ノーマル"), VoicevoxStyle(id: 1, name: "あまあま")]),
             VoicevoxSpeaker(name: "四国めたん", styles: [VoicevoxStyle(id: 2, name: "ノーマル")]),
         ])
-        XCTAssertEqual(list.map(\.label), ["ずんだもん（ノーマル）", "ずんだもん（あまあま）", "四国めたん（ノーマル）"])
+        XCTAssertEqual(list.map(\.label), ["キャラ2（ノーマル）", "キャラ2（あまあま）", "四国めたん（ノーマル）"])
         XCTAssertEqual(list.map(\.id), [3, 1, 2])
         XCTAssertEqual(FontChoices.all.count, 7)
         XCTAssertEqual(FontChoices.options(including: "Klee"), FontChoices.all)

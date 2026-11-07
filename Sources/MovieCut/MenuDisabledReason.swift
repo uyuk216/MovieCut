@@ -94,7 +94,7 @@ extension AppMenuSpec {
         case .pip: return "画像か映像のクリップを選んでください"
         case .speed, .toggleReverse: return "速度を変えられるクリップを選んでください"
         case .freezeFrame: return "再生位置が映像クリップの上にありません"
-        case .audioNormalize, .audioVolumeUp, .audioVolumeDown, .audioVoicePreset: return "音のあるクリップを選んでください"
+        case .audioNormalize, .audioVolumeUp, .audioVolumeDown: return "音のあるクリップを選んでください"
         case .audioClear: return "音声エフェクトがありません"
         case .silenceCut: return "音のあるクリップを選んでください"
         case .scaleDuplicate: return "音のあるクリップを1つ選んでください（ロックされたレイヤー・フリーズは対象外）"

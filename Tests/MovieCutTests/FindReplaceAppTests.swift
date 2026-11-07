@@ -19,8 +19,8 @@ final class FindReplaceAppTests: XCTestCase {
     private func makeModel() -> (ProjectModel, String) {
         var p = Project.new()
         let charId = p.characters[0].id
-        p.tracks[0].clips = [text("t1", "霊夢のテロップ"), voice("v1", "霊夢です", charId: charId)]
-        p.tracks[1].clips = [text("t2", "魔理沙と霊夢", start: 0)]
+        p.tracks[0].clips = [text("t1", "キャラ1のテロップ"), voice("v1", "キャラ1です", charId: charId)]
+        p.tracks[1].clips = [text("t2", "キャラ3とキャラ1", start: 0)]
         let m = ProjectModel(project: p)
         m.notices = OneTimeNotices()
         m.voiceProviderFactory = { _ in ToneVoiceProvider(durations: [1.0], frequencies: [330]) }
@@ -38,10 +38,10 @@ final class FindReplaceAppTests: XCTestCase {
     func testReplaceAllIsOneUndoStepAndUndoRestoresEverything() async {
         let (m, _) = makeModel()
         let before = m.project
-        let n = await m.replaceAllText("霊夢", with: "霊夢さん", options: TextSearch.Options(), selectionOnly: false)
+        let n = await m.replaceAllText("キャラ1", with: "キャラ1さん", options: TextSearch.Options(), selectionOnly: false)
         XCTAssertEqual(n, 3)
-        XCTAssertEqual(m.project.allClips.first { $0.id == "t1" }?.text, "霊夢さんのテロップ")
-        XCTAssertEqual(m.project.allClips.first { $0.id == "t2" }?.text, "魔理沙と霊夢さん")
+        XCTAssertEqual(m.project.allClips.first { $0.id == "t1" }?.text, "キャラ1さんのテロップ")
+        XCTAssertEqual(m.project.allClips.first { $0.id == "t2" }?.text, "キャラ3とキャラ1さん")
         XCTAssertEqual(m.effectiveUndoManager.undoActionName, ProjectModel.findReplaceUndoName)
         XCTAssertEqual(undoCount(m), 1)
         m.effectiveUndoManager.undo()
@@ -50,7 +50,7 @@ final class FindReplaceAppTests: XCTestCase {
 
     func testNoOpRegistersNothing() async {
         let (m, _) = makeModel()
-        let n = await m.replaceAllText("霊夢", with: "霊夢", options: TextSearch.Options(), selectionOnly: false)
+        let n = await m.replaceAllText("キャラ1", with: "キャラ1", options: TextSearch.Options(), selectionOnly: false)
         XCTAssertEqual(n, 0)
         XCTAssertFalse(m.effectiveUndoManager.canUndo)
         let none = await m.replaceAllText("存在しない", with: "x", options: TextSearch.Options(), selectionOnly: false)
@@ -61,9 +61,9 @@ final class FindReplaceAppTests: XCTestCase {
     func testVoiceLineChangeRegeneratesAudioInSameUndoStep() async {
         let (m, _) = makeModel()
         let oldSrc = m.project.allClips.first { $0.id == "v1" }?.src
-        _ = await m.replaceAllText("霊夢", with: "霊夢ちゃん", options: TextSearch.Options(), selectionOnly: false)
+        _ = await m.replaceAllText("キャラ1", with: "キャラ1ちゃん", options: TextSearch.Options(), selectionOnly: false)
         let v = m.project.allClips.first { $0.id == "v1" }
-        XCTAssertEqual(v?.text, "霊夢ちゃんです")
+        XCTAssertEqual(v?.text, "キャラ1ちゃんです")
         XCTAssertNotNil(v?.src)
         XCTAssertNotEqual(v?.src, oldSrc, "セリフの文字が変わったので音声を作り直す")
         XCTAssertEqual(v?.offset, 0)
@@ -74,17 +74,17 @@ final class FindReplaceAppTests: XCTestCase {
         let (m, _) = makeModel()
         m.selectedClipIDs = ["t2"]
         m.selectedClipId = "t2"
-        XCTAssertEqual(m.findTextMatchCount("霊夢", selectionOnly: true, options: TextSearch.Options()), 1)
-        let n = await m.replaceAllText("霊夢", with: "X", options: TextSearch.Options(), selectionOnly: true)
+        XCTAssertEqual(m.findTextMatchCount("キャラ1", selectionOnly: true, options: TextSearch.Options()), 1)
+        let n = await m.replaceAllText("キャラ1", with: "X", options: TextSearch.Options(), selectionOnly: true)
         XCTAssertEqual(n, 1)
-        XCTAssertEqual(m.project.allClips.first { $0.id == "t1" }?.text, "霊夢のテロップ")
-        XCTAssertEqual(m.project.allClips.first { $0.id == "t2" }?.text, "魔理沙とX")
+        XCTAssertEqual(m.project.allClips.first { $0.id == "t1" }?.text, "キャラ1のテロップ")
+        XCTAssertEqual(m.project.allClips.first { $0.id == "t2" }?.text, "キャラ3とX")
     }
 
     func testCountFollowsCaseOption() {
         let (m, _) = makeModel()
         XCTAssertEqual(m.findTextMatchCount("REIMU", selectionOnly: false, options: TextSearch.Options()), 0)
-        XCTAssertEqual(m.findTextMatchCount("霊夢", selectionOnly: false, options: TextSearch.Options(caseSensitive: true)), 3)
+        XCTAssertEqual(m.findTextMatchCount("キャラ1", selectionOnly: false, options: TextSearch.Options(caseSensitive: true)), 3)
     }
 
     func testFindReplaceMenuItemIsInEditMenuWithoutShortcut() {
@@ -103,12 +103,12 @@ final class FindReplaceAppTests: XCTestCase {
     /// 置き換える一致がすべてロックされたレイヤーにあるとき、「一致しない」ではなく「ロックのため変えていない」と出す。
     func testAllMatchesOnLockedLayerSaysLockedNotNoMatch() async {
         var p = Project.new()
-        p.tracks[1].clips = [text("t2", "魔理沙")]
+        p.tracks[1].clips = [text("t2", "キャラ3")]
         p.tracks[1].locked = true
         let m = ProjectModel(project: p)
         m.notices = OneTimeNotices()
         let before = m.project
-        let n = await m.replaceAllText("魔理沙", with: "アリス", options: TextSearch.Options(), selectionOnly: false)
+        let n = await m.replaceAllText("キャラ3", with: "アリス", options: TextSearch.Options(), selectionOnly: false)
         XCTAssertEqual(n, 0)
         XCTAssertEqual(m.project, before)
         XCTAssertTrue(m.statusText.contains("ロック"), "状態欄: \(m.statusText)")

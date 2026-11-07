@@ -103,7 +103,7 @@ final class ExportPresetTests: XCTestCase {
         p.tracks[0].clips = []
         let provider = RealVoiceProvider(project: p, cache: VoiceCache(directory: tmp.appendingPathComponent("voices")))
         do {
-            try await ScriptTimeline.add(lines: ["霊夢: プリセット"], to: &p, voice: provider, directory: tmp, selectedCharId: p.characters[0].id)
+            try await ScriptTimeline.add(lines: ["キャラ1: プリセット"], to: &p, voice: provider, directory: tmp, selectedCharId: p.characters[0].id)
         } catch { throw XCTSkip("声を作れないので飛ばします: \(error.localizedDescription)") }
         var t = Clip(); t.type = .text; t.text = "字幕"; t.start = 0; t.duration = p.endTime; t.fontSize = 60; t.x = 0.5; t.y = 0.3
         p.tracks[4].clips = [t]

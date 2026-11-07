@@ -170,9 +170,9 @@ public struct Character: Codable, Equatable, Identifiable {
             return c
         }
         return [
-            make(0) { $0.name = "霊夢"; $0.engine = "aquestalk"; $0.voice = "れいむ"; $0.speed = 100; $0.color = "#e8384f" },
-            make(1) { $0.name = "魔理沙"; $0.engine = "aquestalk"; $0.voice = "まりさ"; $0.speed = 100; $0.color = "#f2c53d" },
-            make(2) { $0.name = "ずんだもん"; $0.engine = "voicevox"; $0.speaker = 3; $0.speed = 1; $0.pitch = 0; $0.intonation = 1; $0.color = "#7ac943" },
+            make(0) { $0.name = "キャラ1"; $0.color = "#e8384f" },
+            make(1) { $0.name = "キャラ3"; $0.color = "#f2c53d" },
+            make(2) { $0.name = "キャラ2"; $0.color = "#7ac943" },
         ]
     }
 

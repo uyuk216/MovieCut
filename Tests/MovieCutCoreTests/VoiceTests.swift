@@ -30,7 +30,7 @@ final class FakeVoicevox: URLProtocol {
         }
         var data = Data()
         switch comps.path {
-        case "/speakers": data = Data(#"[{"name":"ずんだもん","styles":[{"id":3,"name":"ノーマル"},{"id":1,"name":"あまあま"}]}]"#.utf8)
+        case "/speakers": data = Data(#"[{"name":"キャラ2","styles":[{"id":3,"name":"ノーマル"},{"id":1,"name":"あまあま"}]}]"#.utf8)
         case "/audio_query": data = Data(#"{"accent_phrases":[],"speedScale":9,"pitchScale":9,"intonationScale":9,"volumeScale":9,"outputSamplingRate":24000}"#.utf8)
         case "/synthesis": data = Data("RIFFfake".utf8)
         default: break
@@ -83,19 +83,19 @@ final class VoiceUnitTests: XCTestCase {
     }
 
     func testScriptLineParsing() {
-        let chars = Project.new().characters   // 霊夢 魔理沙 ずんだもん
+        let chars = Project.new().characters   // キャラ1 キャラ3 キャラ2
         let sel = chars[1].id
         func p(_ l: String) -> String? { ScriptTimeline.parse(line: l, characters: chars, selectedCharId: sel).map { "\($0.0.name)|\($0.1)" } }
-        XCTAssertEqual(p("霊夢: こんにちは"), "霊夢|こんにちは")
-        XCTAssertEqual(p("霊夢：こんにちは"), "霊夢|こんにちは")
-        XCTAssertEqual(p("  ずんだもん :  なのだ  "), "ずんだもん|なのだ")
-        XCTAssertEqual(p("だれか: やあ"), "魔理沙|だれか: やあ")   // 不明な名前 → 選択中キャラ、行全体
-        XCTAssertEqual(p("ただのセリフ"), "魔理沙|ただのセリフ")
-        XCTAssertEqual(p("霊夢: 時間は3:00だぜ"), "霊夢|時間は3:00だぜ")   // セリフ中のコロンは残す
-        XCTAssertEqual(p(": こんにちは"), "魔理沙|: こんにちは")
-        XCTAssertEqual(p("霊夢:"), "魔理沙|霊夢:")
+        XCTAssertEqual(p("キャラ1: こんにちは"), "キャラ1|こんにちは")
+        XCTAssertEqual(p("キャラ1：こんにちは"), "キャラ1|こんにちは")
+        XCTAssertEqual(p("  キャラ2 :  なのだ  "), "キャラ2|なのだ")
+        XCTAssertEqual(p("だれか: やあ"), "キャラ3|だれか: やあ")   // 不明な名前 → 選択中キャラ、行全体
+        XCTAssertEqual(p("ただのセリフ"), "キャラ3|ただのセリフ")
+        XCTAssertEqual(p("キャラ1: 時間は3:00だぜ"), "キャラ1|時間は3:00だぜ")   // セリフ中のコロンは残す
+        XCTAssertEqual(p(": こんにちは"), "キャラ3|: こんにちは")
+        XCTAssertEqual(p("キャラ1:"), "キャラ3|キャラ1:")
         XCTAssertNil(p("   "))
-        XCTAssertEqual(ScriptTimeline.parse(line: "x", characters: chars, selectedCharId: nil)?.0.name, "霊夢")  // 選択無し → 先頭
+        XCTAssertEqual(ScriptTimeline.parse(line: "x", characters: chars, selectedCharId: nil)?.0.name, "キャラ1")  // 選択無し → 先頭
     }
 
     func testClipDurationMath() {
@@ -107,7 +107,7 @@ final class VoiceUnitTests: XCTestCase {
         var p = Project.new()
         let before = p.tracks.count
         let tone = ToneVoiceProvider(durations: [1.0, 2.0], frequencies: [220])
-        let added = try await ScriptTimeline.add(lines: ["霊夢: あ", "", "魔理沙：い", "なにか", "ずんだもん: う"], to: &p, voice: tone, directory: tmp, selectedCharId: p.characters[1].id)
+        let added = try await ScriptTimeline.add(lines: ["キャラ1: あ", "", "キャラ3：い", "なにか", "キャラ2: う"], to: &p, voice: tone, directory: tmp, selectedCharId: p.characters[1].id)
         XCTAssertEqual(added.count, 4)
         XCTAssertEqual(p.tracks.filter { $0.clips.count == 4 }.count, 1)
         XCTAssertEqual(p.tracks.count, before)   // 空のレイヤーが「全部ボイス」として再利用される
@@ -116,9 +116,9 @@ final class VoiceUnitTests: XCTestCase {
         for i in 1..<added.count { XCTAssertEqual(starts[i], starts[i-1] + durs[i-1] + 0.1, accuracy: 1e-6) }
         XCTAssertEqual(durs[0], 1.15, accuracy: 0.01)
         XCTAssertEqual(added.map { $0.text ?? "" }, ["あ", "い", "なにか", "う"])
-        XCTAssertEqual(added.map { clipRef in p.characters.first(where: { c in c.id == clipRef.charId })?.name ?? "" }, ["霊夢", "魔理沙", "魔理沙", "ずんだもん"])
+        XCTAssertEqual(added.map { clipRef in p.characters.first(where: { c in c.id == clipRef.charId })?.name ?? "" }, ["キャラ1", "キャラ3", "キャラ3", "キャラ2"])
         // 2 回目は同じレイヤーの末尾に続く
-        let again = try await ScriptTimeline.add(lines: ["霊夢: え"], to: &p, voice: tone, directory: tmp)
+        let again = try await ScriptTimeline.add(lines: ["キャラ1: え"], to: &p, voice: tone, directory: tmp)
         XCTAssertEqual(again[0].start, starts[3] + durs[3], accuracy: 1e-6)   // renderer.js と同じ: 次の台本は trackEnd(間隔なし)から
     }
 
@@ -200,7 +200,7 @@ final class VoiceUnitTests: XCTestCase {
         XCTAssertEqual(body["intonationScale"] as? Double, 1)
         XCTAssertEqual(body["volumeScale"] as? Double, 1)
         let sp = try await client.speakers()
-        XCTAssertEqual(sp, [VoicevoxSpeaker(name: "ずんだもん", styles: [VoicevoxStyle(id: 3, name: "ノーマル"), VoicevoxStyle(id: 1, name: "あまあま")])])
+        XCTAssertEqual(sp, [VoicevoxSpeaker(name: "キャラ2", styles: [VoicevoxStyle(id: 3, name: "ノーマル"), VoicevoxStyle(id: 1, name: "あまあま")])])
         XCTAssertEqual(FakeVoicevox.calls.last?.method, "GET")
     }
 
@@ -252,7 +252,7 @@ final class RealEngineTests: XCTestCase {
         let client = VoicevoxClient(baseURL: base, cache: VoiceCache(directory: tmp))
         let sp = try await client.speakers()
         XCTAssertTrue(sp.contains { $0.styles.contains { $0.id == 3 } })
-        let url = try await client.synthesize(text: "ずんだもんなのだ", speaker: 3)
+        let url = try await client.synthesize(text: "キャラ2なのだ", speaker: 3)
         let dur = try RealVoiceProvider.duration(of: url)
         XCTAssertGreaterThan(dur, 0.5)
         let f = try AVAudioFile(forReading: url)
@@ -288,7 +288,7 @@ final class RealEngineTests: XCTestCase {
         try XCTSkipUnless(FileManager.default.isExecutableFile(atPath: VoicevoxEngine.defaultBinary), "VOICEVOX 未インストール")
         var p = Project.new()
         let provider = RealVoiceProvider(project: p, cache: VoiceCache(directory: tmp), engine: engine)
-        try await ScriptTimeline.add(lines: ["霊夢: ゆっくりしていってね", "ずんだもん: ずんだもんなのだ"], to: &p, voice: provider, directory: tmp)
+        try await ScriptTimeline.add(lines: ["キャラ1: ゆっくりしていってね", "キャラ2: キャラ2なのだ"], to: &p, voice: provider, directory: tmp)
         XCTAssertTrue(provider.enginesUsed.contains("voicevox"))
         let clips = p.allClips.filter { $0.type == .voice }.sorted { $0.start < $1.start }
         XCTAssertEqual(clips.count, 2)

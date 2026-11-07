@@ -9,7 +9,7 @@
  "characters": [
   {
    "id": "vco9c7j8",
-   "name": "霊夢",
+   "name": "キャラ1",
    "engine": "aquestalk",
    "voice": "れいむ",
    "speed": 100,
@@ -24,7 +24,7 @@
   },
   {
    "id": "jkfyiuq5",
-   "name": "魔理沙",
+   "name": "キャラ3",
    "engine": "aquestalk",
    "voice": "まりさ",
    "speed": 100,
@@ -39,7 +39,7 @@
   },
   {
    "id": "1x4n8me9",
-   "name": "ずんだもん",
+   "name": "キャラ2",
    "engine": "voicevox",
    "speaker": 3,
    "speed": 1,

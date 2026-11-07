@@ -354,7 +354,7 @@ final class MenuTests: XCTestCase {
         await m.generateVoicesFromScript()
         XCTAssertTrue(m.project.allClips.isEmpty)
         XCTAssertEqual(m.statusText, "左の台本欄にセリフを書いてください")
-        m.scriptText = "霊夢: こんにちは\nずんだもん: やあ"
+        m.scriptText = "キャラ1: こんにちは\nキャラ2: やあ"
         await m.generateVoicesFromScript()
         XCTAssertEqual(m.project.allClips.filter { $0.type == .voice }.count, 2)
     }
@@ -455,11 +455,11 @@ final class MenuTests: XCTestCase {
     func testKyokoWarningIsShownOnlyOncePerSession() async {
         let m = makeModel()
         m.voiceProviderFactory = { _ in FakeKyokoProvider() }
-        await m.generateVoices(from: "霊夢: こんにちは")
+        await m.generateVoices(from: "キャラ1: こんにちは")
         XCTAssertEqual(m.errorMessage, "AquesTalkPlayer が見つからないので、macOS の Kyoko で代わりに読み上げます。")
         XCTAssertEqual(m.errorTitle, "ゆっくり音声について")
         m.errorMessage = nil
-        await m.generateVoices(from: "霊夢: もう一度")
+        await m.generateVoices(from: "キャラ1: もう一度")
         XCTAssertNil(m.errorMessage, "2 回目は出さない")
         // 試し読み上げも同じ入れ物を使うので出ない
         m.playTestAudio = { _ in }
@@ -544,7 +544,7 @@ final class MenuTests: XCTestCase {
         dock.requestAttention = { bounces += 1 }
         m.dockOverride = dock
         m.applyVideoSize(320, 180)
-        await m.generateVoices(from: "霊夢: こんにちは")
+        await m.generateVoices(from: "キャラ1: こんにちは")
         let out = FileManager.default.temporaryDirectory.appendingPathComponent("ye-dock-\(UUID().uuidString).mp4")
         defer { try? FileManager.default.removeItem(at: out) }
         let t = Task { @MainActor in

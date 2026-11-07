@@ -207,7 +207,7 @@ public enum CharacterEditing {
     }
 }
 
-/// VOICEVOX の話者一覧(「ずんだもん（ノーマル）」の形)。
+/// VOICEVOX の話者一覧(「キャラ2（ノーマル）」の形)。
 public struct SpeakerChoice: Equatable, Sendable {
     public var id: Int
     public var label: String

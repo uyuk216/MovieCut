@@ -90,7 +90,7 @@ final class TachieTests: XCTestCase {
         let plain = try String(decoding: Project().encoded(), as: UTF8.self)
         for k in ["tachies", "tachieId", "mouthDrive", "subtitleText", "speakingOnly", "partOffsets"] { XCTAssertFalse(plain.contains(k), k) }
         var p = Project()
-        var t = Tachie(name: "霊夢"); t.id = "t1"; t.imgClosed = "/a.png"
+        var t = Tachie(name: "キャラ1"); t.id = "t1"; t.imgClosed = "/a.png"
         p.tachies = [t]
         var c = tachieClip("c1", tachie: "t1", drive: .character("ch1"))
         c.speakingOnly = true
@@ -170,11 +170,11 @@ final class TachieTests: XCTestCase {
 
     func testCharacterLegacyKeysFollowTheFile() throws {
         // 旧ファイルのキャラ(キーが全部ある)は従来どおり全部書く。キーが無いキャラは書かない(既定値のとき)
-        let old = ##"{"id":"a","name":"霊夢","engine":"aquestalk","color":"#e8384f","imgClosed":null,"imgOpen":null,"x":0.2,"y":0.72,"scale":1,"flip":true,"alwaysShow":true}"##
+        let old = ##"{"id":"a","name":"キャラ1","engine":"aquestalk","color":"#e8384f","imgClosed":null,"imgOpen":null,"x":0.2,"y":0.72,"scale":1,"flip":true,"alwaysShow":true}"##
         var c = try JSONDecoder().decode(Character.self, from: Data(old.utf8))
         var s = String(decoding: try JSONEncoder().encode(c), as: UTF8.self)
         for k in ["imgClosed", "imgOpen", "\"x\"", "\"y\"", "scale", "flip", "alwaysShow"] { XCTAssertTrue(s.contains(k), k) }
-        let new = ##"{"id":"a","name":"霊夢","engine":"aquestalk","color":"#e8384f"}"##
+        let new = ##"{"id":"a","name":"キャラ1","engine":"aquestalk","color":"#e8384f"}"##
         c = try JSONDecoder().decode(Character.self, from: Data(new.utf8))
         s = String(decoding: try JSONEncoder().encode(c), as: UTF8.self)
         for k in ["imgClosed", "imgOpen", "\"x\"", "\"y\"", "scale", "flip", "alwaysShow"] { XCTAssertFalse(s.contains(k), k) }
@@ -249,7 +249,7 @@ final class TachieTests: XCTestCase {
         var cb = tachieClip("cb", tachie: "tb", drive: driveB, x: 0.75, y: 0.5)
         if speakingOnlyB { cb.speakingOnly = true }
         let p = project(clips: [[voice("v1", char: "ch1", text: "あ", wav: wav)], [tachieClip("ca", tachie: "ta", drive: driveA, x: 0.25, y: 0.5, duration: 3), cb]],
-                        characters: [character("ch1", "霊夢"), character("ch2", "魔理沙")], tachies: [a, b])
+                        characters: [character("ch1", "キャラ1"), character("ch2", "キャラ3")], tachies: [a, b])
         return (p, 30, 90, 40)
     }
 
@@ -347,39 +347,39 @@ final class TachieTests: XCTestCase {
     // MARK: Stage 3 台本の記法と字幕
 
     func testScriptSyntaxSpokenAndSubtitle() {
-        let chars = [character("a", "霊夢"), character("b", "魔理沙")]
+        let chars = [character("a", "キャラ1"), character("b", "キャラ3")]
         func p(_ l: String) -> ScriptTimeline.Line? { ScriptTimeline.parseLine(l, characters: chars, selectedCharId: nil) }
-        let same = p("霊夢: こんにちは")
+        let same = p("キャラ1: こんにちは")
         XCTAssertEqual(same?.spoken, "こんにちは"); XCTAssertNil(same?.subtitle, "| が無い = 字幕は読み上げ文と同じ")
-        let diff = p("魔理沙：ゆっくり | ゆっくりしていってね！")
+        let diff = p("キャラ3：ゆっくり | ゆっくりしていってね！")
         XCTAssertEqual(diff?.who.id, "b"); XCTAssertEqual(diff?.spoken, "ゆっくり"); XCTAssertEqual(diff?.subtitle, "ゆっくりしていってね！")
-        let none = p("霊夢: ふふふ |")
+        let none = p("キャラ1: ふふふ |")
         XCTAssertEqual(none?.spoken, "ふふふ"); XCTAssertEqual(none?.subtitle, "", "| のあとが空 = 字幕なし")
-        XCTAssertEqual(p("霊夢: ふふふ｜  ")?.subtitle, "", "全角の区切りも使える")
-        let tag = p("霊夢: [笑顔]やあ | [笑顔]こんにちは")
+        XCTAssertEqual(p("キャラ1: ふふふ｜  ")?.subtitle, "", "全角の区切りも使える")
+        let tag = p("キャラ1: [笑顔]やあ | [笑顔]こんにちは")
         XCTAssertEqual(tag?.spoken, "[笑顔]やあ"); XCTAssertEqual(tag?.subtitle, "[笑顔]こんにちは")
-        XCTAssertEqual(p("霊夢: a | b | c")?.subtitle, "b | c", "最初の区切りだけで分ける")
-        XCTAssertNil(p("霊夢: | 字幕だけ"), "読み上げ文が空の行は声を作れない")
+        XCTAssertEqual(p("キャラ1: a | b | c")?.subtitle, "b | c", "最初の区切りだけで分ける")
+        XCTAssertNil(p("キャラ1: | 字幕だけ"), "読み上げ文が空の行は声を作れない")
         XCTAssertNil(p("※ メモ | あ"))
         // 名前が分からない行は選択中のキャラ、行全体が対象
         XCTAssertEqual(p("なんとか | かんとか")?.who.id, "a")
         XCTAssertEqual(p("なんとか | かんとか")?.subtitle, "かんとか")
         // 従来の parse は読み上げ文だけを返す
-        XCTAssertEqual(ScriptTimeline.parse(line: "霊夢: やあ | 字幕", characters: chars, selectedCharId: nil)?.1, "やあ")
-        XCTAssertEqual(ScriptTimeline.parse(line: "霊夢: [笑顔]やあ", characters: chars, selectedCharId: nil)?.1, "[笑顔]やあ")
+        XCTAssertEqual(ScriptTimeline.parse(line: "キャラ1: やあ | 字幕", characters: chars, selectedCharId: nil)?.1, "やあ")
+        XCTAssertEqual(ScriptTimeline.parse(line: "キャラ1: [笑顔]やあ", characters: chars, selectedCharId: nil)?.1, "[笑顔]やあ")
     }
 
     func testScriptAddStoresSubtitleTextAndExportRoundTrips() async throws {
         var p = Project()
-        p.characters = [character("a", "霊夢")]
+        p.characters = [character("a", "キャラ1")]
         p.tracks = [Track(name: "L1")]
-        let lines = ["霊夢: やあ", "霊夢: よみ | じまく", "霊夢: ふふ |", "霊夢: [笑顔]ほほ | [笑顔]ほほ", "霊夢: ごご | ごご"]
+        let lines = ["キャラ1: やあ", "キャラ1: よみ | じまく", "キャラ1: ふふ |", "キャラ1: [笑顔]ほほ | [笑顔]ほほ", "キャラ1: ごご | ごご"]
         let added = try await ScriptTimeline.add(lines: lines, to: &p, voice: ToneVoiceProvider(), directory: tmp)
         XCTAssertEqual(added.map(\.text), ["やあ", "よみ", "ふふ", "[笑顔]ほほ", "ごご"])
         XCTAssertEqual(added.map(\.subtitleText), [nil, "じまく", "", nil, nil], "読み上げ文と同じ字幕は書かない")
         // 台本に書き戻して、もう一度読むと同じ(読み上げ文と同じ字幕は書かない)
         let script = VoiceScriptExport.make(p)
-        XCTAssertEqual(script.text, "霊夢: やあ\n霊夢: よみ | じまく\n霊夢: ふふ |\n霊夢: [笑顔]ほほ\n霊夢: ごご")
+        XCTAssertEqual(script.text, "キャラ1: やあ\nキャラ1: よみ | じまく\nキャラ1: ふふ |\nキャラ1: [笑顔]ほほ\nキャラ1: ごご")
         var q = Project(); q.characters = p.characters; q.tracks = [Track(name: "L1")]
         let again = try await ScriptTimeline.add(lines: script.text.components(separatedBy: "\n"), to: &q, voice: ToneVoiceProvider(), directory: tmp)
         XCTAssertEqual(again.map(\.text), added.map(\.text))
@@ -396,7 +396,7 @@ final class TachieTests: XCTestCase {
 
     func testSubtitleGenerationUsesSubtitleTextAndSkipsEmpty() throws {
         var p = Project()
-        p.characters = [character("a", "霊夢")]
+        p.characters = [character("a", "キャラ1")]
         func v(_ id: String, _ start: Double, _ text: String, _ sub: String?) -> Clip {
             var c = Clip(); c.id = id; c.type = .voice; c.start = start; c.duration = 1; c.charId = "a"; c.text = text; c.subtitleText = sub; return c
         }
@@ -414,7 +414,7 @@ final class TachieTests: XCTestCase {
     func testSubtitleIsDrawnFromSubtitleTextAndEmptyDrawsNothing() throws {
         func make(_ sub: String?) -> Project {
             var c = Clip(); c.type = .voice; c.start = 0; c.duration = 1; c.charId = "a"; c.text = "あ"; c.subtitle = true; c.fontSize = 30; c.subtitleText = sub
-            var p = project(clips: [[c]], characters: [character("a", "霊夢")], w: 200, h: 100)
+            var p = project(clips: [[c]], characters: [character("a", "キャラ1")], w: 200, h: 100)
             p.bg = "#000000"
             return p
         }

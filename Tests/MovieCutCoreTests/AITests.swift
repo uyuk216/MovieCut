@@ -3,24 +3,24 @@ import XCTest
 
 final class AITests: XCTestCase {
     // MARK: 台本
-    let names = ["霊夢", "魔理沙"]
+    let names = ["キャラ1", "キャラ3"]
 
     func testScriptParseToleratesFencesAndProse() throws {
         let r = """
         もちろんです!台本です。
         ```
-        霊夢: こんにちは
-        魔理沙：やあ、元気か?
-        - 霊夢: 「元気だよ」
-        **魔理沙**: そうか
+        キャラ1: こんにちは
+        キャラ3：やあ、元気か?
+        - キャラ1: 「元気だよ」
+        **キャラ3**: そうか
         ナレーター: 知らない人
         ```
         以上です。
         """
-        XCTAssertEqual(try AIScriptPrompt.parse(r, characterNames: names), ["霊夢: こんにちは", "魔理沙: やあ、元気か?", "霊夢: 元気だよ", "魔理沙: そうか"])
+        XCTAssertEqual(try AIScriptPrompt.parse(r, characterNames: names), ["キャラ1: こんにちは", "キャラ3: やあ、元気か?", "キャラ1: 元気だよ", "キャラ3: そうか"])
     }
     func testScriptParseWithoutFences() throws {
-        XCTAssertEqual(try AIScriptPrompt.parse("前置き\n1. 霊夢: はい\n説明: これは無視", characterNames: names), ["霊夢: はい"])
+        XCTAssertEqual(try AIScriptPrompt.parse("前置き\n1. キャラ1: はい\n説明: これは無視", characterNames: names), ["キャラ1: はい"])
     }
     func testScriptGarbageThrows() {
         XCTAssertThrowsError(try AIScriptPrompt.parse("すみません、できません。", characterNames: names)) {
@@ -30,14 +30,14 @@ final class AITests: XCTestCase {
     }
     func testScriptParsedLinesAreImportableByExistingParser() throws {
         let p = Project.new()
-        for l in try AIScriptPrompt.parse("霊夢: やあ", characterNames: p.characters.map(\.name)) {
+        for l in try AIScriptPrompt.parse("キャラ1: やあ", characterNames: p.characters.map(\.name)) {
             let (who, text) = try XCTUnwrap(ScriptTimeline.parse(line: l, characters: p.characters, selectedCharId: nil))
-            XCTAssertEqual(who.name, "霊夢"); XCTAssertEqual(text, "やあ")
+            XCTAssertEqual(who.name, "キャラ1"); XCTAssertEqual(text, "やあ")
         }
     }
     func testScriptPromptContainsThemeAndNames() {
         let s = AIScriptPrompt.build(.init(theme: "猫の飼い方", characterNames: names, lineCount: 10))
-        XCTAssertTrue(s.contains("猫の飼い方")); XCTAssertTrue(s.contains("霊夢、魔理沙")); XCTAssertTrue(s.contains("10 行"))
+        XCTAssertTrue(s.contains("猫の飼い方")); XCTAssertTrue(s.contains("キャラ1、キャラ3")); XCTAssertTrue(s.contains("10 行"))
         XCTAssertTrue(AIScriptPrompt.build(.init(theme: "x", characterNames: names, lineCount: 9999)).contains("60 行"))
     }
 
@@ -77,13 +77,13 @@ final class AITests: XCTestCase {
         XCTAssertEqual(try AIRewritePrompt.parse(String(repeating: "あ", count: 1000)).count, AIRewritePrompt.maxLength)
     }
     func testRewritePromptHasOriginal() {
-        let s = AIRewritePrompt.build(text: "元の文", characterName: "霊夢", mode: .shorten)
-        XCTAssertTrue(s.contains("元の文")); XCTAssertTrue(s.contains("短く")); XCTAssertTrue(s.contains("霊夢"))
+        let s = AIRewritePrompt.build(text: "元の文", characterName: "キャラ1", mode: .shorten)
+        XCTAssertTrue(s.contains("元の文")); XCTAssertTrue(s.contains("短く")); XCTAssertTrue(s.contains("キャラ1"))
     }
 
     // MARK: 偽プロバイダ
     func testFakeProviderEndToEnd() async throws {
-        let f = FakeAIProvider(.reply("霊夢: はい\n魔理沙: いいえ"))
+        let f = FakeAIProvider(.reply("キャラ1: はい\nキャラ3: いいえ"))
         let out = try await f.complete("p")
         XCTAssertEqual(try AIScriptPrompt.parse(out, characterNames: names).count, 2)
         XCTAssertEqual(f.prompts, ["p"])
@@ -113,10 +113,10 @@ final class AITests: XCTestCase {
     func quoted(_ p: String) -> String { "'" + p + "'" }
 
     func testCommandSuccessReadsStdin() async throws {
-        let path = try script("read -r first\nprintf '霊夢: 受け取った(%s)\\n' \"$first\"\n")
+        let path = try script("read -r first\nprintf 'キャラ1: 受け取った(%s)\\n' \"$first\"\n")
         let p = try CommandAIProvider(commandLine: quoted(path) + " --flag", timeout: 10)
         let out = try await p.complete("テーマ\n二行目")
-        XCTAssertEqual(out, "霊夢: 受け取った(テーマ)\n")
+        XCTAssertEqual(out, "キャラ1: 受け取った(テーマ)\n")
     }
     func testCommandGarbageOutputStillReturnsButParserRejects() async throws {
         let path = try script("echo 'すみません、お手伝いできません'\n")
@@ -189,15 +189,15 @@ final class AITests: XCTestCase {
     func testProjectInfoJSON() async throws {
         var p = Project.new()
         let dir = FileManager.default.temporaryDirectory
-        try await ScriptTimeline.add(lines: ["霊夢: こんにちは"], to: &p, voice: ToneVoiceProvider(), directory: dir)
+        try await ScriptTimeline.add(lines: ["キャラ1: こんにちは"], to: &p, voice: ToneVoiceProvider(), directory: dir)
         p.markers = [Marker(time: 1, name: "章")]
         let obj = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(try ProjectInfo.json(p).utf8)) as? [String: Any])
         XCTAssertEqual(obj["size"] as? String, "1920x1080")
         XCTAssertEqual(obj["clipCount"] as? Int, 1)
-        XCTAssertEqual(obj["script"] as? [String], ["霊夢: こんにちは"])
+        XCTAssertEqual(obj["script"] as? [String], ["キャラ1: こんにちは"])
         XCTAssertEqual((obj["characters"] as? [[String: Any]])?.count, 3)
         XCTAssertEqual((obj["markers"] as? [[String: Any]])?.first?["name"] as? String, "章")
         let clip = try XCTUnwrap((obj["clips"] as? [[String: Any]])?.first)
-        XCTAssertEqual(clip["character"] as? String, "霊夢"); XCTAssertEqual(clip["type"] as? String, "voice")
+        XCTAssertEqual(clip["character"] as? String, "キャラ1"); XCTAssertEqual(clip["type"] as? String, "voice")
     }
 }

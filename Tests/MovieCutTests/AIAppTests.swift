@@ -10,7 +10,7 @@ final class AIAppTests: XCTestCase {
 
     private func makeModel(reply: FakeAIProvider.Behavior, confirm: Bool = true, reviewButton: Int? = 0, reviewText: String? = nil, spy: Spy = Spy()) -> (ProjectModel, FakeAIProvider, Spy) {
         var p = Project.new()
-        p.tracks[0].clips = [voice("v1", "霊夢", "こんにちは、今日はいい天気ですね", start: 0, dur: 3), voice("v2", "魔理沙", "そうだな", start: 20, dur: 2)]
+        p.tracks[0].clips = [voice("v1", "キャラ1", "こんにちは、今日はいい天気ですね", start: 0, dur: 3), voice("v2", "キャラ3", "そうだな", start: 20, dur: 2)]
         let m = ProjectModel(project: p)
         m.notices = OneTimeNotices()
         let fake = FakeAIProvider(reply)
@@ -29,8 +29,8 @@ final class AIAppTests: XCTestCase {
     private func steps(_ m: ProjectModel) -> Int { let u = m.effectiveUndoManager; var n = 0; while u.canUndo { u.undo(); n += 1 }; for _ in 0..<n { u.redo() }; return n }
 
     func testDeclinedConfirmSendsNothing() async {
-        let (m, fake, spy) = makeModel(reply: .reply("霊夢: はい"), confirm: false)
-        let ok = await m.generateAIScript(theme: "猫", characterNames: ["霊夢"], lineCount: 5)
+        let (m, fake, spy) = makeModel(reply: .reply("キャラ1: はい"), confirm: false)
+        let ok = await m.generateAIScript(theme: "猫", characterNames: ["キャラ1"], lineCount: 5)
         XCTAssertFalse(ok)
         XCTAssertEqual(fake.prompts, [], "確認で断ったら AI には何も送らない")
         XCTAssertEqual(spy.confirms.count, 1)
@@ -42,42 +42,42 @@ final class AIAppTests: XCTestCase {
         m.aiUI.makeProvider = { throw AIError.notConfigured }
         var asked = false
         m.aiUI.confirmSend = { _, _ in asked = true; return true }
-        let ok = await m.generateAIScript(theme: "猫", characterNames: ["霊夢"], lineCount: 5)
+        let ok = await m.generateAIScript(theme: "猫", characterNames: ["キャラ1"], lineCount: 5)
         XCTAssertFalse(ok); XCTAssertFalse(asked)
         XCTAssertEqual(m.errorTitle, "AI を使えません")
         XCTAssertTrue(m.errorMessage?.contains("設定") == true)
     }
     func testScriptGoesToScriptFieldOnly() async {
-        let (m, _, spy) = makeModel(reply: .reply("前置き\n```\n霊夢: こんにちは\n魔理沙: やあ\n```"))
+        let (m, _, spy) = makeModel(reply: .reply("前置き\n```\nキャラ1: こんにちは\nキャラ3: やあ\n```"))
         m.scriptText = "既存: 行"
         let before = m.project
-        let ok = await m.generateAIScript(theme: "猫", characterNames: ["霊夢", "魔理沙"], lineCount: 5)
+        let ok = await m.generateAIScript(theme: "猫", characterNames: ["キャラ1", "キャラ3"], lineCount: 5)
         XCTAssertTrue(ok)
-        XCTAssertEqual(m.scriptText, "既存: 行\n霊夢: こんにちは\n魔理沙: やあ")
+        XCTAssertEqual(m.scriptText, "既存: 行\nキャラ1: こんにちは\nキャラ3: やあ")
         XCTAssertEqual(m.project, before, "音声もクリップも自動では作らない")
         XCTAssertEqual(spy.reviews, 1)
     }
     func testScriptGarbageReportsAndChangesNothing() async {
         let (m, _, spy) = makeModel(reply: .reply("すみません、できません"))
-        let ok = await m.generateAIScript(theme: "猫", characterNames: ["霊夢"], lineCount: 5)
+        let ok = await m.generateAIScript(theme: "猫", characterNames: ["キャラ1"], lineCount: 5)
         XCTAssertFalse(ok); XCTAssertEqual(m.scriptText, ""); XCTAssertEqual(spy.reviews, 0)
         XCTAssertEqual(m.errorTitle, "AI の返事を使えません")
     }
     func testReviewCancelKeepsScriptEmpty() async {
-        let (m, _, _) = makeModel(reply: .reply("霊夢: はい"), reviewButton: nil)
-        let ok = await m.generateAIScript(theme: "猫", characterNames: ["霊夢"], lineCount: 5)
+        let (m, _, _) = makeModel(reply: .reply("キャラ1: はい"), reviewButton: nil)
+        let ok = await m.generateAIScript(theme: "猫", characterNames: ["キャラ1"], lineCount: 5)
         XCTAssertFalse(ok); XCTAssertEqual(m.scriptText, "")
     }
     func testProviderErrorShownAndNotBusy() async {
         let (m, _, _) = makeModel(reply: .fail(.timedOut(5)))
-        let ok = await m.generateAIScript(theme: "猫", characterNames: ["霊夢"], lineCount: 5)
+        let ok = await m.generateAIScript(theme: "猫", characterNames: ["キャラ1"], lineCount: 5)
         XCTAssertFalse(ok); XCTAssertNil(m.busyMessage); XCTAssertNil(m.aiCancel)
         XCTAssertEqual(m.errorTitle, "AI を使えませんでした")
         XCTAssertTrue(m.errorMessage?.contains("5 秒") == true)
     }
     func testCancelWhileWaiting() async throws {
-        let (m, _, _) = makeModel(reply: .delay(seconds: 10, reply: "霊夢: はい"))
-        let t = Task { await m.generateAIScript(theme: "猫", characterNames: ["霊夢"], lineCount: 5) }
+        let (m, _, _) = makeModel(reply: .delay(seconds: 10, reply: "キャラ1: はい"))
+        let t = Task { await m.generateAIScript(theme: "猫", characterNames: ["キャラ1"], lineCount: 5) }
         for _ in 0..<50 where m.aiCancel == nil { try await Task.sleep(nanoseconds: 20_000_000) }
         XCTAssertNotNil(m.aiCancel, "問い合わせ中はキャンセルできる")
         XCTAssertNotNil(m.busyMessage)
