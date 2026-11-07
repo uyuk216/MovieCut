@@ -178,7 +178,8 @@ final class TachieTests: XCTestCase {
         c = try JSONDecoder().decode(Character.self, from: Data(new.utf8))
         s = String(decoding: try JSONEncoder().encode(c), as: UTF8.self)
         for k in ["imgClosed", "imgOpen", "\"x\"", "\"y\"", "scale", "flip", "alwaysShow"] { XCTAssertFalse(s.contains(k), k) }
-        XCTAssertEqual(try JSONEncoder().encode(try JSONDecoder().decode(Character.self, from: Data(s.utf8))), try JSONEncoder().encode(c))
+        let enc = JSONEncoder(); enc.outputFormatting = .sortedKeys
+        XCTAssertEqual(try enc.encode(try JSONDecoder().decode(Character.self, from: Data(s.utf8))), try enc.encode(c))
         // 値を変えれば(既定でなければ)書く
         c.flip = true
         XCTAssertTrue(String(decoding: try JSONEncoder().encode(c), as: UTF8.self).contains("flip"))
