@@ -154,7 +154,7 @@ cat > "$APPCAST" <<XML
   </channel>
 </rss>
 XML
-plutil -lint "$APPCAST" >/dev/null || die "appcast.xml が XML として不正"
+xmllint --noout "$APPCAST" || die "appcast.xml が XML として不正"
 
 # ---- appcast の検査 ----
 grep -q "enclosure url=\"${URL}\"" "$APPCAST" || die "appcast の enclosure URL が想定と違う"
