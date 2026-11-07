@@ -9,7 +9,7 @@
 #   --dry-run: 何もビルドせず、やることを表示し、仮のバンドルで個人情報の検査だけ試す(build/ には触らない)。
 set -euo pipefail
 cd "$(dirname "$0")/.."
-VERSION=0.2.0
+VERSION=0.2.1
 APP_NAME="Movie Cut"
 EDITION=personal
 DRY_RUN=0
