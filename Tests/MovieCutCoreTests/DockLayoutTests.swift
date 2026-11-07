@@ -24,7 +24,7 @@ final class DockLayoutTests: XCTestCase {
         XCTAssertEqual(cf, 0.66, accuracy: 0.001)
         XCTAssertEqual(right, .group(DockGroup(panels: [.inspector, .characters], active: .inspector)))  // 右 = プロパティ|キャラクター(タブ)
         guard case .split(.vertical, let vf, let top, let bottom) = left else { return XCTFail() }
-        XCTAssertEqual(vf, 0.5, accuracy: 0.001)
+        XCTAssertEqual(vf, 0.45, accuracy: 0.001)
         XCTAssertEqual(top, .group(DockGroup(panels: [.preview])))                        // 左上 = プレビュー
         XCTAssertEqual(bottom, .group(DockGroup(panels: [.timeline])))                    // 左下 = タイムライン
     }
@@ -335,7 +335,7 @@ final class DockMinimumWidthTests: XCTestCase {
         guard case .split(.horizontal, _, let left, let right) = DockLayout.default.root! else { return XCTFail() }
         XCTAssertGreaterThanOrEqual(DockMetrics.minExtent(of: right, axis: .horizontal), 300)
         XCTAssertGreaterThanOrEqual(DockMetrics.minExtent(of: left, axis: .horizontal), 320)
-        XCTAssertGreaterThanOrEqual(DockMetrics.minExtent(of: left, axis: .vertical), 340)   // プレビュー 200 + タイムライン 140
+        XCTAssertGreaterThanOrEqual(DockMetrics.minExtent(of: left, axis: .vertical), 400)   // プレビュー 200 + タイムライン 200
     }
     func testTooNarrowSplitsProportionally() {
         let w = DockMetrics.firstSize(total: 400, fraction: 0.5, minFirst: 320, minSecond: 300)

@@ -248,11 +248,11 @@ public struct DockLayout: Equatable, Codable {
 
     private static func leaf(_ p: DockPanel) -> DockNode { .group(DockGroup(panels: [p])) }
 
-    /// 初期配置 = YMM4 の初期画面に倣う: 左の列(約66%)= 上にプレビュー(再生バーつき・列の約60%)/ 下にタイムライン(約40%)、
+    /// 初期配置 = YMM4 の初期画面に倣う: 左の列(約66%)= 上にプレビュー(再生バーつき・列の約55%)/ 下にタイムライン(約45%)、
     /// 右の列(約34%)= プロパティとキャラクターを同じグループのタブに(プロパティが前)。
     public static let `default` = DockLayout(root:
         .split(axis: .horizontal, fraction: 0.66,
-               first: .split(axis: .vertical, fraction: 0.5, first: leaf(.preview), second: leaf(.timeline)),
+               first: .split(axis: .vertical, fraction: 0.45, first: leaf(.preview), second: leaf(.timeline)),
                second: .group(DockGroup(panels: [.inspector, .characters], active: .inspector))))
 
     public static func preset(_ p: DockPreset) -> DockLayout {
@@ -600,7 +600,7 @@ public enum DockMetrics {
         switch panel {
         case .inspector, .characters: return (300, 160)
         case .preview: return (320, 200)
-        case .timeline: return (320, 140)
+        case .timeline: return (320, 200)   // 定規 22 + レイヤー約 4 行が見える高さ
         }
     }
 
