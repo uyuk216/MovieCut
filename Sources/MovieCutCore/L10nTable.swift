@@ -68,6 +68,7 @@ enum L10nTable {
         "LUT を読み込む…": "Load LUT…",
         "MP4 を書き出す…": "Export MP4…",
         "Movie Cut について": "About Movie Cut",
+        "アップデートを確認…": "Check for Updates…",
         "PSDから立ち絵を作る…": "Make Character from PSD…",
         "PSDを読み込む…": "Import PSD…",
         "QRコードを追加…": "Add QR Code…",

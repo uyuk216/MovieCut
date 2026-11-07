@@ -4,6 +4,8 @@
 #   --edition personal(既定): 今までどおり build/ に作る。バンドル ID jp.local.moviecut、データは個人の環境。
 #   --edition public: 配布用。build/public/ に作る。バンドル ID jp.local.moviecut.public、データは別フォルダ・別設定。
 #                     作ったバンドルに個人のファイルや名前が入っていないかを調べ、見つかったら失敗する。
+#                     配布版だけ Sparkle(自動アップデート)を組み込む。公開鍵は環境変数 MOVIECUT_SPARKLE_PUBLIC_KEY(Base64)で渡す。
+#                     未設定ならプレースホルダが入り、アプリはアップデートの確認を始めない(秘密鍵はこのスクリプトでは扱わない)。
 #   --dry-run: 何もビルドせず、やることを表示し、仮のバンドルで個人情報の検査だけ試す(build/ には触らない)。
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -32,7 +34,12 @@ APP="${OUT_DIR}/${APP_NAME}.app"
 # 個人のファイル・名前がバンドルに入っていないかを調べる(見つかったら 1 を返す)
 scan_bundle() {
   local bundle="$1" bad=0 hits
-  hits="$(grep -rIl -e '/Users/' -e 'uyu' "$bundle" 2>/dev/null || true)"
+  # 例外: 配布用アップデートの公開 URL(github.com/uyuk216/MovieCut)、署名の CodeResources(ハッシュの文字列がたまたま一致する)
+  hits=""
+  while IFS= read -r f; do
+    case "$f" in */_CodeSignature/CodeResources) continue ;; esac
+    if sed 's#github\.com/uyuk216/MovieCut/#GH/#g' "$f" | grep -q -e '/Users/' -e 'uyu'; then hits="${hits}${f}"$'\n'; fi
+  done < <(grep -rIl -e '/Users/' -e 'uyu' "$bundle" 2>/dev/null || true)
   [ -n "$hits" ] && { echo "NG: 個人のパス・名前を含むテキスト:"; echo "$hits"; bad=1; }
   hits="$(find "$bundle" -type f \( -iname '*.psd' -o -iname '*.psb' -o -iname '*.mov' -o -iname '*.mp4' -o -iname '*.m4v' -o -iname '*.wav' -o -iname '*.mp3' -o -iname '*.ymproj' -o -iname '*.mcpjc' -o -iname '*.mcrecover' -o -iname '*Fixtures*' \) 2>/dev/null)"
   [ -n "$hits" ] && { echo "NG: 個人の素材・試験用ファイルらしきもの:"; echo "$hits"; bad=1; }
@@ -60,7 +67,13 @@ if [ "$DRY_RUN" = 1 ]; then
 fi
 
 EXTRA_FLAGS=()
+SPARKLE_KEY="${MOVIECUT_SPARKLE_PUBLIC_KEY:-}"
 if [ "$EDITION" = public ]; then
+  export MOVIECUT_SPARKLE=1   # Package.swift が Sparkle を取得・リンクする(個人版は付けない)
+  if [ -z "$SPARKLE_KEY" ]; then
+    SPARKLE_KEY="PLACEHOLDER_SET_MOVIECUT_SPARKLE_PUBLIC_KEY"
+    echo "注意: MOVIECUT_SPARKLE_PUBLIC_KEY が未設定。公開鍵はプレースホルダのため、このビルドはアップデートを確認しません。" >&2
+  fi
   # 配布版にビルドした場所(個人のパス)を残さない
   EXTRA_FLAGS=(-Xswiftc -file-prefix-map -Xswiftc "$(pwd)=/src" -Xswiftc -debug-prefix-map -Xswiftc "$(pwd)=/src")
 fi
@@ -70,6 +83,18 @@ BIN="$(swift build -c release --arch arm64 --show-bin-path)"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN/MovieCut" "$APP/Contents/MacOS/MovieCut"
+SPARKLE_PLIST=""
+if [ "$EDITION" = public ]; then
+  # Sparkle.framework を同梱し、実行ファイルがそこを探せるようにする
+  [ -d "$BIN/Sparkle.framework" ] || { echo "失敗: $BIN/Sparkle.framework が見つかりません" >&2; exit 1; }
+  mkdir -p "$APP/Contents/Frameworks"
+  ditto "$BIN/Sparkle.framework" "$APP/Contents/Frameworks/Sparkle.framework"
+  install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP/Contents/MacOS/MovieCut"
+  SPARKLE_PLIST="  <key>SUFeedURL</key><string>https://github.com/uyuk216/MovieCut/releases/latest/download/appcast.xml</string>
+  <key>SUEnableAutomaticChecks</key><true/>
+  <key>SUScheduledCheckInterval</key><integer>86400</integer>
+  <key>SUPublicEDKey</key><string>${SPARKLE_KEY}</string>"
+fi
 
 # ヘルプメニューの「ライセンス」「第三者の規約」で開く文書(リポジトリ直下から)
 REPO_ROOT="$(pwd)"
@@ -96,6 +121,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>NSHighResolutionCapable</key><true/>
   <key>NSSpeechRecognitionUsageDescription</key><string>動画や音声の話し声を、このMacの中で文字にして字幕を作るために使います。音声は外部に送りません。</string>
   <key>NSPrincipalClass</key><string>NSApplication</string>
+${SPARKLE_PLIST}
   <key>NSHumanReadableCopyright</key><string>Copyright © 2026 Movie Cut. All rights reserved.</string>
   <key>CFBundleDocumentTypes</key>
   <array>

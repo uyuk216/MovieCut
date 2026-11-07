@@ -45,7 +45,10 @@ struct AppCommands: Commands {
     var body: some Commands {
         // アプリメニュー
         CommandGroup(replacing: .appInfo) {
-            MenuSection { _, run in MenuItemView(spec: AppMenuSpec.about, perform: run) }
+            MenuSection { _, run in
+                MenuItemView(spec: AppMenuSpec.about, perform: run)
+                if AppUpdater.isAvailable { MenuItemView(spec: AppMenuSpec.checkForUpdates, perform: run) }
+            }
         }
         CommandGroup(replacing: .appSettings) {
             MenuSection { s, run in MenuItemView(spec: AppMenuSpec.settings(s), perform: run) }

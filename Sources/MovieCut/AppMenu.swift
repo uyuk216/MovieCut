@@ -4,6 +4,7 @@ import MovieCutCore
 /// メニューバーの項目が呼ぶ操作(ツールバーと同じモデルの関数に行き着く)。
 enum MenuCommand: Hashable {
     case about, settings, videoSettings
+    case checkForUpdates
     case addMedia, importPSD, importRigFolder, importRigPSD, export, exportPreset(ExportPreset), exportCustomPreset(String), saveCustomPreset
     // 字幕(B3)とチャプター
     case importSubtitles, exportSubtitles, generateSubtitles, copyChapters, copyChaptersColor(MarkerColor)
@@ -536,6 +537,9 @@ enum AppMenuSpec {
     }
 
     static let about = MenuItemSpec(command: .about, title: "Movie Cut について", shortcut: nil, enabled: true, checked: nil)
+
+    /// アプリメニュー ▸ アップデートを確認…(配布版だけ。メニューへ出すかは AppUpdater.isAvailable で決める)。
+    static let checkForUpdates = MenuItemSpec(command: .checkForUpdates, title: "アップデートを確認…", shortcut: nil, enabled: true, checked: nil)
 
     static func settings(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .settings, title: "設定…", shortcut: cmd(","), enabled: s.canEdit, checked: nil)
@@ -1279,7 +1283,7 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s), apngExport(s)] + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), clipListItem(s), noteListItem(s)] + scriptStoryboardItems(s) + [makeProxies(s)] + [] + clipMenu(s).flatMap { $0 } + multicamItems(s) + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textVerticalItem(s), textPerCharItem(s), textCounterItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), audioAutoSyncItem(s), beatMarkersItem(s), scaleDuplicateItem(s), beatPlaceItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
+        [about, checkForUpdates, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s), apngExport(s)] + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), clipListItem(s), noteListItem(s)] + scriptStoryboardItems(s) + [makeProxies(s)] + [] + clipMenu(s).flatMap { $0 } + multicamItems(s) + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textVerticalItem(s), textPerCharItem(s), textCounterItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), audioAutoSyncItem(s), beatMarkersItem(s), scaleDuplicateItem(s), beatPlaceItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerColorItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + guideItems(s) + [previewProxy(s), fullScreen(s)] + help.flatMap { $0 }
@@ -1294,6 +1298,7 @@ enum AppMenu {
     static func perform(_ c: MenuCommand, model: ProjectModel?) {
         switch c {
         case .about: AppInfo.showAboutPanel()
+        case .checkForUpdates: AppUpdater.shared.checkForUpdates()
         case .helpShortcuts: ShortcutSheet.show()
         case .openRecent(let path): WelcomeActions.open(path: path)
         case .clearRecents: RecentProjectsController.shared.clear()

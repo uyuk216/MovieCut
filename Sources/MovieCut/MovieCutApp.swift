@@ -29,6 +29,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             MainActor.assumeIsolated { WelcomeWindow.showAtLaunchIfNeeded(launchedWithDocuments: launchedWithDocuments) }
         }
         DebugHooks.shared.appDidLaunch()
+        // 配布版だけ、アップデートの自動確認を始める(個人版・鍵なしの試作では何もしない)
+        MainActor.assumeIsolated { AppUpdater.shared.start() }
         // 異常終了で残った自動保存の写しがあれば、復元するかを聞く(静かな検証では聞かない)
         if !DebugHooks.isQuiet {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { MainActor.assumeIsolated { RecoveryPrompt.offerIfNeeded() } }
