@@ -256,6 +256,11 @@ extension ProjectModel {
         edit(name) { $0 = p }
     }
 
+    /// おすすめ音声設定を適用する(声の項目だけ。1 回の取り消しで戻る)。
+    func applyVoicePreset(_ preset: VoicePreset, charId: String) {
+        setCharacterProperty({ $0 = VoicePresetCatalog.applying(preset, to: $0) }, name: "おすすめ音声設定の適用", charId: charId)
+    }
+
     func setCharacterField(_ field: CharacterField, _ value: Double, charId: String? = nil) {
         setCharacterProperty({ field.apply(value, to: &$0) }, name: field.undoName, charId: charId)
     }

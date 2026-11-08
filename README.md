@@ -19,6 +19,9 @@ Scripts/make-app.sh --edition public dmg   # 配布版(build/public/)。個人�
 Scripts/make-app.sh --edition public --dry-run   # 何も作らず、やることの表示と個人情報の検査だけ試す
 ```
 
+## おすすめ音声設定
+キャラクターのパネルの「おすすめ音声設定…」から、配布された声の設定(JSON)をネットまたはファイルから取り込めます。形式と公開の仕方は [docs/おすすめ音声設定の配布.md](docs/おすすめ音声設定の配布.md)。
+
 ## テスト
 ```
 swift test

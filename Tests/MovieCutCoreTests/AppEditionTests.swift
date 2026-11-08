@@ -96,8 +96,8 @@ final class DistributionGuardTests: XCTestCase {
     func testNoPersonalPathsOrNamesInShippedSources() throws {
         let forbidden = ["/Users/", "uyu", "mycodex"]
         var files: [URL] = []
-        // make-app.sh は検査用に禁止語そのものを、release.sh は公開先のリポジトリ名(uyuk216)を書いている開発用スクリプトで、配布物には入らないので除く
-        for d in ["Sources", "Resources", "Scripts"] { files += textFiles(under: d).filter { !["make-app.sh", "release.sh"].contains($0.lastPathComponent) } }
+        // make-app.sh は検査用に禁止語そのものを、release.sh は公開先のリポジトリ名(uyuk216)を書いている開発用スクリプトで、配布物には入らないので除く。VoicePresetSheet.swift も公開先の Pages の URL(固定)に同じ名前を含むので除く
+        for d in ["Sources", "Resources", "Scripts"] { files += textFiles(under: d).filter { !["make-app.sh", "release.sh", "VoicePresetSheet.swift"].contains($0.lastPathComponent) } }
         for f in ["LICENSE.ja.md", "docs/第三者の規約.md"] { files.append(packageRoot.appendingPathComponent(f)) }
         XCTAssertGreaterThan(files.count, 50, "ソースが見つからない(場所の取り違え)")
         var hits: [String] = []

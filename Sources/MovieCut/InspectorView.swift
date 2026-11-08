@@ -1102,6 +1102,7 @@ struct CharacterInspector: View {
     @ObservedObject var model: ProjectModel
     @ObservedObject var speakers: SpeakerCatalog
     let charId: String
+    @State private var showPresets = false
 
     private var ch: Character? { model.character(charId) }
 
@@ -1149,6 +1150,9 @@ struct CharacterInspector: View {
                     .labelsHidden()
                 }
                 if c.engine == "voicevox" { voicevoxFields(c) } else { aquestalkFields(c) }
+                Button("おすすめ音声設定…") { showPresets = true }
+                    .controlSize(.small)
+                    .disabled(model.isLocked)
                 InspectorSection(title: "操作")
                 Button { Task { await model.testSpeak(charId: charId) } } label: { Text("試しに読み上げる").frame(maxWidth: .infinity) }
                     .disabled(model.isLocked)
@@ -1160,6 +1164,7 @@ struct CharacterInspector: View {
                     .help(model.project.characters.count <= 1 ? "最後の1人は消せません" : "このキャラとセリフを消します")
             }
             .controlSize(.regular)
+            .sheet(isPresented: $showPresets) { VoicePresetSheet(model: model, charId: charId) }
             .onDisappear { model.flushCoalesced() }
             .task(id: model.project.voicevoxUrl) {
                 if c.engine == "voicevox" { await speakers.load(baseURL: model.project.voicevoxUrl) }
