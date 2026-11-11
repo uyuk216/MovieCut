@@ -64,8 +64,8 @@ public enum AutosaveRecovery {
     public static func load(_ url: URL) -> Entry? {
         guard isSafeFileName(url.lastPathComponent),
               let data = try? InputLimits.readFile(url, limit: maxFileBytes, what: "復元ファイル", allowSymlink: false),
-              InputLimits.jsonDepthWithinLimit(data),
               let e = try? decode(data), e.project.count <= InputLimits.maxProjectBytes,
+              InputLimits.jsonDepthWithinLimit(e.project),
               (try? Project.decode(from: e.project)) != nil else { return nil }
         return e
     }
@@ -87,19 +87,67 @@ public enum AutosaveRecovery {
         edited && revision != lastWritten
     }
 
+    /// 自動保存の失敗の数え方(画面に依存しない)。続けて `threshold` 回失敗したら 1 度だけ知らせ、成功したら知らせを消す。
+    public struct FailureTracker: Equatable, Sendable {
+        public static let threshold = 2
+        public static let message = "自動保存の写しを書けません(ディスクの空きなどを確認してください)。編集は続けられますが、いまの内容は復元用に残っていません"
+        public private(set) var consecutiveFailures = 0
+        public private(set) var warningShown = false
+        public init() {}
+
+        public enum Event: Equatable, Sendable { case none, showWarning, clearWarning }
+
+        /// 1 回の書き込みの結果を記録し、画面に出すべきことを返す(知らせは続けて失敗しても 1 度だけ)。
+        public mutating func record(success: Bool) -> Event {
+            if success {
+                consecutiveFailures = 0
+                if warningShown { warningShown = false; return .clearWarning }
+                return .none
+            }
+            consecutiveFailures += 1
+            if consecutiveFailures >= Self.threshold, !warningShown { warningShown = true; return .showWarning }
+            return .none
+        }
+    }
+
     /// 写しを消すべきか: 保存済み(編集済みでない)のとき。
     public static func shouldRemove(edited: Bool) -> Bool { !edited }
 
-    public static func encode(_ e: Entry) throws -> Data {
+    /// 写しの形式。
+    /// - 新(v2): 1 行目に小さな JSON の見出し(`{"format":"mcrecover2","name":…,"originalPath":…,"savedAt":…}`)、改行、そのあとにプロジェクトの JSON をそのまま。
+    ///   プロジェクトを base64 にして JSON に包み直さない(書く量が約 3 割減り、二重の符号化もない)。
+    /// - 旧(v1): 全体が 1 つの JSON(`Entry` そのもの。`project` は base64)。読むことだけ続ける(前の版が書いた写しを復元できる)。
+    /// 旧い版のアプリは v2 を読めない(= 一覧に出ない)。同じ PC で版を戻す場合だけの影響で、元のファイルは書き換えない。
+    public static let formatTag = "mcrecover2"
+
+    struct Header: Codable { var format: String; var name: String; var originalPath: String?; var savedAt: Date }
+
+    private static func jsonEncoder() -> JSONEncoder {
         let enc = JSONEncoder()
         enc.outputFormatting = [.sortedKeys]
         enc.dateEncodingStrategy = .secondsSince1970
-        return try enc.encode(e)
+        return enc
     }
 
+    /// 書く形式(v2)。
+    public static func encode(_ e: Entry) throws -> Data {
+        var out = try jsonEncoder().encode(Header(format: formatTag, name: e.name, originalPath: e.originalPath, savedAt: e.savedAt))
+        out.append(0x0A)
+        out.append(e.project)
+        return out
+    }
+
+    /// 旧形式(v1)で書く(互換の確認用。アプリは使わない)。
+    public static func encodeLegacy(_ e: Entry) throws -> Data { try jsonEncoder().encode(e) }
+
+    /// v2 と v1 のどちらも読む。
     public static func decode(_ data: Data) throws -> Entry {
         let dec = JSONDecoder()
         dec.dateDecodingStrategy = .secondsSince1970
+        if let nl = data.firstIndex(of: 0x0A), nl < 64 * 1024,
+           let h = try? dec.decode(Header.self, from: data[data.startIndex..<nl]), h.format == formatTag {
+            return Entry(name: h.name, originalPath: h.originalPath, savedAt: h.savedAt, project: Data(data[data.index(after: nl)...]))
+        }
         return try dec.decode(Entry.self, from: data)
     }
 

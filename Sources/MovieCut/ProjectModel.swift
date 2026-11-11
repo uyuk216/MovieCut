@@ -123,6 +123,13 @@ final class ProjectModel: ObservableObject {
     let recoverySessionID = UUID().uuidString
     var recoveryWrittenRevision: Int?
     var recoveryTimer: Timer?
+    /// 写しの符号化・書き込み・削除を順番に行う直列キュー(主スレッドを止めない)。
+    nonisolated let recoveryQueue = DispatchQueue(label: "jp.local.moviecut.autosave", qos: .utility)
+    var recoveryWriteInFlight = false
+    /// 写しを消すたびに増やす(消す前に始めた書き込みの結果を捨てるため)。
+    var recoveryEpoch = 0
+    /// 書き込みの失敗の数え方(続けて失敗したら 1 度だけ状態欄に知らせる)。
+    var recoveryFailures = AutosaveRecovery.FailureTracker()
     /// 復元で開いた書類は、保存するまで「編集済み」扱い(写しを消さない)。
     var restoredFromRecovery = false
     /// ドラッグ中の編集の出発点(M4a。ドラッグの間は Undo に積まず、離したときに 1 回だけ登録する)。

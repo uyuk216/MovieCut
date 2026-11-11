@@ -87,13 +87,44 @@ extension ProjectModel {
     }
 
     /// 編集済みで版が変わっていれば写しを書く。保存済みなら写しを消す。
-    func autosaveTick(directory: URL, edited: Bool) {
+    /// 主スレッドでは値型のプロジェクトを写し取るだけ。符号化と書き込みは model ごとの直列キューで行い(2 つが重ならない。
+    /// 前の書き込みが終わっていなければ今回は見送り、次の周期でそのときの最新を書く = 最後に書いたものが残る)、
+    /// 結果は主スレッドへ戻して数える。`synchronous` はテスト用(その場で書いて結果まで反映する)。
+    func autosaveTick(directory: URL, edited: Bool, synchronous: Bool = false) {
         if AutosaveRecovery.shouldRemove(edited: edited) { removeRecoveryFile(in: directory); return }
-        guard AutosaveRecovery.shouldWrite(edited: edited, revision: autosaveRevision, lastWritten: recoveryWrittenRevision),
-              let data = try? savedProject.encoded() else { return }
-        let entry = AutosaveRecovery.Entry(name: documentName, originalPath: fileURL?.path, savedAt: Date(), project: data)
-        // 書けなくても編集は続けられる。次の周期で再度試す(復元フォルダの外・リンク・大きすぎる中身は書かない)
-        if AutosaveRecovery.write(entry, sessionID: recoverySessionID, in: directory) { recoveryWrittenRevision = autosaveRevision }
+        let revision = autosaveRevision
+        guard AutosaveRecovery.shouldWrite(edited: edited, revision: revision, lastWritten: recoveryWrittenRevision),
+              !recoveryWriteInFlight else { return }
+        // 主スレッドでの仕事はここまで(プロジェクトは値型なので、写しはその後の編集の影響を受けない)
+        let snapshot = savedProject
+        let name = documentName, path = fileURL?.path, sessionID = recoverySessionID
+        let epoch = recoveryEpoch
+        let work: @Sendable () -> Bool = {
+            guard let data = try? snapshot.encoded() else { return false }
+            let entry = AutosaveRecovery.Entry(name: name, originalPath: path, savedAt: Date(), project: data)
+            return AutosaveRecovery.write(entry, sessionID: sessionID, in: directory)
+        }
+        if synchronous {
+            applyAutosaveResult(work(), revision: revision, epoch: epoch)
+            return
+        }
+        recoveryWriteInFlight = true
+        recoveryQueue.async { [weak self] in
+            let ok = work()
+            DispatchQueue.main.async { MainActor.assumeIsolated { self?.applyAutosaveResult(ok, revision: revision, epoch: epoch) } }
+        }
+    }
+
+    /// 書き込みの結果を主スレッドで反映する。書けた版を覚え、失敗は数えて、続けて失敗したときだけ 1 度知らせる(成功で消す)。
+    func applyAutosaveResult(_ ok: Bool, revision: Int, epoch: Int) {
+        recoveryWriteInFlight = false
+        guard epoch == recoveryEpoch else { return }   // 書いている間に写しを消した(保存・閉じた)ので、結果は捨てる
+        if ok { recoveryWrittenRevision = revision }
+        switch recoveryFailures.record(success: ok) {
+        case .showWarning: statusText = AutosaveRecovery.FailureTracker.message
+        case .clearWarning: if statusText == AutosaveRecovery.FailureTracker.message { statusText = "" }
+        case .none: break
+        }
     }
 
     func removeRecoveryFile() {
@@ -101,7 +132,11 @@ extension ProjectModel {
     }
 
     private func removeRecoveryFile(in dir: URL) {
-        if let url = AutosaveRecovery.safeURL(sessionID: recoverySessionID, in: dir) { try? FileManager.default.removeItem(at: url) }
+        // 書き込み中のものがあれば、それが済んでから消す(同じ直列キューの後ろ。短く待つだけ。閉じてすぐ終了しても写しが残らない)。結果は epoch で捨てる
+        recoveryEpoch &+= 1
         recoveryWrittenRevision = nil
+        if let url = AutosaveRecovery.safeURL(sessionID: recoverySessionID, in: dir) {
+            recoveryQueue.sync { try? FileManager.default.removeItem(at: url) }
+        }
     }
 }

@@ -105,19 +105,19 @@ final class AutosaveRecoveryAppTests: XCTestCase {
         m.notices = OneTimeNotices()
         let file = dir.appendingPathComponent(AutosaveRecovery.fileName(sessionID: m.recoverySessionID))
 
-        m.autosaveTick(directory: dir, edited: false)
+        m.autosaveTick(directory: dir, edited: false, synchronous: true)
         XCTAssertFalse(FileManager.default.fileExists(atPath: file.path), "編集していなければ写さない")
 
         var c = Clip(); c.type = .text; c.text = "未保存"; c.duration = 1
         var t = Track(name: "文字"); t.clips = [c]
         m.project.tracks = [t]
-        m.autosaveTick(directory: dir, edited: true)
+        m.autosaveTick(directory: dir, edited: true, synchronous: true)
         let e = try AutosaveRecovery.decode(Data(contentsOf: file))
         XCTAssertEqual(e.name, "無題")
         XCTAssertNil(e.originalPath)
         XCTAssertEqual(try Project.decode(from: e.project), m.project)
 
-        m.autosaveTick(directory: dir, edited: false)
+        m.autosaveTick(directory: dir, edited: false, synchronous: true)
         XCTAssertFalse(FileManager.default.fileExists(atPath: file.path), "保存済みになったら写しを消す")
     }
 
@@ -126,7 +126,7 @@ final class AutosaveRecoveryAppTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: dir) }
         let m = ProjectModel(project: Project.new())
         m.restoredFromRecovery = true
-        m.autosaveTick(directory: dir, edited: m.restoredFromRecovery)
+        m.autosaveTick(directory: dir, edited: m.restoredFromRecovery, synchronous: true)
         let file = dir.appendingPathComponent(AutosaveRecovery.fileName(sessionID: m.recoverySessionID))
         XCTAssertTrue(FileManager.default.fileExists(atPath: file.path))
     }
@@ -264,14 +264,96 @@ final class ScriptTextModelTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: dir) }
         let m = ProjectModel(project: .new())
         m.notices = OneTimeNotices()
-        m.autosaveTick(directory: dir, edited: true)           // 最初の写し
+        m.autosaveTick(directory: dir, edited: true, synchronous: true)           // 最初の写し
         let file = dir.appendingPathComponent(AutosaveRecovery.fileName(sessionID: m.recoverySessionID))
         let first = try Data(contentsOf: file)
         m.scriptText = "未保存の台本"
-        m.autosaveTick(directory: dir, edited: true)
+        m.autosaveTick(directory: dir, edited: true, synchronous: true)
         XCTAssertNotEqual(try Data(contentsOf: file), first, "台本だけの変更でも写しを書き直す")
         let e = try AutosaveRecovery.decode(Data(contentsOf: file))
         let restored = try Project.decode(from: e.project)
         XCTAssertEqual(ProjectModel(project: restored).scriptText, "未保存の台本")
+    }
+}
+
+
+/// 自動保存の背景書き込みと、失敗の知らせ(時間に頼らない: キューの完了を待って、主キューの順番で結果を確かめる)。
+@MainActor
+final class AutosaveBackgroundTests: XCTestCase {
+    private func tempDir() throws -> URL {
+        let d = FileManager.default.temporaryDirectory.appendingPathComponent("recbg-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        return d
+    }
+
+    /// 背景キューの仕事と、その結果を主スレッドへ返す処理が済むまで待つ。
+    private func drain(_ m: ProjectModel) {
+        m.recoveryQueue.sync {}
+        let e = expectation(description: "main drained")
+        DispatchQueue.main.async { e.fulfill() }
+        wait(for: [e], timeout: 10)
+    }
+
+    func testBackgroundWriteLandsAndRecordsTheRevision() throws {
+        let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let m = ProjectModel(project: .new()); m.notices = OneTimeNotices()
+        m.scriptText = "背景で書く"
+        m.autosaveTick(directory: dir, edited: true)
+        XCTAssertTrue(m.recoveryWriteInFlight, "書き込みは別のキューで行う(主スレッドでは待たない)")
+        drain(m)
+        XCTAssertFalse(m.recoveryWriteInFlight)
+        XCTAssertEqual(m.recoveryWrittenRevision, m.autosaveRevision)
+        let file = dir.appendingPathComponent(AutosaveRecovery.fileName(sessionID: m.recoverySessionID))
+        XCTAssertEqual(try Project.decode(from: AutosaveRecovery.decode(Data(contentsOf: file)).project).scriptText, "背景で書く")
+        // 変わっていなければ書かない
+        let before = try Data(contentsOf: file)
+        m.autosaveTick(directory: dir, edited: true)
+        XCTAssertFalse(m.recoveryWriteInFlight)
+        XCTAssertEqual(try Data(contentsOf: file), before)
+    }
+
+    func testTickWhileWriteIsInFlightIsSkippedAndLaterWriteWins() throws {
+        let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let m = ProjectModel(project: .new()); m.notices = OneTimeNotices()
+        m.scriptText = "1"
+        m.autosaveTick(directory: dir, edited: true)
+        m.scriptText = "2"
+        m.autosaveTick(directory: dir, edited: true)     // 1 つ目がまだ主スレッドへ戻っていない = 見送り(重ならない)
+        drain(m)
+        m.autosaveTick(directory: dir, edited: true)     // 次の周期: 最新を書く
+        drain(m)
+        let file = dir.appendingPathComponent(AutosaveRecovery.fileName(sessionID: m.recoverySessionID))
+        XCTAssertEqual(try Project.decode(from: AutosaveRecovery.decode(Data(contentsOf: file)).project).scriptText, "2")
+    }
+
+    func testRemovalWinsOverAnInFlightWriteResult() throws {
+        let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let m = ProjectModel(project: .new()); m.notices = OneTimeNotices()
+        m.scriptText = "x"
+        m.autosaveTick(directory: dir, edited: true)
+        m.autosaveTick(directory: dir, edited: false)    // 保存した → 写しを消す(書き込みの済むのを待ってから)
+        drain(m)
+        let file = dir.appendingPathComponent(AutosaveRecovery.fileName(sessionID: m.recoverySessionID))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
+        XCTAssertNil(m.recoveryWrittenRevision, "消す前に始めた書き込みの結果は捨てる")
+    }
+
+    func testFailuresSurfaceOnceAfterTwoAndClearOnSuccess() throws {
+        let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let missing = dir.appendingPathComponent("nope", isDirectory: true)     // 書けない場所
+        let m = ProjectModel(project: .new()); m.notices = OneTimeNotices()
+        m.scriptText = "a"
+        m.autosaveTick(directory: missing, edited: true, synchronous: true)
+        XCTAssertEqual(m.statusText, "", "1 回の失敗では知らせない")
+        XCTAssertNil(m.recoveryWrittenRevision, "失敗した版は書けたことにしない(次の周期で再試行)")
+        m.autosaveTick(directory: missing, edited: true, synchronous: true)
+        XCTAssertEqual(m.statusText, AutosaveRecovery.FailureTracker.message, "続けて 2 回で知らせる")
+        m.statusText = "別の表示"
+        m.autosaveTick(directory: missing, edited: true, synchronous: true)
+        XCTAssertEqual(m.statusText, "別の表示", "3 回目以降は繰り返さない(30 秒ごとに出し直さない)")
+        m.statusText = AutosaveRecovery.FailureTracker.message
+        m.autosaveTick(directory: dir, edited: true, synchronous: true)
+        XCTAssertEqual(m.statusText, "", "次の成功で消える")
+        XCTAssertEqual(m.recoveryWrittenRevision, m.autosaveRevision)
     }
 }
