@@ -226,3 +226,52 @@ final class RangeDragLoopAppTests: XCTestCase {
         XCTAssertEqual(m.effectiveUndoManager.undoActionName, "範囲", "ループの切り替えは編集ではない")
     }
 }
+
+/// 台本の文字: 保存・自動保存の写し・編集済みの印(Undo には載せない)。
+@MainActor
+final class ScriptTextModelTests: XCTestCase {
+    func testScriptComesFromTheProjectAndOpeningDoesNotMarkEdited() {
+        var p = Project.new(); p.scriptText = "A: こんにちは"
+        let m = ProjectModel(project: p)
+        m.notices = OneTimeNotices()
+        var kinds: [NSDocument.ChangeType] = []
+        m.documentChangeHook = { kinds.append($0) }
+        XCTAssertEqual(m.scriptText, "A: こんにちは")
+        XCTAssertTrue(kinds.isEmpty, "開いただけでは編集済みにならない")
+        XCTAssertEqual(m.mirror.get().scriptText, "A: こんにちは")
+    }
+
+    func testEditingScriptMarksEditedWithoutUndoAndReachesTheSavedProject() {
+        let m = ProjectModel(project: .new())
+        m.notices = OneTimeNotices()
+        var kinds: [NSDocument.ChangeType] = []
+        m.documentChangeHook = { kinds.append($0) }
+        m.scriptText = "A"; m.scriptText = "AB"; m.scriptText = "AB"
+        XCTAssertEqual(kinds, [.changeDone, .changeDone], "変えるたび 1 回(同じ文字の代入では印を付けない)")
+        XCTAssertFalse(m.effectiveUndoManager.canUndo, "Undo には登録しない(1 文字ごとに積まない)")
+        XCTAssertEqual(m.savedProject.scriptText, "AB")
+        XCTAssertEqual(m.mirror.get().scriptText, "AB", "保存(snapshot)はミラーから読む")
+        // 台本の途中で別の編集をして Undo しても、台本は巻き戻らない
+        m.edit("x") { $0.markers.append(Marker()) }
+        m.effectiveUndoManager.undo()
+        XCTAssertEqual(m.scriptText, "AB")
+        XCTAssertEqual(m.mirror.get().scriptText, "AB")
+    }
+
+    func testAutosaveWritesWhenOnlyScriptChangedAndRecoveryRestoresIt() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("rec-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let m = ProjectModel(project: .new())
+        m.notices = OneTimeNotices()
+        m.autosaveTick(directory: dir, edited: true)           // 最初の写し
+        let file = dir.appendingPathComponent(AutosaveRecovery.fileName(sessionID: m.recoverySessionID))
+        let first = try Data(contentsOf: file)
+        m.scriptText = "未保存の台本"
+        m.autosaveTick(directory: dir, edited: true)
+        XCTAssertNotEqual(try Data(contentsOf: file), first, "台本だけの変更でも写しを書き直す")
+        let e = try AutosaveRecovery.decode(Data(contentsOf: file))
+        let restored = try Project.decode(from: e.project)
+        XCTAssertEqual(ProjectModel(project: restored).scriptText, "未保存の台本")
+    }
+}

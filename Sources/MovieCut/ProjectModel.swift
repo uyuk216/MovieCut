@@ -89,9 +89,13 @@ final class ProgressVoiceProvider: VoiceProvider {
 final class ProjectMirror: @unchecked Sendable {
     private let lock = NSLock()
     private var value: Project
-    init(_ p: Project) { value = p }
+    private var script: String
+    init(_ p: Project) { value = p; script = p.scriptText }
+    /// タイムラインの編集(台本の文字は変えない。台本は `setScript` が持つ)。
     func set(_ p: Project) { lock.withLock { value = p } }
-    func get() -> Project { lock.withLock { value } }
+    func setScript(_ s: String) { lock.withLock { script = s } }
+    /// 保存する中身: 編集の最新 + 台本の最新。
+    func get() -> Project { lock.withLock { var p = value; p.scriptText = script; return p } }
 }
 
 /// 1 つのドキュメントの状態。すべての編集は `edit(_:_:)` を通し、UndoManager に登録する(Project 全体のスナップショット式)。
@@ -222,7 +226,20 @@ final class ProjectModel: ObservableObject {
     /// 名前を変えているマーカー(シートを出す)。
     @Published var renamingMarkerId: String?
     /// 左の台本欄の文字(ツールバー・メニューの「台本から音声を作る」が読む)。
-    @Published var scriptText = ""
+    /// 保存するプロジェクトの一部(`Project.scriptText`)。Undo の対象にはしない(文字の Undo は TextEditor が持つ)が、変えたら書類を編集済みにする。
+    /// 本体は `mirror`(保存・自動保存はそこから読む)。`project.scriptText` は開いたときの値のまま古くなるので読まない。
+    @Published var scriptText = "" {
+        didSet {
+            guard scriptText != oldValue else { return }
+            mirror.setScript(scriptText)
+            scriptRevision &+= 1
+            noteDocumentChanged(undoing: false, redoing: false)
+        }
+    }
+    /// 台本を変えた回数(自動保存が「変わったか」を見るのに使う)。
+    private(set) var scriptRevision = 0
+    /// 保存・復元の写しに入れるプロジェクト(台本の最新を含む)。
+    var savedProject: Project { var p = rootProject; p.scriptText = scriptText; return p }
     /// タイムラインの拡大率(pt/秒)と吸着(M4 のドラッグで使う)。
     @Published var pps: Double = TimelineLayout.defaultPps
     @Published var snapEnabled = true
@@ -321,6 +338,7 @@ final class ProjectModel: ObservableObject {
         self.mirror = ProjectMirror(project)
         self.project = project
         self.selectedCharId = project.characters.first?.id
+        self.scriptText = project.scriptText   // init 中の代入では didSet は動かない(編集済みにならない)
         self.playback = PlaybackController(model: self)
         OpenProjects.register(self)
         schedulePrewarm()

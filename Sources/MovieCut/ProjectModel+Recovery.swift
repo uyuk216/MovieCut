@@ -78,6 +78,9 @@ extension ProjectModel {
         restoredFromRecovery || (window.flatMap { NSDocumentController.shared.document(for: $0) }?.isDocumentEdited ?? false)
     }
 
+    /// 自動保存が「変わったか」を見る版(編集と台本のどちらでも変わる)。
+    var autosaveRevision: Int { projectRevision &+ (scriptRevision << 32) }
+
     func autosaveTick() {
         guard let dir = RecoveryFolder.url else { return }
         autosaveTick(directory: dir, edited: edited)
@@ -86,11 +89,11 @@ extension ProjectModel {
     /// 編集済みで版が変わっていれば写しを書く。保存済みなら写しを消す。
     func autosaveTick(directory: URL, edited: Bool) {
         if AutosaveRecovery.shouldRemove(edited: edited) { removeRecoveryFile(in: directory); return }
-        guard AutosaveRecovery.shouldWrite(edited: edited, revision: projectRevision, lastWritten: recoveryWrittenRevision),
-              let data = try? project.encoded() else { return }
+        guard AutosaveRecovery.shouldWrite(edited: edited, revision: autosaveRevision, lastWritten: recoveryWrittenRevision),
+              let data = try? savedProject.encoded() else { return }
         let entry = AutosaveRecovery.Entry(name: documentName, originalPath: fileURL?.path, savedAt: Date(), project: data)
         // 書けなくても編集は続けられる。次の周期で再度試す(復元フォルダの外・リンク・大きすぎる中身は書かない)
-        if AutosaveRecovery.write(entry, sessionID: recoverySessionID, in: directory) { recoveryWrittenRevision = projectRevision }
+        if AutosaveRecovery.write(entry, sessionID: recoverySessionID, in: directory) { recoveryWrittenRevision = autosaveRevision }
     }
 
     func removeRecoveryFile() {

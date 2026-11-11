@@ -43,10 +43,12 @@ public struct Project: Codable, Equatable {
     public var multicams: [MulticamGroup] = []
     /// 立ち絵素材(キャラクターの声・字幕とは別の「素材」。タイムラインの立ち絵クリップ `Clip.tachieId` から参照する)。空のときはファイルに書かない。
     public var tachies: [Tachie] = []
+    /// 左の台本欄の文字。空のときはファイルに書かない(古い版は知らないキーとして保持して書き戻す)。
+    public var scriptText: String = ""
     /// 知らないキー(保持して書き戻す)
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["width", "height", "fps", "bg", "codec", "voicevoxUrl", "aquestalkCommand", "characters", "tracks", "markers", "rangeIn", "rangeOut", "mediaHints", "mediaPool", "targetTrackId", "multicams", "tachies"]
+    static let knownKeys: Set<String> = ["scriptText", "width", "height", "fps", "bg", "codec", "voicevoxUrl", "aquestalkCommand", "characters", "tracks", "markers", "rangeIn", "rangeOut", "mediaHints", "mediaPool", "targetTrackId", "multicams", "tachies"]
 
     public init() {}
 
@@ -72,11 +74,13 @@ public struct Project: Codable, Equatable {
         targetTrackId = l.string("targetTrackId")
         multicams = l.value("multicams") ?? []
         tachies = l.value("tachies") ?? []
+        scriptText = l.string("scriptText") ?? ""
         extra = l.extra()
         // 型が違って読めなかったときは、捨てずにそのまま書き戻す
         if targetTrackId == nil, let raw: JSONValue = l.value("targetTrackId") { extra["targetTrackId"] = raw }
         if multicams.isEmpty, let raw: JSONValue = l.value("multicams"), raw != .array([]) { extra["multicams"] = raw }
         if tachies.isEmpty, let raw: JSONValue = l.value("tachies"), raw != .array([]) { extra["tachies"] = raw }
+        if scriptText.isEmpty, let raw: JSONValue = l.value("scriptText"), raw != .string("") { extra["scriptText"] = raw }
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -101,6 +105,7 @@ public struct Project: Codable, Equatable {
         try c.encodeIfPresent(targetTrackId, forKey: AnyKey("targetTrackId"))
         if !multicams.isEmpty { try c.encode(multicams, forKey: AnyKey("multicams")) }
         if !tachies.isEmpty { try c.encode(tachies, forKey: AnyKey("tachies")) }
+        if !scriptText.isEmpty { try c.encode(scriptText, forKey: AnyKey("scriptText")) }
     }
 
     /// fps を Int / Double / "29.97" / "30000/1001" のどれからでも読む。読めない・欠けているときは 60、範囲外は 1〜240 に収める。
