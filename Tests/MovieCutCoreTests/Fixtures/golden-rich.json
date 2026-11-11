@@ -40,6 +40,7 @@
     }
   ],
   "codec" : "hevc",
+  "formatVersion" : 1,
   "fps" : 30,
   "futureProjectKey" : {
     "l" : [

@@ -51,6 +51,7 @@
     }
   ],
   "codec" : "hevc",
+  "formatVersion" : 1,
   "fps" : 60,
   "height" : 2160,
   "tracks" : [

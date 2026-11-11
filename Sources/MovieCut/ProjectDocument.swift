@@ -38,6 +38,8 @@ final class ProjectDocument: ReferenceFileDocument {
         // 旧形式(キャラクターが立ち絵を持つ)は、立ち絵素材 + 立ち絵クリップへ移して開く(保存すると新形式)
         let p = try Project.decodeMigrating(from: data)
         model = onMain { ProjectModel(project: p) }
+        // 新しい版で作られたファイル: 開いたままの中身を控える(最初の保存の前に世代バックアップへ残す)
+        if p.isNewerFormat { onMain { model.newerFormatOriginal = data } }
         onMain { model.startAutosave() }
     }
 
@@ -47,6 +49,16 @@ final class ProjectDocument: ReferenceFileDocument {
     }
 
     func fileWrapper(snapshot: Data, configuration: WriteConfiguration) throws -> FileWrapper {
+        // 新しい版のファイルを初めて上書きするときは、先に元の中身を世代バックアップへ残す(残せなければ保存を止める = 黙って失わない)
+        if let original = onMain({ model.newerFormatOriginal }), let url = onMain({ model.fileURL }) {
+            do {
+                try ProjectFormat.backupOriginalBeforeFirstSave(original: original, saving: snapshot, projectURL: url,
+                                                                keep: ProjectVersions.keep(from: DataLocations.current.defaults))
+                onMain { model.newerFormatOriginal = nil }
+            } catch {
+                throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey: "新しいバージョンで作られたファイルの元の中身を「過去の版」へ残せなかったため、保存を中止しました。(\(error.localizedDescription))"])
+            }
+        }
         // 保存したら最近使った項目へ(保存先が決まっているときだけ。書き込みが済んだあとに記録する)
         // あわせて、保存した中身を世代バックアップへ残す(保存先が決まっているときだけ。別のキューで書き、保存を待たせない)
         DispatchQueue.main.async { [model] in

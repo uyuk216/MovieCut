@@ -270,6 +270,10 @@ final class ProjectModel: ObservableObject {
     var fileURL: URL?
     /// 開いたときの「欠けた素材」案内を出したか(書類ごとに 1 回だけ)。
     var offeredMissingMediaOnOpen = false
+    /// 新しい版の形式のファイルを開いたときの、開いたままの中身(最初の保存の前に世代バックアップへ残す)。バックアップ済み・通常のファイルは nil。
+    var newerFormatOriginal: Data?
+    /// 新しい版の警告を出したか(書類ごとに 1 回だけ)。
+    var warnedNewerFormat = false
     weak var window: NSWindow?
     /// ドキュメントウィンドウの UndoManager(ビューが渡す)。無ければ自前のもの(テスト用)。
     var undoManager: UndoManager?

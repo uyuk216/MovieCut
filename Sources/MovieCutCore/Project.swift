@@ -45,10 +45,13 @@ public struct Project: Codable, Equatable {
     public var tachies: [Tachie] = []
     /// 左の台本欄の文字。空のときはファイルに書かない(古い版は知らないキーとして保持して書き戻す)。
     public var scriptText: String = ""
+    /// ファイルから読んだ形式の版(`formatVersion`。無ければ 0)。書くときは `ProjectFormat.current` 以上を書く。`==` には入らない。
+    public var sourceFormat = SourceFormatVersion()
+    public var isNewerFormat: Bool { ProjectFormat.isNewer(sourceFormat.value) }
     /// 知らないキー(保持して書き戻す)
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["scriptText", "width", "height", "fps", "bg", "codec", "voicevoxUrl", "aquestalkCommand", "characters", "tracks", "markers", "rangeIn", "rangeOut", "mediaHints", "mediaPool", "targetTrackId", "multicams", "tachies"]
+    static let knownKeys: Set<String> = ["formatVersion", "scriptText", "width", "height", "fps", "bg", "codec", "voicevoxUrl", "aquestalkCommand", "characters", "tracks", "markers", "rangeIn", "rangeOut", "mediaHints", "mediaPool", "targetTrackId", "multicams", "tachies"]
 
     public init() {}
 
@@ -75,6 +78,7 @@ public struct Project: Codable, Equatable {
         multicams = l.value("multicams") ?? []
         tachies = l.value("tachies") ?? []
         scriptText = l.string("scriptText") ?? ""
+        sourceFormat = SourceFormatVersion(max(0, l.int("formatVersion") ?? 0))
         extra = l.extra()
         // 型が違って読めなかったときは、捨てずにそのまま書き戻す
         if targetTrackId == nil, let raw: JSONValue = l.value("targetTrackId") { extra["targetTrackId"] = raw }
@@ -86,6 +90,7 @@ public struct Project: Codable, Equatable {
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: AnyKey.self)
         for (k, v) in extra { try c.encode(v, forKey: AnyKey(k)) }
+        try c.encode(max(sourceFormat.value, ProjectFormat.current), forKey: AnyKey(ProjectFormat.key))
         try c.encode(width, forKey: AnyKey("width"))
         try c.encode(height, forKey: AnyKey("height"))
         // 整数のレートは整数で書く(ファイルを読みやすく保つ)

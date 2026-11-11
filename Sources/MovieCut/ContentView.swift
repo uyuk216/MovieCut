@@ -121,7 +121,7 @@ struct ContentView: View {
             model.undoManager = undoManager
             model.fileURL = fileURL
             RecentProjectsController.shared.record(url: fileURL)
-            model.offerMissingMediaOnOpen()
+            model.warnNewerFormatOnOpen { model.offerMissingMediaOnOpen() }
             model.installKeyboard()
             model.installDock(store: dock, presents: presentsDockWindows)
             if model.window?.isMainWindow == true { ActiveDocument.shared.activate(model) }

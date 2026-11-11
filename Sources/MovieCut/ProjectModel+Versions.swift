@@ -19,6 +19,18 @@ enum ProjectVersionRecorder {
 
 @MainActor
 extension ProjectModel {
+    /// 新しい版の Movie Cut で作られたファイルを開いたとき、書類ごとに 1 度だけ知らせる。閉じたら `then`(次の案内)へ。
+    func warnNewerFormatOnOpen(then: @escaping () -> Void) {
+        guard newerFormatOriginal != nil, !warnedNewerFormat, let window else { then(); return }
+        warnedNewerFormat = true
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = ProjectFormat.newerWarning
+        alert.informativeText = ProjectFormat.newerWarningDetail
+        alert.addButton(withTitle: "OK")
+        alert.beginSheetModal(for: window) { _ in then() }
+    }
+
     /// 保存した書類か(世代があり得るか)。
     var hasSavedFile: Bool { fileURL != nil }
 
