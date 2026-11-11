@@ -75,6 +75,18 @@ enum WelcomeActions {
     }
 }
 
+/// はじめかたの短い手順(ウェルカム画面とプレビューの空表示で共有)。
+struct QuickStartHint: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(L10n.t(QuickStart.title)).font(.system(size: 12, weight: .semibold))
+            ForEach(QuickStart.steps, id: \.self) { Text(L10n.t($0)).font(.system(size: 12)) }
+        }
+        .foregroundStyle(.secondary)
+        .fixedSize()
+    }
+}
+
 struct WelcomeView: View {
     @ObservedObject var controller = RecentProjectsController.shared
     @State private var showAtLaunch = WelcomeSettings.showAtLaunch()
@@ -87,6 +99,7 @@ struct WelcomeView: View {
             if controller.recents.entries.isEmpty {
                 Spacer()
                 Text(L10n.t("最近使ったプロジェクトはありません")).foregroundStyle(.secondary)
+                QuickStartHint().padding(.top, 14)
                 Spacer()
             } else {
                 List(selection: $selection) {

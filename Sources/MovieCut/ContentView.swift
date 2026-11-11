@@ -325,6 +325,16 @@ struct CenterPanel: View {
     var body: some View {
         VStack(spacing: 0) {
             PreviewView(project: model.project, time: model.currentTime, assets: model.assets, model: model, epoch: model.previewEpoch)
+            .overlay {
+                // クリップが 1 つも無いときだけ出す案内(クリックは通す。書き出しには関係しない SwiftUI の重ね表示)。
+                if model.project.allClips.isEmpty {
+                    QuickStartHint()
+                        .padding(14)
+                        .background(.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 8))
+                        .environment(\.colorScheme, .dark)
+                        .allowsHitTesting(false)
+                }
+            }
             .padding(4)
         }
     }

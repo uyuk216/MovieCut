@@ -83,8 +83,8 @@ final class VoiceUnitTests: XCTestCase {
     }
 
     func testScriptLineParsing() {
-        let chars = Project.new().characters   // キャラ1 キャラ3 キャラ2
-        let sel = chars[1].id
+        let chars = Project.new().characters   // キャラ1 キャラ2 キャラ3
+        let sel = chars[2].id
         func p(_ l: String) -> String? { ScriptTimeline.parse(line: l, characters: chars, selectedCharId: sel).map { "\($0.0.name)|\($0.1)" } }
         XCTAssertEqual(p("キャラ1: こんにちは"), "キャラ1|こんにちは")
         XCTAssertEqual(p("キャラ1：こんにちは"), "キャラ1|こんにちは")
@@ -107,7 +107,7 @@ final class VoiceUnitTests: XCTestCase {
         var p = Project.new()
         let before = p.tracks.count
         let tone = ToneVoiceProvider(durations: [1.0, 2.0], frequencies: [220])
-        let added = try await ScriptTimeline.add(lines: ["キャラ1: あ", "", "キャラ3：い", "なにか", "キャラ2: う"], to: &p, voice: tone, directory: tmp, selectedCharId: p.characters[1].id)
+        let added = try await ScriptTimeline.add(lines: ["キャラ1: あ", "", "キャラ3：い", "なにか", "キャラ2: う"], to: &p, voice: tone, directory: tmp, selectedCharId: p.characters[2].id)
         XCTAssertEqual(added.count, 4)
         XCTAssertEqual(p.tracks.filter { $0.clips.count == 4 }.count, 1)
         XCTAssertEqual(p.tracks.count, before)   // 空のレイヤーが「全部ボイス」として再利用される

@@ -37,7 +37,7 @@ public final class RealVoiceProvider: VoiceProvider {
         if character.engine == "voicevox" {
             _ = try voicevox.validatedBaseURL()   // 送ってよい先か(だめなら日本語の理由で止める)
             guard await engine.ensureRunning(baseURL: voicevoxURL) else {
-                throw VoiceError.message("VOICEVOX に接続できません。VOICEVOX をインストールして起動してください(\(DependencyStatus.voicevoxURL))。")
+                throw VoiceError.message("VOICEVOX に接続できません。VOICEVOX をインストールして起動するか、インスペクタでこのキャラの音声エンジンを「ゆっくり (AquesTalk)」に切り替えてください(\(DependencyStatus.voicevoxURL))。")
             }
             url = try await voicevox.synthesize(text: text, speaker: character.speaker ?? 3, speed: character.speed, pitch: character.pitch, intonation: character.intonation)
             lock.withLock { _ = enginesUsed.insert("voicevox") }

@@ -219,7 +219,7 @@ final class ExporterTests: XCTestCase {
         XCTAssertEqual(v[1].start, 1.85 + 0.1, accuracy: 1e-9)
         XCTAssertEqual(v[1].duration, 1.75, accuracy: 1e-9)
         XCTAssertEqual(v[0].charId, p.characters[0].id)
-        XCTAssertEqual(v[1].charId, p.characters[2].id)
+        XCTAssertEqual(v[1].charId, p.characters[1].id)
         XCTAssertEqual(v[0].fontSize, 128)            // 64 × 2(4K)
         XCTAssertEqual(p.tracks[4].clips.first { $0.type == .text }?.fontSize, 240)
         XCTAssertEqual(p.tracks[4].clips.first { $0.type == .blur }?.strength, 60)

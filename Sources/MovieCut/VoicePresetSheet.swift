@@ -38,6 +38,9 @@ struct VoicePresetSheet: View {
     @State private var presets: [VoicePreset] = []
     @State private var message: String?
     @State private var loading = false
+    @State private var autoFetched = false
+    /// 通信の差し替え口(テスト用)。既定は本物の取得。
+    var loader: () async throws -> VoicePresetCatalog = { try await VoicePresetSource.fetch() }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -47,7 +50,7 @@ struct VoicePresetSheet: View {
             HStack {
                 Button { Task { await loadFromNet() } } label: { Text("ネットから取得") }.disabled(loading)
                 Button("ファイルから読み込み…") { loadFromFile() }.disabled(loading)
-                if loading { ProgressView().controlSize(.small) }
+                if loading { ProgressView().controlSize(.small); Text(L10n.t("取得中…")).font(.system(size: 11)).foregroundStyle(.secondary) }
             }
             if let m = message { Text(m).font(.system(size: 12)).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true) }
             List(presets) { p in
@@ -64,6 +67,12 @@ struct VoicePresetSheet: View {
             HStack { Spacer(); Button("閉じる") { dismiss() }.keyboardShortcut(.cancelAction) }
         }
         .padding(16).frame(width: 440, height: 420)
+        .task {
+            // 開いたとき一覧が空なら、1 回だけ自動で取得する(シートを開いたのはユーザー操作)。
+            guard !autoFetched, presets.isEmpty else { return }
+            autoFetched = true
+            await loadFromNet()
+        }
     }
 
     private func show(_ c: VoicePresetCatalog) {
@@ -74,9 +83,11 @@ struct VoicePresetSheet: View {
     private func loadFromNet() async {
         loading = true; message = nil
         defer { loading = false }
-        do { show(try await VoicePresetSource.fetch()) }
-        catch let e as VoicePresetCatalog.Failure { message = e.localizedDescription }
-        catch { message = "ネットから取得できませんでした。接続を確認して、もう一度お試しください。" }
+        switch await VoicePresetFetchOutcome.run(loader) {
+        case .loaded(let p): presets = p; message = nil
+        case .empty: presets = []; message = "使える設定がありませんでした。"
+        case .failed(let m): message = m
+        }
     }
 
     private func loadFromFile() {

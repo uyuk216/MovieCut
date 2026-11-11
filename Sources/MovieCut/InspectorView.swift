@@ -1150,9 +1150,21 @@ struct CharacterInspector: View {
                     .labelsHidden()
                 }
                 if c.engine == "voicevox" { voicevoxFields(c) } else { aquestalkFields(c) }
-                Button("おすすめ音声設定…") { showPresets = true }
-                    .controlSize(.small)
-                    .disabled(model.isLocked)
+                if !c.hasVoiceChosen {
+                    HStack(alignment: .center, spacing: 8) {
+                        Image(systemName: "info.circle.fill").foregroundStyle(.orange)
+                        Text(L10n.t("声がまだ選ばれていません")).font(.system(size: 11)).foregroundStyle(.secondary)
+                        Spacer(minLength: 4)
+                        Button(L10n.t("おすすめ音声設定…")) { showPresets = true }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
+                            .disabled(model.isLocked)
+                    }
+                } else {
+                    Button("おすすめ音声設定…") { showPresets = true }
+                        .controlSize(.small)
+                        .disabled(model.isLocked)
+                }
                 InspectorSection(title: "操作")
                 Button { Task { await model.testSpeak(charId: charId) } } label: { Text("試しに読み上げる").frame(maxWidth: .infinity) }
                     .disabled(model.isLocked)

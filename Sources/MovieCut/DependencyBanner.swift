@@ -13,7 +13,7 @@ struct DependencyBannerContent: Equatable {
         var messages: [String] = []
         var links: [Link] = []
         if !s.voicevoxInstalled && !s.voicevoxRunning {
-            messages.append("VOICEVOX が見つかりません。キャラ2などの声を使うには、VOICEVOX をインストールしてください。")
+            messages.append("VOICEVOX が見つかりません。VOICEVOX をインストールして起動するか、キャラの音声エンジンをインスペクタで「ゆっくり (AquesTalk)」に切り替えてください。")
             links.append(Link(title: "VOICEVOX を入手", url: DependencyStatus.voicevoxURL))
         }
         if !s.aquestalkPlayerInstalled {

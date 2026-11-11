@@ -171,8 +171,8 @@ public struct Character: Codable, Equatable, Identifiable {
         }
         return [
             make(0) { $0.name = "キャラ1"; $0.color = "#e8384f" },
-            make(1) { $0.name = "キャラ3"; $0.color = "#f2c53d" },
-            make(2) { $0.name = "キャラ2"; $0.color = "#7ac943" },
+            make(1) { $0.name = "キャラ2"; $0.color = "#f2c53d" },
+            make(2) { $0.name = "キャラ3"; $0.color = "#7ac943" },
         ]
     }
 

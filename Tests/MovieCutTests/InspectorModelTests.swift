@@ -270,7 +270,7 @@ final class InspectorModelTests: XCTestCase {
         XCTAssertFalse(m.isPlaying)
         XCTAssertEqual(undoAll(m), 1)                                  // 1 回の Undo で、キャラもクリップも戻る
         XCTAssertEqual(m.project, before)
-        XCTAssertEqual(m.character(marisa)?.name, "キャラ3")
+        XCTAssertEqual(m.character(marisa)?.name, "キャラ2")
     }
 
     func testCannotDeleteLastCharacter() {

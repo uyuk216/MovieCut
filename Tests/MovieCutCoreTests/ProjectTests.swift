@@ -38,7 +38,7 @@ final class ProjectTests: XCTestCase {
         XCTAssertEqual(p.bg, "#000000"); XCTAssertEqual(p.codec, "h264")
         XCTAssertEqual(p.voicevoxUrl, "http://127.0.0.1:50021")
         XCTAssertEqual(p.aquestalkCommand, n.aquestalkCommand)
-        XCTAssertEqual(p.characters.map { $0.name }, ["キャラ1", "キャラ3", "キャラ2"])
+        XCTAssertEqual(p.characters.map { $0.name }, ["キャラ1", "キャラ2", "キャラ3"])
         XCTAssertEqual(p.characters.map { $0.engine }, ["voicevox", "voicevox", "voicevox"])
         XCTAssertEqual(p.characters.map { $0.flip }, [true, false, false])
         XCTAssertEqual(p.characters.map { $0.x }, [0.18, 0.82, 0.82])
