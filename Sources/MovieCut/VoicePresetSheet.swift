@@ -7,7 +7,7 @@ import MovieCutCore
 enum VoicePresetSource {
     static let url = URL(string: "https://uyuk216.github.io/MovieCut/voice-presets.json")!
 
-    /// ボタンを押したときだけ呼ぶ。HTTPS のみ・10 秒・256KB・Cookie と資格情報なし。
+    /// この画面を開いたときと「ネットから取得」を押したときに呼ぶ。HTTPS のみ・10 秒・256KB・Cookie と資格情報なし。
     static func fetch() async throws -> VoicePresetCatalog {
         guard url.scheme == "https" else { throw VoicePresetCatalog.Failure.invalid }
         let cfg = URLSessionConfiguration.ephemeral
@@ -45,7 +45,7 @@ struct VoicePresetSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("おすすめ音声設定").font(.headline)
-            Text("声の設定(エンジン・話者・速さ・高さ・抑揚)だけを、選んだキャラに入れます。名前や字幕の色は変わりません。「ネットから取得」はボタンを押したときだけ通信します。")
+            Text("声の設定(エンジン・話者・速さ・高さ・抑揚)だけを、選んだキャラに入れます。名前や字幕の色は変わりません。この画面を開くと、一覧をネット(HTTPS)から一度だけ取得します。送るのは取得のリクエストだけです。")
                 .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             HStack {
                 Button { Task { await loadFromNet() } } label: { Text("ネットから取得") }.disabled(loading)

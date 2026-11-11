@@ -113,8 +113,8 @@ final class KitchenSinkTests: XCTestCase {
         p.tracks = [Track(name: "声")]
         let voice = ToneVoiceProvider(durations: [1.7, 1.6], frequencies: [220, 330])
         let voiceClips = try await ScriptTimeline.add(lines: [
-            "キャラ1: [笑顔]ゆっくりしていってね",
-            "キャラ2: [怒り]キャラ2なのだ",
+            "キャラ1: [笑顔]こんにちは",
+            "キャラ2: [怒り]よろしくお願いします",
             "キャラ1: [まばたき]つぎのせりふ",
             "キャラ1: 最後の行",
         ], to: &p, voice: voice, directory: dir, selectedCharId: p.characters[0].id)

@@ -88,7 +88,7 @@ final class VoiceUnitTests: XCTestCase {
         func p(_ l: String) -> String? { ScriptTimeline.parse(line: l, characters: chars, selectedCharId: sel).map { "\($0.0.name)|\($0.1)" } }
         XCTAssertEqual(p("キャラ1: こんにちは"), "キャラ1|こんにちは")
         XCTAssertEqual(p("キャラ1：こんにちは"), "キャラ1|こんにちは")
-        XCTAssertEqual(p("  キャラ2 :  なのだ  "), "キャラ2|なのだ")
+        XCTAssertEqual(p("  キャラ2 :  よろしく  "), "キャラ2|よろしく")
         XCTAssertEqual(p("だれか: やあ"), "キャラ3|だれか: やあ")   // 不明な名前 → 選択中キャラ、行全体
         XCTAssertEqual(p("ただのセリフ"), "キャラ3|ただのセリフ")
         XCTAssertEqual(p("キャラ1: 時間は3:00だぜ"), "キャラ1|時間は3:00だぜ")   // セリフ中のコロンは残す
@@ -252,7 +252,7 @@ final class RealEngineTests: XCTestCase {
         let client = VoicevoxClient(baseURL: base, cache: VoiceCache(directory: tmp))
         let sp = try await client.speakers()
         XCTAssertTrue(sp.contains { $0.styles.contains { $0.id == 3 } })
-        let url = try await client.synthesize(text: "キャラ2なのだ", speaker: 3)
+        let url = try await client.synthesize(text: "よろしくお願いします", speaker: 3)
         let dur = try RealVoiceProvider.duration(of: url)
         XCTAssertGreaterThan(dur, 0.5)
         let f = try AVAudioFile(forReading: url)
@@ -288,7 +288,7 @@ final class RealEngineTests: XCTestCase {
         try XCTSkipUnless(FileManager.default.isExecutableFile(atPath: VoicevoxEngine.defaultBinary), "VOICEVOX 未インストール")
         var p = Project.new()
         let provider = RealVoiceProvider(project: p, cache: VoiceCache(directory: tmp), engine: engine)
-        try await ScriptTimeline.add(lines: ["キャラ1: ゆっくりしていってね", "キャラ2: キャラ2なのだ"], to: &p, voice: provider, directory: tmp)
+        try await ScriptTimeline.add(lines: ["キャラ1: こんにちは", "キャラ2: よろしくお願いします"], to: &p, voice: provider, directory: tmp)
         XCTAssertTrue(provider.enginesUsed.contains("voicevox"))
         let clips = p.allClips.filter { $0.type == .voice }.sorted { $0.start < $1.start }
         XCTAssertEqual(clips.count, 2)

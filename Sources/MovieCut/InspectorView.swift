@@ -1189,9 +1189,10 @@ struct CharacterInspector: View {
         switch speakers.state {
         case .loaded:
             InspectorField(label: "話者") {
-                Picker("", selection: Binding(get: { speaker }, set: { v in model.setCharacterProperty({ $0.speaker = v }, name: "話者の変更", charId: charId) })) {
-                    if speakers.label(for: speaker) == nil { Text("話者 \(speaker)").tag(speaker) }
-                    ForEach(speakers.choices, id: \.id) { Text($0.label).tag($0.id) }
+                Picker("", selection: Binding<Int?>(get: { c.speaker }, set: { v in if let v { model.setCharacterProperty({ $0.speaker = v }, name: "話者の変更", charId: charId) } })) {
+                    if c.speaker == nil { Text(L10n.t("未選択")).tag(Int?.none) }
+                    else if speakers.label(for: speaker) == nil { Text("話者 \(speaker)").tag(Int?.some(speaker)) }
+                    ForEach(speakers.choices, id: \.id) { Text($0.label).tag(Int?.some($0.id)) }
                 }
                 .labelsHidden()
             }
@@ -1222,10 +1223,10 @@ struct CharacterInspector: View {
 
     @ViewBuilder private func aquestalkFields(_ c: Character) -> some View {
         InspectorField(label: "声") {
-            Picker("", selection: Binding(get: { c.voice ?? AquesTalkPresets.all[0] }, set: { v in model.setCharacterProperty({ $0.voice = v }, name: "声の変更", charId: charId) })) {
-                let cur = c.voice ?? AquesTalkPresets.all[0]
-                if !AquesTalkPresets.all.contains(cur) { Text(cur).tag(cur) }
-                ForEach(AquesTalkPresets.all, id: \.self) { Text($0).tag($0) }
+            Picker("", selection: Binding<String?>(get: { c.voice }, set: { v in if let v { model.setCharacterProperty({ $0.voice = v }, name: "声の変更", charId: charId) } })) {
+                if let cur = c.voice { if !AquesTalkPresets.all.contains(cur) { Text(cur).tag(String?.some(cur)) } }
+                else { Text(L10n.t("未選択")).tag(String?.none) }
+                ForEach(AquesTalkPresets.all, id: \.self) { Text($0).tag(String?.some($0)) }
             }
             .labelsHidden()
         }

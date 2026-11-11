@@ -299,6 +299,8 @@ enum L10nTable {
         "③「音声を作る」を押す": "3. Press \"Generate Voice\"",
         "④書き出す ⌘E": "4. Export ⌘E",
         "声がまだ選ばれていません": "No voice chosen yet",
+        "声 未設定": "Voice not set",
+        "未選択": "Not selected",
         "おすすめ音声設定…": "Recommended Voice Settings…",
         "取得中…": "Loading…",
         "起動時にこの画面を表示": "Show this screen at launch",

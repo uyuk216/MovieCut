@@ -209,7 +209,7 @@ struct ToolbarBar: View {
 /// 台本欄の説明と書き方の例(試験が内容を確かめる)。
 enum ScriptHelp {
     static let caption = "1行に1セリフ。「キャラ名: 読み上げ文」でそのキャラが読み上げます。「キャラ名: 読み上げ文 | 字幕文」と書くと、字幕だけ別の文にできます（| のあとを空にすると字幕なし）。"
-    static let placeholder = "キャラ1: ゆっくりしていってね！\nキャラ2: 今日はよろしくなのだ | 今日はよろしく！\nキャラ1: （効果音だけ） |"
+    static let placeholder = "キャラ1: こんにちは！\nキャラ2: 今日はよろしくお願いします | 今日はよろしく！\nキャラ1: （効果音だけ） |"
 }
 
 struct LeftPanel: View {
@@ -291,10 +291,7 @@ struct CharacterRow: View {
     let selected: Bool
     let action: () -> Void
 
-    private var engineLabel: String {
-        if ch.engine == "voicevox" { return speakerName ?? "VOICEVOX 話者 \(ch.speaker ?? 3)" }
-        return "ゆっくり " + (ch.voice ?? "")
-    }
+    private var engineLabel: String { L10n.t(CharacterRowSubtitle.text(for: ch, speakerName: speakerName)) }
 
     var body: some View {
         Button(action: action) {

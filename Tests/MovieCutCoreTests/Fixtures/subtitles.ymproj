@@ -10,7 +10,7 @@
       "id": "t1",
       "name": "セリフ",
       "clips": [
-        { "id": "v1", "type": "voice", "charId": "c1", "src": "/tmp/none.wav", "start": 0, "duration": 2.5, "text": "こんにちは\nゆっくりしていってね", "subtitle": true },
+        { "id": "v1", "type": "voice", "charId": "c1", "src": "/tmp/none.wav", "start": 0, "duration": 2.5, "text": "こんにちは\nこんにちは", "subtitle": true },
         { "id": "v2", "type": "voice", "charId": "c1", "src": "/tmp/none.wav", "start": 2.6, "duration": 1.4, "text": "字幕なし", "subtitle": false },
         { "id": "v3", "type": "voice", "charId": "c1", "src": "/tmp/none.wav", "start": 12.0345, "duration": 3, "text": "二番目" }
       ]

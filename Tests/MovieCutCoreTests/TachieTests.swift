@@ -351,8 +351,8 @@ final class TachieTests: XCTestCase {
         func p(_ l: String) -> ScriptTimeline.Line? { ScriptTimeline.parseLine(l, characters: chars, selectedCharId: nil) }
         let same = p("キャラ1: こんにちは")
         XCTAssertEqual(same?.spoken, "こんにちは"); XCTAssertNil(same?.subtitle, "| が無い = 字幕は読み上げ文と同じ")
-        let diff = p("キャラ3：ゆっくり | ゆっくりしていってね！")
-        XCTAssertEqual(diff?.who.id, "b"); XCTAssertEqual(diff?.spoken, "ゆっくり"); XCTAssertEqual(diff?.subtitle, "ゆっくりしていってね！")
+        let diff = p("キャラ3：あいさつ | こんにちは！")
+        XCTAssertEqual(diff?.who.id, "b"); XCTAssertEqual(diff?.spoken, "あいさつ"); XCTAssertEqual(diff?.subtitle, "こんにちは！")
         let none = p("キャラ1: ふふふ |")
         XCTAssertEqual(none?.spoken, "ふふふ"); XCTAssertEqual(none?.subtitle, "", "| のあとが空 = 字幕なし")
         XCTAssertEqual(p("キャラ1: ふふふ｜  ")?.subtitle, "", "全角の区切りも使える")

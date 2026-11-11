@@ -109,7 +109,7 @@ public enum ScriptTimeline {
         var p = Project.new()
         if let s = size { p = p.scaledForResolution(newWidth: s.width, newHeight: s.height) }
         if let c = codec { p.codec = c }
-        try await add(lines: ["キャラ1: ゆっくりしていってね", "キャラ2: キャラ2なのだ"], to: &p, voice: voice, directory: directory)
+        try await add(lines: ["キャラ1: こんにちは", "キャラ2: よろしくお願いします"], to: &p, voice: voice, directory: directory)
         var text = Clip()
         text.type = .text; text.text = "テスト"; text.start = 0; text.duration = 2
         text.x = 0.5; text.y = 0.2

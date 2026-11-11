@@ -101,7 +101,7 @@ final class SubtitleTests: XCTestCase {
 
     func testCuesFromProjectPicksVoiceSubtitlesAndSubtitleLayerText() throws {
         let cues = SubtitleFile.cues(from: try fixture())
-        XCTAssertEqual(cues.map(\.text), ["こんにちは\nゆっくりしていってね", "文字クリップ", "二番目"], "字幕オフのボイスと、ふつうのレイヤーの文字は出さない")
+        XCTAssertEqual(cues.map(\.text), ["こんにちは\nこんにちは", "文字クリップ", "二番目"], "字幕オフのボイスと、ふつうのレイヤーの文字は出さない")
         XCTAssertEqual(cues[2].start, 12.0345, accuracy: 1e-9)
         XCTAssertEqual(cues[2].end, 15.0345, accuracy: 1e-9)
         let srt = SubtitleFile.format(cues, as: .srt)

@@ -38,3 +38,13 @@ public enum VoicePresetFetchOutcome: Equatable {
         }
     }
 }
+
+/// キャラクター一覧の行に出す 2 行目(エンジン・話者)。声が未選択なら「声 未設定」。
+public enum CharacterRowSubtitle {
+    public static let unsetVoice = "声 未設定"
+    public static func text(for c: Character, speakerName: String?) -> String {
+        guard c.hasVoiceChosen else { return unsetVoice }
+        if c.engine == "voicevox" { return speakerName ?? "VOICEVOX 話者 \(c.speaker ?? 3)" }
+        return "ゆっくり " + (c.voice ?? "")
+    }
+}

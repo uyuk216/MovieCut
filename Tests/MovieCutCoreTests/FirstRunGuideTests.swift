@@ -38,3 +38,22 @@ final class FirstRunGuideTests: XCTestCase {
         XCTAssertEqual(o3, .failed(VoicePresetCatalog.Failure.tooLarge.localizedDescription))
     }
 }
+
+final class CharacterRowSubtitleTests: XCTestCase {
+    func testUnsetVoiceShowsPlaceholder() {
+        var c = Character.defaults()[0]
+        c.engine = "voicevox"; c.speaker = nil
+        XCTAssertEqual(CharacterRowSubtitle.text(for: c, speakerName: nil), "声 未設定")
+        XCTAssertEqual(CharacterRowSubtitle.text(for: c, speakerName: "どこか"), "声 未設定")
+        c.engine = "aquestalk"; c.voice = nil
+        XCTAssertEqual(CharacterRowSubtitle.text(for: c, speakerName: nil), "声 未設定")
+    }
+    func testChosenVoiceShowsSpeaker() {
+        var c = Character.defaults()[0]
+        c.engine = "voicevox"; c.speaker = 5
+        XCTAssertEqual(CharacterRowSubtitle.text(for: c, speakerName: "名前（ノーマル）"), "名前（ノーマル）")
+        XCTAssertEqual(CharacterRowSubtitle.text(for: c, speakerName: nil), "VOICEVOX 話者 5")
+        c.engine = "aquestalk"; c.voice = "A"
+        XCTAssertEqual(CharacterRowSubtitle.text(for: c, speakerName: nil), "ゆっくり A")
+    }
+}
