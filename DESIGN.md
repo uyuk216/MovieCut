@@ -90,7 +90,7 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
 ## 機能チェックリスト (旧 Electron 版にあった機能。全部 Swift 版に入っている)
 プロジェクト: 新規/開く/保存/別名/最近/未保存確認/.mcpjc 関連付け(旧 .ymproj も開ける)。
 動画設定: 解像度プリセット(1366×768 / HD 1280×720 / FHD 1920×1080 / WQHD 2560×1440 / 4K / 5K / 8K。縦向きは「縦横を入れ替える」)+ カスタム(幅・高さ 64〜8192、縦横比の固定・入れ替え、定番サイズ、最近使ったカスタム 3 件)、FPS 24/30/48/60/120/240 + カスタム(1〜240。`29.97` `12.5` `30000/1001` を受ける。放送用 23.976/29.97/59.94 はシートの「放送用」ボタン)。入力の読み取り・検証は Core の `ResolutionInput` / `FrameRateInput` / `OutputPlan` / `RecentCustoms`(アプリのシートとコマンドラインで共通)、背景 黒(既定)/白/緑/自由、書き出し形式 H.264/HEVC、解像度変更時に文字・字幕・ぼかしの大きさを sqrt(面積比) で調整(最小8)。
-キャラ: 追加/削除(最後の1人は不可)/名前/字幕縁色/エンジン(VOICEVOX|ゆっくり)/話者/速さ・高さ・抑揚/プリセット(れいむ,まりさ,中性,機械,ロボット)/立ち絵(口閉じ・口開き)/位置・大きさ・左右反転・いつも表示/試し読み上げ。
+キャラ: 追加/削除(最後の1人は不可)/名前/字幕縁色/エンジン(VOICEVOX|ゆっくり)/話者/速さ・高さ・抑揚/プリセット(女声1,女声2,中性,機械,ロボット)/立ち絵(口閉じ・口開き)/位置・大きさ・左右反転・いつも表示/試し読み上げ。
 台本: 「名前: セリフ」「名前：セリフ」行 → 音声クリップ(名前が不明なら選択中キャラ)、空いている音声レイヤーへ連続配置、並べた後は全体表示。
 音声: VOICEVOX(/Applications/VOICEVOX.app/Contents/Resources/vv-engine/run を 127.0.0.1:50021 で自動起動、cpu_num_threads は perflevel0 のコア数、/speakers /audio_query /synthesis、結果は Application Support にキャッシュ)、AquesTalkPlayer(`/Applications/AquesTalkPlayer.app/Contents/MacOS/AquesTalkPlayer -P プリセット -T テキスト -W out.wav`)、無ければ `say -v Kyoko` で代用。
 クリップ: 画像/動画/音声/テキスト/音声(ボイス)/ぼかし範囲/調整レイヤー。クリップごとのぼかし(画像・動画・文字)、不透明度、拡大、位置、音量、トリム(offset)、テキストの文字・大きさ・色・縁色・フォント。ボイスは字幕 ON/OFF・サイズ・フォント・音量、セリフやキャラを変えると音声を作り直す。

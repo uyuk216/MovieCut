@@ -41,10 +41,10 @@ final class VoicePresetTests: XCTestCase {
         XCTAssertEqual(c.presets[1].speed, 50)
     }
     func testApplyKeepsNonVoiceFields() throws {
-        let p = try dec(#"{"presets":[{"name":"p","engine":"aquestalk","voice":"れいむ","speed":120}]}"#).presets[0]
+        let p = try dec(#"{"presets":[{"name":"p","engine":"aquestalk","voice":"女声1","speed":120}]}"#).presets[0]
         var ch = Character(); ch.name = "太郎"; ch.color = "#123456"; ch.x = 0.3
         let r = VoicePresetCatalog.applying(p, to: ch)
         XCTAssertEqual(r.name, "太郎"); XCTAssertEqual(r.color, "#123456"); XCTAssertEqual(r.x, 0.3); XCTAssertEqual(r.id, ch.id)
-        XCTAssertEqual(r.engine, "aquestalk"); XCTAssertEqual(r.voice, "れいむ"); XCTAssertEqual(r.speed, 120)
+        XCTAssertEqual(r.engine, "aquestalk"); XCTAssertEqual(r.voice, "女声1"); XCTAssertEqual(r.speed, 120)
     }
 }

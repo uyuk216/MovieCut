@@ -182,7 +182,7 @@ public struct Character: Codable, Equatable, Identifiable {
         name = l.string("name") ?? name
         engine = l.string("engine") ?? engine
         speaker = l.int("speaker")
-        voice = l.string("voice")
+        voice = AquesTalkPresets.canonicalVoice(l.string("voice"))
         speed = l.double("speed")
         pitch = l.double("pitch")
         intonation = l.double("intonation")

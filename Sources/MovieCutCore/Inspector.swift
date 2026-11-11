@@ -183,7 +183,7 @@ public enum CharacterEditing {
             if c.speaker == nil { c.speaker = 3 }
         } else {
             if !((c.speed ?? 0) > 5) { c.speed = 100 }
-            if (c.voice ?? "").isEmpty { c.voice = AquesTalkPresets.all.first ?? "れいむ" }
+            if (c.voice ?? "").isEmpty { c.voice = AquesTalkPresets.all.first ?? "女声1" }
         }
     }
 

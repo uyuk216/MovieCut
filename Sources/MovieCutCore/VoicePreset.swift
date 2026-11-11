@@ -71,8 +71,9 @@ public struct VoicePresetCatalog: Equatable {
         var speaker: Int?
         if let s = number(d, "speaker") { speaker = Int(max(0, min(100000, s.rounded()))) }
         let voice = string(d, "voice").map { String($0.trimmingCharacters(in: .whitespacesAndNewlines).prefix(maxNameLength)) }.flatMap { $0.isEmpty ? nil : $0 }
+        let voiceCanon = AquesTalkPresets.canonicalVoice(voice)
         func f(_ k: String, _ field: CharacterField) -> Double? { number(d, k).map { field.clamp($0, engine: engine) } }
-        return VoicePreset(id: String(idRaw.prefix(80)), name: name, note: note, engine: engine, voice: voice, speaker: speaker,
+        return VoicePreset(id: String(idRaw.prefix(80)), name: name, note: note, engine: engine, voice: voiceCanon, speaker: speaker,
                            speed: f("speed", .speed), pitch: f("pitch", .pitch), intonation: f("intonation", .intonation),
                            volume: number(d, "volume").map { min(max($0, 0), 2) })
     }

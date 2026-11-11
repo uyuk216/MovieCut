@@ -34,7 +34,7 @@ final class InspectorCoreTests: XCTestCase {
 
     func testSwitchEngineConvertsSpeedAndFillsFields() {
         var c = Character()
-        c.engine = "aquestalk"; c.voice = "れいむ"; c.speed = 100
+        c.engine = "aquestalk"; c.voice = "女声1"; c.speed = 100
         CharacterEditing.switchEngine(&c, to: "voicevox")
         XCTAssertEqual(c.engine, "voicevox")
         XCTAssertEqual(c.speed, 1)            // 100 → 1
@@ -44,10 +44,10 @@ final class InspectorCoreTests: XCTestCase {
         XCTAssertEqual(c.speed, 1.4)
         CharacterEditing.switchEngine(&c, to: "aquestalk")
         XCTAssertEqual(c.speed, 100)           // 1.4 → 100
-        XCTAssertEqual(c.voice, "れいむ")        // 前の声が残っていればそのまま
+        XCTAssertEqual(c.voice, "女声1")        // 前の声が残っていればそのまま
         var d = Character(); d.engine = "voicevox"; d.speaker = 5; d.speed = nil
         CharacterEditing.switchEngine(&d, to: "aquestalk")
-        XCTAssertEqual(d.speed, 100); XCTAssertEqual(d.voice, "れいむ")   // 声が無ければ先頭のプリセット
+        XCTAssertEqual(d.speed, 100); XCTAssertEqual(d.voice, "女声1")   // 声が無ければ先頭のプリセット
         d.speed = 150
         CharacterEditing.switchEngine(&d, to: "aquestalk")
         XCTAssertEqual(d.speed, 150)           // ゆっくり側で正しい値は保つ

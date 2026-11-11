@@ -149,7 +149,7 @@ final class VoiceUnitTests: XCTestCase {
         let have = AquesTalkSynthesizer(cache: VoiceCache(directory: tmp), playerPath: "/bin/ls")
         XCTAssertFalse(have.usingFallback)
         // 引数は配列(シェルを通さない)。セリフに何が入っていても 1 つの引数のまま
-        let inv = have.invocation(text: "$(rm -rf /); `x` 'y'", voice: "れいむ", out: URL(fileURLWithPath: "/tmp/a b.wav"))
+        let inv = have.invocation(text: "$(rm -rf /); `x` 'y'", voice: "女声1", out: URL(fileURLWithPath: "/tmp/a b.wav"))
         XCTAssertEqual(inv.executable.lastPathComponent, "ls")
         XCTAssertEqual(inv.arguments, ["-P", "れいむ", "-T", "$(rm -rf /); `x` 'y'", "-W", "/tmp/a b.wav"])
         let say = none.invocation(text: "-v", voice: nil, out: URL(fileURLWithPath: "/tmp/o.wav"))
@@ -231,7 +231,7 @@ final class RealEngineTests: XCTestCase {
         // Electron 版で作った参照 WAV(Tests/MovieCutCoreTests/Fixtures/aq_reimu.wav)
         let ref = try XCTUnwrap(Bundle.module.url(forResource: "aq_reimu", withExtension: "wav", subdirectory: "Fixtures"))
         let aq = AquesTalkSynthesizer(cache: VoiceCache(directory: tmp))
-        let out = try await aq.synthesize(text: "ゆっくりしていってね", voice: "れいむ", speed: 100)
+        let out = try await aq.synthesize(text: "ゆっくりしていってね", voice: "女声1", speed: 100)
         let a = try Data(contentsOf: out), b = try Data(contentsOf: ref)
         XCTAssertEqual(a.count, b.count, "サイズ")
         XCTAssertTrue(a == b, "Electron 版の WAV とバイト単位で同一")
@@ -240,7 +240,7 @@ final class RealEngineTests: XCTestCase {
 
     func testSayFallbackProducesWav() async throws {
         let aq = AquesTalkSynthesizer(cache: VoiceCache(directory: tmp), playerPath: "/nonexistent/aq")
-        let out = try await aq.synthesize(text: "ゆっくりしていってね", voice: "れいむ", speed: 100)
+        let out = try await aq.synthesize(text: "ゆっくりしていってね", voice: "女声1", speed: 100)
         XCTAssertGreaterThan(try RealVoiceProvider.duration(of: out), 0.5)
     }
 
@@ -297,5 +297,29 @@ final class RealEngineTests: XCTestCase {
             XCTAssertEqual(c.duration, d + 0.15, accuracy: 1e-6)
         }
         XCTAssertEqual(clips[1].start, clips[0].start + clips[0].duration + 0.1, accuracy: 1e-6)
+    }
+
+    // MARK: 声の旧名(旧ファイル互換)
+    func testLegacyVoiceNameLoadsAsNewName() throws {
+        let json = #"{"characters":[{"id":"a","name":"A","engine":"aquestalk","voice":"れいむ"},{"id":"b","name":"B","engine":"aquestalk","voice":"まりさ"},{"id":"c","name":"C","engine":"aquestalk","voice":"中性"},{"id":"d","name":"D","engine":"aquestalk","voice":"謎の声"}]}"#
+        let p = try JSONDecoder().decode(Project.self, from: Data(json.utf8))
+        XCTAssertEqual(p.characters.map(\.voice), ["女声1", "女声2", "中性", "謎の声"])
+        let re = try JSONDecoder().decode(Project.self, from: try p.encoded())
+        XCTAssertEqual(re.characters.map(\.voice), ["女声1", "女声2", "中性", "謎の声"])
+    }
+    func testVoiceResolutionOldAndNewAreIdentical() {
+        XCTAssertEqual(AquesTalkPresets.playerName("れいむ"), AquesTalkPresets.playerName("女声1"))
+        XCTAssertEqual(AquesTalkPresets.playerName("まりさ"), AquesTalkPresets.playerName("女声2"))
+        XCTAssertEqual(AquesTalkPresets.canonicalVoice("れいむ"), "女声1")
+        let aq = AquesTalkSynthesizer(cache: VoiceCache(directory: tmp), playerPath: "/bin/ls")
+        let o = URL(fileURLWithPath: "/tmp/o.wav")
+        XCTAssertEqual(aq.invocation(text: "t", voice: "れいむ", out: o).arguments, aq.invocation(text: "t", voice: "女声1", out: o).arguments)
+        XCTAssertEqual(aq.invocation(text: "t", voice: "女声2", out: o).arguments.prefix(2), ["-P", "まりさ"])
+    }
+    func testUnknownVoiceNamesUnchanged() {
+        XCTAssertEqual(AquesTalkPresets.playerName("中性"), "中性")
+        XCTAssertEqual(AquesTalkPresets.playerName("謎の声"), "謎の声")
+        XCTAssertEqual(AquesTalkPresets.canonicalVoice("謎の声"), "謎の声")
+        XCTAssertNil(AquesTalkPresets.canonicalVoice(nil)); XCTAssertNil(AquesTalkPresets.playerName(nil))
     }
 }

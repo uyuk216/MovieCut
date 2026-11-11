@@ -195,7 +195,7 @@ final class SecurityHardeningTests: XCTestCase {
         var proj = Project.new()
         proj.aquestalkCommand = "touch \(pwned.path)"          // プロジェクト由来のコマンドは無視される
         let aq = AquesTalkSynthesizer(cache: VoiceCache(directory: tmp.appendingPathComponent("v")), playerPath: script.path)
-        let out = try await aq.synthesize(text: "a'; touch \(pwned.path); '", voice: "れいむ", speed: 100)
+        let out = try await aq.synthesize(text: "a'; touch \(pwned.path); '", voice: "女声1", speed: 100)
         XCTAssertTrue(FileManager.default.fileExists(atPath: out.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: pwned.path), "シェルを通さない")
         let lines = try String(contentsOf: log, encoding: .utf8).split(separator: "\n").map(String.init)
