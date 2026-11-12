@@ -47,6 +47,7 @@ public enum EffectPipeline {
         case .opticalMist: return v("amount") < eps || v("radius") < eps
         case .highlightRolloff: return false
         case .bokehBlur: return v("radius") < 0.5
+        case .filmGrain: return v("amount") < eps
         }
     }
 
@@ -213,6 +214,8 @@ public enum EffectPipeline {
                 .premultiplyingAlpha()
         case .bokehBlur:
             return Bokeh.apply(img, radius: e.v("radius") * scale, shape: ApertureShape(value: e.v("shape")), rotation: e.v("rotation"), highlight: e.v("highlight"))
+        case .filmGrain:
+            return FilmGrain.apply(img, amount: e.v("amount"), size: e.v("size") * scale)
         case .lut:
             guard let p = e.path, let c = LUTCache.shared.cube(atPath: p) else { return img }
             return LUTApply.apply(img, lut: c.lut, dimension: c.dimension, data: c.data, intensity: e.v("intensity"))

@@ -33,6 +33,8 @@ public enum EffectKind: String, CaseIterable, Sendable {
     case highlightRolloff
     /// 絞りぼかし: 円・多角形・星・ハートの形のボケ(明るい光が、その形の円盤になる)。
     case bokehBlur
+    /// フィルムグレイン: 輝度のノイズを粒状に足す(フィルムの粒)。
+    case filmGrain
 
     public var label: String {
         switch self {
@@ -60,6 +62,7 @@ public enum EffectKind: String, CaseIterable, Sendable {
         case .opticalMist: return "光学ミスト"
         case .highlightRolloff: return "ハイライト補正"
         case .bokehBlur: return "絞りぼかし"
+        case .filmGrain: return "フィルムグレイン"
         }
     }
 
@@ -103,6 +106,7 @@ public enum EffectKind: String, CaseIterable, Sendable {
         case .highlightRolloff: return [Self.p("knee", "圧縮の始まり", 0, 0.99, HighlightRolloff.defaultKnee, 0.01, .percent)]
         case .bokehBlur: return [Self.p("radius", "ボケの半径（px）", 0, 100, 20, 1, .px), Self.p("shape", "絞りの形", 0, Double(ApertureShape.allCases.count - 1), 0, 1, .aperture),
                                  Self.p("highlight", "ハイライトの強調", 0, 1, 0.3, 0.01, .percent), Self.p("rotation", "形の向き（°）", -180, 180, 0, 1, .degrees)]
+        case .filmGrain: return [Self.p("amount", "強さ", 0, 1, 0.35, 0.01, .percent), Self.p("size", "粒の大きさ（px）", 1, 16, 2, 1, .px)]
         }
     }
 
