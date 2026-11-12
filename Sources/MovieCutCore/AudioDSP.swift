@@ -366,9 +366,42 @@ final class LimiterProcessor {
     }
 }
 
-// MARK: - 処理の連なり(ノイズ除去 → ゲート → EQ → コンプレッサー → リバーブ → リミッター)
+// MARK: - ディレイ(エコー)
 
-/// 1 つのクリップにかける ノイズ除去 → EQ → コンプレッサー → リバーブ。ブロックごとに `process` を呼ぶと、状態が続く。
+/// 左右別の循環バッファで、間隔ぶん遅れた音を `mix` で重ね、入力+遅れた音×`feedback` を
+/// バッファへ戻す(繰り返し)。feedback は 0.9 以下なので尾は必ず減衰する。
+/// クリップの終わりより後ろの尾は出さない(リバーブと同じ)。乱数を使わないので決定的。
+final class DelayProcessor {
+    private var bufL: [Float], bufR: [Float]
+    private var idx = 0
+    private let feedback: Float, mix: Float
+
+    init(_ d: AudioFx.Delay, sr: Double) {
+        let n = max(1, Int((d.timeSeconds * sr).rounded()))
+        bufL = [Float](repeating: 0, count: n)
+        bufR = [Float](repeating: 0, count: n)
+        feedback = Float(d.feedbackValue)
+        mix = Float(d.mix)
+    }
+
+    func process(_ l: UnsafeMutablePointer<Float>, _ r: UnsafeMutablePointer<Float>, _ n: Int) {
+        guard mix > 0 else { return }
+        let dry = 1 - mix
+        for i in 0..<n {
+            let dl = bufL[idx], dr = bufR[idx]
+            bufL[idx] = l[i] + dl * feedback
+            bufR[idx] = r[i] + dr * feedback
+            l[i] = l[i] * dry + dl * mix
+            r[i] = r[i] * dry + dr * mix
+            idx += 1
+            if idx >= bufL.count { idx = 0 }
+        }
+    }
+}
+
+// MARK: - 処理の連なり(ノイズ除去 → ゲート → EQ → コンプレッサー → リバーブ → ディレイ → リミッター)
+
+/// 1 つのクリップにかける ノイズ除去 → EQ → コンプレッサー → リバーブ → ディレイ。ブロックごとに `process` を呼ぶと、状態が続く。
 final class AudioFxChain {
     private let denoise: DenoiseProcessor?
     private let gate: GateProcessor?
@@ -376,6 +409,7 @@ final class AudioFxChain {
     private let eq: EQProcessor?
     private let comp: CompressorProcessor?
     private let reverb: ReverbProcessor?
+    private let delay: DelayProcessor?
 
     init(_ fx: AudioFx, sr: Double) {
         // 強(スペクトル)のときは、ミキサーが入力の側でかける(`SpectralDenoiseSource`)ので、ここでは簡易版を使わない
@@ -385,6 +419,7 @@ final class AudioFxChain {
         eq = fx.eq.flatMap { $0.isActive ? EQProcessor($0, sr: sr) : nil }
         comp = fx.compressor.flatMap { $0.isActive ? CompressorProcessor($0, sr: sr) : nil }
         reverb = fx.reverb.flatMap { $0.isActive ? ReverbProcessor($0, sr: sr) : nil }
+        delay = fx.delay.flatMap { $0.isActive ? DelayProcessor($0, sr: sr) : nil }
     }
 
     func process(_ l: UnsafeMutablePointer<Float>, _ r: UnsafeMutablePointer<Float>, _ n: Int) {
@@ -393,6 +428,7 @@ final class AudioFxChain {
         eq?.process(l, r, n)
         comp?.process(l, r, n)
         reverb?.process(l, r, n)
+        delay?.process(l, r, n)
         limiter?.process(l, r, n)
     }
 }

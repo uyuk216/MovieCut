@@ -129,6 +129,59 @@ public enum AudioFxEditing {
         edit(&c) { fx in var k = fx.reverb ?? AudioFx.Reverb(); k.size = size.rawValue; fx.reverb = k }
     }
 
+    // MARK: ディレイ
+
+    public enum DelayParam: CaseIterable, Sendable {
+        case time, feedback, mix
+        public var range: ClosedRange<Double> {
+            switch self {
+            case .time: return AudioFx.Delay.timeRange
+            case .feedback: return AudioFx.Delay.feedbackRange
+            case .mix: return AudioFx.Delay.mixRange
+            }
+        }
+        public func value(of d: AudioFx.Delay) -> Double {
+            switch self {
+            case .time: return d.timeSeconds
+            case .feedback: return d.feedbackValue
+            case .mix: return d.mix
+            }
+        }
+        public var label: String {
+            switch self {
+            case .time: return "間隔（秒）"
+            case .feedback: return "繰り返し"
+            case .mix: return "ミックス"
+            }
+        }
+        public var undoName: String { "ディレイの変更" }
+    }
+
+    /// オン / オフ。オンにすると既定値のディレイを足す。オフは設定を残したまま切る(`enabled` = false)。
+    @discardableResult
+    public static func setDelayEnabled(_ c: inout Clip, _ on: Bool) -> Bool {
+        edit(&c) { fx in
+            if on { var k = fx.delay ?? AudioFx.Delay(); k.enabled = true; fx.delay = k }
+            else if var k = fx.delay { k.enabled = false; fx.delay = k }
+        }
+    }
+
+    /// 間隔・繰り返し・ミックス(範囲に収め、小数 2 桁に丸める)。
+    @discardableResult
+    public static func setDelay(_ c: inout Clip, _ p: DelayParam, _ v: Double) -> Bool {
+        let r = p.range
+        let x = v.isFinite ? (min(max(v, r.lowerBound), r.upperBound) * 100).rounded() / 100 : r.lowerBound
+        return edit(&c) { fx in
+            var k = fx.delay ?? AudioFx.Delay()
+            switch p {
+            case .time: k.time = x
+            case .feedback: k.feedback = x
+            case .mix: k.mixValue = x
+            }
+            fx.delay = k
+        }
+    }
+
     // MARK: ノーマライズ
 
     @discardableResult

@@ -12,6 +12,7 @@ struct AudioFxPanel: View {
     @State private var openEQ: Bool?
     @State private var openComp: Bool?
     @State private var openReverb: Bool?
+    @State private var openDelay: Bool?
     @State private var openNorm: Bool?
     @State private var openDuck: Bool?
 
@@ -81,6 +82,7 @@ struct AudioFxPanel: View {
                 eqGroup(c)
                 compressorGroup(c)
                 reverbGroup(c)
+                delayGroup(c)
                 normalizeGroup(c)
                 duckGroup(c)
             }
@@ -170,6 +172,35 @@ struct AudioFxPanel: View {
             .padding(.top, 4)
         } label: {
             Text("リバーブ").font(.system(size: 12, weight: .semibold)).foregroundStyle(on ? Color.primary : Color.secondary)
+        }
+    }
+
+    // MARK: ディレイ
+
+    @ViewBuilder private func delayGroup(_ c: Clip) -> some View {
+        let dl = c.audioFx?.delay
+        let on = dl?.isActive ?? false
+        DisclosureGroup(isExpanded: expanded($openDelay, active: on)) {
+            VStack(alignment: .leading, spacing: 6) {
+                Toggle("ディレイを使う", isOn: Binding(get: { dl?.enabled ?? false }, set: { v in
+                    model.setAudioFx({ _ = AudioFxEditing.setDelayEnabled(&$0, v) }, name: "ディレイの切り替え", clipId: clipId)
+                }))
+                .toggleStyle(.checkbox)
+                let k = dl ?? AudioFx.Delay()
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(AudioFxEditing.DelayParam.allCases, id: \.self) { p in
+                        fxSlider(p.label, value: p.value(of: k), range: p.range, step: p == .time ? 0.01 : 0.05,
+                                 format: { p == .time ? String(format: "%.2f 秒", $0) : "\(Int(($0 * 100).rounded()))%" },
+                                 undo: p.undoName) { _ = AudioFxEditing.setDelay(&$0, p, $1) }
+                    }
+                    Text("遅れた音を重ねます(エコー)。繰り返しを大きくすると尾が長くなります。")
+                        .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+                .opacity(dl?.enabled ?? false ? 1 : 0.45)
+            }
+            .padding(.top, 4)
+        } label: {
+            Text("ディレイ").font(.system(size: 12, weight: .semibold)).foregroundStyle(on ? Color.primary : Color.secondary)
         }
     }
 
