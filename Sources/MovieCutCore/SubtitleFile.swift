@@ -5,7 +5,11 @@ public struct SubtitleCue: Equatable {
     public var start: Double
     public var end: Double
     public var text: String
-    public init(start: Double, end: Double, text: String) { self.start = start; self.end = end; self.text = text }
+    /// ルビ(ふりがな)。本文は親文字だけを持ち、読みはここに分けて持つ(`RubyText`)。
+    public var ruby: [RubySpan] = []
+    public init(start: Double, end: Double, text: String, ruby: [RubySpan] = []) {
+        self.start = start; self.end = end; self.text = text; self.ruby = ruby
+    }
 }
 
 public enum SubtitleFormat: String, CaseIterable {
@@ -56,8 +60,10 @@ public enum SubtitleFile {
         var n = 0
         for c in cues {
             let body = cleanBody(c.text)
+            // VTT はルビを <ruby> で書き戻す(SRT には書き方が無いので親文字だけ出す)
+            let marked = format == .vtt && !c.ruby.isEmpty ? RubyText.markup(body, spans: c.ruby) : body
             // VTT/SRT どちらでも、本文の中の "-->" は件の区切りと取り違えられる
-            let safe = body.replacingOccurrences(of: "-->", with: "->")
+            let safe = marked.replacingOccurrences(of: "-->", with: "->")
             guard !safe.isEmpty, c.end > c.start else { continue }
             n += 1
             if format == .srt { out += "\(n)\n" }
@@ -81,7 +87,7 @@ public enum SubtitleFile {
                 default: isSubtitle = false
                 }
                 guard isSubtitle, let text = c.text, c.duration > 0 else { continue }
-                list.append((order, SubtitleCue(start: c.start, end: c.start + c.duration, text: text)))
+                list.append((order, SubtitleCue(start: c.start, end: c.start + c.duration, text: text, ruby: c.ruby)))
                 order += 1
             }
         }
@@ -101,7 +107,7 @@ public enum SubtitleFile {
     }
 
     /// SRT でも VTT でも読む(形式は自動判定)。BOM・CRLF・CR・番号なし・VTT の WEBVTT/NOTE/STYLE/REGION・件の設定・
-    /// HTML/VTT のタグ・ASS の `{\an8}`・ルビ(`<rt>` の読みは捨てる)に耐える。時刻が読めない件・本文が空の件は捨てる。
+    /// HTML/VTT のタグ・ASS の `{\an8}`・ルビ(`<ruby>` の読みは保持する)に耐える。時刻が読めない件・本文が空の件は捨てる。
     /// 重なる件はそのまま返す。開始順に並べる(同じなら元の順)。
     public static func parse(_ raw: String) -> [SubtitleCue] {
         // 大きすぎる入力は先頭だけ読む(件数にも上限)
@@ -125,10 +131,11 @@ public enum SubtitleFile {
             guard let ti = b.firstIndex(where: { $0.contains("-->") }) else { continue }
             if result.count >= maxCues { break }
             guard let (s, e) = parseTiming(b[ti]) else { continue }
-            let body = stripMarkup(b[(ti + 1)...].joined(separator: "\n"))
+            let (noRuby, rubySpans) = RubyText.extractMarkup(b[(ti + 1)...].joined(separator: "\n"))
+            let body = stripMarkup(noRuby)
             let cleaned = cleanBody(body)
             guard !cleaned.isEmpty else { continue }
-            result.append((result.count, SubtitleCue(start: s, end: e, text: cleaned)))
+            result.append((result.count, SubtitleCue(start: s, end: e, text: cleaned, ruby: rubySpans)))
         }
         return result.sorted { ($0.1.start, $0.0) < ($1.1.start, $1.0) }.map(\.1)
     }
@@ -186,6 +193,7 @@ public enum SubtitleImport {
         var c = Clip()
         c.type = .text
         c.text = cue.text
+        c.ruby = cue.ruby
         c.start = cue.start
         c.duration = cue.end - cue.start
         c.x = 0.5; c.y = 0.88
@@ -207,7 +215,7 @@ public enum SubtitleImport {
             guard e > 1e-9 else { return nil }
             let s = max(0, c.start + off)
             guard e > s else { return nil }
-            return SubtitleCue(start: s, end: e, text: c.text)
+            return SubtitleCue(start: s, end: e, text: c.text, ruby: c.ruby)
         }.sorted { $0.start < $1.start }
         guard !shifted.isEmpty else { return nil }
 

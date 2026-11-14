@@ -437,7 +437,7 @@ public struct Renderer {
             if pose.isPlain(c) {
                 let plainCacheable = !geometryAnimated && !pose.transitionMoves && !animating && (pose.opacity >= 1 || blurred)
                 drawText(shown, x: pose.x * W, y: pose.y * H, size: size, color: c.colorOrDefault, font: c.fontOrDefault, outline: c.outlineOrDefault, ctx: ctx,
-                         cacheable: plainCacheable, style: style, visible: visible, charAnim: charAnim)
+                         cacheable: plainCacheable, style: style, visible: visible, charAnim: charAnim, ruby: c.ruby)
                 if let n = hlVisible, n > 0, let hl = style?.highlight {
                     drawText(shown, x: pose.x * W, y: pose.y * H, size: size, color: hl.colorOrDefault, font: c.fontOrDefault, outline: c.outlineOrDefault, ctx: ctx,
                              cacheable: plainCacheable, style: hlStyle, visible: n)
@@ -448,13 +448,13 @@ public struct Renderer {
                 var ox = 0.0, oy = 0.0
                 if let crop = c.crop, !crop.isEmpty {
                     // 切り抜きは、描いた文字の枠(幅 = 一番長い行、高さ = 行数 × 行間)に対して
-                    let box = textBlockSize(shown, size: size, font: c.fontOrDefault, style: style)
+                    let box = textBlockSize(shown, size: size, font: c.fontOrDefault, style: style, ruby: c.ruby)
                     let kw = box.width * crop.keptWidth, kh = box.height * crop.keptHeight
                     ctx.clip(to: CGRect(x: -kw / 2, y: -kh / 2, width: kw, height: kh))
                     ox = -(crop.l - crop.r) / 2 * box.width
                     oy = -(crop.t - crop.b) / 2 * box.height
                 }
-                drawText(shown, x: ox, y: oy, size: size, color: c.colorOrDefault, font: c.fontOrDefault, outline: c.outlineOrDefault, ctx: ctx, cacheable: false, style: style, visible: visible, charAnim: charAnim)
+                drawText(shown, x: ox, y: oy, size: size, color: c.colorOrDefault, font: c.fontOrDefault, outline: c.outlineOrDefault, ctx: ctx, cacheable: false, style: style, visible: visible, charAnim: charAnim, ruby: c.ruby)
                 if let n = hlVisible, n > 0, let hl = style?.highlight {
                     drawText(shown, x: ox, y: oy, size: size, color: hl.colorOrDefault, font: c.fontOrDefault, outline: c.outlineOrDefault, ctx: ctx, cacheable: false, style: hlStyle, visible: n)
                 }
@@ -505,7 +505,7 @@ public struct Renderer {
     }
 
     /// 文字の枠(幅 = 一番長い行の幅、高さ = 行数 × 文字の大きさ × 1.2)。
-    func textBlockSize(_ text: String, size: Double, font: String, style: TextStyle? = nil) -> CGSize {
+    func textBlockSize(_ text: String, size: Double, font: String, style: TextStyle? = nil, ruby: [RubySpan] = []) -> CGSize {
         // 縦書き: 幅 = 列の数 × 列の幅(行間 × 大きさ)、高さ = 一番長い列
         if style?.verticalOrDefault == true {
             return VerticalText.blockSize(text, size: size, spacing: style?.letterSpacingOrDefault ?? 0, lineHeight: style?.lineHeightOrDefault ?? TextStyle.defaultLineHeight)
@@ -514,7 +514,8 @@ public struct Renderer {
         let f = TextCache.font(name: font, size: size, bold: style?.boldOrDefault ?? true)
         let sp = style?.letterSpacingOrDefault ?? 0, it = style?.italicOrDefault ?? false
         let w = lines.map { TextCache.layout(f, font: font, line: $0, spacing: sp, italic: it).width }.max() ?? 0
-        return CGSize(width: w, height: Double(lines.count) * size * (style?.lineHeightOrDefault ?? TextStyle.defaultLineHeight))
+        let pitch = size * (style?.lineHeightOrDefault ?? TextStyle.defaultLineHeight) + (RubyText.resolve(ruby, in: text).isEmpty ? 0 : size * RubyText.pitchReserveRatio)
+        return CGSize(width: w, height: Double(lines.count) * pitch)
     }
 
     /// 画面に置いたときの、クリップの枠の大きさ(拡大を反映、回転は含まない)。素材が読めなければ nil。プレビューの取っ手用。
@@ -538,7 +539,7 @@ public struct Renderer {
         case .tachie:
             return tachieSize(c, at: t)
         case .text:
-            let box = textBlockSize(c.text ?? "", size: c.fontSize ?? 80, font: c.fontOrDefault, style: c.textStyle)
+            let box = textBlockSize(c.text ?? "", size: c.fontSize ?? 80, font: c.fontOrDefault, style: c.textStyle, ruby: c.ruby)
             let crop = c.cropOrDefault
             return CGSize(width: box.width * crop.keptWidth * pose.scale, height: box.height * crop.keptHeight * pose.scale)
         default:
@@ -779,7 +780,7 @@ public struct Renderer {
     }
 
     func drawText(_ text: String, x: Double, y: Double, size: Double, color: String, font: String, outline: String, ctx: CGContext, cacheable: Bool = true,
-                  style: TextStyle? = nil, visible: Int? = nil, charAnim: CharAnimSpec? = nil) {
+                  style: TextStyle? = nil, visible: Int? = nil, charAnim: CharAnimSpec? = nil, ruby: [RubySpan] = []) {
         guard size > 0 else { return }
         // 縦書き・1 文字ずつの動きは、文字ごとに配置して描く(別の道)
         if (style?.verticalOrDefault ?? false) || charAnim != nil {
@@ -791,7 +792,9 @@ public struct Renderer {
         let outC = parseHexColor(outline) ?? parseHexColor("#000000")!
         let f = TextCache.font(name: font, size: size, bold: style?.boldOrDefault ?? true)
         let spacing = style?.letterSpacingOrDefault ?? 0, italic = style?.italicOrDefault ?? false
-        let pitch = size * (style?.lineHeightOrDefault ?? TextStyle.defaultLineHeight)
+        // ルビがあるときは、読みを置く余白ぶん行間を広げる(縦書き・文字ごとの動きの経路ではルビを出さない)
+        let resolvedRuby = RubyText.resolve(ruby, in: text)
+        let pitch = size * (style?.lineHeightOrDefault ?? TextStyle.defaultLineHeight) + (resolvedRuby.isEmpty ? 0 : size * RubyText.pitchReserveRatio)
         let full = lines.map { TextCache.layout(f, font: font, line: $0, spacing: spacing, italic: italic) }
         let blockW = full.map(\.width).max() ?? 0
         let align = style?.alignOrDefault ?? .center
@@ -844,6 +847,31 @@ public struct Renderer {
             ctx.translateBy(x: CGFloat(ox), y: CGFloat(baseline))
             Renderer.paintLine(line, f, size: size, fill: fillC, outline: outC, ctx: ctx)
             ctx.restoreGState()
+        }
+        // ルビ: 行を全部描いたあとに、読みを親文字の上へ重ねる(見えている範囲の分だけ)
+        if !resolvedRuby.isEmpty {
+            var rem = visible
+            var lineStart = 0
+            for (i, ln) in lines.enumerated() {
+                let n = ln.count
+                var shownCount = n
+                if let r = rem { shownCount = min(n, r); rem = max(0, r - n) }
+                let segs = resolvedRuby.filter { $0.start >= lineStart && $0.end <= lineStart + n && $0.start - lineStart < shownCount }
+                    .map { (start: $0.start - lineStart, end: $0.end - lineStart, reading: $0.reading) }
+                if !segs.isEmpty {
+                    let yy = y + (Double(i) - Double(lines.count - 1) / 2) * pitch
+                    let baseline = yy + (f.ascent - f.descent) / 2
+                    let ox: Double
+                    switch align {
+                    case .center: ox = x - full[i].width / 2
+                    case .left: ox = x - blockW / 2
+                    case .right: ox = x + blockW / 2 - full[i].width
+                    }
+                    drawRubyReadings(segs, line: ln, fontName: font, size: size, lineLeftX: ox, baseline: baseline,
+                                     fill: fillC, outline: outC, ctx: ctx, cacheable: cacheable, style: style)
+                }
+                lineStart += n + 1
+            }
         }
     }
 

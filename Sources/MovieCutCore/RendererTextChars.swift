@@ -133,7 +133,7 @@ extension Renderer {
             ctx.translateBy(x: CGFloat(x), y: CGFloat(y)); ctx.scaleBy(x: CGFloat(scale), y: CGFloat(scale)); ctx.translateBy(x: CGFloat(-x), y: CGFloat(-y))
         }
         let animating = moving || charAnim != nil
-        drawText(text, x: x, y: y, size: size, color: "#ffffff", font: c.fontOrDefault, outline: outline, ctx: ctx, cacheable: !animating, style: style, visible: visible, charAnim: charAnim)
+        drawText(text, x: x, y: y, size: size, color: "#ffffff", font: c.fontOrDefault, outline: outline, ctx: ctx, cacheable: !animating, style: style, visible: visible, charAnim: charAnim, ruby: c.ruby)
         ctx.restoreGState()
     }
 }
