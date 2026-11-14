@@ -57,6 +57,16 @@ moviecut-cli export in.mcpjc out.m4a --preset audio        # 音声のみ(AAC 25
 「出力 ▸ 書き出しプリセット ▸ 現在の設定をプリセットに保存…」で自分のプリセットを作れます(Application Support の `MovieCut/export-presets.json`。壊れていても無視して起動します)。CLI は保存したプリセット名もそのまま `--preset` に使えます。
 保存パネルでは「書き出しの種類」と「ビットレート」を選べます。
 
+## プロジェクト生成(コマンドライン)
+台本テキスト(「キャラ名: 読み上げ文 | 字幕文」。`|` の前が読み上げ、後ろが字幕)から、実際の声(VOICEVOX / AquesTalk)でプロジェクトを作れます。ファス子(Muse)が SSH 経由で組み立て、アプリで開いて微調整する使い方を想定しています。
+```
+moviecut-cli script script.txt --out p.ymproj                                    # 既定キャラで新規作成
+moviecut-cli script script.txt --out p.ymproj --template base.mcpjc --clean      # 既存プロジェクトのキャラ・設定を引き継ぐ(クリップとマーカーは消す)
+moviecut-cli script script.txt --out p.ymproj --size 1080x1920 --char ずんだもん   # 縦動画・既定キャラ(名前のない行の話し手)の指定
+moviecut-cli addimage p.ymproj slide.png p2.ymproj [--start 0] [--duration 5]    # 画像クリップを追加(無指定ならプロジェクトの終わりまで)
+moviecut-cli project-info p.ymproj                                               # 中身を JSON で確認(読み取り専用)
+```
+
 - ラウドネス: 「出力 ▸ ラウドネスを測る…」(書き出しと同じミックスを BS.1770 で測る。統合・ショートターム最大・真のピーク)。CLI: `moviecut-cli loudness <project>`。YouTube の −14 LUFS は目安として差を見せるだけで、音量は変えません。
 - スコープ: 「表示 ▸ スコープ…」で、今のコマのヒストグラムと波形を見られます(表示用。書き出しには影響しません)。
 

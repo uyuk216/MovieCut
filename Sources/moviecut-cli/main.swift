@@ -525,14 +525,26 @@ case "deps":
     print("voicevoxInstalled: \(st.voicevoxInstalled)\nvoicevoxRunning: \(st.voicevoxRunning)\naquestalkPlayerInstalled: \(st.aquestalkPlayerInstalled)")
     for n in st.notice { print("notice: " + n) }
 case "script" where args.count >= 2:
-    // script <script.txt> --out <out.ymproj>: 台本ファイルから実際の声でプロジェクトを作る(既定キャラ=キャラ1)
+    // script <script.txt> --out <out.ymproj> [--template <既存プロジェクト>] [--clean] [--size WxH] [--fps 29.97] [--bg #rrggbb|transparent] [--char <キャラ名>]
+    // 台本ファイルから実際の声でプロジェクトを作る(既定キャラ=先頭、または --char で指定したキャラ。名前のない行がそのキャラになる)
+    // --template を付けると、そのプロジェクトのキャラ・画角・設定を引き継ぐ。--clean は引き継いだクリップとマーカーを消してから台本を入れる。
     guard let outPath = optValue("--out") else { fail("--out が必要です") }
     do {
-        var p = Project.new()
+        var p: Project
+        if let t = optValue("--template") { p = try Project.load(from: URL(fileURLWithPath: t)) } else { p = Project.new() }
+        if args.contains("--clean") { p.tracks = Track.defaultLayers(); p.markers = [] }
+        if let s = optValue("--size") { let sz = parseSize(s); p = p.scaledForResolution(newWidth: sz.0, newHeight: sz.1) }
+        if let f = optValue("--fps") { p.fps = parseFps(f) }
+        if let b = optValue("--bg") { guard b == Project.transparentBackground || parseHexColor(b) != nil else { fail("--bg は #rrggbb か transparent") }; p.bg = b }
+        var selectedCharId = p.characters[0].id
+        if let name = optValue("--char") {
+            guard let c = p.characters.first(where: { $0.name == name }) else { fail("--char: キャラ「\(name)」がプロジェクトにいません") }
+            selectedCharId = c.id
+        }
         let lines = try String(contentsOfFile: args[1], encoding: .utf8).components(separatedBy: "\n")
         let provider = RealVoiceProvider(project: p)
         defer { provider.engine.shutdown() }
-        try await ScriptTimeline.add(lines: lines, to: &p, voice: provider, directory: FileManager.default.temporaryDirectory, selectedCharId: p.characters[0].id)
+        try await ScriptTimeline.add(lines: lines, to: &p, voice: provider, directory: FileManager.default.temporaryDirectory, selectedCharId: selectedCharId)
         try p.save(to: URL(fileURLWithPath: outPath))
         print("engines used: \(provider.enginesUsed.sorted().joined(separator: ", ")); fallback: \(provider.usingFallback)")
         print("wrote \(outPath)")
@@ -556,6 +568,27 @@ case "addvideo" where args.count == 4:
         try p.save(to: URL(fileURLWithPath: args[3]))
         print(String(format: "added video %@ (%.2fs) to layer %d; project end=%.2fs; wrote %@", url.lastPathComponent, dur, ti! + 1, p.endTime, args[3]))
     } catch { fail("動画を足せませんでした: \(error.localizedDescription)") }
+case "addimage" where args.count >= 4:
+    // addimage <in.ymproj> <image.png> <out.ymproj> [--start 0] [--duration 5]: 画像を、空いているレイヤー(無ければ新設)に画像クリップとして置く(画面に収まる大きさ・中央)
+    // --duration が無ければ、プロジェクトの終わりまで(プロジェクトが空なら 5 秒)
+    do {
+        var p = try Project.load(from: URL(fileURLWithPath: args[1]))
+        let path = args[2]
+        guard FileManager.default.fileExists(atPath: path) else { fail("画像が見つかりません: \(path)") }
+        var c = Clip()
+        c.type = .image
+        c.start = optValue("--start").flatMap(Double.init) ?? 0
+        let dur = optValue("--duration").flatMap(Double.init) ?? (p.endTime > c.start ? p.endTime - c.start : 5)
+        guard dur > 0 else { fail("--duration は 0 より大きい秒数にしてください") }
+        c.duration = dur; c.offset = 0
+        c.src = path
+        c.x = 0.5; c.y = 0.5; c.scale = 1; c.opacity = 1
+        var ti = p.tracks.firstIndex { $0.clips.isEmpty }
+        if ti == nil { p.tracks.append(Track(name: "レイヤー\(p.tracks.count + 1)")); ti = p.tracks.count - 1 }
+        p.tracks[ti!].clips.append(c)
+        try p.save(to: URL(fileURLWithPath: args[3]))
+        print(String(format: "added image %@ (start=%.2fs dur=%.2fs) to layer %d; project end=%.2fs; wrote %@", (path as NSString).lastPathComponent, c.start, c.duration, ti! + 1, p.endTime, args[3]))
+    } catch { fail("画像を足せませんでした: \(error.localizedDescription)") }
 case "genclips" where args.count == 3:
     // genclips <N> <out.ymproj>: 音声なしのクリップ(文字・画像・ぼかし・ボイス風)を N 個並べた重いプロジェクト(タイムラインの描画の検証用)
     guard let n = Int(args[1]), n > 0 else { fail("N は正の整数") }
@@ -679,5 +712,5 @@ case "smoke":
         try await runExport(p, to: URL(fileURLWithPath: outPath))
     } catch { fail("書き出せませんでした: \(error.localizedDescription)") }
 default:
-    fail("usage:\n  moviecut-cli info <file.ymproj>\n  moviecut-cli new <out.ymproj>\n  moviecut-cli export <in.mcpjc> <out.mp4|out.m4a> [--range a:b|project] [--preset youtube1080|youtube1080p60|youtube4k|short|shorts|tiktok|reels|x720|x1080|light|audio|<保存したプリセット名>] [--bitrate 8(Mbps)] [--size WxH] [--fps 29.97] [--codec h264|hevc|prores422|prores4444] [--bg #rrggbb|transparent]\n  moviecut-cli smoke --out <mp4> [--size WxH] [--fps 23.976] [--codec h264|hevc] [--blur] [--tone] [--save-project p.ymproj]\n  moviecut-cli speak (--voicevox <id> [--speed --pitch --intonation] | --voice <preset> [--speed]) --text <t> --out <wav>\n  moviecut-cli speakers | deps | script <script.txt> --out <p.ymproj>\n  moviecut-cli rig-frame <フォルダ|.psd> --out <png> [--mouth あ|い|う|え|お|open|closed] [--blink] [--pick 眉=2,目=5] [--expr 名前] [--height 1080] [--bench N] [--list]\n  moviecut-cli migrate <旧形式.mcpjc> <出力.mcpjc>   (キャラの立ち絵を立ち絵素材+クリップへ移す)\n  moviecut-cli psd-info <file.psd>\n  moviecut-cli frame <in.ymproj> --t <sec> --out <png|jpg> [--size WxH] [--bench N]\n  moviecut-cli gif <in.mcpjc> --out <x.gif> [--fps 10] [--width 480] [--range a:b|project]\n  moviecut-cli apng <in.mcpjc> --out <x.png> [--fps 15] [--width 480] [--loop 0] [--bg transparent] [--range a:b|project]\n  moviecut-cli sequence <in.mcpjc> --out <dir> [--format png|jpeg] [--name base] [--range a:b|project] [--fps 30] [--size WxH]\n  moviecut-cli addvideo <in.ymproj> <clip.mp4> <out.ymproj>\n  moviecut-cli genclips <N> <out.ymproj>\n  moviecut-cli silence <project|media> [--threshold -40] [--min 0.4] [--pad 0.1]\n  moviecut-cli beats <project|media> [--all]\n  moviecut-cli subs <project> --out <x.srt|x.vtt>\n  moviecut-cli subtitle-check <project>\n  moviecut-cli transcribe <media|project> --out <x.srt|x.vtt> [--clip 0] [--locale ja-JP]\n  moviecut-cli chapters <project> [--color red|orange|yellow|green|blue|purple|gray|teal]\n  moviecut-cli loudness <project> [--range a:b|project]\n  moviecut-cli project-info <project>   (JSON。読み取り専用)\n  moviecut-cli ai script --theme <t> [--chars キャラ1,キャラ3] [--lines 12] --provider-cmd \"claude -p\" [--timeout 120] [--out x.txt] [--show-prompt]")
+    fail("usage:\n  moviecut-cli info <file.ymproj>\n  moviecut-cli new <out.ymproj>\n  moviecut-cli export <in.mcpjc> <out.mp4|out.m4a> [--range a:b|project] [--preset youtube1080|youtube1080p60|youtube4k|short|shorts|tiktok|reels|x720|x1080|light|audio|<保存したプリセット名>] [--bitrate 8(Mbps)] [--size WxH] [--fps 29.97] [--codec h264|hevc|prores422|prores4444] [--bg #rrggbb|transparent]\n  moviecut-cli smoke --out <mp4> [--size WxH] [--fps 23.976] [--codec h264|hevc] [--blur] [--tone] [--save-project p.ymproj]\n  moviecut-cli speak (--voicevox <id> [--speed --pitch --intonation] | --voice <preset> [--speed]) --text <t> --out <wav>\n  moviecut-cli speakers | deps | script <script.txt> --out <p.ymproj> [--template <既存プロジェクト>] [--clean] [--size WxH] [--fps 29.97] [--bg #rrggbb|transparent] [--char <キャラ名>]\n  moviecut-cli rig-frame <フォルダ|.psd> --out <png> [--mouth あ|い|う|え|お|open|closed] [--blink] [--pick 眉=2,目=5] [--expr 名前] [--height 1080] [--bench N] [--list]\n  moviecut-cli migrate <旧形式.mcpjc> <出力.mcpjc>   (キャラの立ち絵を立ち絵素材+クリップへ移す)\n  moviecut-cli psd-info <file.psd>\n  moviecut-cli frame <in.ymproj> --t <sec> --out <png|jpg> [--size WxH] [--bench N]\n  moviecut-cli gif <in.mcpjc> --out <x.gif> [--fps 10] [--width 480] [--range a:b|project]\n  moviecut-cli apng <in.mcpjc> --out <x.png> [--fps 15] [--width 480] [--loop 0] [--bg transparent] [--range a:b|project]\n  moviecut-cli sequence <in.mcpjc> --out <dir> [--format png|jpeg] [--name base] [--range a:b|project] [--fps 30] [--size WxH]\n  moviecut-cli addvideo <in.ymproj> <clip.mp4> <out.ymproj>\n  moviecut-cli addimage <in.ymproj> <image.png> <out.ymproj> [--start 0] [--duration 5]\n  moviecut-cli genclips <N> <out.ymproj>\n  moviecut-cli silence <project|media> [--threshold -40] [--min 0.4] [--pad 0.1]\n  moviecut-cli beats <project|media> [--all]\n  moviecut-cli subs <project> --out <x.srt|x.vtt>\n  moviecut-cli subtitle-check <project>\n  moviecut-cli transcribe <media|project> --out <x.srt|x.vtt> [--clip 0] [--locale ja-JP]\n  moviecut-cli chapters <project> [--color red|orange|yellow|green|blue|purple|gray|teal]\n  moviecut-cli loudness <project> [--range a:b|project]\n  moviecut-cli project-info <project>   (JSON。読み取り専用)\n  moviecut-cli ai script --theme <t> [--chars キャラ1,キャラ3] [--lines 12] --provider-cmd \"claude -p\" [--timeout 120] [--out x.txt] [--show-prompt]")
 }
