@@ -47,4 +47,13 @@ final class ClipGroupingTests: XCTestCase {
         let starts = Dictionary(uniqueKeysWithValues: p.allClips.map { ($0.id, $0.start) })
         XCTAssertEqual(starts["a"], 1.5); XCTAssertEqual(starts["c"], 2.5); XCTAssertEqual(starts["b"], 3)
     }
+
+    func testNextId() {
+        var p = project()
+        XCTAssertEqual(ClipGrouping.nextId(in: p), "group1")   // g1, g2 は形式が違うので空き
+        ClipGrouping.assign("group1", to: ["b"], in: &p)
+        XCTAssertEqual(ClipGrouping.nextId(in: p), "group2")
+        ClipGrouping.assign("group3", to: ["c"], in: &p)
+        XCTAssertEqual(ClipGrouping.nextId(in: p), "group2", "空いている一番小さい番号")
+    }
 }

@@ -1373,7 +1373,7 @@ final class TimelineCanvas: NSView {
                 m.setSelection(ClipSelection(ids: m.selectedClipIDs, primary: id))
                 collapse = id
             } else {
-                m.selectOnly(id)
+                m.selectExpandingGroup(id)   // グループのクリップなら全員を選ぶ(ドラッグでまとめて動かせる)
             }
             guard !m.isLocked, let loc = ClipEditing.locate(id, in: project), !project.tracks[loc.track].isLocked else { return }   // ロックされたレイヤーのクリップは動かさない
             let c = project.tracks[loc.track].clips[loc.index]
@@ -1972,6 +1972,8 @@ final class TimelineCanvas: NSView {
         add("貼り付け", enabled: m.canPasteClips) { m.pasteClips() }
         menu.addItem(.separator())
         add("再生位置で分割", enabled: m.canSplit) { m.splitSelected() }
+        add("グループにする", enabled: m.selectedClipIDs.count >= 2) { m.groupSelectedClips() }
+        add("グループを解除", enabled: m.selectionHasGroup) { m.ungroupSelectedClips() }
         add("複製", enabled: !m.selectedClipIDs.isEmpty) { m.duplicateSelected() }
         add("削除", enabled: !m.selectedClipIDs.isEmpty) { m.deleteSelected() }
         add("すき間を詰めて削除", enabled: !m.selectedClipIDs.isEmpty) { m.rippleDeleteSelected() }
@@ -1987,7 +1989,7 @@ final class TimelineCanvas: NSView {
             return layerContextMenu(row: i)
         }
         if let id = clipId(at: p) {
-            if !m.selectedClipIDs.contains(id) { m.selectOnly(id) }      // 選択の外を右クリックしたら、それだけを選ぶ
+            if !m.selectedClipIDs.contains(id) { m.selectExpandingGroup(id) }      // 選択の外を右クリックしたら、それを選ぶ(グループなら全員)
             return clipContextMenu()
         }
         return nil

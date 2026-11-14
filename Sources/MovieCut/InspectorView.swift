@@ -327,6 +327,10 @@ struct MultiSelectionInspector: View {
                 Button(Title.rippleDelete) { model.rippleDeleteSelected() }
                 Button(Title.copy) { model.copySelection() }
             }
+            HStack(spacing: 8) {
+                Button("グループにする") { model.groupSelectedClips() }
+                Button("グループを解除") { model.ungroupSelectedClips() }.disabled(!model.selectionHasGroup)
+            }
         }
         .disabled(model.isLocked)
     }
@@ -472,6 +476,7 @@ struct ClipInspector: View {
                 }
                 InspectorSection(title: "注記")
                 ClipNoteField(model: model, clipId: clipId, note: c.note ?? "").id(clipId)
+                groupSection(c)
                 if c.type == .voice { voiceSections(c) }
                 if c.type == .text { textSections(c) }
                 if c.type == .tachie { TachieClipSection(model: model, clip: c) }
@@ -494,6 +499,24 @@ struct ClipInspector: View {
                 }
             }
             .onDisappear { model.flushCoalesced() }
+        }
+    }
+
+    /// グループの状態と付け外し。グループのクリップは、タイムラインで押すと全員が選ばれる。
+    @ViewBuilder private func groupSection(_ c: Clip) -> some View {
+        InspectorSection(title: "グループ")
+        if let g = c.group {
+            Text("グループのメンバー（\(ClipGrouping.members(of: g, in: model.project).count) 個）")
+                .font(.system(size: 12)).foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                Button("全員を選択") { model.selectGroupMembers(of: clipId) }
+                Button("このクリップを外す") { model.setClipProperty(\.group, to: nil, name: "グループから外す", clipId: clipId) }
+            }
+            .controlSize(.small)
+            .disabled(model.isLocked)
+        } else {
+            Text("グループに入っていません。2 つ以上選んで「グループにする」と、押したときに全員が選ばれ、ドラッグでまとめて動かせます。")
+                .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
     }
 

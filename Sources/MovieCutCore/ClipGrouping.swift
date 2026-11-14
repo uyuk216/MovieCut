@@ -30,6 +30,14 @@ public enum ClipGrouping {
         return out
     }
 
+    /// まだ使われていない新しいグループ ID("group1", "group2", …のうち一番小さい空き)。
+    public static func nextId(in project: Project) -> String {
+        let used = Set(groupIds(in: project))
+        var n = 1
+        while used.contains("group\(n)") { n += 1 }
+        return "group\(n)"
+    }
+
     /// グループの付け外し。group が nil なら解除。対象が無ければ何もしない。
     public static func assign(_ group: String?, to ids: Set<String>, in project: inout Project) {
         for ti in project.tracks.indices {
