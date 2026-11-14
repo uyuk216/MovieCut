@@ -914,6 +914,16 @@ struct ClipInspector: View {
         InspectorSection(title: "見た目")
         slider("不透明度", .opacity, step: 0.01, format: Self.pct)
         slider("ぼかし（px）", .blur, step: 1, format: Self.px)
+        InspectorField(label: "合成方法") { blendPicker(c) }
+    }
+
+    /// 下のレイヤーとの合成方法(ブレンドモード)。未設定 = 通常。
+    private func blendPicker(_ c: Clip) -> some View {
+        Picker("", selection: Binding(get: { c.blendMode?.rawValue ?? "" },
+                                      set: { v in model.setClipProperty(\.blendMode, to: ClipBlendMode(rawValue: v), name: "合成方法の変更", clipId: clipId) })) {
+            Text("通常").tag("")
+            ForEach(ClipBlendMode.allCases, id: \.rawValue) { m in Text(m.label).tag(m.rawValue) }
+        }
     }
 
     /// 「変形をリセット」で戻るものがあるか。
