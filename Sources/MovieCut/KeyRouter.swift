@@ -1,7 +1,7 @@
 import AppKit
 
 /// ウィンドウ全体のキー操作。入力欄にフォーカスがあるときは何もしない(台本やシートの入力を壊さない)。
-enum KeyCommand: Hashable {
+enum KeyCommand: Hashable, CaseIterable {
     case playPause, stepBack, stepForward, toStart, toEnd
     /// S = 分割、Delete / Backspace = 削除、Escape = 選択を外す(ハンドラが無ければキーはそのまま素通りする)。
     case split, delete, deselect
@@ -40,10 +40,34 @@ final class KeyRouter {
         !flags.intersection([.command, .option, .control]).isEmpty
     }
 
-    /// このキーをコマンドとして扱うか。入力欄・修飾キーのときは nil。
-    static func command(keyCode: UInt16, modifiers: NSEvent.ModifierFlags, firstResponder: NSResponder?) -> KeyCommand? {
+    /// 既定の対応をコマンド別に見たもの(削除は ⌫ と ⌦ の両方)。
+    static let defaultKeyCodes: [KeyCommand: [UInt16]] = [
+        .playPause: [49], .stepBack: [123], .stepForward: [124], .toStart: [115], .toEnd: [119],
+        .split: [1], .delete: [51, 117], .deselect: [53],
+        .shuttleBack: [38], .shuttleStop: [40], .shuttleForward: [37],
+    ]
+
+    /// ショートカットの上書きの置き場(テストでは差し替える)。
+    static var shortcutStore: ShortcutStore = .shared
+
+    /// 上書きを反映した実効の対応表(キーコード → コマンド)。
+    /// 上書きされたコマンドの既定キーは外れ、上書きで指定されたキーは元の持ち主から移る。
+    static func effectiveKeyMap(store: ShortcutStore) -> [UInt16: KeyCommand] {
+        var map: [UInt16: KeyCommand] = [:]
+        for cmd in KeyCommand.allCases where store.plainOverride(for: cmd) == nil {
+            for code in defaultKeyCodes[cmd] ?? [] { map[code] = cmd }
+        }
+        for cmd in KeyCommand.allCases {
+            if let b = store.plainOverride(for: cmd) { map[b.keyCode] = cmd }
+        }
+        return map
+    }
+
+    /// キー入力 → コマンド。FirstResponder がテキスト入力中、または対象外のウインドウでは nil。
+    static func command(keyCode: UInt16, modifiers: NSEvent.ModifierFlags,
+                        firstResponder: NSResponder?) -> KeyCommand? {
         guard !hasBlockingModifier(modifiers), !isTextInput(firstResponder) else { return nil }
-        return keyMap[keyCode]
+        return effectiveKeyMap(store: shortcutStore)[keyCode]
     }
 
     /// ⌘= か ⌘+(Shift は許す)か。配列によって「+」の押し方が違うので、文字で見る。

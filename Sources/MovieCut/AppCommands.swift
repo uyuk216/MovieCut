@@ -6,18 +6,23 @@ struct MenuItemView: View {
     let spec: MenuItemSpec
     let perform: (MenuCommand) -> Void
 
+    /// 項目表の値に、ユーザーの上書き(ショートカット一覧の画面で変更)を重ねた実効のショートカット。
+    private var effectiveShortcut: MenuShortcut? {
+        ShortcutStore.shared.menuOverride(for: ShortcutStore.id(for: spec.command)) ?? spec.shortcut
+    }
+
     /// 使えないときの理由(ツールチップ)。有効なら nil。
     private var reason: String? { AppMenuSpec.disabledReason(for: spec, state: ActiveDocument.shared.state) }
 
     var body: some View {
         if let checked = spec.checked {
             Toggle(spec.localizedTitle, isOn: Binding(get: { checked }, set: { _ in perform(spec.command) }))
-                .keyboardShortcut(spec.shortcut?.keyboardShortcut)
+                .keyboardShortcut(effectiveShortcut?.keyboardShortcut)
                 .disabled(!spec.enabled)
                 .help(reason.map(L10n.t) ?? "")
         } else {
             Button(spec.localizedTitle) { perform(spec.command) }
-                .keyboardShortcut(spec.shortcut?.keyboardShortcut)
+                .keyboardShortcut(effectiveShortcut?.keyboardShortcut)
                 .disabled(!spec.enabled)
                 .help(reason.map(L10n.t) ?? "")
         }
