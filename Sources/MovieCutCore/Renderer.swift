@@ -161,9 +161,14 @@ public struct Renderer {
                         ctx.saveGState()
                         Renderer.clip(ctx, mask: m, W: W, H: H)
                     }
+                    // ブレンドモード: このクリップの描画全体に効かせる(終わりで必ず戻す)
+                    if let blendMode = c.blendMode {
+                        ctx.saveGState()
+                        ctx.setBlendMode(blendMode.cgBlendMode)
+                    }
                     // 複合クリップで、キャンバスいっぱいに・効果なし・不透明度 100% なら、中身を親の画面に直接描く(中間の画像を作らない)。
                     // 直接描くので、まとめる前のクリップを描いたときと画素が完全に一致する
-                    if c.type == .compound, mask == nil, c.mask == nil, pose.isFullCanvasCompound, !c.hasActiveEffects, let child = compoundRenderer(c) {
+                    if c.type == .compound, mask == nil, c.mask == nil, c.blendMode == nil, pose.isFullCanvasCompound, !c.hasActiveEffects, let child = compoundRenderer(c) {
                         ctx.saveGState()
                         child.drawFrame(t: t - c.start + c.offset, into: ctx)
                         ctx.restoreGState()
@@ -178,9 +183,10 @@ public struct Renderer {
                     } else {
                         ctx.saveGState()
                         ctx.setAlpha(CGFloat(pose.opacity))
-                        drawClipContent(c, pose: pose, t: t, ctx: ctx, W: W, H: H, fastFade: mask == nil, fadeAlpha: pose.opacity)
+                        drawClipContent(c, pose: pose, t: t, ctx: ctx, W: W, H: H, fastFade: mask == nil && c.blendMode == nil, fadeAlpha: pose.opacity)
                         ctx.restoreGState()
                     }
+                    if c.blendMode != nil { ctx.restoreGState() }
                     if mask != nil { ctx.restoreGState() }
                 case .voice:
                     if let id = c.charId { speaking[id] = c }

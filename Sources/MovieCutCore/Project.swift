@@ -434,6 +434,8 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var tracks: [Track]? = nil
     /// 形のマスク(キャンバスの矩形・楕円。省いたときは何もしない)。
     public var mask: ClipMask? = nil
+    /// ブレンドモード(下のレイヤーとの合成方法)。無いときは通常。設定したときだけ書く。
+    public var blendMode: ClipBlendMode? = nil
     /// 図形の見た目(shape クリップ)。無いときは既定。設定した項目だけ書く。
     public var figure: Figure? = nil
     /// 作業メモ(クリップの注記)。書き出しには出ない。空・未設定のときは書かない。
@@ -452,7 +454,7 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var followsProjectEnd: Bool? = nil
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["id", "type", "subtitleText", "tachieId", "mouthDrive", "speakingOnly", "followsProjectEnd", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "bokehShape", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "frameFlow", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "valueRef", "duck", "visualizer", "stabilize", "stabilizeRoll", "tracks", "mask", "figure", "note", "locked"]
+    static let knownKeys: Set<String> = ["id", "type", "subtitleText", "tachieId", "mouthDrive", "speakingOnly", "followsProjectEnd", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "bokehShape", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "frameFlow", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "valueRef", "duck", "visualizer", "stabilize", "stabilizeRoll", "tracks", "mask", "blendMode", "figure", "note", "locked"]
 
     public init() {}
 
@@ -627,6 +629,11 @@ public struct Clip: Codable, Equatable, Identifiable {
         for (key, ok) in [("subtitleText", subtitleText != nil), ("tachieId", tachieId != nil)] where !ok {
             if let raw: JSONValue = l.value(key) { extra[key] = raw }
         }
+        // ブレンドモード: 知らない名前は捨てずに書き戻す
+        if let raw: JSONValue = l.value("blendMode") {
+            if let name: String = l.value("blendMode"), let m = ClipBlendMode(rawValue: name) { blendMode = m }
+            else { extra["blendMode"] = raw }
+        }
         if let raw: JSONValue = l.value("visualizer") {
             if let v: Visualizer = l.value("visualizer") { visualizer = v } else { extra["visualizer"] = raw }
         }
@@ -718,6 +725,7 @@ public struct Clip: Codable, Equatable, Identifiable {
         if followsProjectEnd == true { try c.encode(true, forKey: AnyKey("followsProjectEnd")) }
         if let t = tracks { try c.encode(t, forKey: AnyKey("tracks")) }
         try c.encodeIfPresent(mask, forKey: AnyKey("mask"))
+        if let m = blendMode { try c.encode(m.rawValue, forKey: AnyKey("blendMode")) }
         if let s = stabilize, s > 0 { try c.encode(min(s, 1), forKey: AnyKey("stabilize")) }
         if stabilizeRoll == true { try c.encode(true, forKey: AnyKey("stabilizeRoll")) }
     }
