@@ -525,7 +525,7 @@ case "deps":
     print("voicevoxInstalled: \(st.voicevoxInstalled)\nvoicevoxRunning: \(st.voicevoxRunning)\naquestalkPlayerInstalled: \(st.aquestalkPlayerInstalled)")
     for n in st.notice { print("notice: " + n) }
 case "script" where args.count >= 2:
-    // script <script.txt> --out <out.ymproj> [--template <既存プロジェクト>] [--clean] [--size WxH] [--fps 29.97] [--bg #rrggbb|transparent] [--char <キャラ名>] [--dict <辞書.txt>]
+    // script <script.txt|.csv> --out <out.ymproj> [--template <既存プロジェクト>] [--clean] [--size WxH] [--fps 29.97] [--bg #rrggbb|transparent] [--char <キャラ名>] [--dict <辞書.txt>]
     // 台本ファイルから実際の声でプロジェクトを作る(既定キャラ=先頭、または --char で指定したキャラ。名前のない行がそのキャラになる)
     // --template を付けると、そのプロジェクトのキャラ・画角・設定を引き継ぐ。--clean は引き継いだクリップとマーカーを消してから台本を入れる。
     guard let outPath = optValue("--out") else { fail("--out が必要です") }
@@ -543,7 +543,10 @@ case "script" where args.count >= 2:
         }
         // 読み辞書(「表記,読み」を 1 行 1 件)をプロジェクトに読み込む。テンプレートの辞書より優先する
         if let d = optValue("--dict") { p.readingDictionary = ReadingDictionary.parse(text: try String(contentsOfFile: d, encoding: .utf8)) }
-        let lines = try String(contentsOfFile: args[1], encoding: .utf8).components(separatedBy: "\n")
+        let rawScript = try String(contentsOfFile: args[1], encoding: .utf8)
+        let lines = (args[1] as NSString).pathExtension.lowercased() == "csv"
+            ? ScriptCSV.lines(fromCSV: rawScript)
+            : rawScript.components(separatedBy: "\n")
         let provider = RealVoiceProvider(project: p)
         defer { provider.engine.shutdown() }
         try await ScriptTimeline.add(lines: lines, to: &p, voice: provider, directory: FileManager.default.temporaryDirectory, selectedCharId: selectedCharId)
