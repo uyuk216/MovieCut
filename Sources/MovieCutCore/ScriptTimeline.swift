@@ -82,16 +82,23 @@ public enum ScriptTimeline {
         for line in lines {
             guard let parsed = parseLine(line, characters: project.characters, selectedCharId: selectedCharId) else { continue }
             let who = parsed.who, text = parsed.spoken
-            let r = try await voice.synthesize(character: who, text: ExpressionTag.body(text), in: directory)
+            // 読み辞書: 読み上げ文だけを読みに置き換える(字幕は元の表記のまま)
+            let voiceText = ReadingDictionary.apply(to: text, entries: project.readingDictionary)
+            let r = try await voice.synthesize(character: who, text: ExpressionTag.body(voiceText), in: directory)
             var clip = Clip()
             clip.type = .voice
             clip.start = cursor
             clip.duration = r.duration + 0.15
             clip.offset = 0
             clip.src = r.url.path
-            clip.text = text
+            clip.text = voiceText
             // 字幕の文が読み上げる文と同じなら書かない(`|` なしと同じ)
-            if let sub = parsed.subtitle, sub != text { clip.subtitleText = sub }
+            if let sub = parsed.subtitle {
+                if sub != voiceText { clip.subtitleText = sub }
+            } else if voiceText != text {
+                // 字幕の指定が無い行で辞書が効いたときは、字幕に元の表記を残す
+                clip.subtitleText = text
+            }
             clip.charId = who.id
             clip.volume = 1
             clip.subtitle = true

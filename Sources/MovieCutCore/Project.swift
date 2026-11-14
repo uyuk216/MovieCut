@@ -43,6 +43,8 @@ public struct Project: Codable, Equatable {
     public var multicams: [MulticamGroup] = []
     /// 立ち絵素材(キャラクターの声・字幕とは別の「素材」。タイムラインの立ち絵クリップ `Clip.tachieId` から参照する)。空のときはファイルに書かない。
     public var tachies: [Tachie] = []
+    /// 読み辞書(表記 → 読み)。台本から声を作るとき、読み上げ文に適用する。使ったときだけ書く。
+    public var readingDictionary: [ReadingEntry] = []
     /// 左の台本欄の文字。空のときはファイルに書かない(古い版は知らないキーとして保持して書き戻す)。
     public var scriptText: String = ""
     /// ファイルから読んだ形式の版(`formatVersion`。無ければ 0)。書くときは `ProjectFormat.current` 以上を書く。`==` には入らない。
@@ -51,7 +53,7 @@ public struct Project: Codable, Equatable {
     /// 知らないキー(保持して書き戻す)
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["formatVersion", "scriptText", "width", "height", "fps", "bg", "codec", "voicevoxUrl", "aquestalkCommand", "characters", "tracks", "markers", "rangeIn", "rangeOut", "mediaHints", "mediaPool", "targetTrackId", "multicams", "tachies"]
+    static let knownKeys: Set<String> = ["formatVersion", "scriptText", "width", "height", "fps", "bg", "codec", "voicevoxUrl", "aquestalkCommand", "characters", "tracks", "markers", "rangeIn", "rangeOut", "mediaHints", "mediaPool", "targetTrackId", "multicams", "tachies", "readingDictionary"]
 
     public init() {}
 
@@ -77,6 +79,7 @@ public struct Project: Codable, Equatable {
         targetTrackId = l.string("targetTrackId")
         multicams = l.value("multicams") ?? []
         tachies = l.value("tachies") ?? []
+        readingDictionary = l.value("readingDictionary") ?? []
         scriptText = l.string("scriptText") ?? ""
         sourceFormat = SourceFormatVersion(max(0, l.int("formatVersion") ?? 0))
         extra = l.extra()
@@ -84,6 +87,7 @@ public struct Project: Codable, Equatable {
         if targetTrackId == nil, let raw: JSONValue = l.value("targetTrackId") { extra["targetTrackId"] = raw }
         if multicams.isEmpty, let raw: JSONValue = l.value("multicams"), raw != .array([]) { extra["multicams"] = raw }
         if tachies.isEmpty, let raw: JSONValue = l.value("tachies"), raw != .array([]) { extra["tachies"] = raw }
+        if readingDictionary.isEmpty, let raw: JSONValue = l.value("readingDictionary"), raw != .array([]) { extra["readingDictionary"] = raw }
         if scriptText.isEmpty, let raw: JSONValue = l.value("scriptText"), raw != .string("") { extra["scriptText"] = raw }
     }
 
@@ -110,6 +114,7 @@ public struct Project: Codable, Equatable {
         try c.encodeIfPresent(targetTrackId, forKey: AnyKey("targetTrackId"))
         if !multicams.isEmpty { try c.encode(multicams, forKey: AnyKey("multicams")) }
         if !tachies.isEmpty { try c.encode(tachies, forKey: AnyKey("tachies")) }
+        if !readingDictionary.isEmpty { try c.encode(readingDictionary, forKey: AnyKey("readingDictionary")) }
         if !scriptText.isEmpty { try c.encode(scriptText, forKey: AnyKey("scriptText")) }
     }
 
