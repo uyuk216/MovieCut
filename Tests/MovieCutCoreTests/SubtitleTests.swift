@@ -77,9 +77,12 @@ final class SubtitleTests: XCTestCase {
         XCTAssertEqual(SubtitleFile.parse(s), [cue(1, 2, "こんにちは & やあ ね"), cue(3, 4, "上の字幕")])
     }
 
-    func testParseRubyKeepsBaseText() {
+    func testParseRubyKeepsBaseTextAndRuby() {
         let s = "00:00:00.000 --> 00:00:01.000\n<ruby>漢字<rp>(</rp><rt>かんじ</rt><rp>)</rp></ruby>です\n"
-        XCTAssertEqual(SubtitleFile.parse(s), [cue(0, 1, "漢字です")])
+        let cues = SubtitleFile.parse(s)
+        XCTAssertEqual(cues.count, 1)
+        XCTAssertEqual(cues.first?.text, "漢字です", "本文はルビを除いた形のまま")
+        XCTAssertEqual(cues.first?.ruby, [RubySpan(base: "漢字", reading: "かんじ")], "ルビは捨てずに持つ(字幕・テキストの表示で使う)")
     }
 
     func testParseDropsEmptyAndBrokenAndKeepsOverlaps() {
