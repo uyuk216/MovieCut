@@ -58,7 +58,17 @@ public enum ReadingDictionary {
         return result
     }
 
-    // MARK: テキスト形式(辞書ファイル・あとで画面から編集するときの共通形式)
+    /// 画面・ファイルから入れた列を整える: 表記・読みが空の件を除き、同じ表記は最初の 1 件だけ残す。
+    public static func normalized(_ entries: [ReadingEntry]) -> [ReadingEntry] {
+        var seen = Set<String>()
+        return entries.filter { e in
+            guard !e.word.isEmpty, !e.reading.isEmpty, !seen.contains(e.word) else { return false }
+            seen.insert(e.word)
+            return true
+        }
+    }
+
+    // MARK: テキスト形式(辞書ファイル・画面の編集でも使う共通形式)
     //
     // 1 行 1 件: 「表記,読み」「表記\t読み」「表記=読み」のどれか。# か ※ で始まる行はコメント、空行は無視。
     // 同じ表記が複数あれば最初の 1 件だけを使う。

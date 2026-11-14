@@ -150,6 +150,7 @@ struct AppCommands: Commands {
                 MenuItemView(spec: AppMenuSpec.beatPlaceItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.fillerCutItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.transcriptEditItem(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.dictionaryItem(s), perform: run)
                 Divider()
                 Menu(L10n.t("テキスト")) {
                     Menu(L10n.t("スタイルを適用")) { items(AppMenuSpec.textStyleItems(s), run) }

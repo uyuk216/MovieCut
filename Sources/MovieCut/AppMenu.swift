@@ -120,6 +120,8 @@ enum MenuCommand: Hashable {
     case compoundGroup, compoundUngroup, compoundEnter, compoundExit
     // 編集 ▸ 検索と置換(テロップとセリフの一括置換。ショートカットは持たない)
     case findReplace
+    // クリップ ▸ 読み辞書を編集…(台本から声を作るときの読み替え。プロジェクトに保存。ショートカットは持たない)
+    case readingDictionary
     case zoomIn, zoomOut, zoomFit, zoomSelection
     // クリップ ▸ 1 コマ前へ / 後ろへ(ショートカットは持たない: ⌥← は文字欄の単語移動と競合するため)
     case nudgeEarlier, nudgeLater
@@ -1169,6 +1171,11 @@ enum AppMenuSpec {
     static func audioAutoSyncItem(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .audioAutoSync, title: "音声で映像と音声を自動同期", shortcut: nil, enabled: s.canEdit && s.canAudioAutoSync, checked: nil)
     }
+    /// クリップ ▸ 読み辞書を編集…(ドキュメントがあればいつでも。シートで編集して保存する)。
+    static func dictionaryItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .readingDictionary, title: "読み辞書を編集…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "セリフの読み替え")
+    }
+
     static func silenceCutItem(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .silenceCut, title: "無音をカット…", shortcut: nil, enabled: s.canEdit && s.canSilenceCut, checked: nil)
     }
@@ -1282,7 +1289,7 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, checkForUpdates, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s), apngExport(s)] + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), clipListItem(s), noteListItem(s)] + scriptStoryboardItems(s) + [makeProxies(s)] + [] + clipMenu(s).flatMap { $0 } + multicamItems(s) + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textVerticalItem(s), textPerCharItem(s), textCounterItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), audioAutoSyncItem(s), beatMarkersItem(s), scaleDuplicateItem(s), beatPlaceItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
+        [about, checkForUpdates, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s), apngExport(s)] + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), clipListItem(s), noteListItem(s)] + scriptStoryboardItems(s) + [makeProxies(s)] + [] + clipMenu(s).flatMap { $0 } + multicamItems(s) + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textVerticalItem(s), textPerCharItem(s), textCounterItem(s), dictionaryItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [silenceCutItem(s), audioAutoSyncItem(s), beatMarkersItem(s), scaleDuplicateItem(s), beatPlaceItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerColorItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + guideItems(s) + [previewProxy(s), fullScreen(s)] + help.flatMap { $0 }
@@ -1490,6 +1497,7 @@ enum AppMenu {
             case .fillerCut: m.openFillerSheet()
             case .transcriptEdit: m.openTranscriptEditSheet()
             case .findReplace: m.openFindReplace()
+            case .readingDictionary: m.openDictionarySheet()
             case .delete: m.deleteSelected()
             case .addText: m.addTextClip()
             case .addBlur: m.addBlurClip()

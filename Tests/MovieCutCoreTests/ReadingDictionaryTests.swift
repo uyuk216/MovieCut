@@ -101,4 +101,15 @@ final class ReadingDictionaryTests: XCTestCase {
         XCTAssertEqual(added[0].text, "相棒の本音")
         XCTAssertNil(added[0].subtitleText)
     }
+
+    func testNormalized() {
+        let raw = [ReadingEntry(word: "", reading: "x"),
+                   ReadingEntry(word: "相棒", reading: ""),
+                   ReadingEntry(word: "相棒", reading: "あいぼう"),
+                   ReadingEntry(word: "相棒", reading: "あいぼー"),
+                   ReadingEntry(word: "本音", reading: "ほんね")]
+        XCTAssertEqual(ReadingDictionary.normalized(raw),
+                       [ReadingEntry(word: "相棒", reading: "あいぼう"), ReadingEntry(word: "本音", reading: "ほんね")])
+        XCTAssertEqual(ReadingDictionary.normalized([]), [])
+    }
 }

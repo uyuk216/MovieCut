@@ -203,6 +203,8 @@ final class ProjectModel: ObservableObject {
     /// クリップ ▸ ロール編集… / スリップ編集… のシート(コマ数で境界・素材の区間をずらす)。
     @Published var showRollSheet = false
     @Published var showSlipSheet = false
+    /// 「読み辞書を編集…」のシート。
+    @Published var showDictionarySheet = false
     /// 「無音をカット…」のシートと、その対象のクリップ。
     @Published var showSilenceSheet = false
     var silenceClipId: String?

@@ -68,6 +68,19 @@ extension ProjectModel {
         return p
     }
 
+    // MARK: 読み辞書
+
+    /// 読み辞書の編集シートを開く。
+    func openDictionarySheet() { showDictionarySheet = true }
+
+    /// 読み辞書を丸ごと入れ替える(1 回の Undo)。整えた結果が今と同じなら何も登録しない。
+    func setReadingDictionary(_ entries: [ReadingEntry]) {
+        let cleaned = ReadingDictionary.normalized(entries)
+        guard cleaned != project.readingDictionary else { return }
+        flushCoalesced()
+        edit("読み辞書の編集") { $0.readingDictionary = cleaned }
+    }
+
     // MARK: クリップの項目(1 回の編集 / ドラッグ中 / まとめ)
 
     /// 1 回の編集として書き換える(変わらなければ何も登録しない)。`clipId` 省略で選択中のクリップ。
