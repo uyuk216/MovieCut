@@ -89,6 +89,7 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
 - **無音検出**(`SilenceDetector` / `LevelProfile`): クリップの使う範囲をミキサーと同じ経路(AVAudioFile / AVAssetReader、48 kHz ステレオ)で読み、10 ミリ秒ごとの RMS(左右の大きい方、dBFS)を一度測る。しきい値・最短の無音・余白を動かしても測り直さずに範囲を求められる(シートの「N 箇所」)。しきい値未満の窓が最短の無音以上続いたところを無音とし、両端に余白を残す(クリップの端側には残さず、余白を引くと残らないものは捨てる)。速度・逆再生のクリップは対象外(素材の時間とタイムラインの時間が 1 対 1 にならない)。
 - **切り分け**(`ClipEditing.removeSilence`): 残す範囲ごとに `ClipEditing.split` で切る(フェード・キーフレーム・トランジションの振り分けは分割と同じ)。先頭の断片が元の id を引き継ぐ。`ripple` なら断片を前へ詰め、同じレイヤーの、元のクリップの終わり以降に始まるクリップを取り除いた長さだけ左へ(0 未満にしない)。切る所が無い・全部が無音・対象外は nil(Undo に登録しない)。最短 0.05 秒未満の断片は残さない。
 - **UI**: クリップ ▸ 無音をカット…(`MenuCommand.silenceCut` → `openSilenceSheet` → `SilenceCutSheet`)、クリップ ▸ 音声 ▸ 自動ダッキングを切り替え(`audioDuckToggle`、✓ 付き)。インスペクタの「音声」の下に「自動ダッキング」(スライダーのドラッグは 1 回の Undo)。CLI は `moviecut-cli silence`。
+- **シーン検出**(`SceneDetector` / `SceneProfile`): クリップの範囲を間隔(既定 0.25 秒)ごとにサンプリングし、16×16 に潰した RGB の指紋の差(平均絶対差 0...1)を一度測る。しきい値(既定 0.35)以上の差をカット点候補とし、強い順に「前後と両端から最短シーン(既定 0.5 秒)以上離れている」ものだけ残す。ハードカットは拾えるが、ディゾルブ等の緩やかな切り替え・少しずつ変わる映像は拾いにくく、精度は間隔まで。速度・逆再生・フリーズ・速度ランプのあるクリップは対象外。UI: クリップ ▸ シーンで分割…(`MenuCommand.sceneSplit` → `openSceneSheet` → `SceneSplitSheet`、間隔を変えたときだけ測り直す)。分割は `SceneDetector.splitAtScenes` が `ClipEditing.split` を順に当て、全体で 1 回の Undo。新しいファイル形式の項目は持たない。CLI は `moviecut-cli scenes`。
 
 ## 機能チェックリスト (旧 Electron 版にあった機能。全部 Swift 版に入っている)
 プロジェクト: 新規/開く/保存/別名/最近/未保存確認/.mcpjc 関連付け(旧 .ymproj も開ける)。

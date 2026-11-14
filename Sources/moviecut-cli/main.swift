@@ -689,6 +689,43 @@ case "silence" where args.count >= 2:
             report(ClipEditing.makeMediaClip(path: path, kind: kind, duration: dur, start: 0), label: url.lastPathComponent)
         }
     } catch { fail("読めませんでした: \(error)") }
+case "scenes" where args.count >= 2:
+    // scenes <project|media> [--threshold 0.35] [--interval 0.25] [--min 0.5]: シーンのカット点を表示する(画面なしの確認用。ファイルは変えない)
+    var sparams = SceneParams()
+    if let v = optValue("--threshold") { guard let d = Double(v) else { fail("--threshold は 0...1 の数字(例: 0.35)") }; sparams.threshold = d }
+    if let v = optValue("--interval") { guard let d = Double(v), d > 0 else { fail("--interval は秒の数字(例: 0.25)") }; sparams.sampleInterval = d }
+    if let v = optValue("--min") { guard let d = Double(v), d > 0 else { fail("--min は秒の数字(例: 0.5)") }; sparams.minScene = d }
+    sparams = sparams.clamped
+    print(String(format: "threshold=%.2f  interval=%.2f s  min=%.2f s", sparams.threshold, sparams.sampleInterval, sparams.minScene))
+    func sfmt(_ t: Double) -> String { String(format: "%.3f", t) }
+    func sreport(_ c: Clip, label: String) {
+        guard let prof = SceneDetector.analyze(clip: c, interval: sparams.sampleInterval) else { print("\(label): 映像を読めない、または対象外(速度・逆再生・フリーズあり)"); return }
+        let cuts = prof.cutPoints(sparams)
+        print(String(format: "%@: duration=%.3f s  シーン境界 %d 箇所", label, c.duration, cuts.count))
+        for t in cuts { print("  cut  \(sfmt(t))   timeline \(sfmt(c.start + t))") }
+    }
+    let spath = args[1]
+    let sext = (spath as NSString).pathExtension.lowercased()
+    do {
+        if sext == "mcpjc" || sext == "ymproj" {
+            let p = try Project.load(from: URL(fileURLWithPath: spath))
+            var n = 0
+            for (ti, t) in p.tracks.enumerated() {
+                for c in t.clips where SceneDetector.supports(c) {
+                    n += 1
+                    sreport(c, label: "[layer \(ti + 1)] \(c.type.rawValue) \(((c.src ?? "") as NSString).lastPathComponent) @\(sfmt(c.start))")
+                }
+            }
+            if n == 0 { fail("動画クリップがありません") }
+        } else {
+            let url = URL(fileURLWithPath: spath)
+            guard FileManager.default.fileExists(atPath: spath) else { fail("見つかりません: \(spath)") }
+            let kind = ClipEditing.kindOf(path: spath)
+            guard kind == .video else { fail("動画ファイルを指定してください") }
+            let dur = await ClipEditing.probeDuration(url: url, kind: kind)
+            sreport(ClipEditing.makeMediaClip(path: spath, kind: kind, duration: dur, start: 0), label: url.lastPathComponent)
+        }
+    } catch { fail("読めませんでした: \(error)") }
 case "smoke":
     // smoke --out <mp4> [--size WxH] [--codec h264|hevc] [--blur]
     guard let outPath = optValue("--out") else { fail("--out が必要です") }
@@ -717,5 +754,5 @@ case "smoke":
         try await runExport(p, to: URL(fileURLWithPath: outPath))
     } catch { fail("書き出せませんでした: \(error.localizedDescription)") }
 default:
-    fail("usage:\n  moviecut-cli info <file.ymproj>\n  moviecut-cli new <out.ymproj>\n  moviecut-cli export <in.mcpjc> <out.mp4|out.m4a> [--range a:b|project] [--preset youtube1080|youtube1080p60|youtube4k|short|shorts|tiktok|reels|x720|x1080|light|audio|<保存したプリセット名>] [--bitrate 8(Mbps)] [--size WxH] [--fps 29.97] [--codec h264|hevc|prores422|prores4444] [--bg #rrggbb|transparent]\n  moviecut-cli smoke --out <mp4> [--size WxH] [--fps 23.976] [--codec h264|hevc] [--blur] [--tone] [--save-project p.ymproj]\n  moviecut-cli speak (--voicevox <id> [--speed --pitch --intonation] | --voice <preset> [--speed]) --text <t> --out <wav>\n  moviecut-cli speakers | deps | script <script.txt> --out <p.ymproj> [--template <既存プロジェクト>] [--clean] [--size WxH] [--fps 29.97] [--bg #rrggbb|transparent] [--char <キャラ名>]\n  moviecut-cli rig-frame <フォルダ|.psd> --out <png> [--mouth あ|い|う|え|お|open|closed] [--blink] [--pick 眉=2,目=5] [--expr 名前] [--height 1080] [--bench N] [--list]\n  moviecut-cli migrate <旧形式.mcpjc> <出力.mcpjc>   (キャラの立ち絵を立ち絵素材+クリップへ移す)\n  moviecut-cli psd-info <file.psd>\n  moviecut-cli frame <in.ymproj> --t <sec> --out <png|jpg> [--size WxH] [--bench N]\n  moviecut-cli gif <in.mcpjc> --out <x.gif> [--fps 10] [--width 480] [--range a:b|project]\n  moviecut-cli apng <in.mcpjc> --out <x.png> [--fps 15] [--width 480] [--loop 0] [--bg transparent] [--range a:b|project]\n  moviecut-cli sequence <in.mcpjc> --out <dir> [--format png|jpeg] [--name base] [--range a:b|project] [--fps 30] [--size WxH]\n  moviecut-cli addvideo <in.ymproj> <clip.mp4> <out.ymproj>\n  moviecut-cli addimage <in.ymproj> <image.png> <out.ymproj> [--start 0] [--duration 5]\n  moviecut-cli genclips <N> <out.ymproj>\n  moviecut-cli silence <project|media> [--threshold -40] [--min 0.4] [--pad 0.1]\n  moviecut-cli beats <project|media> [--all]\n  moviecut-cli subs <project> --out <x.srt|x.vtt>\n  moviecut-cli subtitle-check <project>\n  moviecut-cli transcribe <media|project> --out <x.srt|x.vtt> [--clip 0] [--locale ja-JP]\n  moviecut-cli chapters <project> [--color red|orange|yellow|green|blue|purple|gray|teal]\n  moviecut-cli loudness <project> [--range a:b|project]\n  moviecut-cli project-info <project>   (JSON。読み取り専用)\n  moviecut-cli ai script --theme <t> [--chars キャラ1,キャラ3] [--lines 12] --provider-cmd \"claude -p\" [--timeout 120] [--out x.txt] [--show-prompt]")
+    fail("usage:\n  moviecut-cli info <file.ymproj>\n  moviecut-cli new <out.ymproj>\n  moviecut-cli export <in.mcpjc> <out.mp4|out.m4a> [--range a:b|project] [--preset youtube1080|youtube1080p60|youtube4k|short|shorts|tiktok|reels|x720|x1080|light|audio|<保存したプリセット名>] [--bitrate 8(Mbps)] [--size WxH] [--fps 29.97] [--codec h264|hevc|prores422|prores4444] [--bg #rrggbb|transparent]\n  moviecut-cli smoke --out <mp4> [--size WxH] [--fps 23.976] [--codec h264|hevc] [--blur] [--tone] [--save-project p.ymproj]\n  moviecut-cli speak (--voicevox <id> [--speed --pitch --intonation] | --voice <preset> [--speed]) --text <t> --out <wav>\n  moviecut-cli speakers | deps | script <script.txt> --out <p.ymproj> [--template <既存プロジェクト>] [--clean] [--size WxH] [--fps 29.97] [--bg #rrggbb|transparent] [--char <キャラ名>]\n  moviecut-cli rig-frame <フォルダ|.psd> --out <png> [--mouth あ|い|う|え|お|open|closed] [--blink] [--pick 眉=2,目=5] [--expr 名前] [--height 1080] [--bench N] [--list]\n  moviecut-cli migrate <旧形式.mcpjc> <出力.mcpjc>   (キャラの立ち絵を立ち絵素材+クリップへ移す)\n  moviecut-cli psd-info <file.psd>\n  moviecut-cli frame <in.ymproj> --t <sec> --out <png|jpg> [--size WxH] [--bench N]\n  moviecut-cli gif <in.mcpjc> --out <x.gif> [--fps 10] [--width 480] [--range a:b|project]\n  moviecut-cli apng <in.mcpjc> --out <x.png> [--fps 15] [--width 480] [--loop 0] [--bg transparent] [--range a:b|project]\n  moviecut-cli sequence <in.mcpjc> --out <dir> [--format png|jpeg] [--name base] [--range a:b|project] [--fps 30] [--size WxH]\n  moviecut-cli addvideo <in.ymproj> <clip.mp4> <out.ymproj>\n  moviecut-cli addimage <in.ymproj> <image.png> <out.ymproj> [--start 0] [--duration 5]\n  moviecut-cli genclips <N> <out.ymproj>\n  moviecut-cli silence <project|media> [--threshold -40] [--min 0.4] [--pad 0.1]\n  moviecut-cli scenes <project|media> [--threshold 0.35] [--interval 0.25] [--min 0.5]\n  moviecut-cli beats <project|media> [--all]\n  moviecut-cli subs <project> --out <x.srt|x.vtt>\n  moviecut-cli subtitle-check <project>\n  moviecut-cli transcribe <media|project> --out <x.srt|x.vtt> [--clip 0] [--locale ja-JP]\n  moviecut-cli chapters <project> [--color red|orange|yellow|green|blue|purple|gray|teal]\n  moviecut-cli loudness <project> [--range a:b|project]\n  moviecut-cli project-info <project>   (JSON。読み取り専用)\n  moviecut-cli ai script --theme <t> [--chars キャラ1,キャラ3] [--lines 12] --provider-cmd \"claude -p\" [--timeout 120] [--out x.txt] [--show-prompt]")
 }

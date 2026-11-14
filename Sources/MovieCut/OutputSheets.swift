@@ -227,3 +227,83 @@ struct SilenceCutSheet: View {
         if model.cutSilence(clipId: id, profile: p, params: params, ripple: ripple) { model.showSilenceSheet = false }
     }
 }
+
+// MARK: - シーンで分割…
+
+/// 「クリップ ▸ シーンで分割…」。選んだ動画を一度サンプリングし、しきい値などを動かすと「N 箇所で分割します」がすぐ変わる
+/// (間隔を変えたときだけ「測り直す」で再計測)。「分割」で全体が 1 回の Undo。Esc で取り消し。
+struct SceneSplitSheet: View {
+    @ObservedObject var model: ProjectModel
+    @State private var profile: SceneProfile?
+    @State private var loading = true
+    @State private var failed = false
+    @State private var threshold = SceneParams.default.threshold
+    @State private var interval = SceneParams.default.sampleInterval
+    @State private var minScene = SceneParams.default.minScene
+
+    private var params: SceneParams { SceneParams(threshold: threshold, sampleInterval: interval, minScene: minScene).clamped }
+    private var clipId: String? { model.sceneClipId }
+    private var cuts: [Double] { profile?.cutPoints(params) ?? [] }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("シーンで分割").font(.headline)
+            Text("映像が大きく切り替わる所(カット点)でクリップを割ります。緩やかな切り替え(ディゾルブなど)や少しずつ変わる映像は拾いにくいことがあります。")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            slider("しきい値", value: $threshold, range: SceneParams.thresholdRange, step: 0.01, format: { String(format: "%.2f", $0) })
+            slider("最短シーン", value: $minScene, range: SceneParams.minSceneRange, step: 0.1, format: { String(format: "%.1f 秒", $0) })
+            HStack {
+                Text("間隔").frame(width: 84, alignment: .leading)
+                Slider(value: $interval, in: SceneParams.intervalRange, step: 0.05)
+                Text(String(format: "%.2f 秒", interval)).monospacedDigit().frame(width: 64, alignment: .trailing)
+                Button("測り直す") { Task { await analyze() } }.disabled(loading)
+            }
+            Group {
+                if loading {
+                    HStack(spacing: 6) { ProgressView().controlSize(.small); Text("映像を調べています…") }
+                } else if failed {
+                    Text("このクリップの映像を読めませんでした。").foregroundStyle(.red)
+                } else {
+                    Text("\(cuts.count) 箇所で分割します")
+                }
+            }
+            .font(.callout)
+            HStack {
+                Spacer()
+                Button("キャンセル") { model.showSceneSheet = false }
+                    .keyboardShortcut(.cancelAction)
+                Button("分割") { commit() }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(loading || failed || cuts.isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(width: 400)
+        .task { await analyze() }
+    }
+
+    private func slider(_ label: String, value: Binding<Double>, range: ClosedRange<Double>, step: Double, format: (Double) -> String) -> some View {
+        HStack {
+            Text(label).frame(width: 84, alignment: .leading)
+            Slider(value: value, in: range, step: step)
+            Text(format(value.wrappedValue)).monospacedDigit().frame(width: 64, alignment: .trailing)
+        }
+    }
+
+    private func analyze() async {
+        guard let id = clipId, let c = model.clip(id) else { loading = false; failed = true; return }
+        loading = true
+        let iv = params.sampleInterval
+        let result = await Task.detached(priority: .userInitiated) { SceneDetector.analyze(clip: c, interval: iv) }.value
+        profile = result
+        failed = result == nil
+        loading = false
+    }
+
+    private func commit() {
+        guard let id = clipId, let p = profile else { return }
+        if model.splitAtScenes(clipId: id, profile: p, params: params) { model.showSceneSheet = false }
+    }
+}
+

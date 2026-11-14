@@ -208,6 +208,9 @@ final class ProjectModel: ObservableObject {
     /// 「無音をカット…」のシートと、その対象のクリップ。
     @Published var showSilenceSheet = false
     var silenceClipId: String?
+    /// 「シーンで分割…」のシートと、その対象のクリップ。
+    @Published var showSceneSheet = false
+    var sceneClipId: String?
     /// 「選択クリップを音階で複製…」「ビートに合わせてクリップを並べる…」のシートと、その対象のクリップ。
     @Published var showScaleSheet = false
     var scaleClipId: String?
