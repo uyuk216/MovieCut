@@ -435,7 +435,11 @@ final class PlaybackController {
             stopInternal()
             return
         }
-        model.currentTime = t
+        // 画面に出す時刻はプロジェクトのコマ境界にそろえる。音のクロックは連続値で、そのまま出すと
+        // ディスプレイ更新(60/120Hz)のたびに新しい時刻になり、プレビューが同じコマを何度も
+        // 全解像度で描き直して負荷が跳ね上がる(落ちたコマが境界だと字幕が欠けて見え、音も途切れやすい)。
+        // コマに無い時刻の絵は存在しないので、そろえても見た目は失われない。
+        model.currentTime = model.project.frameRate.snapped(t)
     }
 
     /// シャトル中: 時計の経過 × 速さだけ進める。端に着いたら止まる。

@@ -31,15 +31,16 @@ final class FakeClock: PlaybackClock {
 
 @MainActor
 final class PlaybackTests: XCTestCase {
-    private func voiceProject(end: Double = 5) -> Project {
+    private func voiceProject(end: Double = 5, fps: Double = 60) -> Project {
         var p = Project.new()
+        p.fps = fps
         var c = Clip(); c.type = .voice; c.src = "/tmp/a.wav"; c.start = 0; c.duration = end
         p.tracks[0].clips.append(c)
         return p
     }
 
-    private func make(end: Double = 5) -> (ProjectModel, PlaybackController, FakeBackend, FakeClock) {
-        let m = ProjectModel(project: voiceProject(end: end))
+    private func make(end: Double = 5, fps: Double = 60) -> (ProjectModel, PlaybackController, FakeBackend, FakeClock) {
+        let m = ProjectModel(project: voiceProject(end: end, fps: fps))
         let b = FakeBackend(), k = FakeClock()
         let c = PlaybackController(model: m, backend: b, clock: k, debounce: 0, mixer: { _, _ in 5 })
         c.timerFallback = false
@@ -157,6 +158,19 @@ final class PlaybackTests: XCTestCase {
         c.step(frames: -1)
         XCTAssertEqual(m.currentTime, 0)             // 0 より前へは行かない
         XCTAssertEqual(b.loaded.count, 1)            // ミックスは作り直していない
+    }
+
+    /// 再生中に画面へ出す時刻はコマ境界にそろう(30fps のプロジェクトで、連続した音クロックを入れても
+    /// コマの時刻だけが出て、同じコマの間は動かない = プレビューの描き直しが増えない)。
+    func testTickSnapsPublishedTimeToFrameGrid() async {
+        let (m, c, b, _) = make(fps: 30)
+        await startPlaying(c)
+        b.time = 0.51; c.tick()
+        XCTAssertEqual(m.currentTime, 0.5, accuracy: 1e-9)            // 15 コマ目
+        b.time = 0.5499; c.tick()
+        XCTAssertEqual(m.currentTime, 16.0 / 30.0, accuracy: 1e-9)    // 16 コマ目
+        b.time = 0.55; c.tick()
+        XCTAssertEqual(m.currentTime, 16.0 / 30.0, accuracy: 1e-9)    // 同じコマの間は据え置き
     }
 
     func testHostClockFallbackWhenBackendHasNoTime() async {
