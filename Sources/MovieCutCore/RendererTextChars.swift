@@ -106,7 +106,7 @@ extension Renderer {
         guard !text.isEmpty else { return }
         let size = c.fontSize ?? 64
         let style = c.textStyle
-        var x = W / 2, y = H * 0.88
+        var x = W / 2, y = H * project.subtitleYOrDefault
         if style?.verticalOrDefault == true {
             let b = textBlockSize(text, size: size, font: c.fontOrDefault, style: style)
             x = W - max(size * 0.6, W * 0.03) - b.width / 2

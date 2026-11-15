@@ -213,3 +213,35 @@ final class SubtitleTests: XCTestCase {
         XCTAssertEqual(r.warnings, [])
     }
 }
+
+final class SubtitlePositionTests: XCTestCase {
+    func testSubtitleYDefaultRoundTripAndClamp() throws {
+        var p = Project.new()
+        XCTAssertNil(p.subtitleY)
+        XCTAssertEqual(p.subtitleYOrDefault, Project.defaultSubtitleY)
+        XCTAssertEqual(p.subtitleYOrDefault, 0.88)
+        p.subtitleY = 0.68
+        XCTAssertEqual(p.subtitleYOrDefault, 0.68)
+        let data = try JSONEncoder().encode(p)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        XCTAssertEqual(json["subtitleY"] as? Double ?? -1, 0.68, accuracy: 1e-9)
+        let back = try JSONDecoder().decode(Project.self, from: data)
+        XCTAssertEqual(back.subtitleY ?? -1, 0.68, accuracy: 1e-9)
+        // 未設定なら書かない
+        let plain = try JSONSerialization.jsonObject(with: JSONEncoder().encode(Project.new())) as! [String: Any]
+        XCTAssertNil(plain["subtitleY"])
+        // 範囲外は 0〜1 に収める。不正値は既定に戻す
+        p.subtitleY = 1.4; XCTAssertEqual(p.subtitleYOrDefault, 1)
+        p.subtitleY = -0.2; XCTAssertEqual(p.subtitleYOrDefault, 0)
+        p.subtitleY = .nan; XCTAssertEqual(p.subtitleYOrDefault, 0.88)
+    }
+
+    func testImportUsesProjectSubtitleY() {
+        let cue = SubtitleCue(start: 0, end: 1, text: "テスト")
+        var p = Project.new()
+        XCTAssertEqual(SubtitleImport.makeClip(cue, project: p).y, 0.88)
+        p.subtitleY = 0.68
+        XCTAssertEqual(SubtitleImport.makeClip(cue, project: p).y, 0.68)
+    }
+}
+

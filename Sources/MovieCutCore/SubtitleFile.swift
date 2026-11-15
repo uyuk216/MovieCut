@@ -196,7 +196,7 @@ public enum SubtitleImport {
         c.ruby = cue.ruby
         c.start = cue.start
         c.duration = cue.end - cue.start
-        c.x = 0.5; c.y = 0.88
+        c.x = 0.5; c.y = project.subtitleYOrDefault
         c.fontSize = max(8, (64 * ClipEditing.resK(project)).rounded())
         c.color = "#ffffff"
         c.outline = "#000000"

@@ -345,6 +345,21 @@ final class RendererTests: XCTestCase {
         XCTAssertEqual(upperHits, 0)
     }
 
+    func testSubtitleFollowsProjectSubtitleY() throws {
+        var ch = Character(); ch.id = "c1"; ch.color = "#ff0000"; ch.alwaysShow = false
+        var v = Clip(); v.type = .voice; v.start = 0; v.duration = 1; v.charId = "c1"; v.text = "あいう"; v.subtitle = true; v.fontSize = 30
+        var p = project(clips: [v], characters: [ch])
+        p.subtitleY = 0.5
+        let px = try render(p, t: 0.5)
+        var midHits = 0, lowerHits = 0, upperHits = 0
+        for y in 0..<px.h { for x in 0..<px.w where px.lum(x, y) > 20 {
+            if y > 150 { lowerHits += 1 } else if y < 50 { upperHits += 1 } else { midHits += 1 }
+        } }
+        XCTAssertGreaterThan(midHits, 100)
+        XCTAssertEqual(lowerHits, 0)
+        XCTAssertEqual(upperHits, 0)
+    }
+
     func testMissingFilesAndUnknownTypesAreTolerated() throws {
         var img = Clip(); img.type = .image; img.src = "/nonexistent/none.png"; img.start = 0; img.duration = 2
         var vid = Clip(); vid.type = .video; vid.src = "/nonexistent/none.mp4"; vid.start = 0; vid.duration = 2

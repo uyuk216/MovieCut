@@ -45,6 +45,15 @@ public struct Project: Codable, Equatable {
     public var tachies: [Tachie] = []
     /// 読み辞書(表記 → 読み)。台本から声を作るとき、読み上げ文に適用する。使ったときだけ書く。
     public var readingDictionary: [ReadingEntry] = []
+    /// ボイス字幕の表示位置(画面の高さに対する割合)。未設定 = 従来の 0.88。設定したときだけ書く。
+    public var subtitleY: Double? = nil
+    /// 字幕位置の既定値(従来ハードコードされていた値)。
+    public static let defaultSubtitleY = 0.88
+    /// 実際に使う字幕位置。未設定・不正値なら既定、範囲外は 0〜1 に収める。
+    public var subtitleYOrDefault: Double {
+        guard let v = subtitleY, v.isFinite else { return Self.defaultSubtitleY }
+        return min(max(v, 0), 1)
+    }
     /// 左の台本欄の文字。空のときはファイルに書かない(古い版は知らないキーとして保持して書き戻す)。
     public var scriptText: String = ""
     /// ファイルから読んだ形式の版(`formatVersion`。無ければ 0)。書くときは `ProjectFormat.current` 以上を書く。`==` には入らない。
@@ -53,7 +62,7 @@ public struct Project: Codable, Equatable {
     /// 知らないキー(保持して書き戻す)
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["formatVersion", "scriptText", "width", "height", "fps", "bg", "codec", "voicevoxUrl", "aquestalkCommand", "characters", "tracks", "markers", "rangeIn", "rangeOut", "mediaHints", "mediaPool", "targetTrackId", "multicams", "tachies", "readingDictionary"]
+    static let knownKeys: Set<String> = ["formatVersion", "scriptText", "width", "height", "fps", "bg", "codec", "voicevoxUrl", "aquestalkCommand", "characters", "tracks", "markers", "rangeIn", "rangeOut", "mediaHints", "mediaPool", "targetTrackId", "multicams", "tachies", "readingDictionary", "subtitleY"]
 
     public init() {}
 
@@ -80,6 +89,7 @@ public struct Project: Codable, Equatable {
         multicams = l.value("multicams") ?? []
         tachies = l.value("tachies") ?? []
         readingDictionary = l.value("readingDictionary") ?? []
+        subtitleY = l.double("subtitleY")
         scriptText = l.string("scriptText") ?? ""
         sourceFormat = SourceFormatVersion(max(0, l.int("formatVersion") ?? 0))
         extra = l.extra()
@@ -115,6 +125,7 @@ public struct Project: Codable, Equatable {
         if !multicams.isEmpty { try c.encode(multicams, forKey: AnyKey("multicams")) }
         if !tachies.isEmpty { try c.encode(tachies, forKey: AnyKey("tachies")) }
         if !readingDictionary.isEmpty { try c.encode(readingDictionary, forKey: AnyKey("readingDictionary")) }
+        try c.encodeIfPresent(subtitleY, forKey: AnyKey("subtitleY"))
         if !scriptText.isEmpty { try c.encode(scriptText, forKey: AnyKey("scriptText")) }
     }
 
