@@ -65,9 +65,18 @@ public struct VoicevoxClient {
         }
     }
 
+    /// 間のパラメータの既定値。エンジン既定(0.1 / 0.1 / 1.0)のままだと文間が空きすぎるため、量産で実績のある値を使う。
+    public static let defaultPrePhonemeLength = 0.03
+    public static let defaultPostPhonemeLength = 0.03
+    public static let defaultPauseLengthScale = 0.65
+
     /// POST /audio_query → パラメータ設定 → POST /synthesis → キャッシュへ書く。
-    public func synthesize(text: String, speaker: Int, speed: Double? = nil, pitch: Double? = nil, intonation: Double? = nil, volume: Double? = nil) async throws -> URL {
-        let key = VoiceCache.key([.string("vv"), .string(baseURL), .string(text), .number(Double(speaker)), .opt(speed), .opt(pitch), .opt(intonation), .opt(volume)])
+    /// 間(pre / post / pause)は未指定なら上の既定値を使う(エンジン既定には任せない)。
+    public func synthesize(text: String, speaker: Int, speed: Double? = nil, pitch: Double? = nil, intonation: Double? = nil, volume: Double? = nil, prePhonemeLength: Double? = nil, postPhonemeLength: Double? = nil, pauseLengthScale: Double? = nil) async throws -> URL {
+        let pre = prePhonemeLength ?? Self.defaultPrePhonemeLength
+        let post = postPhonemeLength ?? Self.defaultPostPhonemeLength
+        let pause = pauseLengthScale ?? Self.defaultPauseLengthScale
+        let key = VoiceCache.key([.string("vv"), .string(baseURL), .string(text), .number(Double(speaker)), .opt(speed), .opt(pitch), .opt(intonation), .opt(volume), .number(pre), .number(post), .number(pause)])
         if let hit = cache.hit(forKey: key) { return hit }
         let out = try cache.url(forKey: key)
 
@@ -79,6 +88,9 @@ public struct VoicevoxClient {
         query["pitchScale"] = pitch ?? 0
         query["intonationScale"] = intonation ?? 1
         query["volumeScale"] = volume ?? 1
+        query["prePhonemeLength"] = pre
+        query["postPhonemeLength"] = post
+        query["pauseLengthScale"] = pause
 
         var sreq = URLRequest(url: try url("/synthesis?speaker=\(speaker)"))
         sreq.httpMethod = "POST"

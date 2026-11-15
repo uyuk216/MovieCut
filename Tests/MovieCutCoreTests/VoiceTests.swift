@@ -204,6 +204,56 @@ final class VoiceUnitTests: XCTestCase {
         XCTAssertEqual(FakeVoicevox.calls.last?.method, "GET")
     }
 
+    func testVoicevoxPauseParamsDefaults() async throws {
+        let client = VoicevoxClient(baseURL: "http://fake.local:50021", cache: VoiceCache(directory: tmp), session: FakeVoicevox.session(), policy: Self.fakePolicy)
+        _ = try await client.synthesize(text: "あ", speaker: 1)
+        let body = try JSONSerialization.jsonObject(with: FakeVoicevox.calls[1].body ?? Data()) as! [String: Any]
+        // 未指定ならエンジン既定(0.1 / 0.1 / 1.0)ではなく、アプリの既定(0.03 / 0.03 / 0.65)を送る
+        XCTAssertEqual(body["prePhonemeLength"] as? Double ?? -1, 0.03, accuracy: 1e-9)
+        XCTAssertEqual(body["postPhonemeLength"] as? Double ?? -1, 0.03, accuracy: 1e-9)
+        XCTAssertEqual(body["pauseLengthScale"] as? Double ?? -1, 0.65, accuracy: 1e-9)
+    }
+
+    func testVoicevoxPauseParamsExplicitAndCache() async throws {
+        let client = VoicevoxClient(baseURL: "http://fake.local:50021", cache: VoiceCache(directory: tmp), session: FakeVoicevox.session(), policy: Self.fakePolicy)
+        _ = try await client.synthesize(text: "あ", speaker: 1, prePhonemeLength: 0.05, postPhonemeLength: 0.07, pauseLengthScale: 0.5)
+        let body = try JSONSerialization.jsonObject(with: FakeVoicevox.calls[1].body ?? Data()) as! [String: Any]
+        XCTAssertEqual(body["prePhonemeLength"] as? Double ?? -1, 0.05, accuracy: 1e-9)
+        XCTAssertEqual(body["postPhonemeLength"] as? Double ?? -1, 0.07, accuracy: 1e-9)
+        XCTAssertEqual(body["pauseLengthScale"] as? Double ?? -1, 0.5, accuracy: 1e-9)
+        XCTAssertEqual(FakeVoicevox.calls.count, 2)
+        // 同じ値ならキャッシュ(通信なし)
+        _ = try await client.synthesize(text: "あ", speaker: 1, prePhonemeLength: 0.05, postPhonemeLength: 0.07, pauseLengthScale: 0.5)
+        XCTAssertEqual(FakeVoicevox.calls.count, 2)
+        // nil(既定)と既定値の明示は同じキャッシュになる
+        _ = try await client.synthesize(text: "い", speaker: 1)
+        XCTAssertEqual(FakeVoicevox.calls.count, 4)
+        _ = try await client.synthesize(text: "い", speaker: 1, prePhonemeLength: 0.03, postPhonemeLength: 0.03, pauseLengthScale: 0.65)
+        XCTAssertEqual(FakeVoicevox.calls.count, 4)
+        // 間が違えば作り直す
+        _ = try await client.synthesize(text: "い", speaker: 1, pauseLengthScale: 0.9)
+        XCTAssertEqual(FakeVoicevox.calls.count, 6)
+    }
+
+    func testCharacterPauseParamsRoundTrip() throws {
+        var ch = Character()
+        ch.prePhonemeLength = 0.04; ch.postPhonemeLength = 0.02; ch.pauseLengthScale = 0.8
+        let data = try JSONEncoder().encode(ch)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        XCTAssertEqual(json["prePhonemeLength"] as? Double ?? -1, 0.04, accuracy: 1e-9)
+        XCTAssertEqual(json["postPhonemeLength"] as? Double ?? -1, 0.02, accuracy: 1e-9)
+        XCTAssertEqual(json["pauseLengthScale"] as? Double ?? -1, 0.8, accuracy: 1e-9)
+        let back = try JSONDecoder().decode(Character.self, from: data)
+        XCTAssertEqual(back.prePhonemeLength ?? -1, 0.04, accuracy: 1e-9)
+        XCTAssertEqual(back.postPhonemeLength ?? -1, 0.02, accuracy: 1e-9)
+        XCTAssertEqual(back.pauseLengthScale ?? -1, 0.8, accuracy: 1e-9)
+        // 未設定なら書かない
+        let plain = try JSONSerialization.jsonObject(with: JSONEncoder().encode(Character())) as! [String: Any]
+        XCTAssertNil(plain["prePhonemeLength"])
+        XCTAssertNil(plain["postPhonemeLength"])
+        XCTAssertNil(plain["pauseLengthScale"])
+    }
+
     func testVoicevoxHTTPError() async {
         FakeVoicevox.status = 500
         let client = VoicevoxClient(baseURL: "http://fake.local:50021", cache: VoiceCache(directory: tmp), session: FakeVoicevox.session(), policy: Self.fakePolicy)

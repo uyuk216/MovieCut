@@ -139,6 +139,12 @@ public struct Character: Codable, Equatable, Identifiable {
     public var speed: Double? = nil
     public var pitch: Double? = nil
     public var intonation: Double? = nil
+    /// VOICEVOX の間: 文頭の無音(秒)。未設定 = VoicevoxClient の既定(0.03)。設定したときだけ書く。
+    public var prePhonemeLength: Double? = nil
+    /// VOICEVOX の間: 文末の無音(秒)。未設定 = 既定(0.03)。
+    public var postPhonemeLength: Double? = nil
+    /// VOICEVOX の間: 息継ぎ(音素の切れ目)の長さの倍率。未設定 = 既定(0.65)。
+    public var pauseLengthScale: Double? = nil
     public var color: String = "#4f8cff"
     public var imgClosed: String? = nil
     public var imgOpen: String? = nil
@@ -167,7 +173,7 @@ public struct Character: Codable, Equatable, Identifiable {
     public var extra: [String: JSONValue] = [:]
 
     static let legacyPoseKeys: Set<String> = ["imgClosed", "imgOpen", "x", "y", "scale", "flip", "alwaysShow"]
-    static let knownKeys: Set<String> = ["id", "name", "engine", "speaker", "voice", "speed", "pitch", "intonation", "color", "imgClosed", "imgOpen", "imgBlink", "imgVowels", "expressions", "bounce", "rig", "subtitleColor", "x", "y", "scale", "flip", "alwaysShow"]
+    static let knownKeys: Set<String> = ["id", "name", "engine", "speaker", "voice", "speed", "pitch", "intonation", "prePhonemeLength", "postPhonemeLength", "pauseLengthScale", "color", "imgClosed", "imgOpen", "imgBlink", "imgVowels", "expressions", "bounce", "rig", "subtitleColor", "x", "y", "scale", "flip", "alwaysShow"]
 
     public init() {}
 
@@ -201,6 +207,9 @@ public struct Character: Codable, Equatable, Identifiable {
         speed = l.double("speed")
         pitch = l.double("pitch")
         intonation = l.double("intonation")
+        prePhonemeLength = l.double("prePhonemeLength")
+        postPhonemeLength = l.double("postPhonemeLength")
+        pauseLengthScale = l.double("pauseLengthScale")
         color = l.string("color") ?? color
         imgClosed = l.string("imgClosed")
         imgOpen = l.string("imgOpen")
@@ -230,6 +239,9 @@ public struct Character: Codable, Equatable, Identifiable {
         try c.encodeIfPresent(speed, forKey: AnyKey("speed"))
         try c.encodeIfPresent(pitch, forKey: AnyKey("pitch"))
         try c.encodeIfPresent(intonation, forKey: AnyKey("intonation"))
+        try c.encodeIfPresent(prePhonemeLength, forKey: AnyKey("prePhonemeLength"))
+        try c.encodeIfPresent(postPhonemeLength, forKey: AnyKey("postPhonemeLength"))
+        try c.encodeIfPresent(pauseLengthScale, forKey: AnyKey("pauseLengthScale"))
         try c.encode(color, forKey: AnyKey("color"))
         // Electron 版は未設定を null で書く(旧形式のまま持っているときだけ。移行後は書かない)
         if let s = imgClosed { try c.encode(s, forKey: AnyKey("imgClosed")) } else if legacyKeys.contains("imgClosed") { try c.encodeNil(forKey: AnyKey("imgClosed")) }
