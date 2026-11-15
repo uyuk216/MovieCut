@@ -111,6 +111,43 @@ final class SubtitleTests: XCTestCase {
         XCTAssertTrue(srt.contains("3\n00:00:12,035 --> 00:00:15,035\n二番目"), srt)
     }
 
+    /// ボイスの字幕は読み上げ文ではなく表示字幕(subtitleText)を測る(2026-11-16 の指摘:
+    /// 読みが 35 字でも表示が 2 行に収まれば「1 行が長い」と誤警告しない)。
+    func testCuesFromProjectUsesDisplaySubtitleForVoice() {
+        var p = Project(); p.width = 1920; p.height = 1080
+        var tr = Track(name: "ボイス")
+        var v = Clip(); v.type = .voice
+        v.text = "きょうしょうかいするのは、ぱーそなるえーあいえーじぇんとのミューズよ。"
+        v.subtitleText = "今日紹介するのは、\nパーソナルAIエージェントの『Muse』よ。"
+        v.start = 0; v.duration = 3
+        tr.clips = [v]; p.tracks = [tr]
+        let cues = SubtitleFile.cues(from: p)
+        XCTAssertEqual(cues.map(\.text), ["今日紹介するのは、\nパーソナルAIエージェントの『Muse』よ。"], "読み上げ文ではなく字幕文を出す")
+        XCTAssertTrue(SubtitleValidator.validate(project: p).isEmpty, "表示字幕で測れば誤警告は出ない")
+    }
+
+    /// 字幕文が空 = 字幕なし。読み上げ文にフォールバックして勝手に字幕化しない。
+    func testCuesFromProjectSkipsVoiceWithEmptySubtitleText() {
+        var p = Project(); p.width = 1920; p.height = 1080
+        var tr = Track(name: "ボイス")
+        var v = Clip(); v.type = .voice
+        v.text = "よみあげぶん"; v.subtitleText = ""
+        v.start = 0; v.duration = 2
+        tr.clips = [v]; p.tracks = [tr]
+        XCTAssertTrue(SubtitleFile.cues(from: p).isEmpty, "字幕なしのボイスは字幕に出さない")
+    }
+
+    /// 字幕文が無いボイスは読み上げ文を使うが、表情タグは表示字幕に出さない(描画と同じ)。
+    func testCuesFromProjectStripsExpressionTagFromVoiceReading() {
+        var p = Project(); p.width = 1920; p.height = 1080
+        var tr = Track(name: "ボイス")
+        var v = Clip(); v.type = .voice
+        v.text = "[笑い]こんにちは"
+        v.start = 0; v.duration = 2
+        tr.clips = [v]; p.tracks = [tr]
+        XCTAssertEqual(SubtitleFile.cues(from: p).map(\.text), ["こんにちは"])
+    }
+
     func testTimingIgnoresSpeedAndHiddenLayers() throws {
         var p = try fixture()
         // 速度は動画・音声だけの属性。ボイス・文字に付いていても、タイムライン上の開始と長さがそのまま使われる

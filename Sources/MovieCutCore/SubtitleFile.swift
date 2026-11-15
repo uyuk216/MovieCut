@@ -75,6 +75,8 @@ public enum SubtitleFile {
     /// プロジェクトの字幕: 表示される(隠れていないレイヤーの)ボイス(字幕オフでないもの。描画と同じく未設定はオン)と、
     /// 名前が「字幕」のレイヤーの文字クリップ。時刻はタイムライン上の開始と長さ(ボイス・文字は速度の対象外なので、
     /// `duration` がそのまま画面に出る長さ)。開始順(同じなら元の順)。
+    /// ボイスの本文は読み上げ文ではなく表示字幕(`Clip.subtitleBody`: 字幕文があればそれ、無ければ読み上げ文から
+    /// 表情タグを除いたもの)を使う。字幕文が空(字幕なし)のボイスは出さない。
     public static func cues(from project: Project) -> [SubtitleCue] {
         var list: [(Int, SubtitleCue)] = []
         var order = 0
@@ -86,7 +88,11 @@ public enum SubtitleFile {
                 case .text: isSubtitle = isSubtitleLayer(tr.name)
                 default: isSubtitle = false
                 }
-                guard isSubtitle, let text = c.text, c.duration > 0 else { continue }
+                guard isSubtitle, c.duration > 0 else { continue }
+                // ボイスは表示字幕を測る(読み上げ文のかな表記を測ると行数・文字数・速さの警告が実際とずれる)。
+                // 文字クリップは本文そのものが表示字幕。空(ボイスの字幕なし含む)は出さない(書き出しでも捨てられる)。
+                let text = c.type == .voice ? c.subtitleBody : (c.text ?? "")
+                guard !text.isEmpty else { continue }
                 list.append((order, SubtitleCue(start: c.start, end: c.start + c.duration, text: text, ruby: c.ruby)))
                 order += 1
             }
