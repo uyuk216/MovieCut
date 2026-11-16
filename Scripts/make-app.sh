@@ -101,6 +101,9 @@ REPO_ROOT="$(pwd)"
 cp "$REPO_ROOT/LICENSE.ja.md" "$APP/Contents/Resources/LICENSE.ja.md"
 cp "$REPO_ROOT/docs/第三者の規約.md" "$APP/Contents/Resources/第三者の規約.md"
 
+# アプリアイコン(Scripts/make-icon.sh で生成。無ければ汎用アイコンのまま)
+if [ -f "$REPO_ROOT/Resources/AppIcon.icns" ]; then cp "$REPO_ROOT/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"; fi
+
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -111,6 +114,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>MovieCutEdition</key><string>${EDITION}</string>
   <key>CFBundleName</key><string>${APP_NAME}</string>
   <key>CFBundleDisplayName</key><string>${APP_NAME}</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>${VERSION}</string>
   <key>CFBundleVersion</key><string>${VERSION}</string>
