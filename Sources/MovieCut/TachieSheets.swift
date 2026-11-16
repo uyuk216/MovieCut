@@ -78,9 +78,9 @@ struct TachieListSection: View {
                         .buttonStyle(.plain).disabled(model.isLocked).help("再生位置に立ち絵クリップを置く")
                 }
                 .padding(.horizontal, 8).padding(.vertical, 5)
-                .background(Color(nsColor: .controlBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .overlay(RoundedRectangle(cornerRadius: 6).stroke(model.selectedTachieId == t.id ? Color(red: 0.96, green: 0.78, blue: 0.24) : Color(nsColor: .separatorColor), lineWidth: model.selectedTachieId == t.id ? 1.5 : 1))
+                .background(MCDesign.Color.control)
+                .clipShape(RoundedRectangle(cornerRadius: MCDesign.Radius.control))
+                .overlay(RoundedRectangle(cornerRadius: MCDesign.Radius.control).stroke(model.selectedTachieId == t.id ? MCDesign.Color.selection : MCDesign.Color.separator, lineWidth: model.selectedTachieId == t.id ? 1.5 : 1))
                 .contentShape(Rectangle())
                 .onTapGesture { model.selectTachie(t.id) }
                 .contextMenu {

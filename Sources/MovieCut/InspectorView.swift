@@ -69,9 +69,9 @@ struct InspectorField<Content: View>: View {
             HStack(spacing: 2) {
                 Text(label).font(.system(size: 12)).foregroundStyle(.secondary)
                 if let key, key.state != .none {
-                    Button(action: key.prev) { Image(systemName: "chevron.left").font(.system(size: 9, weight: .semibold)).frame(width: 16, height: 16).contentShape(Rectangle()) }
+                    Button(action: key.prev) { Image(systemName: "chevron.left").font(MCDesign.Font.badge).frame(width: 16, height: 16).contentShape(Rectangle()) }
                         .buttonStyle(.plain).disabled(!key.canPrev).help("前のキーフレームへ")
-                    Button(action: key.next) { Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).frame(width: 16, height: 16).contentShape(Rectangle()) }
+                    Button(action: key.next) { Image(systemName: "chevron.right").font(MCDesign.Font.badge).frame(width: 16, height: 16).contentShape(Rectangle()) }
                         .buttonStyle(.plain).disabled(!key.canNext).help("次のキーフレームへ")
                 }
                 Spacer(minLength: 4)
@@ -1204,7 +1204,7 @@ struct CharacterInspector: View {
                 let n = CharacterEditing.voiceClips(of: charId, in: model.project).count
                 Button { Task { await model.regenerateAllVoices(charId: charId) } } label: { Text("このキャラの全セリフを作り直す\(n > 0 ? "（\(n)）" : "")").frame(maxWidth: .infinity) }
                     .disabled(model.isLocked || n == 0)
-                Button(role: .destructive) { model.requestDeleteCharacter(charId) } label: { Text("このキャラを消す").foregroundStyle(Color(red: 1, green: 0.45, blue: 0.42)).frame(maxWidth: .infinity) }
+                Button(role: .destructive) { model.requestDeleteCharacter(charId) } label: { Text("このキャラを消す").foregroundStyle(MCDesign.Color.destructive).frame(maxWidth: .infinity) }
                     .disabled(model.isLocked || model.project.characters.count <= 1)
                     .help(model.project.characters.count <= 1 ? "最後の1人は消せません" : "このキャラとセリフを消します")
             }

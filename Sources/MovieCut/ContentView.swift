@@ -7,7 +7,7 @@ import MovieCutCore
 
 extension Color {
     init(hex: String) {
-        let c = parseHexColor(hex) ?? CGColor(red: 0.3, green: 0.55, blue: 1, alpha: 1)
+        let c = parseHexColor(hex) ?? NSColor.systemBlue.cgColor
         self.init(cgColor: c)
     }
 
@@ -64,7 +64,7 @@ struct ContentView: View {
             DockHost(model: model, store: dock)
         }
         .frame(minWidth: 1100, minHeight: 700)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(MCDesign.Color.window)
         .preferredColorScheme(.dark)
         .overlay { BusyOverlay(message: model.busyMessage, onCancel: model.transcribeCancel ?? model.aiCancel ?? model.proxyCancel ?? model.imageGenCancel) }
         .sheet(isPresented: $model.showSettings) { SettingsSheet(model: model) }
@@ -189,9 +189,9 @@ struct ToolbarBar: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 3)
-        .background(Color(nsColor: .underPageBackgroundColor).opacity(0.5))
+        .padding(.horizontal, MCDesign.Spacing.m)
+        .padding(.vertical, MCDesign.Spacing.xs)
+        .background(MCDesign.Color.underPage.opacity(0.5))
         .background(GeometryReader { g in
             Color.clear
                 .onAppear { width = g.size.width }
@@ -307,9 +307,9 @@ struct CharacterRow: View {
             }
             .padding(.horizontal, 10).padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(nsColor: .controlBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 6))
-            .overlay(RoundedRectangle(cornerRadius: 6).stroke(selected ? Color(red: 0.96, green: 0.78, blue: 0.24) : Color(nsColor: .separatorColor), lineWidth: selected ? 1.5 : 1))
+            .background(MCDesign.Color.control)
+            .clipShape(RoundedRectangle(cornerRadius: MCDesign.Radius.control))
+            .overlay(RoundedRectangle(cornerRadius: MCDesign.Radius.control).stroke(selected ? MCDesign.Color.selection : MCDesign.Color.separator, lineWidth: selected ? 1.5 : 1))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

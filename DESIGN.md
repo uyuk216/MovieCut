@@ -596,3 +596,12 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
 - **複合クリップの中の編集**(`Core/CompoundScope.swift`、`App/ProjectModel+CompoundScope.swift`): モデルは `compoundPath`(入っている複合の id の列)と `scopeRoot`(書類全体)を持ち、`project` は「中身に差し替えた見え方」。`CompoundScope.view` / `embed` で往復し、`mirror`(保存)・`rootProject` は常に書類全体。`edit` の入口は変わらず、`replace` → `applyRoot` が根を差し替えて Undo に「差し替え前の根」を登録するので、Undo の列は 1 本(中・外のどちらからでも 1 回で戻る)。Undo で入っている複合が無くなったら外へ出る。複合クリップ(またはそのレイヤー)がロックなら中の編集は断る。書き出し(`directExportBlocked`)の前に一番上へ戻る。限界: 中にいる間のプレビューは中身だけ(背景のみ書類のもの)、書き出し以外の「現在のフレームを画像で」などは中の見え方。
 - **同梱素材**(`Core/BuiltInSounds.swift` / `BuiltInImages.swift` / `BuiltInLibrary.swift`): `DataLocations.builtinMedia`(Application Support の `Bundled/`)へ、初回だけ WAV(44.1 kHz・16 ビット・モノラル)と PNG を書く。固定の式と固定の乱数の種なので毎回同じ中身。`BuiltInLibrary.version` を上げると書き直す。一覧は普通のフォルダと同じ `MediaBrowser.scan`。
 - **L10n**(`Core/L10n.swift`、`L10nTable.swift`): キーは日本語の文字列そのもの。`L10n.t` は日本語ではそのまま、英語では対訳表(無ければ日本語)。言語は 設定の上書き → システム(日本語以外は英語)。XCTest 内と `MC_LANG=ja|en` は固定。適用点: `MenuItemView`(`MenuItemSpec.localizedTitle`)、`Menu("…")` / `CommandMenu`、`InspectorSection`、パネル名、`Text` / `Button` / `Toggle` / `.help` の文字列、エラーの見出し。トップのメニュー名の英語は `MenuOrder` の別名(File / Edit / Clip / Playback / Go / Output / View / Window / Help)と一致させてある。
+
+## 見た目(デザインシステム。feat/apple-hig-design で導入)
+
+- 見た目の定数は `Sources/MovieCut/DesignSystem.swift`(`MCDesign`)に集める。色はシステムカラー(意味で定義され、ライト/ダーク・コントラスト強調に追随する動的な色)、フォントは macOS のテキストスタイル、余白は 8pt グリッド、角丸は Radius の 3 段(5 / 6 / 10)。新しい画面・部品は直書きせずトークンを使い、既存の直書きも触るついでに移す。
+- 根拠は Apple の Human Interface Guidelines(Branding / Color / Typography / Layout / Dark Mode)。要点: ブランドの主張は控えめに(ロゴを画面に常駐させない)、選択や主要操作の印はシステムのアクセントカラーにそろえる(利用者の設定を尊重)、破壊的操作の赤はシステムレッド、文字は 10pt 未満にしない、システムカラーの値を直書きしない。
+- 商標まわりの点検済み: アプリ名・画面内に Apple の商標やロゴは使っていない(製品名の表記ゆれもなし)。
+- 意図的な例外: 画面全体はダーク固定(`.preferredColorScheme(.dark)`)。動画編集という用途と、タイムライン/プレビューのキャンバスが暗色前提で設計されているため。外枠はセマンティックカラー化してあるので、将来ライトモードに対応する余地は残してある。
+- タイムラインのクリップ種別色(`TimelinePalette`)はキャンバス上の機能色なので対象外(従来どおり)。
+- アプリアイコンは `Resources/AppIcon.icns`(青→藍の角丸四角 + 再生三角 + タイムラインの帯。再生成は `Scripts/make-icon.sh`、絵は `Scripts/icon-draw.swift`)。`make-app.sh` があればバンドルへ取り込み、`CFBundleIconFile` で指す。

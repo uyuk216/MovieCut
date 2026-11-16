@@ -174,7 +174,7 @@ struct TachieInspector: View {
                     .disabled(model.isLocked)
                     .help("この立ち絵をタイムラインの再生位置に置きます（口は、すべての声に連動）")
                 TachieAssetBody(model: model, tachie: t)
-                Button(role: .destructive) { model.removeTachie(id: tachieId) } label: { Text("この立ち絵素材を消す").foregroundStyle(Color(red: 1, green: 0.45, blue: 0.42)).frame(maxWidth: .infinity) }
+                Button(role: .destructive) { model.removeTachie(id: tachieId) } label: { Text("この立ち絵素材を消す").foregroundStyle(MCDesign.Color.destructive).frame(maxWidth: .infinity) }
                     .disabled(model.isLocked)
                     .help("使っている立ち絵クリップも一緒に消えます")
             }

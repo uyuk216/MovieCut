@@ -79,8 +79,8 @@ enum WelcomeActions {
 struct QuickStartHint: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(L10n.t(QuickStart.title)).font(.system(size: 12, weight: .semibold))
-            ForEach(QuickStart.steps, id: \.self) { Text(L10n.t($0)).font(.system(size: 12)) }
+            Text(L10n.t(QuickStart.title)).font(MCDesign.Font.calloutSemibold)
+            ForEach(QuickStart.steps, id: \.self) { Text(L10n.t($0)).font(MCDesign.Font.callout) }
         }
         .foregroundStyle(.secondary)
         .fixedSize()

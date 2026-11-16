@@ -39,7 +39,7 @@ struct DockPanelWindowRoot: View {
             Divider()
             DockPanelContent(panel: panel, model: model)
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(MCDesign.Color.window)
         .preferredColorScheme(.dark)
     }
 }

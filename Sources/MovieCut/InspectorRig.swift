@@ -18,7 +18,7 @@ struct RigPartThumb: View {
                 Text(path == nil ? "なし" : "…").font(.system(size: 10)).foregroundStyle(.tertiary)
             }
             if !label.isEmpty {
-                VStack { Spacer(); Text(label).font(.system(size: 9, weight: .semibold)).padding(.horizontal, 3).background(.black.opacity(0.55)).foregroundStyle(.white).cornerRadius(3) }.padding(2)
+                VStack { Spacer(); Text(label).font(MCDesign.Font.badge).padding(.horizontal, 3).background(.black.opacity(0.55)).foregroundStyle(.white).cornerRadius(3) }.padding(2)
             }
         }
         .frame(width: 56, height: 56)
