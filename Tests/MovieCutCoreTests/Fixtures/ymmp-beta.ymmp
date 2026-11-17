@@ -1,0 +1,24 @@
+﻿_{
+  "Timeline": {
+    "Name": "ベータ",
+    "VideoInfo": {
+      "FPS": 30,
+      "Hz": 44100,
+      "Width": 1280,
+      "Height": 720
+    },
+    "Items": [
+      {
+        "$type": "YukkuriMovieMaker.Project.Items.TextItem, YukkuriMovieMaker",
+        "Text": "ベータ形式の文字",
+        "Frame": 30,
+        "Length": 60,
+        "Layer": 0
+      }
+    ],
+    "Length": 90,
+    "MaxLayer": 0,
+    "CurrentFrame": 0
+  },
+  "Characters": []
+}
