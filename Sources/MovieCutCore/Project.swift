@@ -35,6 +35,8 @@ public struct Project: Codable, Equatable {
     public var rangeOut: Double? = nil
     /// 素材の探し直し用の目印(キーは元の素材のパス)。パッケージ保存のときだけ入る。空のときは書かない。
     public var mediaHints: [String: MediaHint] = [:]
+    /// 素材のフィンガープリント(キーは元の素材のパス)。再リンクで中身まで確かめるために使う。空のときは書かない(無いプロジェクトもそのまま読める)。
+    public var mediaFingerprints: [String: MediaFingerprint] = [:]
     /// 取り込んだ素材のパス(順番どおり)。クリップを消しても残り、「未使用の素材」で整理する。空のときは書かない。
     public var mediaPool: [String] = []
     /// トラックターゲット: 新しく足すクリップの行き先のレイヤー(`Track.id`)。1 つだけ。設定したときだけファイルに書く。
@@ -51,7 +53,7 @@ public struct Project: Codable, Equatable {
     /// 知らないキー(保持して書き戻す)
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["formatVersion", "scriptText", "width", "height", "fps", "bg", "codec", "voicevoxUrl", "aquestalkCommand", "characters", "tracks", "markers", "rangeIn", "rangeOut", "mediaHints", "mediaPool", "targetTrackId", "multicams", "tachies"]
+    static let knownKeys: Set<String> = ["formatVersion", "scriptText", "width", "height", "fps", "bg", "codec", "voicevoxUrl", "aquestalkCommand", "characters", "tracks", "markers", "rangeIn", "rangeOut", "mediaHints", "mediaFingerprints", "mediaPool", "targetTrackId", "multicams", "tachies"]
 
     public init() {}
 
@@ -73,6 +75,7 @@ public struct Project: Codable, Equatable {
         markers = l.value("markers") ?? []
         rangeIn = l.value("rangeIn"); rangeOut = l.value("rangeOut")
         mediaHints = l.value("mediaHints") ?? [:]
+        mediaFingerprints = l.value("mediaFingerprints") ?? [:]
         mediaPool = l.value("mediaPool") ?? []
         targetTrackId = l.string("targetTrackId")
         multicams = l.value("multicams") ?? []
@@ -106,6 +109,7 @@ public struct Project: Codable, Equatable {
         try c.encodeIfPresent(rangeIn, forKey: AnyKey("rangeIn"))
         try c.encodeIfPresent(rangeOut, forKey: AnyKey("rangeOut"))
         if !mediaHints.isEmpty { try c.encode(mediaHints, forKey: AnyKey("mediaHints")) }
+        if !mediaFingerprints.isEmpty { try c.encode(mediaFingerprints, forKey: AnyKey("mediaFingerprints")) }
         if !mediaPool.isEmpty { try c.encode(mediaPool, forKey: AnyKey("mediaPool")) }
         try c.encodeIfPresent(targetTrackId, forKey: AnyKey("targetTrackId"))
         if !multicams.isEmpty { try c.encode(multicams, forKey: AnyKey("multicams")) }
