@@ -391,7 +391,7 @@ final class TimelineCanvas: NSView {
     override func layout() {
         super.layout()
         removeAllToolTips()
-        addToolTip(NSRect(x: TimelineLayout.headerWidth, y: 0, width: max(0, bounds.width - TimelineLayout.headerWidth), height: max(0, bounds.height)), owner: self, userData: nil)
+        addToolTip(NSRect(x: 0, y: 0, width: max(0, bounds.width), height: max(0, bounds.height)), owner: self, userData: nil)   // ヘッダー(自前描画ボタン)と本体の両方を同じ owner で受ける
     }
 
     /// 素材の有無の覚え(描画のたびに stat しない。3 秒ごとに見直す)。
@@ -435,8 +435,22 @@ final class TimelineCanvas: NSView {
 
     /// 旗の上にポインタがあるとき、名前と時刻を出す。
     @objc func view(_ view: NSView, stringForToolTip tag: NSView.ToolTipTag, point: NSPoint, userData data: UnsafeMutableRawPointer?) -> String {
+        if point.x < TimelineLayout.headerWidth { return headerToolTip(at: point) }
         if let m = markerHit(at: point) { return "\(m.name)  \(timecode(m.time))" }
         if let id = clipId(at: point), let c = project.allClips.first(where: { $0.id == id }), let mk = missingMark(for: c, width: 100) { return mk.help }
+        return ""
+    }
+    /// レイヤーヘッダーの自前描画ボタン(当たり判定は mouseDown と同じ矩形)の説明。
+    private func headerToolTip(at p: NSPoint) -> String {
+        guard let i = geometry.rowIndex(forY: p.y, rowCount: project.tracks.count) else { return "" }
+        let top = geometry.rowTop(i)
+        let chips = TimelineLayout.chipRects(rowTop: top, rowHeight: geometry.rowHeight(i))
+        if chips.hide.contains(p) { return "レイヤーの表示/非表示" }
+        if chips.mute.contains(p) { return "レイヤーのミュート" }
+        if TimelineLayout.targetRect(rowTop: top).contains(p) { return "ターゲットレイヤー(貼り付けや追加の行き先)" }
+        if TimelineLayout.lockRect(rowTop: top).contains(p) { return "ロック(編集できないようにする)" }
+        if TimelineLayout.soloRect(rowTop: top).contains(p) { return "ソロ(このレイヤーだけ鳴らす/映す)" }
+        if TimelineLayout.deleteRect(rowTop: top, rowHeight: geometry.rowHeight(i)).contains(p) { return "レイヤーを削除" }
         return ""
     }
     required init?(coder: NSCoder) { fatalError() }
