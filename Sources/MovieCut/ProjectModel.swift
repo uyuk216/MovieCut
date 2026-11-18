@@ -229,6 +229,10 @@ final class ProjectModel: ObservableObject {
     @Published var isExporting = false
     @Published var statusText = ""
     @Published var exportProgress: Double = 0
+    /// オブジェクトトラッキング(W3-03)実行中の進捗(0〜1。nil なら実行していない)。
+    @Published var objectTrackingProgress: Double? = nil
+    /// 実行中の追跡セッション(キャンセル用。保存しない)。
+    var objectTrackingSession: ObjectTrackingSession? = nil
     /// 声を作っている間のメッセージ(nil なら作っていない)。
     @Published var busyMessage: String?
     @Published var errorMessage: String?

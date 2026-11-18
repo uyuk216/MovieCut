@@ -284,11 +284,14 @@ struct InspectorView: View {
                     case .character(let id):
                         CharacterInspector(model: model, speakers: speakers, charId: id).id(id)
                     case .none:
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("クリップを選ぶと、ここで編集できます")
-                                .font(.callout).foregroundStyle(.secondary)
-                            Text("タイムライン上のクリップをクリックして選びます。")
-                                .font(.caption).foregroundStyle(.tertiary)
+                        VStack(alignment: .leading, spacing: 10) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("クリップを選ぶと、ここで編集できます")
+                                    .font(.callout).foregroundStyle(.secondary)
+                                Text("タイムライン上のクリップをクリックして選びます。")
+                                    .font(.caption).foregroundStyle(.tertiary)
+                            }
+                            CameraSection(model: model)
                         }
                     }
                 }
@@ -486,6 +489,7 @@ struct ClipInspector: View {
                 InspectorSection(title: "注記")
                 ClipNoteField(model: model, clipId: clipId, note: c.note ?? "").id(clipId)
                 groupSection(c)
+                TrackingSection(model: model, clip: c)
                 if c.type == .voice { voiceSections(c) }
                 if c.type == .text { textSections(c) }
                 if c.type == .tachie { TachieClipSection(model: model, clip: c) }
@@ -507,6 +511,7 @@ struct ClipInspector: View {
                     audioFadeFields(c)
                     AudioFxPanel(model: model, clipId: clipId, forceExpanded: Self.expandAudioFx)
                 }
+                CameraSection(model: model)
             }
             .onDisappear { model.flushCoalesced() }
         }
