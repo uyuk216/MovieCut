@@ -40,6 +40,8 @@ public enum EffectKind: String, CaseIterable, Sendable {
     /// 汎用加工の拡充(第2波B2・監査#57): 色調・モザイク形状・歪み・網点など。
     case invert, posterize, unsharpMask, edges, crystallize, hexPixelate, pointillize, twirl
     case lensDistortion, halftone, kaleidoscope, tritone, solarize, spinBlur, edgeBlur, echo
+    /// 映像ノイズ除去: CINoiseReduction による空間方向の平滑(学習型ではない。方式と限界は VideoDenoise / docs 参照)。
+    case denoise
 
     public var label: String {
         switch self {
@@ -85,6 +87,7 @@ public enum EffectKind: String, CaseIterable, Sendable {
         case .spinBlur: return "回転ブラー"
         case .edgeBlur: return "境界ぼかし"
         case .echo: return "残像"
+        case .denoise: return "ノイズ除去"
         }
     }
 
@@ -147,6 +150,7 @@ public enum EffectKind: String, CaseIterable, Sendable {
         case .edgeBlur: return [Self.p("radius", "ぼかし半径（px）", 0, 100, 20, 1, .px), Self.p("inner", "ぼかさない範囲", 0, 1, 0.6, 0.01, .percent)]
         case .echo: return [Self.p("distance", "ずらし量（px）", 0, 200, 30, 1, .px), Self.p("angle", "向き（°）", -180, 180, 0, 1, .degrees),
                             Self.p("count", "重ねる数", 1, 8, 3, 1), Self.p("opacity", "残像の濃さ", 0, 1, 0.5, 0.01, .percent)]
+        case .denoise: return [Self.p("strength", "強さ", 0, 1, 0.5, 0.01, .percent)]
         }
     }
 

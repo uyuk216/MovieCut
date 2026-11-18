@@ -85,4 +85,18 @@ final class BlendModeTests: XCTestCase {
         let scr = try centerRGB(stackedProject(topBlend: .screen))
         XCTAssertEqual(scr.0, 255, accuracy: 2); XCTAssertEqual(scr.1, 128, accuracy: 2); XCTAssertEqual(scr.2, 128, accuracy: 2)
     }
+
+    // W3-21 追加検証: その他の代表モードも画素で確かめる(下 = 赤 (255,0,0)、上 = 灰 128)
+    func testRenderMoreModes() throws {
+        let dark = try centerRGB(stackedProject(topBlend: .darken))       // 比較（暗）: 成分ごとの小さい方
+        XCTAssertEqual(dark.0, 128, accuracy: 2); XCTAssertEqual(dark.1, 0, accuracy: 2); XCTAssertEqual(dark.2, 0, accuracy: 2)
+        let light = try centerRGB(stackedProject(topBlend: .lighten))    // 比較（明）: 成分ごとの大きい方
+        XCTAssertEqual(light.0, 255, accuracy: 2); XCTAssertEqual(light.1, 128, accuracy: 2); XCTAssertEqual(light.2, 128, accuracy: 2)
+        let diff = try centerRGB(stackedProject(topBlend: .difference))  // 差分: 絶対差
+        XCTAssertEqual(diff.0, 127, accuracy: 2); XCTAssertEqual(diff.1, 128, accuracy: 2); XCTAssertEqual(diff.2, 128, accuracy: 2)
+        let over = try centerRGB(stackedProject(topBlend: .overlay))     // オーバーレイ: 下が 1 の所は 1、0 の所は 0
+        XCTAssertEqual(over.0, 255, accuracy: 2); XCTAssertEqual(over.1, 0, accuracy: 2); XCTAssertEqual(over.2, 0, accuracy: 2)
+        let plus = try centerRGB(stackedProject(topBlend: .plusLighter)) // 加算: 255+128 は 255 に飽和、0+128 = 128
+        XCTAssertEqual(plus.0, 255, accuracy: 2); XCTAssertEqual(plus.1, 128, accuracy: 2); XCTAssertEqual(plus.2, 128, accuracy: 2)
+    }
 }

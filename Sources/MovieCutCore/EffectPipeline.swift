@@ -68,6 +68,7 @@ public enum EffectPipeline {
         case .spinBlur: return v("amount") < eps
         case .edgeBlur: return v("radius") < eps
         case .echo: return v("distance") < eps || v("opacity") < eps || v("count") < 0.5
+        case .denoise: return v("strength") < eps
         }
     }
 
@@ -337,6 +338,8 @@ public enum EffectPipeline {
             return EdgeBlur.apply(img, bounds: bounds, radius: e.v("radius") * scale, inner: e.v("inner"))
         case .echo:
             return EchoGhost.apply(img, distance: e.v("distance") * scale, angleDegrees: e.v("angle"), count: Int(e.v("count").rounded()), opacity: e.v("opacity"))
+        case .denoise:
+            return VideoDenoise.apply(img, strength: e.v("strength"))
         case .lut:
             guard let p = e.path, let c = LUTCache.shared.cube(atPath: p) else { return img }
             return LUTApply.apply(img, lut: c.lut, dimension: c.dimension, data: c.data, intensity: e.v("intensity"))

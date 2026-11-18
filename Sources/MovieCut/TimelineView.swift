@@ -245,6 +245,15 @@ final class TimelineCanvas: NSView {
         var base = Project()
     }
     private(set) var keyDrag: KeyDrag?
+    /// 音量包絡線の点を押している最中の操作(音量包絡線UI)。動かせば時刻と音量が変わり、離したときに 1 回の Undo。
+    struct VolumeDrag {
+        var clipId: String
+        var index: Int
+        var downPoint: NSPoint
+        var active = false
+        var base = Project()
+    }
+    private(set) var volumeDrag: VolumeDrag?
     /// 選択クリップの頭・終わりのトランジション(音声フェード)の三角の先端を押している最中の操作。動かすと長さが変わる。
     struct WedgeDrag {
         var clipId: String
@@ -912,6 +921,7 @@ final class TimelineCanvas: NSView {
             TimelinePalette.selection.withAlphaComponent(0.85).setStroke(); o.stroke()
         }
         if selected && c.hasKeyframes { drawKeyframeDiamonds(c, rect: r, ctx: ctx) }
+        if selected { drawVolumeEnvelope(c, rect: r, ctx: ctx) }
         if selected {
             let o = NSBezierPath(roundedRect: r.insetBy(dx: -1, dy: -1), xRadius: 5, yRadius: 5)
             o.lineWidth = 2
@@ -1363,6 +1373,76 @@ final class TimelineCanvas: NSView {
         return best.map { (id, $0.0) }
     }
 
+    // MARK: 音量包絡線(選択クリップの内側)
+
+    static let volumePointHit: CGFloat = 7
+
+    /// 包絡線を描く範囲(下端は菱形の場所を空ける)。
+    func volumeEnvelopeRect(_ r: CGRect) -> CGRect {
+        CGRect(x: r.minX, y: r.minY + 4, width: r.width, height: max(10, r.height - 18))
+    }
+
+    private func volumeY(gain v: Double, in area: CGRect) -> CGFloat {
+        area.maxY - CGFloat(VolumeEnvelopeEditing.fraction(forGain: v)) * area.height
+    }
+
+    private func volumeGain(atY y: CGFloat, in area: CGRect) -> Double {
+        VolumeEnvelopeEditing.gain(forFraction: Double((area.maxY - y) / max(1, area.height)))
+    }
+
+    /// 保存されている点の中心(番号つき)。
+    func volumePointCenters(_ c: Clip, rect r: CGRect) -> [(index: Int, point: NSPoint)] {
+        guard VolumeEnvelopeEditing.supports(c) else { return [] }
+        let area = volumeEnvelopeRect(r)
+        return VolumeEnvelopeEditing.points(c).enumerated().map { (i, k) in
+            (i, NSPoint(x: r.minX + CGFloat(k.t * geometry.pps), y: volumeY(gain: k.v, in: area)))
+        }
+    }
+
+    private func drawVolumeEnvelope(_ c: Clip, rect r: CGRect, ctx: CGContext) {
+        guard VolumeEnvelopeEditing.supports(c), !c.isFreeze, r.width >= 24, r.height >= 24 else { return }
+        let area = volumeEnvelopeRect(r)
+        ctx.saveGState()
+        ctx.clip(to: r.insetBy(dx: 1, dy: 1))
+        // 折れ線: 頭と終わりは、その時刻の音量(点が無ければ設定値)まで伸ばす
+        var times = [0.0]
+        times += VolumeEnvelopeEditing.points(c).map(\.t).filter { $0 > 1e-9 && $0 < c.duration - 1e-9 }
+        times.append(c.duration)
+        let line = NSBezierPath()
+        for (i, t) in times.enumerated() {
+            let pt = NSPoint(x: r.minX + CGFloat(t * geometry.pps), y: volumeY(gain: VolumeEnvelopeEditing.gain(c, at: t), in: area))
+            if i == 0 { line.move(to: pt) } else { line.line(to: pt) }
+        }
+        line.lineWidth = 1.5
+        NSColor.white.withAlphaComponent(0.9).setStroke(); line.stroke()
+        // 等倍(1.0)の目安線
+        let mid = NSBezierPath()
+        mid.move(to: NSPoint(x: r.minX, y: volumeY(gain: 1, in: area))); mid.line(to: NSPoint(x: r.maxX, y: volumeY(gain: 1, in: area)))
+        mid.lineWidth = 0.5
+        NSColor.white.withAlphaComponent(0.35).setStroke(); mid.stroke()
+        for (_, pt) in volumePointCenters(c, rect: r) {
+            let dot = NSBezierPath(ovalIn: NSRect(x: pt.x - 3.5, y: pt.y - 3.5, width: 7, height: 7))
+            NSColor.white.setFill(); dot.fill()
+            dot.lineWidth = 1
+            NSColor(white: 0, alpha: 0.65).setStroke(); dot.stroke()
+        }
+        ctx.restoreGState()
+    }
+
+    /// 点の下にある、選択クリップの包絡線の点。
+    func volumePointHit(at p: NSPoint) -> (clipId: String, index: Int)? {
+        let proj = model?.project ?? project   // 追加直後など、表示側の同期前の状態でも拾えるようモデルの最新を見る
+        guard let id = selectedId, let loc = ClipEditing.locate(id, in: proj) else { return nil }
+        let c = proj.tracks[loc.track].clips[loc.index]
+        let r = geometry.clipRect(start: c.start, duration: c.duration, track: loc.track)
+        var best: (Int, CGFloat)?
+        for (i, pt) in volumePointCenters(c, rect: r) where abs(p.x - pt.x) <= Self.volumePointHit && abs(p.y - pt.y) <= Self.volumePointHit {
+            let d = abs(p.x - pt.x)
+            if best == nil || d < best!.1 { best = (i, d) }
+        }
+        return best.map { (id, $0.0) }
+    }
+
     private func point(_ e: NSEvent) -> NSPoint { convert(e.locationInWindow, from: nil) }
 
     /// 点の下で一番手前のクリップ(後から描くもの、選択中のものが前)。
@@ -1419,7 +1499,30 @@ final class TimelineCanvas: NSView {
             wedgeDrag = WedgeDrag(clipId: hit.clipId, edge: hit.edge, audio: hit.audio, downX: p.x, startSeconds: hit.seconds)
             return
         }
-        if let hit = keyframeHit(at: p), let m = model, !m.isLocked {
+        // 菱形(下端)と包絡線の点(音量 0 のとき下端近く)は重なることがあるので、両方に当たるときは中心に近い方を選ぶ
+        let kHit = keyframeHit(at: p)
+        let vHit = volumePointHit(at: p)
+        var useVolume = false
+        if let vh = vHit, let m = model, !m.isLocked {
+            useVolume = true
+            if let kh = kHit, let loc = ClipEditing.locate(kh.clipId, in: m.project) {
+                let c = m.project.tracks[loc.track].clips[loc.index]
+                let r = geometry.clipRect(start: c.start, duration: c.duration, track: loc.track)
+                let kp = keyframeDiamondCenters(c, rect: r).first { $0.time == kh.time }?.point
+                let vp = volumePointCenters(c, rect: r).first { $0.index == vh.index }?.point
+                if let kp, let vp, hypot(p.x - kp.x, p.y - kp.y) < hypot(p.x - vp.x, p.y - vp.y) { useVolume = false }
+            }
+        }
+        if useVolume, let hit = vHit, let m = model {
+            if modifiers.contains(.option) {
+                m.removeVolumePoint(clipId: hit.clipId, index: hit.index)   // ⌥ クリック: 点を消す(1 回の Undo)
+                needsDisplay = true
+            } else {
+                volumeDrag = VolumeDrag(clipId: hit.clipId, index: hit.index, downPoint: p)
+            }
+            return
+        }
+        if let hit = kHit, let m = model, !m.isLocked {
             keyDrag = KeyDrag(clipId: hit.clipId, time: hit.time, downPoint: p, downTime: geometry.time(forX: p.x))
             return
         }
@@ -1450,6 +1553,12 @@ final class TimelineCanvas: NSView {
                 return
             }
             if clickCount >= 2, zone == .body, c.type == .compound, m.enterCompound(id) { needsDisplay = true; return }   // 複合クリップのダブルクリック: 中に入る
+            if clickCount >= 2, zone == .body, VolumeEnvelopeEditing.supports(c), !c.isFreeze {
+                // ダブルクリック: その位置に音量の点を足す(1 回の Undo)。対象は音声・ボイス・動画だけ
+                let area = volumeEnvelopeRect(r)
+                let t = min(max(Double(p.x - r.minX) / geometry.pps, 0), c.duration)
+                if m.addVolumePoint(clipId: id, at: t, gain: volumeGain(atY: p.y, in: area)) != nil { needsDisplay = true; return }
+            }
             let mode: DragMode = zone == .left ? .trimLeft : (zone == .right ? .trimRight : .move)
             if clickCount >= 2, zone == .body, TimelineHit.editsTextOnDoubleClick(c.type) { m.textFocusRequest += 1 }   // ダブルクリック: 文字の入力欄へ
             if mode != .move && collapse != nil { m.selectOnly(id); collapse = nil }     // 端のトリムは 1 つのクリップだけ
@@ -1522,6 +1631,29 @@ final class TimelineCanvas: NSView {
                 model?.updateGesture(moved)
             } else if let m = model {
                 m.updateGesture(kd.base)       // 動かせない(元の位置に戻した)
+            }
+            syncFromModel()
+            needsDisplay = true
+            return
+        }
+        if var vd = volumeDrag {
+            if !vd.active {
+                guard hypot(p.x - vd.downPoint.x, p.y - vd.downPoint.y) >= Self.dragThreshold, let m = model else { return }
+                m.beginGesture()
+                vd.active = true
+                vd.base = m.project
+                volumeDrag = vd
+            }
+            if let loc = ClipEditing.locate(vd.clipId, in: vd.base) {
+                let c = vd.base.tracks[loc.track].clips[loc.index]
+                let r = geometry.clipRect(start: c.start, duration: c.duration, track: loc.track)
+                let area = volumeEnvelopeRect(r)
+                let t = min(max(geometry.time(forX: p.x) - c.start, 0), c.duration)
+                if let moved = model?.projectMovingVolumePoint(base: vd.base, clipId: vd.clipId, index: vd.index, toTime: t, gain: volumeGain(atY: p.y, in: area)) {
+                    model?.updateGesture(moved)
+                } else if let m = model {
+                    m.updateGesture(vd.base)
+                }
             }
             syncFromModel()
             needsDisplay = true
@@ -1606,6 +1738,15 @@ final class TimelineCanvas: NSView {
                 syncFromModel()
             } else if let start = ClipEditing.locate(kd.clipId, in: project).map({ project.tracks[$0.track].clips[$0.index].start }) {
                 model?.playback.seek(to: start + kd.time)       // 菱形のクリック: その時刻へ
+            }
+            needsDisplay = true
+            return
+        }
+        if let vd = volumeDrag {
+            volumeDrag = nil
+            if vd.active {
+                model?.commitGesture(ProjectModel.volumeEnvelopeUndoName)     // 変わっていれば 1 回の Undo
+                syncFromModel()
             }
             needsDisplay = true
             return
