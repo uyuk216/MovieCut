@@ -248,4 +248,85 @@ final class LoudnessNormalizationTests: XCTestCase {
             XCTAssertTrue((e as? LocalizedError)?.errorDescription?.contains("ラウドネス正規化") ?? false)
         }
     }
+
+    // MARK: - 7. Exporter 統合
+
+    /// 2 秒のプロジェクト(文字 + トーンのボイス)。ExporterTests.twoSecondProject 相当。
+    private func twoSecondToneProject(in dir: URL) throws -> Project {
+        var p = Project.new()
+        p.width = 640; p.height = 360; p.fps = 30; p.codec = "h264"
+        var text = Clip(); text.type = .text; text.text = "テスト"; text.start = 0; text.duration = 2
+        text.x = 0.5; text.y = 0.3; text.fontSize = 60
+        p.tracks[4].clips.append(text)
+        let wav = dir.appendingPathComponent("tone.wav")
+        try ToneVoiceProvider.writeTone(to: wav, duration: 1.85, frequency: 330)
+        var v = Clip(); v.type = .voice; v.start = 0; v.duration = 2; v.src = wav.path; v.text = "ぴー"
+        v.charId = p.characters[0].id; v.volume = 1; v.subtitle = true; v.fontSize = 40
+        p.tracks[0].clips.append(v)
+        return p
+    }
+
+    /// 書き出した MP4 の音声トラックを 48 kHz ステレオ Float32 PCM に戻して測る。
+    private func measureExportedAudio(_ url: URL) async throws -> LoudnessReport {
+        let asset = AVURLAsset(url: url)
+        let tracks = try await asset.loadTracks(withMediaType: .audio)
+        let track = try XCTUnwrap(tracks.first, "音声トラックがない")
+        let reader = try AVAssetReader(asset: asset)
+        let out = AVAssetReaderTrackOutput(track: track, outputSettings: [
+            AVFormatIDKey: kAudioFormatLinearPCM, AVLinearPCMBitDepthKey: 32, AVLinearPCMIsFloatKey: true,
+            AVLinearPCMIsBigEndianKey: false, AVLinearPCMIsNonInterleaved: false,
+            AVSampleRateKey: 48_000, AVNumberOfChannelsKey: 2,
+        ])
+        reader.add(out)
+        XCTAssertTrue(reader.startReading())
+        let meter = LoudnessMeter()
+        while let sb = out.copyNextSampleBuffer() {
+            guard let bb = CMSampleBufferGetDataBuffer(sb) else { continue }
+            var len = 0
+            var ptr: UnsafeMutablePointer<Int8>?
+            XCTAssertEqual(CMBlockBufferGetDataPointer(bb, atOffset: 0, lengthAtOffsetOut: nil, totalLengthOut: &len, dataPointerOut: &ptr), kCMBlockBufferNoErr)
+            let frames = len / (2 * MemoryLayout<Float>.size)
+            guard let base = ptr, frames > 0 else { continue }
+            let f = UnsafeMutableRawPointer(base).bindMemory(to: Float.self, capacity: frames * 2)
+            var l = [Float](repeating: 0, count: frames), r = [Float](repeating: 0, count: frames)
+            for i in 0..<frames { l[i] = f[2 * i]; r[i] = f[2 * i + 1] }
+            l.withUnsafeBufferPointer { lp in r.withUnsafeBufferPointer { rp in meter.add(lp.baseAddress!, rp.baseAddress!, frames) } }
+        }
+        XCTAssertEqual(reader.status, .completed)
+        return meter.finish()
+    }
+
+    func testExporterIntegrationNormalizesToTarget() async throws {
+        let dir = try makeTempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let p = try twoSecondToneProject(in: dir)
+
+        let offURL = dir.appendingPathComponent("off.mp4")
+        let t0 = Date()
+        try await Exporter(project: p, assets: RenderAssets()).export(to: offURL)
+        let offSecs = Date().timeIntervalSince(t0)
+        let off = try await measureExportedAudio(offURL)
+
+        let onURL = dir.appendingPathComponent("on.mp4")
+        let t1 = Date()
+        try await Exporter(project: p, assets: RenderAssets(), loudness: .enabled(targetLUFS: -14)).export(to: onURL)
+        let onSecs = Date().timeIntervalSince(t1)
+        let on = try await measureExportedAudio(onURL)
+
+        print("LOUDNORM-INTEGRATION off: \(off.integrated) LUFS / \(off.truePeakDb) dBTP (\(offSecs)s); on: \(on.integrated) LUFS / \(on.truePeakDb) dBTP (\(onSecs)s)")
+        XCTAssertTrue(off.integrated.isFinite)
+        XCTAssertEqual(on.integrated, -14, accuracy: 1.0)
+        XCTAssertLessThanOrEqual(on.truePeakDb, -0.2)
+        XCTAssertGreaterThan(FileManager.default.contents(atPath: offURL.path)?.count ?? 0, 0)
+    }
+
+    func testAudioExporterIntegrationNormalizesToTarget() async throws {
+        let dir = try makeTempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let p = try twoSecondToneProject(in: dir)
+        let out = dir.appendingPathComponent("on.m4a")
+        try await AudioExporter.export(project: p, to: out, loudness: .enabled(targetLUFS: -14))
+        let on = try await measureExportedAudio(out)
+        print("LOUDNORM-INTEGRATION m4a on: \(on.integrated) LUFS / \(on.truePeakDb) dBTP")
+        XCTAssertEqual(on.integrated, -14, accuracy: 1.0)
+        XCTAssertLessThanOrEqual(on.truePeakDb, -0.2)
+    }
 }
