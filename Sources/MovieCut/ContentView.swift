@@ -227,6 +227,7 @@ struct LeftPanel: View {
                 Spacer()
                 Button(L10n.t("＋")) { model.addCharacter() }
                     .help(L10n.t("キャラクターを追加"))
+                    .accessibilityLabel(L10n.t("キャラクターを追加"))
             }
             .padding(.bottom, 8)
             ScrollView {
@@ -357,8 +358,10 @@ struct TransportBar: View {
         HStack(spacing: 10) {
             Button(Title.toStart) { model.playback.goToStart() }
                 .help(L10n.t("先頭へ(Home)"))
+                .accessibilityLabel(L10n.t("先頭へ"))
             Button(model.isPlaying ? Title.pause : Title.play) { model.playback.togglePlay() }
                 .help(L10n.t("再生 / 一時停止(Space)"))
+                .accessibilityLabel(L10n.t(model.isPlaying ? "一時停止" : "再生"))
                 .disabled(model.isLocked)
             Text("\(timecode(model.currentTime)) / \(timecode(model.project.endTime))")
                 .monospacedDigit()
