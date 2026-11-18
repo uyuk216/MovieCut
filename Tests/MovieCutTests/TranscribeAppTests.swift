@@ -131,4 +131,15 @@ final class TranscribeAppTests: XCTestCase {
         let all = AppMenuSpec.all(state { $0.canTranscribe = true })
         XCTAssertTrue(all.contains { $0.command == .transcribeSubtitles })
     }
+
+    func testWhisperMenuItemSpecMirrorsTranscribe() {
+        let on = AppMenuSpec.transcribeWhisperSubtitles(state { $0.canTranscribe = true })
+        XCTAssertEqual(on.title, "音声から字幕を作る（Whisper）…")
+        XCTAssertEqual(on.command, .transcribeWhisper)
+        XCTAssertNil(on.shortcut)
+        XCTAssertTrue(on.enabled)
+        XCTAssertFalse(AppMenuSpec.transcribeWhisperSubtitles(state { _ in }).enabled)
+        XCTAssertFalse(AppMenuSpec.transcribeWhisperSubtitles(state { $0.canTranscribe = true; $0.isLocked = true }).enabled)
+        XCTAssertTrue(AppMenuSpec.all(state { $0.canTranscribe = true }).contains { $0.command == .transcribeWhisper })
+    }
 }

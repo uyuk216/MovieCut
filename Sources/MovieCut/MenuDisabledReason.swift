@@ -37,7 +37,7 @@ extension AppMenuSpec {
         case .sourceUsage: return "動画・音声・画像のクリップを 1 つ選んでください(フリーズは対象外)"
         case .exportSubtitles, .translateSubtitles: return "字幕にできる文字・セリフがありません"
         case .generateSubtitles: return "字幕にできるセリフがありません"
-        case .transcribeSubtitles: return "音のあるクリップを選んでください"
+        case .transcribeSubtitles, .transcribeWhisper: return "音のあるクリップを選んでください"
         case .relinkMedia: return "見つからない素材はありません"
         case .unusedMedia: return "未使用の素材はありません"
         case .restoreVersion: return "先にプロジェクトを保存してください（保存のたびに世代が残ります）"
