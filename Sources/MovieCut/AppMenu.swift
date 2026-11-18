@@ -132,6 +132,12 @@ enum MenuCommand: Hashable {
     case findReplace
     // クリップ ▸ 読み辞書を編集…(台本から声を作るときの読み替え。プロジェクトに保存。ショートカットは持たない)
     case readingDictionary
+    // クリップ ▸ 台本を編集…(ボイスクリップの一覧編集シート。ショートカットは持たない)
+    case scriptTable
+    // 出力 ▸ 台本CSVを読み込む… / 台本をCSVで書き出す…(ショートカットは持たない)
+    case importScriptCSV, exportScriptCSV
+    // クリップ ▸ アイテムテンプレート(選択クリップを保存 / 適用 / テンプレートから作成。ショートカットは持たない)
+    case saveItemTemplate, applyItemTemplate(String), createFromItemTemplate(String)
     case zoomIn, zoomOut, zoomFit, zoomSelection
     // クリップ ▸ 1 コマ前へ / 後ろへ(ショートカットは持たない: ⌥← は文字欄の単語移動と競合するため)
     case nudgeEarlier, nudgeLater
@@ -270,6 +276,8 @@ struct MenuState: Equatable {
     var markerColorCounts: [MarkerColor: Int] = [:]   // 色ごとのマーカーの数(チャプターを色でコピー)
     /// ファイル ▸ テンプレートから新規作成 の一覧(保存されている名前・名前順)
     var templateNames: [String] = []
+    /// クリップ ▸ アイテムテンプレートの名前(組み込み + 保存したもの)
+    var itemTemplateNames: [String] = []
     /// ファイル ▸ 最近使った項目(新しい順)と、起動時の画面を出す設定
     var recentItems: [RecentMenuItem] = []
     var welcomeAtLaunch = true
@@ -407,6 +415,7 @@ struct MenuState: Equatable {
         previewTier = PreviewTierStore.current
         previewGuides = PreviewGuideStore.current
         templateNames = ProjectTemplateLibrary.names
+        itemTemplateNames = ItemTemplateLibraryCache.names
         let rc = RecentProjectsController.shared
         recentItems = rc.recents.entries.map { RecentMenuItem(path: $0.path, name: $0.name, missing: rc.isMissing($0)) }
         welcomeAtLaunch = WelcomeSettings.showAtLaunch()
@@ -779,6 +788,12 @@ enum AppMenuSpec {
     static func scriptStoryboardItems(_ s: MenuState) -> [MenuItemSpec] {
         [MenuItemSpec(command: .exportScript, title: "台本を書き出す…", shortcut: nil, enabled: s.hasVoiceClips, checked: nil, hint: "声のセリフを「名前: セリフ」で"),
          MenuItemSpec(command: .exportStoryboard, title: "絵コンテを書き出す…", shortcut: nil, enabled: s.canEdit && s.canExport, checked: nil, hint: "代表フレーム 12 枚の PNG")]
+    }
+
+    /// 出力 ▸ 台本CSVを読み込む… / 台本をCSVで書き出す…(ショートカットなし)。
+    static func scriptCSVItems(_ s: MenuState) -> [MenuItemSpec] {
+        [MenuItemSpec(command: .importScriptCSV, title: "台本CSVを読み込む…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "CSV を台本欄へ"),
+         MenuItemSpec(command: .exportScriptCSV, title: "台本をCSVで書き出す…", shortcut: nil, enabled: s.hasVoiceClips, checked: nil, hint: "キャラ・セリフ・読み・字幕・表情")]
     }
 
     static func clipListItem(_ s: MenuState) -> MenuItemSpec {
@@ -1233,6 +1248,26 @@ enum AppMenuSpec {
         MenuItemSpec(command: .readingDictionary, title: "読み辞書を編集…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "セリフの読み替え")
     }
 
+    /// クリップ ▸ 台本を編集…(ボイスクリップが 1 つ以上あるとき。シートで一覧編集する)。
+    static func scriptTableItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .scriptTable, title: "台本を編集…", shortcut: nil, enabled: s.canEdit && s.hasVoiceClips, checked: nil, hint: "セリフの一覧編集")
+    }
+
+    /// クリップ ▸ 選択クリップをアイテムテンプレートとして保存…(クリップを選んでいるとき)。
+    static func saveItemTemplateItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .saveItemTemplate, title: "選択クリップをアイテムテンプレートとして保存…", shortcut: nil, enabled: s.canEdit && s.hasSelection, checked: nil, hint: "設定一式を保存")
+    }
+
+    /// クリップ ▸ アイテムテンプレートを適用 ▸ 名前(選んでいるクリップと同じ種類のものへ当てる)。
+    static func itemTemplateApplyItems(_ s: MenuState) -> [MenuItemSpec] {
+        s.itemTemplateNames.map { MenuItemSpec(command: .applyItemTemplate($0), title: $0, shortcut: nil, enabled: s.canEdit && s.hasSelection, checked: nil) }
+    }
+
+    /// クリップ ▸ テンプレートからクリップを作成 ▸ 名前(再生ヘッドの位置に置く)。
+    static func itemTemplateCreateItems(_ s: MenuState) -> [MenuItemSpec] {
+        s.itemTemplateNames.map { MenuItemSpec(command: .createFromItemTemplate($0), title: $0, shortcut: nil, enabled: s.canEdit, checked: nil) }
+    }
+
     /// クリップ ▸ シーンで分割…(映像のカット点で割る。シートでしきい値を調整)。
     static func sceneSplitItem(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .sceneSplit, title: "シーンで分割…", shortcut: nil, enabled: s.canEdit && s.canSceneSplit, checked: nil, hint: "カット点を検出")
@@ -1356,7 +1391,7 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, checkForUpdates, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s), apngExport(s)] + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), clipListItem(s), noteListItem(s)] + scriptStoryboardItems(s) + [makeProxies(s)] + [] + clipMenu(s).flatMap { $0 } + multicamItems(s) + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textVerticalItem(s), textPerCharItem(s), textCounterItem(s), dictionaryItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [sceneSplitItem(s), silenceCutItem(s)] + rangeDeleteItems(s) + [audioAutoSyncItem(s), beatMarkersItem(s), scaleDuplicateItem(s), beatPlaceItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s), colorTransferItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
+        [about, checkForUpdates, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s), apngExport(s)] + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), clipListItem(s), noteListItem(s)] + scriptStoryboardItems(s) + scriptCSVItems(s) + [makeProxies(s)] + [] + clipMenu(s).flatMap { $0 } + multicamItems(s) + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textVerticalItem(s), textPerCharItem(s), textCounterItem(s), dictionaryItem(s), scriptTableItem(s), saveItemTemplateItem(s)] + itemTemplateApplyItems(s) + itemTemplateCreateItems(s) + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [sceneSplitItem(s), silenceCutItem(s)] + rangeDeleteItems(s) + [audioAutoSyncItem(s), beatMarkersItem(s), scaleDuplicateItem(s), beatPlaceItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s), colorTransferItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerColorItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + previewTierItems(s) + guideItems(s) + [previewProxy(s), fullScreen(s)] + help.flatMap { $0 }
@@ -1463,6 +1498,8 @@ enum AppMenu {
             case .speechShare: m.showSpeechShareStatus()
             case .clipList: m.showClipListSheet = true
             case .exportScript: m.chooseAndExportScript()
+            case .exportScriptCSV: m.chooseAndExportScriptCSV()
+            case .importScriptCSV: m.chooseAndImportScriptCSV()
             case .exportStoryboard: m.chooseAndExportStoryboard()
             case .noteList: m.showNoteListSheet = true
             case .exportStill: m.chooseAndExportStill()
@@ -1575,6 +1612,10 @@ enum AppMenu {
             case .transcriptEdit: m.openTranscriptEditSheet()
             case .findReplace: m.openFindReplace()
             case .readingDictionary: m.openDictionarySheet()
+            case .scriptTable: m.openScriptTable()
+            case .saveItemTemplate: m.saveSelectedAsItemTemplate()
+            case .applyItemTemplate(let name): m.applyItemTemplate(named: name)
+            case .createFromItemTemplate(let name): m.createClipFromItemTemplate(named: name)
             case .delete: m.deleteSelected()
             case .addText: m.addTextClip()
             case .addBlur: m.addBlurClip()
