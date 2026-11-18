@@ -23,6 +23,11 @@ enum MediaThumbnail {
             if let r = try? await gen.image(at: CMTime(seconds: 0.5, preferredTimescale: 600)) {
                 image = NSImage(cgImage: r.image, size: .zero)
             }
+        case .audio:
+            // 音声は波形をサムネイルにする(X-2)。波形はメモリキャッシュ経由(ディスクに書かない)。
+            if let wf = await WaveformCache.shared.waveform(url: item.url, bucketCount: 120) {
+                image = WaveformThumbnailRenderer.image(peaks: wf.peaks, width: maxSide * 2, height: maxSide)
+            }
         default:
             image = nil
         }
@@ -61,5 +66,67 @@ struct MediaThumbnailView: View {
         .frame(width: width, height: height)
         .clipShape(RoundedRectangle(cornerRadius: 4))
         .task(id: item.id) { image = await MediaThumbnail.load(item, maxSide: max(width, height)) }
+    }
+}
+
+/// 波形のサムネイル画像(ピーク列 → 中央寄せのバーのビットマップ)。色は固定の青灰色。
+enum WaveformThumbnailRenderer {
+    static func image(peaks: [Float], width: CGFloat, height: CGFloat) -> NSImage? {
+        let w = max(8, Int(width.rounded())), h = max(8, Int(height.rounded()))
+        guard let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
+                                  space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        let data = AudioWaveformData(minimums: peaks.map { -$0 }, maximums: peaks, duration: 0)
+        let bars = max(1, w / 3)
+        let heights = data.barHeights(count: bars)
+        let barW = Double(w) / Double(bars)
+        ctx.setFillColor(CGColor(srgbRed: 0.30, green: 0.52, blue: 0.92, alpha: 1))
+        for i in 0..<bars {
+            let bh = max(1.0, Double(heights[i]) * Double(h) * 0.92)
+            ctx.fill(CGRect(x: Double(i) * barW + barW * 0.2, y: (Double(h) - bh) / 2,
+                            width: max(1.0, barW * 0.6), height: bh))
+        }
+        guard let cg = ctx.makeImage() else { return nil }
+        return NSImage(cgImage: cg, size: NSSize(width: w, height: h))
+    }
+}
+
+/// 素材プレビュー用の波形表示(音声のみ)。読み込み中はプログレス、作れないときはアイコン。
+struct AudioWaveformView: View {
+    let item: MediaBrowser.Item
+    var height: CGFloat = 64
+    @State private var waveform: AudioWaveformData?
+    @State private var failed = false
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 6).fill(Color.secondary.opacity(0.12))
+            if let wf = waveform {
+                Canvas { ctx, size in
+                    let bars = max(8, Int(size.width / 4))
+                    let hs = wf.barHeights(count: bars)
+                    let bw = size.width / CGFloat(bars)
+                    for (i, v) in hs.enumerated() {
+                        let bh = max(1, CGFloat(v) * size.height * 0.92)
+                        let rect = CGRect(x: CGFloat(i) * bw + bw * 0.2, y: (size.height - bh) / 2,
+                                          width: max(1, bw * 0.6), height: bh)
+                        ctx.fill(Path(roundedRect: rect, cornerRadius: 1), with: .color(.accentColor))
+                    }
+                }
+            } else if failed {
+                Image(systemName: "waveform").font(.title3).foregroundStyle(.secondary)
+            } else {
+                ProgressView().controlSize(.small)
+            }
+        }
+        .frame(height: height)
+        .task(id: item.id) {
+            waveform = nil; failed = false
+            if let wf = await WaveformCache.shared.waveform(url: item.url, bucketCount: 240) {
+                waveform = wf
+            } else {
+                failed = true
+            }
+        }
     }
 }
