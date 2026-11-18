@@ -105,7 +105,7 @@ enum MenuCommand: Hashable {
     // トランジション(kind が nil = なし)
     case transitionIn(TransitionKind?), transitionOut(TransitionKind?), fadeBoth, clearTransitions, crossfade, fadeInOut
     // エフェクト
-    case effectAdd(EffectKind), effectPreset(EffectPreset), effectClear, effectCopy, effectPaste, lutLoad, autoWhiteBalance
+    case effectAdd(EffectKind), effectPreset(EffectPreset), effectClear, effectCopy, effectPaste, lutLoad, colorTransferLoad, autoWhiteBalance
     // 文字(スタイルを適用 = id、文字アニメーション)
     case textStyleApply(String), textStyleApplyAll(String), textAnim(TextAnimKind), toggleCounter, toggleVertical, togglePerChar
     // 配置(ピクチャー・イン・ピクチャーの角)
@@ -1210,6 +1210,11 @@ enum AppMenuSpec {
         MenuItemSpec(command: .lutLoad, title: "LUT を読み込む…", shortcut: nil, enabled: s.canEdit && s.canEffect, checked: nil)
     }
 
+    /// クリップ ▸ 色調転写の参照画像…(参照画像を選ぶ)。
+    static func colorTransferItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .colorTransferLoad, title: "色調転写の参照画像…", shortcut: nil, enabled: s.canEdit && s.canEffect, checked: nil)
+    }
+
     /// クリップ ▸ フィラー語をカット…(音声認識を使うのでメニューの音声の項目と同じ条件。ショートカットは付けない)。
     static func fillerCutItem(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .fillerCut, title: "フィラー語をカット…", shortcut: nil, enabled: s.canEdit && s.canTranscribe, checked: nil)
@@ -1351,7 +1356,7 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, checkForUpdates, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s), apngExport(s)] + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), clipListItem(s), noteListItem(s)] + scriptStoryboardItems(s) + [makeProxies(s)] + [] + clipMenu(s).flatMap { $0 } + multicamItems(s) + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textVerticalItem(s), textPerCharItem(s), textCounterItem(s), dictionaryItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [sceneSplitItem(s), silenceCutItem(s)] + rangeDeleteItems(s) + [audioAutoSyncItem(s), beatMarkersItem(s), scaleDuplicateItem(s), beatPlaceItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
+        [about, checkForUpdates, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s), apngExport(s)] + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), clipListItem(s), noteListItem(s)] + scriptStoryboardItems(s) + [makeProxies(s)] + [] + clipMenu(s).flatMap { $0 } + multicamItems(s) + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textVerticalItem(s), textPerCharItem(s), textCounterItem(s), dictionaryItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [sceneSplitItem(s), silenceCutItem(s)] + rangeDeleteItems(s) + [audioAutoSyncItem(s), beatMarkersItem(s), scaleDuplicateItem(s), beatPlaceItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s), colorTransferItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerColorItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + previewTierItems(s) + guideItems(s) + [previewProxy(s), fullScreen(s)] + help.flatMap { $0 }
@@ -1536,6 +1541,7 @@ enum AppMenu {
             case .effectCopy: m.copyEffectsSelected()
             case .effectPaste: m.pasteEffectsSelected()
             case .lutLoad: m.chooseAndLoadLUT()
+            case .colorTransferLoad: m.chooseColorTransferReference()
             case .autoWhiteBalance: m.autoWhiteBalanceSelected()
             case .textStyleApply(let id): m.applyTextStyleSelected(id)
             case .textStyleApplyAll(let id): m.applyTextStyleToAll(id: id)

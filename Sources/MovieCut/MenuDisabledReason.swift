@@ -84,7 +84,7 @@ extension AppMenuSpec {
         case .transitionIn, .transitionOut, .fadeBoth, .crossfade: return "映像のクリップを選んでください"
         case .clearTransitions: return "トランジションがありません"
         case .fadeInOut: return "映像か音のクリップを選んでください"
-        case .effectAdd, .effectPreset, .lutLoad: return "エフェクトを付けられるクリップを選んでください"
+        case .effectAdd, .effectPreset, .lutLoad, .colorTransferLoad: return "エフェクトを付けられるクリップを選んでください"
         case .audioAutoSync: return AudioSyncEditing.selectionHint
         case .autoWhiteBalance: return "画像か動画のクリップを選んでください"
         case .copyChaptersColor: return "その色のマーカーがありません"
