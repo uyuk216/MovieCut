@@ -160,23 +160,33 @@ struct ToolbarBar: View {
         static let all = [addMedia, text, blur, split, delete]
     }
 
+    /// ツールバーの SF Symbols(題と対)。
+    enum Symbol {
+        static let addMedia = "plus.rectangle.on.folder", text = "textformat", blur = "eye.slash", split = "scissors", delete = "trash"
+    }
+
+    /// アイコン + ラベルの標準スタイルのボタンの中身。
+    private func label(_ title: String, _ symbol: String) -> some View {
+        Label(L10n.t(title), systemImage: symbol)
+    }
+
     var body: some View {
         HStack(spacing: 8) {
             Group {
-                Button(Title.addMedia) { model.chooseAndAddMedia() }
+                Button { model.chooseAndAddMedia() } label: { label(Title.addMedia, Symbol.addMedia) }
                     .help(L10n.t("画像・動画・音声を再生ヘッドの位置に追加(Finder からのドラッグ&ドロップも可)"))
-                Button(Title.text) { model.addTextClip() }
+                Button { model.addTextClip() } label: { label(Title.text, Symbol.text) }
                     .help(L10n.t("一番上のレイヤーに文字を追加"))
-                Button(Title.blur) { model.addBlurClip() }
+                Button { model.addBlurClip() } label: { label(Title.blur, Symbol.blur) }
                     .help(L10n.t("一番上のレイヤーにぼかし範囲を追加"))
             }
             .disabled(model.isLocked)
             Divider().frame(height: 18)
             Group {
-                Button(Title.split) { model.splitSelected() }
+                Button { model.splitSelected() } label: { label(Title.split, Symbol.split) }
                     .disabled(model.isLocked || !model.canSplit)
                     .help(L10n.t("選択中のクリップを再生ヘッドで分割(S)"))
-                Button(Title.delete) { model.deleteSelected() }
+                Button { model.deleteSelected() } label: { label(Title.delete, Symbol.delete) }
                     .disabled(model.isLocked || model.selectedClip == nil)
                     .help(L10n.t("選択中のクリップを削除(Delete)"))
             }
@@ -190,6 +200,7 @@ struct ToolbarBar: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
         }
+        .labelStyle(.titleAndIcon)
         .padding(.horizontal, MCDesign.Spacing.m)
         .padding(.vertical, MCDesign.Spacing.xs)
         .background(MCDesign.Color.underPage.opacity(0.5))
@@ -351,13 +362,20 @@ struct TransportBar: View {
         static let all = [toStart, play, pause]
     }
 
+    /// 再生バーの SF Symbols。
+    enum Symbol {
+        static let toStart = "backward.end.fill", play = "play.fill", pause = "pause.fill"
+    }
+
     static func chipText(_ model: ProjectModel) -> String { VideoText.chip(width: model.project.width, height: model.project.height, fps: model.project.fps) }
 
     var body: some View {
         HStack(spacing: 10) {
-            Button(Title.toStart) { model.playback.goToStart() }
+            Button { model.playback.goToStart() } label: { Image(systemName: Symbol.toStart) }
                 .help(L10n.t("先頭へ(Home)"))
-            Button(model.isPlaying ? Title.pause : Title.play) { model.playback.togglePlay() }
+                .accessibilityLabel(Title.toStart)
+            Button { model.playback.togglePlay() } label: { Image(systemName: model.isPlaying ? Symbol.pause : Symbol.play) }
+                .accessibilityLabel(model.isPlaying ? Title.pause : Title.play)
                 .help(L10n.t("再生 / 一時停止(Space)"))
                 .disabled(model.isLocked)
             Text("\(timecode(model.currentTime)) / \(timecode(model.project.endTime))")
