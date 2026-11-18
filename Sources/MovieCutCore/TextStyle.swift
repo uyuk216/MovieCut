@@ -94,6 +94,36 @@ public struct TextStyle: Codable, Equatable, Sendable {
         }
     }
 
+    /// 外縁(二重縁取りの外側の線)。縁取りの外に、色の帯を 1 本足す。`width` は文字の大きさに対する、縁取りの外に見える帯の太さ(0.04 = 大きさの 4%)。
+    public struct Outer: Codable, Equatable, Sendable {
+        public static let defaultWidth = 0.04
+        /// 帯の太さの上限。縁取り(大きさの 0.11)と合わせても、文字の枠の余白(大きさの 0.2)に収まる。
+        public static let maxWidth = 0.08
+        public var color: String = "#000000"
+        public var width: Double = 0.04
+        public init() {}
+        public init(color: String = "#000000", width: Double = 0.04) {
+            self.color = color; self.width = width
+        }
+        public init(from decoder: Decoder) throws {
+            let l = Lenient(c: try decoder.container(keyedBy: AnyKey.self), known: [])
+            self.init(color: l.string("color") ?? "#000000", width: l.double("width") ?? Self.defaultWidth)
+            self = normalized
+        }
+        public func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: AnyKey.self)
+            try c.encode(color, forKey: AnyKey("color")); try c.encode(width, forKey: AnyKey("width"))
+        }
+        /// 描くときの帯の太さ(範囲に収めた値)。描画と余白の計算は必ずこちらを使う。
+        public var widthOrDefault: Double { TextStyle.clamp(width, 0...Self.maxWidth, Self.defaultWidth) }
+        public var normalized: Outer {
+            var o = self
+            o.width = widthOrDefault
+            if parseHexColor(color) == nil { o.color = "#000000" }
+            return o
+        }
+    }
+
     public enum Align: String, CaseIterable, Sendable {
         case left, center, right
         public var label: String { switch self { case .left: return "左"; case .center: return "中央"; case .right: return "右" } }
@@ -102,6 +132,8 @@ public struct TextStyle: Codable, Equatable, Sendable {
     public var shadow: Shadow?
     public var box: Box?
     public var gradient: Gradient?
+    /// 外縁(縁取りのさらに外の色の帯)。未設定 = なし(従来の描画と同じ)。
+    public var outer: Outer?
     /// 字間(px)。未設定 = 0。
     public var letterSpacing: Double?
     /// 行間(文字の大きさに対する倍率)。未設定 = 1.2。
@@ -118,7 +150,7 @@ public struct TextStyle: Codable, Equatable, Sendable {
     public var vertical: Bool?
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["shadow", "box", "gradient", "letterSpacing", "lineHeight", "align", "bold", "italic", "highlight", "vertical"]
+    static let knownKeys: Set<String> = ["shadow", "box", "gradient", "outer", "letterSpacing", "lineHeight", "align", "bold", "italic", "highlight", "vertical"]
     public static let defaultLineHeight = 1.2
 
     public init() {}
@@ -130,20 +162,21 @@ public struct TextStyle: Codable, Equatable, Sendable {
 
     public init(from decoder: Decoder) throws {
         let l = Lenient(c: try decoder.container(keyedBy: AnyKey.self), known: Self.knownKeys)
-        shadow = l.value("shadow"); box = l.value("box"); gradient = l.value("gradient")
+        shadow = l.value("shadow"); box = l.value("box"); gradient = l.value("gradient"); outer = l.value("outer")
         letterSpacing = l.double("letterSpacing"); lineHeight = l.double("lineHeight"); align = l.string("align")
         bold = l.bool("bold"); italic = l.bool("italic")
         highlight = l.value("highlight")
         vertical = l.bool("vertical")
         extra = l.extra()
         // 読めなかった項目は捨てずに、そのまま書き戻す
-        for key in ["shadow", "box", "gradient", "letterSpacing", "lineHeight", "align", "bold", "italic", "highlight", "vertical"] {
+        for key in ["shadow", "box", "gradient", "outer", "letterSpacing", "lineHeight", "align", "bold", "italic", "highlight", "vertical"] {
             guard let raw: JSONValue = l.value(key), raw != .null else { continue }
             let ok: Bool
             switch key {
             case "shadow": ok = shadow != nil
             case "box": ok = box != nil
             case "gradient": ok = gradient != nil
+            case "outer": ok = outer != nil
             case "letterSpacing": ok = letterSpacing != nil
             case "lineHeight": ok = lineHeight != nil
             case "align": ok = align != nil
@@ -162,6 +195,7 @@ public struct TextStyle: Codable, Equatable, Sendable {
         try c.encodeIfPresent(shadow, forKey: AnyKey("shadow"))
         try c.encodeIfPresent(box, forKey: AnyKey("box"))
         try c.encodeIfPresent(gradient, forKey: AnyKey("gradient"))
+        try c.encodeIfPresent(outer, forKey: AnyKey("outer"))
         try c.encodeIfPresent(letterSpacing, forKey: AnyKey("letterSpacing"))
         try c.encodeIfPresent(lineHeight, forKey: AnyKey("lineHeight"))
         try c.encodeIfPresent(align, forKey: AnyKey("align"))
@@ -173,7 +207,7 @@ public struct TextStyle: Codable, Equatable, Sendable {
 
     /// 何も設定していない(知らない項目も無い)。
     public var isEmpty: Bool {
-        shadow == nil && box == nil && gradient == nil && letterSpacing == nil && lineHeight == nil && align == nil && bold == nil && italic == nil && highlight == nil && vertical == nil && extra.isEmpty
+        shadow == nil && box == nil && gradient == nil && outer == nil && letterSpacing == nil && lineHeight == nil && align == nil && bold == nil && italic == nil && highlight == nil && vertical == nil && extra.isEmpty
     }
 
     public var letterSpacingOrDefault: Double { Self.clamp(letterSpacing ?? 0, -50...200, 0) }
@@ -185,7 +219,7 @@ public struct TextStyle: Codable, Equatable, Sendable {
 
     /// 1 行の画素(影・グラデーション・字形)に関わる設定がある(行のビットマップを別の道で作る)。箱・揃え・行間は行の絵に関係しない。
     var affectsLine: Bool {
-        (shadow?.opacity ?? 0) > 0 || gradient != nil || letterSpacingOrDefault != 0 || italicOrDefault || !boldOrDefault
+        (shadow?.opacity ?? 0) > 0 || gradient != nil || outer != nil || letterSpacingOrDefault != 0 || italicOrDefault || !boldOrDefault
     }
 
     /// 行のビットマップのキャッシュ鍵に足す文字列(`affectsLine` に関わる項目だけ)。
@@ -193,13 +227,14 @@ public struct TextStyle: Codable, Equatable, Sendable {
         var s = "\(letterSpacingOrDefault)|\(italicOrDefault)|\(boldOrDefault)"
         if let sh = shadow { s += "|s\(sh.color),\(sh.dx),\(sh.dy),\(sh.blur),\(sh.opacity)" }
         if let g = gradient { s += "|g\(g.color1),\(g.color2),\(g.angle)" }
+        if let o = outer { s += "|o\(o.color),\(o.widthOrDefault)" }
         return s
     }
 
     /// 範囲に収めた写し。
     public var normalized: TextStyle {
         var s = self
-        s.shadow = shadow?.normalized; s.box = box?.normalized; s.gradient = gradient?.normalized
+        s.shadow = shadow?.normalized; s.box = box?.normalized; s.gradient = gradient?.normalized; s.outer = outer?.normalized
         if let v = letterSpacing { s.letterSpacing = Self.clamp(v, -50...200, 0) }
         if let v = lineHeight { s.lineHeight = Self.clamp(v, 0.6...3, Self.defaultLineHeight) }
         if let a = align, Align(rawValue: a) == nil { s.align = nil }
