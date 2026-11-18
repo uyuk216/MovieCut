@@ -14,7 +14,7 @@ extension Renderer {
     /// 縦書きの文字、または 1 文字ずつ動いている文字を描く。位置は全文字ぶんで決めるので、文字が増えても動かない。
     /// 動いていない縦書きは、全体の輪郭をひとまとめにして 1 枚のビットマップにし、横書きと同じようにキャッシュする。
     func drawTextChars(_ text: String, x: Double, y: Double, size: Double, color: String, font: String, outline: String, ctx: CGContext,
-                       cacheable: Bool, style: TextStyle?, visible: Int?, charAnim: CharAnimSpec?) {
+                       cacheable: Bool, style: TextStyle?, visible: Int?, charAnim: CharAnimSpec?, markupRubies: [MarkupRuby] = []) {
         let fillC = parseHexColor(color) ?? parseHexColor("#ffffff")!
         let outC = parseHexColor(outline) ?? parseHexColor("#000000")!
         let f = TextCache.font(name: font, size: size, bold: style?.boldOrDefault ?? true, weight: style?.weightValue)
@@ -27,7 +27,9 @@ extension Renderer {
         var items: [(ch: PlacedChar, origin: CGPoint)] = []
         let boxW: Double, boxH: Double
         if vertical {
-            let lay = VerticalText.layout(text, font: f, size: size, spacing: spacing, lineHeight: lineHeight, align: align)
+            // ルビがあるときは、読みを置く分だけ列の間隔を広げる(textBlockSize と同じ実効値)
+            let vLineHeight = markupRubies.isEmpty ? lineHeight : Renderer.verticalEffectiveLineHeight(style, rubies: markupRubies)
+            let lay = VerticalText.layout(text, font: f, size: size, spacing: spacing, lineHeight: vLineHeight, align: align)
             items = lay.chars.map { ($0, CGPoint(x: x, y: y)) }
             boxW = lay.width; boxH = lay.height
         } else {
@@ -87,6 +89,37 @@ extension Renderer {
             if let v = visible, it.ch.index >= v { continue }
             if !it.ch.path.isEmpty { all.addPath(it.ch.path) }
         }
+        // 縦書きのルビ: 読みを親文字の列の右側に縦に並べる
+        if vertical, !markupRubies.isEmpty {
+            var vIndex: [Int: Int] = [:]
+            var vc = 0
+            for (i, ch) in text.enumerated() { if ch != "\n" { vIndex[i] = vc; vc += 1 } }
+            var byIndex: [Int: PlacedChar] = [:]
+            for it in items { byIndex[it.ch.index] = it.ch }
+            for r in markupRubies {
+                guard let vs = vIndex[r.start], let ve = vIndex[r.end - 1], let first = byIndex[vs], let last = byIndex[ve] else { continue }
+                if let v = visible, vs >= v { continue }
+                let rsize = size * r.sizeRatio
+                guard rsize > 0 else { continue }
+                let rf = TextCache.font(name: r.fontName ?? font, size: rsize, bold: r.bold ?? (style?.boldOrDefault ?? true))
+                let rx = first.center.x + size / 2 + rsize / 2 + size * 0.08
+                let cyMid = (first.center.y + last.center.y) / 2
+                let reading = Array(r.reading)
+                for (k, rch) in reading.enumerated() {
+                    let cy = cyMid + (Double(reading.count - 1) / 2 - Double(k)) * rsize
+                    let g = VerticalText.glyph(rch, font: rf, size: rsize)
+                    guard !g.path.isEmpty else { continue }
+                    let t: CGAffineTransform
+                    if g.upright {
+                        t = CGAffineTransform(translationX: CGFloat(rx - g.advance / 2), y: CGFloat(cy - (rf.ascent - rf.descent) / 2))
+                    } else {
+                        t = CGAffineTransform(translationX: CGFloat(rx), y: CGFloat(cy + rsize / 2))
+                    }
+                    var tt = t
+                    if let moved = g.path.copy(using: &tt) { all.addPath(moved) }
+                }
+            }
+        }
         guard !all.isEmpty else { return }
         let line = (path: all as CGPath, width: boxW)
         let ix = floor(x), iy = floor(y)
@@ -94,7 +127,8 @@ extension Renderer {
         let k = cacheable ? 1.0 : min(4, max(1, Double(hypot(ctx.ctm.a, ctx.ctm.b))))
         let lineStyle: TextStyle? = (style?.affectsLine ?? false) ? style : nil
         let build = { Renderer.rasterizeLine(line, f, size: size, fill: fillC, outline: outC, fx: fx, fy: fy, style: lineStyle, k: k) }
-        let key = "V|\(font)|\(size)|\(text)|\(visible ?? -1)|\(color)|\(outline)|\(fx)|\(fy)|\(lineHeight)|\(align.rawValue)|\(spacing)|\(style?.boldOrDefault ?? true)|\(lineStyle?.lineKey ?? "")"
+        var key = "V|\(font)|\(size)|\(text)|\(visible ?? -1)|\(color)|\(outline)|\(fx)|\(fy)|\(lineHeight)|\(align.rawValue)|\(spacing)|\(style?.boldOrDefault ?? true)|\(lineStyle?.lineKey ?? "")"
+        if vertical, !markupRubies.isEmpty { key += "|RB" + markupRubies.map { "\($0.start),\($0.end),\($0.reading),\($0.sizeRatio)" }.joined(separator: ";") }
         if let bm = cacheable ? TextCache.bitmap(key: key, build: build) : build() {
             drawCG(ctx, bm.image, CGRect(x: ix + bm.x, y: iy + bm.y, width: Double(bm.image.width) / bm.k, height: Double(bm.image.height) / bm.k))
         }
@@ -106,6 +140,8 @@ extension Renderer {
         guard !text.isEmpty else { return }
         let size = c.fontSize ?? 64
         let style = c.textStyle
+        // 文字制御タグがあるときは、タグを文字として数えない
+        let animText = TextMarkup.plainIfTagged(text, baseSize: size, baseLetterSpacing: style?.letterSpacingOrDefault ?? 0)
         var x = W / 2, y = H * project.subtitleYOrDefault
         if style?.verticalOrDefault == true {
             let b = textBlockSize(text, size: size, font: c.fontOrDefault, style: style)
@@ -118,9 +154,9 @@ extension Renderer {
         if let a = c.textAnim, let kind = a.known, kind != .none, !kind.isScroll {
             let rel = t - c.start
             if a.perCharOrNil != nil {
-                if TextAnimMath.perCharActive(a, count: text.filter { $0 != "\n" }.count, rel: rel) { charAnim = CharAnimSpec(anim: a, rel: rel) }
+                if TextAnimMath.perCharActive(a, count: animText.filter { $0 != "\n" }.count, rel: rel) { charAnim = CharAnimSpec(anim: a, rel: rel) }
             } else {
-                let st = TextAnimMath.state(a, text: text, rel: rel, size: size)
+                let st = TextAnimMath.state(a, text: animText, rel: rel, size: size)
                 if st.active {
                     visible = st.visible; scale = st.scale; alpha = st.alpha; moving = true
                     x += st.dx; y += st.dy

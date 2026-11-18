@@ -497,6 +497,8 @@ public struct Renderer {
             let style = c.textStyle
             // カウントダウンの文字(無ければ text そのもの)
             let shown = c.displayText(at: t, in: project)
+            // 文字制御タグがあるときは、タグを文字として数えない(アニメーション・カラオケはプレーンな文で数える)
+            let animText = TextMarkup.plainIfTagged(shown, baseSize: size, baseLetterSpacing: style?.letterSpacingOrDefault ?? 0)
             // 文字のアニメーション(頭の数秒だけ。終わったあとは静止した文字と同じ速い道)
             var pose = pose
             var visible: Int?
@@ -506,12 +508,12 @@ public struct Renderer {
             defer { if restoreAlpha { ctx.restoreGState() } }
             if let a = c.textAnim, a.perCharOrNil != nil {
                 // 1 文字ずつ動かす: 全体の動きは付けず、文字ごとの状態で描く
-                if TextAnimMath.perCharActive(a, count: shown.filter { $0 != "\n" }.count, rel: t - c.start) {
+                if TextAnimMath.perCharActive(a, count: animText.filter { $0 != "\n" }.count, rel: t - c.start) {
                     animating = true
                     charAnim = CharAnimSpec(anim: a, rel: t - c.start, baseAlpha: fadeAlpha)
                 }
             } else if let a = c.textAnim {
-                let st = TextAnimMath.state(a, text: shown, rel: t - c.start, size: size)
+                let st = TextAnimMath.state(a, text: animText, rel: t - c.start, size: size)
                 if st.active {
                     animating = true
                     visible = st.visible
@@ -529,7 +531,7 @@ public struct Renderer {
             // 位置・拡大・回転が動く文字は、位置ごとにキャッシュしても使い回せないので直接描く
             let geometryAnimated = c.hasKeyframes && ["x", "y", "scale", "rotation"].contains { Animation.isAnimated($0, in: c) }
             // カラオケ字幕: 話している部分(先頭から)を色を変えて重ね描きする。終わったあとは全部その色。
-            let hlVisible = charAnim != nil ? nil : style?.highlight.map { min(KaraokeMath.coloredCount(text: shown, highlight: $0, rel: t - c.start, duration: c.duration), visible ?? Int.max) }
+            let hlVisible = charAnim != nil ? nil : style?.highlight.map { min(KaraokeMath.coloredCount(text: animText, highlight: $0, rel: t - c.start, duration: c.duration), visible ?? Int.max) }
             let hlStyle = Renderer.highlightPassStyle(style)
             if pose.isPlain(c) {
                 let plainCacheable = !geometryAnimated && !pose.transitionMoves && !animating && (pose.opacity >= 1 || blurred)
@@ -603,6 +605,17 @@ public struct Renderer {
 
     /// 文字の枠(幅 = 一番長い行の幅、高さ = 行数 × 文字の大きさ × 1.2)。
     func textBlockSize(_ text: String, size: Double, font: String, style: TextStyle? = nil, ruby: [RubySpan] = []) -> CGSize {
+        // 文字制御タグがあるときは、プレーンな文と実効の寸法で測る
+        if TextMarkup.mightContainTags(text) {
+            let parsed = TextMarkup.parse(text, baseSize: size, baseLetterSpacing: style?.letterSpacingOrDefault ?? 0)
+            if parsed.hasTags {
+                let rubies = Renderer.mergedRubies(parsed, clipRuby: ruby)
+                if style?.verticalOrDefault == true {
+                    return VerticalText.blockSize(parsed.plain, size: size, spacing: style?.letterSpacingOrDefault ?? 0, lineHeight: Renderer.verticalEffectiveLineHeight(style, rubies: rubies))
+                }
+                return Renderer.styledBlockSize(parsed, rubies: rubies, baseSize: size, fontName: font, style: style)
+            }
+        }
         // 縦書き: 幅 = 列の数 × 列の幅(行間 × 大きさ)、高さ = 一番長い列
         if style?.verticalOrDefault == true {
             return VerticalText.blockSize(text, size: size, spacing: style?.letterSpacingOrDefault ?? 0, lineHeight: style?.lineHeightOrDefault ?? TextStyle.defaultLineHeight)
@@ -895,6 +908,19 @@ public struct Renderer {
     func drawText(_ text: String, x: Double, y: Double, size: Double, color: String, font: String, outline: String, ctx: CGContext, cacheable: Bool = true,
                   style: TextStyle? = nil, visible: Int? = nil, charAnim: CharAnimSpec? = nil, ruby: [RubySpan] = []) {
         guard size > 0 else { return }
+        // 文字制御タグ(装飾タグ)があるときだけ、タグ用の経路で描く。タグが無い文は従来どおり。
+        if TextMarkup.mightContainTags(text) {
+            let parsed = TextMarkup.parse(text, baseSize: size, baseLetterSpacing: style?.letterSpacingOrDefault ?? 0)
+            if parsed.hasTags {
+                let rubies = Renderer.mergedRubies(parsed, clipRuby: ruby)
+                if (style?.verticalOrDefault ?? false) || charAnim != nil {
+                    drawTextChars(parsed.plain, x: x, y: y, size: size, color: color, font: font, outline: outline, ctx: ctx, cacheable: cacheable, style: style, visible: visible, charAnim: charAnim, markupRubies: rubies)
+                    return
+                }
+                drawStyledText(parsed, rubies: rubies, x: x, y: y, size: size, color: color, font: font, outline: outline, ctx: ctx, style: style, visible: visible)
+                return
+            }
+        }
         // 縦書き・1 文字ずつの動きは、文字ごとに配置して描く(別の道)
         if (style?.verticalOrDefault ?? false) || charAnim != nil {
             drawTextChars(text, x: x, y: y, size: size, color: color, font: font, outline: outline, ctx: ctx, cacheable: cacheable, style: style, visible: visible, charAnim: charAnim)
