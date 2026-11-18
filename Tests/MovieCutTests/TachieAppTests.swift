@@ -105,4 +105,13 @@ final class TachieAppTests: XCTestCase {
         m.effectiveUndoManager.undo()
         XCTAssertEqual(m.tachie(id)?.imgVowels?["a"], "/x/a.png")
     }
+
+    func testClearingAbsentVowelWithEmptyDictionaryRecordsNoUndo() {
+        let (m, id) = model()
+        m.project.tachies[0].imgVowels = [:]
+        let steps = undoSteps(m)
+        m.setTachieVowelImage(tachieId: id, key: "a", url: nil)
+        XCTAssertEqual(undoSteps(m), steps, "無い母音の外しは Undo に載らない")
+        XCTAssertEqual(m.tachie(id)?.imgVowels, [:], "空辞書のまま書き換えない")
+    }
 }

@@ -112,8 +112,9 @@ extension ProjectModel {
         edit(url == nil ? "口「\(label)」の画像を外す" : "口「\(label)」の画像の変更") { p in
             p = TachieEditing.update(p, id: tachieId) { t in
                 var d = t.imgVowels ?? [:]
-                if let u = url { d[key] = u.path } else { d.removeValue(forKey: key) }
-                t.imgVowels = d.isEmpty ? nil : d
+                if let u = url { d[key] = u.path; t.imgVowels = d }
+                else if d.removeValue(forKey: key) != nil { t.imgVowels = d.isEmpty ? nil : d }
+                // 存在しないキーの外しは imgVowels を書き換えない(空辞書 [] → nil の変化で Undo に載せない)
             }
         }
     }

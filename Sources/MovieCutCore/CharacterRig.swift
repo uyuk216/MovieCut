@@ -794,11 +794,13 @@ public final class RigFrameCache {
         let key = frameIndex > 0 ? "\(path)\u{1e}\(maxPixel)\u{1e}f\(frameIndex)" : "\(path)\u{1e}\(maxPixel)"
         lock.lock()
         if let p = parts[key] { touch(&partOrder, key); lock.unlock(); return p }
-        if missing.contains(path) { lock.unlock(); return nil }
+        // 失敗の記録: パス単位は「ファイル自体が無い」(nativeSize が記録)、キー単位は「この大きさ・このコマの読み込み失敗」。
+        // 1 コマの失敗でそのパスの全コマ・全サイズを止めないよう、part の失敗はキー単位で覚える。
+        if missing.contains(path) || missing.contains(key) { lock.unlock(); return nil }
         lock.unlock()
         let img = RigImageLoader.thumbnail(path, maxPixel: maxPixel, frameIndex: frameIndex)
         lock.lock(); defer { lock.unlock() }
-        guard let img else { missing.insert(path); return nil }
+        guard let img else { missing.insert(key); return nil }
         loadCount += 1
         parts[key] = img; touch(&partOrder, key)
         while partOrder.count > partLimit { parts.removeValue(forKey: partOrder.removeFirst()) }
