@@ -37,6 +37,9 @@ public enum EffectKind: String, CaseIterable, Sendable {
     case bokehBlur
     /// フィルムグレイン: 輝度のノイズを粒状に足す(フィルムの粒)。
     case filmGrain
+    /// 汎用加工の拡充(第2波B2・監査#57): 色調・モザイク形状・歪み・網点など。
+    case invert, posterize, unsharpMask, edges, crystallize, hexPixelate, pointillize, twirl
+    case lensDistortion, halftone, kaleidoscope, tritone, solarize, spinBlur, edgeBlur, echo
 
     public var label: String {
         switch self {
@@ -66,6 +69,22 @@ public enum EffectKind: String, CaseIterable, Sendable {
         case .highlightRolloff: return "ハイライト補正"
         case .bokehBlur: return "絞りぼかし"
         case .filmGrain: return "フィルムグレイン"
+        case .invert: return "反転"
+        case .posterize: return "ポスタリゼーション"
+        case .unsharpMask: return "アンシャープマスク"
+        case .edges: return "輪郭抽出"
+        case .crystallize: return "結晶モザイク"
+        case .hexPixelate: return "六角モザイク"
+        case .pointillize: return "点描モザイク"
+        case .twirl: return "渦巻き"
+        case .lensDistortion: return "レンズ歪み"
+        case .halftone: return "網点"
+        case .kaleidoscope: return "万華鏡"
+        case .tritone: return "トライトーン"
+        case .solarize: return "ソラリゼーション"
+        case .spinBlur: return "回転ブラー"
+        case .edgeBlur: return "境界ぼかし"
+        case .echo: return "残像"
         }
     }
 
@@ -111,6 +130,23 @@ public enum EffectKind: String, CaseIterable, Sendable {
         case .bokehBlur: return [Self.p("radius", "ボケの半径（px）", 0, 100, 20, 1, .px), Self.p("shape", "絞りの形", 0, Double(ApertureShape.allCases.count - 1), 0, 1, .aperture),
                                  Self.p("highlight", "ハイライトの強調", 0, 1, 0.3, 0.01, .percent), Self.p("rotation", "形の向き（°）", -180, 180, 0, 1, .degrees)]
         case .filmGrain: return [Self.p("amount", "強さ", 0, 1, 0.35, 0.01, .percent), Self.p("size", "粒の大きさ（px）", 1, 16, 2, 1, .px)]
+        case .invert: return [Self.p("amount", "強さ", 0, 1, 1, 0.01, .percent)]
+        case .posterize: return [Self.p("levels", "階調数", 2, 16, 6, 1)]
+        case .unsharpMask: return [Self.p("radius", "半径（px）", 0, 100, 8, 1, .px), Self.p("intensity", "強さ", 0, 3, 1, 0.05)]
+        case .edges: return [Self.p("intensity", "強さ", 0, 10, 3, 0.1)]
+        case .crystallize: return [Self.p("size", "結晶の大きさ（px）", 2, 100, 20, 1, .px)]
+        case .hexPixelate: return [Self.p("size", "六角の大きさ（px）", 2, 100, 16, 1, .px)]
+        case .pointillize: return [Self.p("size", "点の半径（px）", 1, 100, 12, 1, .px)]
+        case .twirl: return [Self.p("radius", "半径（px）", 10, 2000, 300, 1, .px), Self.p("angle", "角度（°）", -720, 720, 90, 1, .degrees)]
+        case .lensDistortion: return [Self.p("scale", "歪み（−膨らみ↔＋へこみ）", -1, 1, 0.4, 0.01), Self.p("radius", "半径（px）", 10, 3000, 800, 1, .px)]
+        case .halftone: return [Self.p("width", "網点の間隔（px）", 2, 50, 8, 1, .px), Self.p("angle", "角度（°）", -180, 180, 0, 1, .degrees), Self.p("sharpness", "くっきりさ", 0, 1, 0.7, 0.01, .percent)]
+        case .kaleidoscope: return [Self.p("count", "分割数", 3, 24, 6, 1), Self.p("angle", "角度（°）", -180, 180, 0, 1, .degrees)]
+        case .tritone: return [Self.p("amount", "強さ", 0, 1, 1, 0.01, .percent), Self.p("palette", "色の組", 0, 3, 0, 1, .mode)]
+        case .solarize: return [Self.p("amount", "強さ", 0, 1, 1, 0.01, .percent), Self.p("threshold", "しきい値", 0, 1, 0.5, 0.01, .percent)]
+        case .spinBlur: return [Self.p("amount", "回転量（°）", 0, 90, 20, 1, .degrees)]
+        case .edgeBlur: return [Self.p("radius", "ぼかし半径（px）", 0, 100, 20, 1, .px), Self.p("inner", "ぼかさない範囲", 0, 1, 0.6, 0.01, .percent)]
+        case .echo: return [Self.p("distance", "ずらし量（px）", 0, 200, 30, 1, .px), Self.p("angle", "向き（°）", -180, 180, 0, 1, .degrees),
+                            Self.p("count", "重ねる数", 1, 8, 3, 1), Self.p("opacity", "残像の濃さ", 0, 1, 0.5, 0.01, .percent)]
         }
     }
 

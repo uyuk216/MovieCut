@@ -57,6 +57,17 @@ public enum EffectPipeline {
         case .highlightRolloff: return false
         case .bokehBlur: return v("radius") < 0.5
         case .filmGrain: return v("amount") < eps
+        case .invert: return v("amount") < eps
+        case .posterize: return false
+        case .unsharpMask: return v("intensity") < eps
+        case .edges: return false
+        case .crystallize, .hexPixelate, .pointillize, .halftone, .kaleidoscope: return false
+        case .twirl: return abs(v("angle")) < eps
+        case .lensDistortion: return abs(v("scale")) < eps
+        case .tritone, .solarize: return v("amount") < eps
+        case .spinBlur: return v("amount") < eps
+        case .edgeBlur: return v("radius") < eps
+        case .echo: return v("distance") < eps || v("opacity") < eps || v("count") < 0.5
         }
     }
 
@@ -130,6 +141,8 @@ public enum EffectPipeline {
             case .bokehBlur: m += e.v("radius") * scale * 1.1 + 4
             case .dropShadow: m += max(abs(e.v("dx")), abs(e.v("dy"))) * scale + 3 * e.v("blur") * scale * 0.5
             case .outline: m += e.v("width") * scale
+            case .edgeBlur: m += 3 * e.v("radius") * scale * 0.5
+            case .echo: m += e.v("distance") * e.v("count") * scale
             default: break
             }
         }
@@ -287,6 +300,43 @@ public enum EffectPipeline {
             return Bokeh.apply(img, radius: e.v("radius") * scale, shape: ApertureShape(value: e.v("shape")), rotation: e.v("rotation"), highlight: e.v("highlight"))
         case .filmGrain:
             return FilmGrain.apply(img, amount: e.v("amount"), size: e.v("size") * scale)
+        case .invert:
+            // R' = (1-2a)R + a (G・B も同じ)。a=1 で完全な反転、a=0 で何もしない。
+            let a = e.v("amount"), k = 1 - 2 * a
+            return img.applyingFilter("CIColorMatrix", parameters: [
+                "inputRVector": vec(k, 0, 0, 0), "inputGVector": vec(0, k, 0, 0), "inputBVector": vec(0, 0, k, 0),
+                "inputAVector": vec(0, 0, 0, 1), "inputBiasVector": vec(a, a, a, 0),
+            ])
+        case .posterize:
+            return img.applyingFilter("CIColorPosterize", parameters: ["inputLevels": e.v("levels")])
+        case .unsharpMask:
+            return clamped(img, rect) { $0.applyingFilter("CIUnsharpMask", parameters: ["inputRadius": e.v("radius") * scale, "inputIntensity": e.v("intensity")]) }
+        case .edges:
+            return img.applyingFilter("CIEdges", parameters: ["inputIntensity": e.v("intensity")])
+        case .crystallize:
+            return clamped(img, rect) { $0.applyingFilter("CICrystallize", parameters: ["inputCenter": CIVector(x: bounds.minX, y: bounds.minY), "inputRadius": max(1, e.v("size") * scale)]) }
+        case .hexPixelate:
+            return clamped(img, rect) { $0.applyingFilter("CIHexagonalPixellate", parameters: ["inputCenter": CIVector(x: bounds.minX, y: bounds.minY), "inputScale": max(1, e.v("size") * scale)]) }
+        case .pointillize:
+            return clamped(img, rect) { $0.applyingFilter("CIPointillize", parameters: ["inputCenter": CIVector(x: bounds.minX, y: bounds.minY), "inputRadius": max(1, e.v("size") * scale)]) }
+        case .twirl:
+            return clamped(img, rect) { $0.applyingFilter("CITwirlDistortion", parameters: ["inputCenter": center, "inputRadius": max(1, e.v("radius") * scale), "inputAngle": e.v("angle") * Double.pi / 180]) }
+        case .lensDistortion:
+            return clamped(img, rect) { $0.applyingFilter("CIPinchDistortion", parameters: ["inputCenter": center, "inputRadius": max(1, e.v("radius") * scale), "inputScale": e.v("scale")]) }
+        case .halftone:
+            return img.applyingFilter("CIDotScreen", parameters: ["inputCenter": center, "inputAngle": e.v("angle") * Double.pi / 180, "inputWidth": max(1, e.v("width") * scale), "inputSharpness": e.v("sharpness")])
+        case .kaleidoscope:
+            return clamped(img, rect) { $0.applyingFilter("CIKaleidoscope", parameters: ["inputCount": e.v("count"), "inputCenter": center, "inputAngle": e.v("angle") * Double.pi / 180]) }
+        case .tritone:
+            return Tritone.apply(img, palette: Tritone.paletteIndex(e.v("palette")), amount: e.v("amount"))
+        case .solarize:
+            return Solarize.apply(img, threshold: e.v("threshold"), amount: e.v("amount"))
+        case .spinBlur:
+            return SpinBlur.apply(img, center: CGPoint(x: bounds.midX, y: bounds.midY), angleDegrees: e.v("amount"))
+        case .edgeBlur:
+            return EdgeBlur.apply(img, bounds: bounds, radius: e.v("radius") * scale, inner: e.v("inner"))
+        case .echo:
+            return EchoGhost.apply(img, distance: e.v("distance") * scale, angleDegrees: e.v("angle"), count: Int(e.v("count").rounded()), opacity: e.v("opacity"))
         case .lut:
             guard let p = e.path, let c = LUTCache.shared.cube(atPath: p) else { return img }
             return LUTApply.apply(img, lut: c.lut, dimension: c.dimension, data: c.data, intensity: e.v("intensity"))
