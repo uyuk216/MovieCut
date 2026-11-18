@@ -563,8 +563,24 @@ public struct Renderer {
         return CGRect(x: pose.x * Double(project.width) - bw / 2 - pad, y: pose.y * Double(project.height) - bh / 2 - pad, width: bw + 2 * pad, height: bh + 2 * pad)
     }
 
-    /// エフェクト付きのクリップ: 作業用の範囲(枠 + はみ出しの余白、キャンバス内)だけ透明なビットマップに描き、
+    /// エフェクトの作業範囲(キャンバスの画素・左上原点)。枠 + はみ出しの余白を、キャンバスで切る。
+    /// ただし、枠がキャンバスからはみ出す辺だけ、キャンバスの外へ余白ぶん広げる。
+    /// キャンバスでそのまま切ると、外にある部分が発生源になる影・縁・にじみが中へ届かないため。
+    /// 余白より遠い発生源は結果に届かない(はみ出しの伝わり方は余白が上限)ので、広げる量は余白ぶんで足りる。
+    /// はみ出していない辺は従来どおりキャンバスで切るので、収まっているクリップの作業範囲は従来と完全一致する
+    /// (全画面の絵のぼかしで、作業範囲の端 = 絵の端になる従来の clamp-to-extent の見た目を変えない)。
+    static func effectWorkRect(bounds: CGRect, margin: Double, canvas: CGRect) -> CGRect {
+        let loX = bounds.minX < canvas.minX ? canvas.minX - margin : canvas.minX
+        let hiX = bounds.maxX > canvas.maxX ? canvas.maxX + margin : canvas.maxX
+        let loY = bounds.minY < canvas.minY ? canvas.minY - margin : canvas.minY
+        let hiY = bounds.maxY > canvas.maxY ? canvas.maxY + margin : canvas.maxY
+        let limit = CGRect(x: loX, y: loY, width: hiX - loX, height: hiY - loY)
+        return bounds.insetBy(dx: -margin, dy: -margin).intersection(limit).integral
+    }
+
+    /// エフェクト付きのクリップ: 作業用の範囲(枠 + はみ出しの余白。キャンバスの外の発生源も含む)だけ透明なビットマップに描き、
     /// CIFilter の連なりをかけ(`EffectPipeline`)、クリップごとのぼかしがあればその後にかけて、不透明度で重ねる。
+    /// 仕上がりはキャンバスへ描くときに切れるので、見える範囲の画素は従来と同じ。
     func drawEffectedClip(_ c: Clip, pose: ClipPose, effects fx: [ResolvedEffect], t: Double, ctx: CGContext, W: Double, H: Double) {
         // 形のマスク(クリップの `mask`)は、エフェクトとぼかしの後にかける。マスクの外は透明にして、不透明度で重ねる
         let canvas = CGRect(x: 0, y: 0, width: W, height: H)
@@ -572,7 +588,7 @@ public struct Renderer {
         let blurSigma = min(300, pose.blur)
         let bounds = contentBounds(c, pose: pose, t: t) ?? canvas
         let margin = EffectPipeline.margin(of: fx, scale: resScale) + 3 * blurSigma
-        let work = bounds.insetBy(dx: -margin, dy: -margin).integral.intersection(canvas)
+        let work = Renderer.effectWorkRect(bounds: bounds, margin: margin, canvas: canvas)
         guard !work.isNull, work.width >= 1, work.height >= 1 else { return }
         let ww = Int(work.width), wh = Int(work.height)
         guard let off = Renderer.makeContext(width: ww, height: wh) else { return }
