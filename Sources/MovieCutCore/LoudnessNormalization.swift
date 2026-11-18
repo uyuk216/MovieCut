@@ -176,4 +176,13 @@ public enum LoudnessNormalization {
         try apply(linearGain: p.linearGain, input: input, output: output)
         return Result(plan: p, outputURL: output)
     }
+
+    /// 書き出し時に stderr へ出す 1 行(計測値・目標・適用ゲイン・ピーク制限の有無)。
+    public static func logLine(_ plan: LoudnessNormalizationPlan, settings: LoudnessNormalizationSettings) -> String {
+        func f(_ v: Double) -> String { v.isFinite ? String(format: "%.1f", v) : "-∞" }
+        let m = plan.measured
+        if !m.integrated.isFinite { return "ラウドネス正規化: 無音のため変更しません" }
+        return "ラウドネス正規化: 計測 \(f(m.integrated)) LUFS(トゥルーピーク \(f(m.truePeakDb)) dBTP) → 目標 \(f(settings.targetLUFS)) LUFS、"
+            + "適用ゲイン \(String(format: "%+.1f", plan.appliedGainDb)) dB" + (plan.limitedByTruePeak ? "(トゥルーピーク上限 \(f(settings.truePeakCeilingDbTP)) dBTP で制限)" : "")
+    }
 }

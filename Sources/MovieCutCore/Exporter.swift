@@ -66,12 +66,15 @@ public final class Exporter {
     public let range: ExportRange?
     /// 映像の目標ビットレート(bps)。nil なら解像度から決める既定値(従来どおり)。
     public let videoBitrate: Int?
+    /// 完成したミックスへのラウドネス正規化(既定は無効 = 従来どおり)。
+    public let loudness: LoudnessNormalizationSettings
 
-    public init(project: Project, assets: RenderAssets, range: ExportRange? = nil, videoBitrate: Int? = nil) {
+    public init(project: Project, assets: RenderAssets, range: ExportRange? = nil, videoBitrate: Int? = nil, loudness: LoudnessNormalizationSettings = .disabled) {
         self.project = project
         self.assets = assets
         self.range = range
         self.videoBitrate = videoBitrate
+        self.loudness = loudness
     }
 
     /// 正確な分数のフレームレート(29.97 → 30000/1001 など)。
@@ -133,6 +136,18 @@ public final class Exporter {
         }
         if control.cancelled || Task.isCancelled { throw CancellationError() }
         let hasAudio = mix.sourceCount > 0
+
+        // ラウドネス正規化(有効で音声があるときだけ。計測 → 計画 → 必要なら適用済みの一時ファイルへ)
+        var audioURL = mixURL
+        let normURL = FileManager.default.temporaryDirectory.appendingPathComponent("moviecut-mix-norm-\(UUID().uuidString).caf")
+        defer { try? FileManager.default.removeItem(at: normURL) }
+        if hasAudio, loudness.enabled {
+            let settings = loudness
+            let res = try await Task.detached { try LoudnessNormalization.normalize(input: mixURL, output: normURL, settings: settings) }.value
+            FileHandle.standardError.write(Data((LoudnessNormalization.logLine(res.plan, settings: settings) + "\n").utf8))
+            if let applied = res.outputURL { audioURL = applied }
+            if control.cancelled || Task.isCancelled { throw CancellationError() }
+        }
 
         try? FileManager.default.removeItem(at: url)
         nonisolated(unsafe) let writer: AVAssetWriter
@@ -205,7 +220,7 @@ public final class Exporter {
             ai.expectsMediaDataInRealTime = false
             guard writer.canAdd(ai) else { throw ExportError.cannotAddInput("音声") }
             writer.add(ai)
-            let mixAsset = AVURLAsset(url: mixURL)
+            let mixAsset = AVURLAsset(url: audioURL)
             guard let track = try await mixAsset.loadTracks(withMediaType: .audio).first,
                   let r = try? AVAssetReader(asset: mixAsset) else { throw ExportError.audioReadFailed(nil) }
             let o = AVAssetReaderTrackOutput(track: track, outputSettings: [
