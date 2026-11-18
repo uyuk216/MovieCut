@@ -2,7 +2,7 @@ import Foundation
 import AVFoundation
 
 /// キャラのエンジンに応じて VOICEVOX / AquesTalk(または say)で合成する本物の VoiceProvider。
-public final class RealVoiceProvider: VoiceProvider {
+public final class RealVoiceProvider: VoicevoxAccentProviding {
     public let voicevoxURL: String
     public let voicevox: VoicevoxClient
     public let aquestalk: AquesTalkSynthesizer
@@ -33,13 +33,22 @@ public final class RealVoiceProvider: VoiceProvider {
     public var usingFallback: Bool { aquestalk.usingFallback }
 
     public func synthesize(character: Character, text: String, in directory: URL) async throws -> VoiceResult {
+        try await synthesize(character: character, text: text, accentPhrases: nil, in: directory)
+    }
+
+    /// アクセント句つき合成。VOICEVOX のキャラだけ accent_phrases を差し替え、AquesTalk などは通常合成に落とす。
+    public func synthesizeWithAccent(character: Character, text: String, accentPhrases: [VoicevoxAccentPhrase], in directory: URL) async throws -> VoiceResult {
+        try await synthesize(character: character, text: text, accentPhrases: character.engine == "voicevox" ? accentPhrases : nil, in: directory)
+    }
+
+    private func synthesize(character: Character, text: String, accentPhrases: [VoicevoxAccentPhrase]?, in directory: URL) async throws -> VoiceResult {
         let url: URL
         if character.engine == "voicevox" {
             _ = try voicevox.validatedBaseURL()   // 送ってよい先か(だめなら日本語の理由で止める)
             guard await engine.ensureRunning(baseURL: voicevoxURL) else {
                 throw VoiceError.message("VOICEVOX に接続できません。VOICEVOX をインストールして起動するか、インスペクタでこのキャラの音声エンジンを「ゆっくり (AquesTalk)」に切り替えてください(\(DependencyStatus.voicevoxURL))。")
             }
-            url = try await voicevox.synthesize(text: text, speaker: character.speaker ?? 3, speed: character.speed, pitch: character.pitch, intonation: character.intonation, prePhonemeLength: character.prePhonemeLength, postPhonemeLength: character.postPhonemeLength, pauseLengthScale: character.pauseLengthScale)
+            url = try await voicevox.synthesize(text: text, speaker: character.speaker ?? 3, speed: character.speed, pitch: character.pitch, intonation: character.intonation, prePhonemeLength: character.prePhonemeLength, postPhonemeLength: character.postPhonemeLength, pauseLengthScale: character.pauseLengthScale, accentPhrases: accentPhrases)
             lock.withLock { _ = enginesUsed.insert("voicevox") }
         } else {
             url = try await aquestalk.synthesize(text: text, voice: character.voice, speed: character.speed)

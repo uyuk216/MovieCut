@@ -56,12 +56,25 @@ public struct VoicevoxPluginClient {
     public static let defaultPostPhonemeLength = 0.03
     public static let defaultPauseLengthScale = 0.65
 
+    /// POST /audio_query → accent_phrases を型にして返す(アクセント編集の初期値用。キャッシュには触れない)。
+    public func accentPhrases(text: String, speaker: Int) async throws -> [VoicevoxAccentPhrase] {
+        var qreq = URLRequest(url: try url("/audio_query?text=\(Self.encode(text))&speaker=\(speaker)"))
+        qreq.httpMethod = "POST"
+        let qdata = try await send(qreq, "audio_query")
+        guard let query = try JSONSerialization.jsonObject(with: qdata) as? [String: Any],
+              let phrases = VoicevoxAccent.phrases(fromQuery: query) else { throw VoiceError.badResponse("audio_query") }
+        return phrases
+    }
+
     /// POST /audio_query → パラメータ設定 → POST /synthesis → キャッシュへ書く。
-    public func synthesize(text: String, speaker: Int, speed: Double? = nil, pitch: Double? = nil, intonation: Double? = nil, volume: Double? = nil, prePhonemeLength: Double? = nil, postPhonemeLength: Double? = nil, pauseLengthScale: Double? = nil) async throws -> URL {
+    public func synthesize(text: String, speaker: Int, speed: Double? = nil, pitch: Double? = nil, intonation: Double? = nil, volume: Double? = nil, prePhonemeLength: Double? = nil, postPhonemeLength: Double? = nil, pauseLengthScale: Double? = nil, accentPhrases: [VoicevoxAccentPhrase]? = nil) async throws -> URL {
         let pre = prePhonemeLength ?? Self.defaultPrePhonemeLength
         let post = postPhonemeLength ?? Self.defaultPostPhonemeLength
         let pause = pauseLengthScale ?? Self.defaultPauseLengthScale
-        let key = VoiceCache.key([.string("vv"), .string(baseURL), .string(text), .number(Double(speaker)), .opt(speed), .opt(pitch), .opt(intonation), .opt(volume), .number(pre), .number(post), .number(pause)])
+        var keyParts: [JSONValue] = [.string("vv"), .string(baseURL), .string(text), .number(Double(speaker)), .opt(speed), .opt(pitch), .opt(intonation), .opt(volume), .number(pre), .number(post), .number(pause)]
+        // アクセント句を差し替えるときだけ、その内容(安定 JSON)をキーへ足す。nil なら従来と同一のキー。
+        if let accentPhrases { keyParts.append(.string(VoicevoxAccent.stableJSON(accentPhrases))) }
+        let key = VoiceCache.key(keyParts)
         if let hit = cache.hit(forKey: key) { return hit }
         let out = try cache.url(forKey: key)
 
@@ -76,6 +89,7 @@ public struct VoicevoxPluginClient {
         query["prePhonemeLength"] = pre
         query["postPhonemeLength"] = post
         query["pauseLengthScale"] = pause
+        if let accentPhrases { query["accent_phrases"] = try VoicevoxAccent.jsonObject(from: accentPhrases) }
 
         var sreq = URLRequest(url: try url("/synthesis?speaker=\(speaker)"))
         sreq.httpMethod = "POST"
@@ -91,7 +105,7 @@ public struct VoicevoxPluginClient {
 }
 
 /// VOICEVOX プラグインの `VoiceProvider`。処理手順は `RealVoiceProvider` の voicevox 分岐と同一。
-public final class VoicevoxPluginProvider: VoiceProvider {
+public final class VoicevoxPluginProvider: VoicevoxAccentProviding {
     public let baseURL: String
     public let client: VoicevoxPluginClient
     public let engine: VoicevoxEngine
@@ -109,6 +123,15 @@ public final class VoicevoxPluginProvider: VoiceProvider {
     }
 
     public func synthesize(character: Character, text: String, in directory: URL) async throws -> VoiceResult {
+        try await synthesize(character: character, text: text, accentPhrases: nil, in: directory)
+    }
+
+    /// アクセント句つき合成。このプロバイダは VOICEVOX 専用なので、常に accent_phrases を差し替える。
+    public func synthesizeWithAccent(character: Character, text: String, accentPhrases: [VoicevoxAccentPhrase], in directory: URL) async throws -> VoiceResult {
+        try await synthesize(character: character, text: text, accentPhrases: accentPhrases, in: directory)
+    }
+
+    private func synthesize(character: Character, text: String, accentPhrases: [VoicevoxAccentPhrase]?, in directory: URL) async throws -> VoiceResult {
         _ = try client.validatedBaseURL()   // 送ってよい先か(だめなら日本語の理由で止める)
         let available: Bool
         if let override = engineAvailabilityOverride {
@@ -119,7 +142,7 @@ public final class VoicevoxPluginProvider: VoiceProvider {
         guard available else {
             throw VoiceError.message("VOICEVOX に接続できません。VOICEVOX をインストールして起動するか、インスペクタでこのキャラの音声エンジンを「ゆっくり (AquesTalk)」に切り替えてください(\(DependencyStatus.voicevoxURL))。")
         }
-        let url = try await client.synthesize(text: text, speaker: character.speaker ?? 3, speed: character.speed, pitch: character.pitch, intonation: character.intonation, prePhonemeLength: character.prePhonemeLength, postPhonemeLength: character.postPhonemeLength, pauseLengthScale: character.pauseLengthScale)
+        let url = try await client.synthesize(text: text, speaker: character.speaker ?? 3, speed: character.speed, pitch: character.pitch, intonation: character.intonation, prePhonemeLength: character.prePhonemeLength, postPhonemeLength: character.postPhonemeLength, pauseLengthScale: character.pauseLengthScale, accentPhrases: accentPhrases)
         return VoiceResult(url: url, duration: try WavFile.duration(of: url))
     }
 }
