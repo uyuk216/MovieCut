@@ -18,8 +18,11 @@ final class SequentialVideoFrames {
     private var next: (img: CGImage, pts: Double)?
     private var broken = false
     private let lock = NSLock()
+    /// 1 未満なら、読んだフレームをこの倍率に縮めて持つ(プレビュー再生のメモリ節約)。
+    private let scale: Double
 
-    init(url: URL, fallback: @escaping (Double) -> CGImage?) {
+    init(url: URL, scale: Double = 1, fallback: @escaping (Double) -> CGImage?) {
+        self.scale = scale
         asset = AVURLAsset(url: url)
         track = asset.tracks(withMediaType: .video).first
         let t = track?.preferredTransform ?? .identity
@@ -69,9 +72,29 @@ final class SequentialVideoFrames {
             guard let pb = CMSampleBufferGetImageBuffer(sb) else { continue }
             var img: CGImage?
             VTCreateCGImageFromCVPixelBuffer(pb, options: nil, imageOut: &img)
-            if let img = img { return (img, CMSampleBufferGetPresentationTimeStamp(sb).seconds) }
+            if let img = img {
+                let kept = scale < 1 ? Self.downscaled(img, scale: scale) : img
+                return (kept, CMSampleBufferGetPresentationTimeStamp(sb).seconds)
+            }
         }
         return nil
+    }
+
+    /// scale 倍(各辺最小 1px)に描き直した画像。作れなければ元の画像。
+    static func downscaled(_ img: CGImage, scale: Double) -> CGImage {
+        let w = max(1, Int((Double(img.width) * scale).rounded()))
+        let h = max(1, Int((Double(img.height) * scale).rounded()))
+        guard w < img.width || h < img.height,
+              let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
+                                  space: img.colorSpace ?? CGColorSpaceCreateDeviceRGB(),
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue)
+                ?? CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
+                             space: CGColorSpaceCreateDeviceRGB(),
+                             bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue)
+        else { return img }
+        ctx.interpolationQuality = .medium
+        ctx.draw(img, in: CGRect(x: 0, y: 0, width: w, height: h))
+        return ctx.makeImage() ?? img
     }
 
     func close() {

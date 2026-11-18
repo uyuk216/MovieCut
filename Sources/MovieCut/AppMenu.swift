@@ -141,6 +141,8 @@ enum MenuCommand: Hashable {
     case aiImage
     // 表示 ▸ プレビューの背景(アプリ全体の設定)
     case previewBackground(PreviewBackground)
+    // 表示 ▸ プレビュー画質(自動・フル・中間・低メモリ。アプリ全体の設定)
+    case previewTier(PreviewTierOverride)
     // 表示 ▸ ガイド線(プレビューだけ。ショートカットは持たない)
     case guide(PreviewGuide)
     // 画面のドッキング(パネルの表示と、配置のプリセット)
@@ -381,6 +383,8 @@ struct MenuState: Equatable {
     var isInsideCompound = false     // いま複合クリップの中を編集している(出られる)
     /// 表示 ▸ プレビューの背景(アプリ全体の設定)。
     var previewBackground = PreviewBackground.default
+    /// 表示 ▸ プレビュー画質: 上書き(アプリ全体の設定。auto は予算から決める)。
+    var previewTier = PreviewTierOverride.auto
     /// 表示 ▸ ガイド線: 出しているガイド(アプリ全体の設定)。
     var previewGuides: Set<PreviewGuide> = []
     /// プロキシ編集: 表示のチェック / 映像の素材があって作れる
@@ -398,6 +402,7 @@ struct MenuState: Equatable {
     @MainActor
     init(model: ProjectModel?) {
         previewBackground = PreviewBackgroundStore.current
+        previewTier = PreviewTierStore.current
         previewGuides = PreviewGuideStore.current
         templateNames = ProjectTemplateLibrary.names
         let rc = RecentProjectsController.shared
@@ -1313,6 +1318,11 @@ enum AppMenuSpec {
         PreviewBackground.allCases.map { MenuItemSpec(command: .previewBackground($0), title: $0.title, shortcut: nil, enabled: true, checked: s.previewBackground == $0) }
     }
 
+    /// 表示 ▸ プレビュー画質(ラジオ項目。チェックは現在の上書き。ショートカットは持たない)。
+    static func previewTierItems(_ s: MenuState) -> [MenuItemSpec] {
+        PreviewTierOverride.allCases.map { MenuItemSpec(command: .previewTier($0), title: $0.title, shortcut: nil, enabled: true, checked: s.previewTier == $0) }
+    }
+
     /// 標準の「全画面表示」(⌃⌘F)。ウィンドウがあれば使える(書き出し中でも構わない)。
     static func fullScreen(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .fullScreen, title: "全画面表示", shortcut: MenuShortcut(key: "f", modifiers: [.command, .control]), enabled: s.hasDocument, checked: nil)
@@ -1337,7 +1347,7 @@ enum AppMenuSpec {
         [about, checkForUpdates, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s), apngExport(s)] + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), clipListItem(s), noteListItem(s)] + scriptStoryboardItems(s) + [makeProxies(s)] + [] + clipMenu(s).flatMap { $0 } + multicamItems(s) + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textVerticalItem(s), textPerCharItem(s), textCounterItem(s), dictionaryItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [sceneSplitItem(s), silenceCutItem(s)] + rangeDeleteItems(s) + [audioAutoSyncItem(s), beatMarkersItem(s), scaleDuplicateItem(s), beatPlaceItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerColorItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
-            + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + guideItems(s) + [previewProxy(s), fullScreen(s)] + help.flatMap { $0 }
+            + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + previewTierItems(s) + guideItems(s) + [previewProxy(s), fullScreen(s)] + help.flatMap { $0 }
     }
 }
 
@@ -1365,6 +1375,9 @@ enum AppMenu {
         case .dockLayout(let pr): AppServices.panelDock.apply(pr)
         case .previewBackground(let b):
             PreviewBackgroundStore.set(b)
+            ActiveDocument.shared.refresh()
+        case .previewTier(let t):
+            PreviewTierStore.set(t)
             ActiveDocument.shared.refresh()
         case .guide(let g):
             PreviewGuideStore.toggle(g)

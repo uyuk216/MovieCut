@@ -435,11 +435,22 @@ final class PlaybackController {
             stopInternal()
             return
         }
-        // 画面に出す時刻はプロジェクトのコマ境界にそろえる。音のクロックは連続値で、そのまま出すと
+        // 画面に出す時刻はプロジェクトのコマ境界にそろえる(常時)。音のクロックは連続値で、そのまま出すと
         // ディスプレイ更新(60/120Hz)のたびに新しい時刻になり、プレビューが同じコマを何度も
         // 全解像度で描き直して負荷が跳ね上がる(落ちたコマが境界だと字幕が欠けて見え、音も途切れやすい)。
         // コマに無い時刻の絵は存在しないので、そろえても見た目は失われない。
-        model.currentTime = model.project.frameRate.snapped(t)
+        model.currentTime = displayedTime(t, model: model)
+    }
+
+    /// 画面に出す時刻。まずコマ境界へスナップし(常時)、実効階級が minimal のときは追加でプロジェクト fps の
+    /// 半分の格子に量子化する(映像の更新間隔が 2 倍。音声はそのまま)。格子はコマ境界の 2 つ分なので、スナップ済みの
+    /// 時刻を落としても結果は生の時刻を落とした場合と同じになる。
+    /// 格子に落としても、いま表示している時刻より後退はさせない(階級が変わった直後も同じ)。
+    private func displayedTime(_ t: Double, model: ProjectModel) -> Double {
+        let snapped = model.project.frameRate.snapped(t)
+        guard model.currentPreviewTier() == .minimal, model.project.fps > 0 else { return snapped }
+        let step = 2 / model.project.fps
+        return max(floor(snapped / step) * step, model.currentTime)
     }
 
     /// シャトル中: 時計の経過 × 速さだけ進める。端に着いたら止まる。

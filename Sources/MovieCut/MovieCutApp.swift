@@ -12,6 +12,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 前の起動が残した再生用の一時ファイル(1 日より古いもの)を消す
         DispatchQueue.global(qos: .utility).async { PlaybackTempFiles.removeStale() }
+        // メモリ逼迫で予算のキャッシュを全放出する監視を始める
+        AppServices.memoryPressure.start()
         // メニューの並び(クリップ / 再生 / 移動 を表示の前へ)
         MainActor.assumeIsolated {
             MenuOrder.install()
