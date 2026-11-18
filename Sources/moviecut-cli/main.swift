@@ -316,8 +316,10 @@ case "export" where args.count >= 3:
         }
         // --loudness で完成ミックスを目標ラウドネスへ正規化(--loudness-target <LUFS> は既定 -14、-36〜-5 に丸める)。--loudness 無しの --loudness-target は誤指定として止める。
         var loudness = LoudnessNormalizationSettings.disabled
-        if let t = optValue("--loudness-target") {
+        if args.contains("--loudness-target") {
             guard args.contains("--loudness") else { fail("--loudness-target は --loudness と一緒に指定してください") }
+            // 値が無い(末尾など)ときは既定の -14 として進まず止める。optValue は他のオプションと共用なので、ここで判定する
+            guard let t = optValue("--loudness-target") else { fail("--loudness-target の後に LUFS の数値を指定してください(例 --loudness-target -14)") }
             guard let v = Double(t), v.isFinite else { fail("--loudness-target は LUFS の数値(例 -14)") }
             loudness = .enabled(targetLUFS: LoudnessNormalizationSettings.clampedTarget(v))
         } else if args.contains("--loudness") {
