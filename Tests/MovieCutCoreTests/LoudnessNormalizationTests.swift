@@ -207,6 +207,27 @@ final class LoudnessNormalizationTests: XCTestCase {
         XCTAssertEqual(try frameCount(output), try frameCount(input))
     }
 
+    func testNormalizeClipWithPeakInVeryLastSamplesStaysUnderCeiling() throws {
+        // 本体は 1 kHz 振幅 0.1 の正弦波、末尾 8 サンプルだけ 12 kHz・位相 45°・振幅 1.0 のバースト(真のピーク ≈ 0 dBTP)
+        // 末尾の山を取りこぼすと、上限を超えるゲインが選ばれてしまう
+        let dir = try makeTempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        var x = sine(hz: 1000, amplitude: 0.1, seconds: 5)
+        for k in 0..<8 { x.append(Float(sin(2 * Double.pi * 12_000 * Double(k) / 48_000 + .pi / 4))) }
+        let input = dir.appendingPathComponent("in.caf"), output = dir.appendingPathComponent("out.caf")
+        try writeCAF(left: x, right: x, to: input)
+        let before = try LoudnessAnalysis.measureFile(input)
+        XCTAssertGreaterThan(before.truePeakDb, -1.0, "末尾の山がピーク上限を超えている")
+
+        let result = try LoudnessNormalization.normalize(input: input, output: output, settings: .youtube)
+        XCTAssertTrue(result.plan.limitedByTruePeak)
+        // 計画が見た値で確かめる(適用後の再計測だけだと、同じ計測の取りこぼしを見逃す)
+        XCTAssertEqual(result.plan.measured.truePeakDb, 0.0, accuracy: 0.3, "末尾の山を計画の計測に含めている")
+        let after = try LoudnessAnalysis.measureFile(output)
+        print("[loudnorm tail] before=\(before.truePeakDb) dBTP, applied=\(result.plan.appliedGainDb) dB, after=\(after.integrated) LUFS / \(after.truePeakDb) dBTP")
+        XCTAssertLessThanOrEqual(after.truePeakDb, -1.0 + 0.05)
+        XCTAssertEqual(try frameCount(output), try frameCount(input))
+    }
+
     func testNormalizeLimitedFileStaysUnderCeiling() throws {
         // 高いピーク(スパイク)つきの静かな音: 目標へ上げるとピーク上限が先に効く
         let dir = try makeTempDir(); defer { try? FileManager.default.removeItem(at: dir) }
