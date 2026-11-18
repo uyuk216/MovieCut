@@ -236,6 +236,8 @@ final class ProjectModel: ObservableObject {
     /// 出力 ▸ 注記一覧…(注記のあるクリップの表・テキストと CSV の書き出し)のシート。
     @Published var showNoteListSheet = false
     @Published var showUnusedMediaSheet = false
+    /// 素材の場所の再指定の結果(つながった・見つからなかった)。出すと結果のシートを表示する。
+    @Published var relinkReport: MediaRelinkReport?
     /// 名前を変えているマーカー(シートを出す)。
     @Published var renamingMarkerId: String?
     /// 左の台本欄の文字(ツールバー・メニューの「台本から音声を作る」が読む)。
