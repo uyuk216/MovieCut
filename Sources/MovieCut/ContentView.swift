@@ -64,7 +64,7 @@ struct ContentView: View {
             DockHost(model: model, store: dock)
         }
         .frame(minWidth: 1100, minHeight: 700)
-        .background(MCDesign.Color.window)
+        .background(MCDesign.Color.background)
         .preferredColorScheme(.dark)
         .overlay { BusyOverlay(message: model.busyMessage, onCancel: model.transcribeCancel ?? model.aiCancel ?? model.proxyCancel ?? model.imageGenCancel) }
         .sheet(isPresented: $model.showSettings) { SettingsSheet(model: model) }
@@ -203,7 +203,7 @@ struct ToolbarBar: View {
         .labelStyle(.titleAndIcon)
         .padding(.horizontal, MCDesign.Spacing.m)
         .padding(.vertical, MCDesign.Spacing.xs)
-        .background(MCDesign.Color.underPage.opacity(0.5))
+        .background(MCDesign.Color.barBackground.opacity(0.5))
         .background(GeometryReader { g in
             Color.clear
                 .onAppear { width = g.size.width }
@@ -264,9 +264,9 @@ struct LeftPanel: View {
                     .font(.system(size: 13))
                     .scrollContentBackground(.hidden)
                     .padding(4)
-                    .background(Color(nsColor: .textBackgroundColor))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(nsColor: .separatorColor)))
+                    .background(MCDesign.Color.fieldBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: MCDesign.Radius.control))
+                    .overlay(RoundedRectangle(cornerRadius: MCDesign.Radius.control).stroke(MCDesign.Color.divider))
                 if scriptText.isEmpty {
                     Text(ScriptHelp.placeholder)
                         .font(.system(size: 13))
@@ -387,7 +387,7 @@ struct TransportBar: View {
             if showsResolution {
                 Text(Self.chipText(model))
                     .font(.system(size: 11))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(MCDesign.Color.textTertiary)
                     .lineLimit(1)
                     .help(L10n.t("プロジェクトの解像度とフレームレート(出力メニューで変えられます)"))
             }
@@ -412,7 +412,7 @@ struct BusyOverlay: View {
                 }
                 .padding(24)
                 .frame(minWidth: 280)
-                .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .windowBackgroundColor)))
+                .background(RoundedRectangle(cornerRadius: 10).fill(MCDesign.Color.window))
                 .shadow(radius: 20)
             }
         }

@@ -11,8 +11,8 @@ struct InspectorSection: View {
         HStack(spacing: 8) {
             Text(L10n.t(title))
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.secondary)
-            Rectangle().fill(Color(nsColor: .separatorColor)).frame(height: 1)
+                .foregroundStyle(MCDesign.Color.textSecondary)
+            Rectangle().fill(MCDesign.Color.divider).frame(height: 1)
         }
         .padding(.top, 5)
     }

@@ -44,6 +44,24 @@ enum MCDesign {
         static let control = SwiftUI.Color(nsColor: .controlBackgroundColor)
         /// ウィンドウより一段沈んだ地(ツールバーなど)
         static let underPage = SwiftUI.Color(nsColor: .underPageBackgroundColor)
+
+        // 意味トークン(役割で名前を付けた別名。外枠はシステムのセマンティック色に寄せる)
+        /// アプリ全体の背景
+        static let background = window
+        /// パネル(左・右)の地
+        static let panelBackground = window
+        /// ツールバー・ステータスバーの地
+        static let barBackground = underPage
+        /// 区切り(Divider 相当)
+        static let divider = separator
+        /// 二次テキスト
+        static let textSecondary = SwiftUI.Color(nsColor: .secondaryLabelColor)
+        /// 三次テキスト(解像度・fps の表示など、控えめな文字)
+        static let textTertiary = SwiftUI.Color(nsColor: .tertiaryLabelColor)
+        /// 入力欄の地
+        static let fieldBackground = SwiftUI.Color(nsColor: .textBackgroundColor)
+        /// アクセント(システム設定のアクセントカラー)
+        static let accent = SwiftUI.Color.accentColor
     }
 
     enum Font {
