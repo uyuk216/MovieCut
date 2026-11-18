@@ -1,10 +1,10 @@
 import Foundation
 
 extension Character {
-    /// 声がまだ選ばれていないか(VOICEVOX は話者が nil、AquesTalk は声が nil)。
+    /// 声がまだ選ばれていないか(VOICEVOX 系は話者が nil、AquesTalk は声が nil)。
     /// 合成は未設定でも従来どおり既定の声で鳴る。これは「選んでね」という案内を出すための判定だけ。
     public var hasVoiceChosen: Bool {
-        engine == "voicevox" ? speaker != nil : voice != nil
+        VoicevoxFamily.isVoicevoxStyleEngine(engine) ? speaker != nil : voice != nil
     }
 }
 
@@ -45,6 +45,7 @@ public enum CharacterRowSubtitle {
     public static func text(for c: Character, speakerName: String?) -> String {
         guard c.hasVoiceChosen else { return unsetVoice }
         if c.engine == "voicevox" { return speakerName ?? "VOICEVOX 話者 \(c.speaker ?? 3)" }
+        if let name = VoicevoxFamily.displayName(forEngine: c.engine) { return "\(name) 話者 \(c.speaker ?? 3)" }
         return "ゆっくり " + (c.voice ?? "")
     }
 }
