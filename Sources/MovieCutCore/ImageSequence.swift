@@ -67,6 +67,8 @@ public struct ImageSequence: Equatable, Sendable {
 }
 
 public enum ImageSequenceDetector {
+    /// 欠番として列挙する上限(これ以上抜けていても、列挙はここで打ち切る)。
+    public static let missingLimit = 10_000
     /// 連番として扱う対象の拡張子(画像クリップと同じ)。
     public static func isSequenceCandidate(path: String) -> Bool {
         ClipEditing.imageExtensions.contains((path as NSString).pathExtension.lowercased())
@@ -114,8 +116,18 @@ public enum ImageSequenceDetector {
             let sorted = frames.sorted { $0.number < $1.number }
             // 同じ番号が重なるまとまりは連番として扱わない
             guard sorted.count >= 2, Set(sorted.map(\.number)).count == sorted.count else { continue }
-            let numbers = Set(sorted.map(\.number))
-            let missing = (sorted.first!.number...sorted.last!.number).filter { !numbers.contains($0) }
+            // 欠番は隣り合う番号の間だけを数え、上限までで打ち切る。
+            // (最小〜最大の範囲を全走査すると、1 と 100000000 のような疎な巨大番号で
+            //  範囲そのものが爆発して固まる・メモリを食い尽くすため。F-4 の対策)
+            var missing: [Int] = []
+            for i in 1..<sorted.count {
+                var n = sorted[i - 1].number + 1
+                while n < sorted[i].number, missing.count < missingLimit {
+                    missing.append(n)
+                    n += 1
+                }
+                if missing.count >= missingLimit { break }
+            }
             out.append(ImageSequence(directory: key.directory, prefix: key.prefix, suffix: key.suffix,
                                      ext: key.ext, digits: key.digits, frames: sorted, missingNumbers: missing))
         }

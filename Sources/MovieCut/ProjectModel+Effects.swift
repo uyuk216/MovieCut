@@ -64,8 +64,15 @@ extension ProjectModel {
     func resetEffect(at index: Int, clipId: String? = nil) -> Bool {
         guard let c = targetClip(clipId) else { return false }
         var probe = c
-        guard EffectEditing.reset(&probe, at: index) else { return false }
-        setClipProperty({ _ = EffectEditing.reset(&$0, at: index) }, name: "エフェクトを初期値に戻す", clipId: c.id)
+        if EffectEditing.reset(&probe, at: index) {
+            setClipProperty({ _ = EffectEditing.reset(&$0, at: index) }, name: "エフェクトを初期値に戻す", clipId: c.id)
+            return true
+        }
+        // プラグインエフェクトは記述子で初期値に戻す(プラグインが無い環境では記述子が引けないので何もしない)。
+        guard c.effects.indices.contains(index), let descriptor = pluginEffectDescriptor(for: c.effects[index].kind) else { return false }
+        var pluginProbe = c
+        guard EffectEditing.reset(&pluginProbe, at: index, descriptor: descriptor) else { return false }
+        setClipProperty({ _ = EffectEditing.reset(&$0, at: index, descriptor: descriptor) }, name: "エフェクトを初期値に戻す", clipId: c.id)
         return true
     }
 

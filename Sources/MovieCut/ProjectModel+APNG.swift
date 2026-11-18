@@ -76,7 +76,7 @@ extension ProjectModel {
         let frames = APNGExporter.plan(project: snapshot, range: range, options: options).frames
         return await runJob(title: "APNG を書き出しています", fileName: url.lastPathComponent, notices: [],
                             success: "\(url.lastPathComponent) に \(frames) コマの APNG を書き出しました", result: url) { progress in
-            try await APNGExporter.export(project: snapshot, range: range, options: options, to: url, progress: progress)
+            try await APNGExporter.export(project: snapshot, range: range, options: options, to: url, pluginEffectProviders: AppServices.pluginEffectProviders, progress: progress)
         }
     }
 }

@@ -52,7 +52,7 @@ final class ExportQueueController: ObservableObject {
 
     /// 本番の書き出し: MP4(今の設定のまま)。描画は書き出しと同じ経路。
     static let defaultRunner: Runner = { project, range, url, progress in
-        try await ExportJob.run(project: project, preset: nil, range: range, to: url, progress: progress)
+        try await ExportJob.run(project: project, preset: nil, range: range, to: url, pluginEffectProviders: AppServices.pluginEffectProviders, progress: progress)
     }
 
     var entries: [ExportQueue.Entry] { queue.entries }

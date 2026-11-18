@@ -54,7 +54,7 @@ extension ProjectModel {
         let plan = PngWavExporter.plan(project: snapshot, range: range, options: options)
         return await runJob(title: "連番PNG+WAV を書き出しています", fileName: directory.lastPathComponent, notices: [],
                             success: "\(directory.lastPathComponent) に \(plan.frameCount) 枚の PNG と WAV を書き出しました", result: directory) { progress in
-            try await PngWavExporter.export(project: snapshot, range: range, options: options, to: directory, progress: progress)
+            try await PngWavExporter.export(project: snapshot, range: range, options: options, to: directory, pluginEffectProviders: AppServices.pluginEffectProviders, progress: progress)
         }
     }
 

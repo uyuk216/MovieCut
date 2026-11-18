@@ -50,6 +50,14 @@ enum AppServices {
         host.register(manifest: ProjectInfoExportPlugin.manifest, directory: dir)
         return host
     }
+    /// プラグインエフェクトのプロバイダ一覧(F-1 配線。プレビュー・書き出しの Renderer へ渡す)。
+    /// エフェクトプロバイダはプロジェクトに依存しない組み込み 2 件(色反転・ポスタリゼーション)なので、
+    /// ホストは 1 度だけ作って使い回す。プラグインが無い環境では空になり、描画は従来と完全一致する。
+    static let pluginEffectProviders: [any VideoEffectProviding] = makePluginHost(for: Project.new()).allEffectProviders()
+    /// プラグインエフェクトの記述子一覧(メニュー・インスペクタの表示用。実体は上のプロバイダと同じ組み込み分)。
+    static let pluginEffectDescriptors: [PluginEffectDescriptor] = makePluginHost(for: Project.new()).effectDescriptors()
+    /// プラグイン書き出し形式の記述子一覧(出力メニューの表示用)。
+    static let pluginExportFormats: [ExportFormatDescriptor] = makePluginHost(for: Project.new()).exportFormatDescriptors()
     /// 作業メモリの予算(キャッシュが経由する単一の管理)。上限は総 RAM から決める(24GB 以上の Mac は上限なし)。
     static let cacheBudget = CacheBudgetManager(limitBytes: MemoryBudget.currentLimitBytes(platform: .mac))
     /// メモリ逼迫の監視(警告・緊急で予算のキャッシュを全放出)。起動時に `start()` する。
@@ -749,7 +757,7 @@ final class ProjectModel: ObservableObject {
         let title = (chosen.map { $0.audioOnly ? "音声を書き出しています" : "\($0.name) で書き出しています" } ?? (plan.isProRes ? "\(OutputPlan.codecLabel(plan.codec)) の .mov を書き出しています" : "MP4 を書き出しています"))
         return await runJob(title: title, fileName: url.lastPathComponent, notices: notices,
                             success: "\(url.lastPathComponent) に書き出しました" + (plan.usesFallbackCodec && isVideo ? "(HEVC)" : ""), result: url) { progress in
-            try await ExportJob.run(project: snapshot, preset: preset, spec: spec, bitrateMbps: bitrateMbps, range: range, to: url, loudness: loudness, progress: progress)
+            try await ExportJob.run(project: snapshot, preset: preset, spec: spec, bitrateMbps: bitrateMbps, range: range, to: url, loudness: loudness, pluginEffectProviders: AppServices.pluginEffectProviders, progress: progress)
         }
     }
 

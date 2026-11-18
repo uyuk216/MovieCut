@@ -14,6 +14,31 @@ public enum MidiImporter {
     public static let markerLimit = 1000
     /// 音の余韻(秒)。最後のノートの後ろに足す。
     public static let tail = 0.5
+    /// 取り込みの総尺上限(秒)。これを超える MIDI は音声化で巨大な WAV(と巨大な中間バッファ)を
+    /// 作ってしまうため、取り込まない(F-4 のガード。prepare が MidiError.tooLong で弾く)。
+    public static let maxDurationSeconds = 600.0
+    /// 取り込みのノート数上限。病的に密なファイル(いわゆる黒 MIDI 級)で描画コストと
+    /// マーカー・クリップ生成が爆発しないようにする上限(prepare が MidiError.tooManyNotes で弾く)。
+    public static let maxNotes = 50_000
+    /// renderSamples が確保するサンプルの上限(= 総尺上限 + 余韻ぶん)。
+    /// prepare を通らない直接呼び出しでも、メモリ確保がこの範囲を超えないための防御。
+    public static let maxSamples = Int(((maxDurationSeconds + tail) * Double(sampleRate)).rounded())
+    /// renderSamples が 1 回で処理するノートサンプルの総量の上限(防御)。
+    /// 総尺・ノート数の上限内でも、全ノートが総尺いっぱいに重なる病的な入力で内側のループが
+    /// 爆発しないようにする。これを超えた分のノートは描かない(prepare 経由では通常起きない)。
+    public static let maxNoteSamples = 300_000_000
+
+    /// 取り込み上限の検査(総尺・ノート数)。超えていれば MidiError を投げる。
+    /// 取り込みの入口(prepare)がパース直後に呼び、アプリ側は既存のエラーパス
+    /// (errorTitle / errorMessage)でそのまま表示する。
+    public static func validate(_ file: MidiFileData) throws {
+        guard file.duration.isFinite, file.duration <= maxDurationSeconds else {
+            throw MidiError.tooLong(seconds: file.duration.isFinite ? file.duration : maxDurationSeconds + 1, limit: maxDurationSeconds)
+        }
+        guard file.notes.count <= maxNotes else {
+            throw MidiError.tooManyNotes(count: file.notes.count, limit: maxNotes)
+        }
+    }
 
     public static func isMIDI(path: String) -> Bool {
         ["mid", "midi"].contains((path as NSString).pathExtension.lowercased())
@@ -27,25 +52,31 @@ public enum MidiImporter {
     public static func renderSamples(_ file: MidiFileData) -> [Float] {
         let sr = Double(sampleRate)
         let total = file.duration + tail
-        let n = Int((total * sr).rounded())
+        // 防御: 総尺が上限を超える入力でも、確保するサンプルは maxSamples まで(prepare 経由では validate が先に弾く)。
+        let n = min(maxSamples, Int((total * sr).rounded()))
         guard n > 0 else { return [] }
         var out = [Double](repeating: 0, count: n)
+        var noteSampleBudget = maxNoteSamples
         for note in file.notes {
             let start = Int((note.start * sr).rounded())
             // 減衰はノートの長さ + 0.35 秒でほぼ消えるようにする
             let length = note.duration + 0.35
             let count = min(n - start, Int((length * sr).rounded()))
             guard start >= 0, count > 0 else { continue }
+            // 防御: ノートサンプルの総量が上限に達したら、それ以降のノートは描かない。
+            guard noteSampleBudget > 0 else { break }
+            let allowed = min(count, noteSampleBudget)
+            noteSampleBudget -= allowed
             let f = note.frequency
             let gain = Double(note.velocity) / 127 * 0.5
-            for i in 0..<count {
+            for i in 0..<allowed {
                 let t = Double(i) / sr
                 let env = min(1, t / 0.005) * exp(-3 * t / max(0.05, length))
                 let phase = 2 * Double.pi * f * t
                 out[start + i] += gain * env * (sin(phase) + 0.5 * sin(phase * 2) + 0.25 * sin(phase * 3))
             }
         }
-        let peak = out.map { abs($0) }.max() ?? 0
+        let peak = out.reduce(0.0) { max($0, abs($1)) }
         guard peak > 0 else { return [Float](repeating: 0, count: n) }
         let k = Double(BuiltInSounds.peakLevel) / peak
         return out.map { Float($0 * k) }
@@ -89,6 +120,7 @@ public enum MidiImporter {
     @discardableResult
     public static func prepare(atPath path: String, cacheDir: URL) throws -> (wavPath: String, file: MidiFileData) {
         let file = try MidiParser.parseFile(atPath: path)
+        try validate(file)
         let fm = FileManager.default
         let url = cacheDir.appendingPathComponent("rendered.wav")
         if let a = try? fm.attributesOfItem(atPath: url.path), (a[.size] as? NSNumber)?.intValue ?? 0 > 0 {

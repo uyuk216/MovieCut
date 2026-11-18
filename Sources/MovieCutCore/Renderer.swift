@@ -95,6 +95,10 @@ public struct Renderer {
     /// プレビュー用。手ぶれ補正の解析が無いとき、待たずに補正なしのコマを出し、解析が終わったらこれを呼ぶ(主スレッドへの送りは呼び出し側)。
     /// nil(既定・書き出し・CLI)のときは解析が終わるまで待つので、結果は常に同じ。
     public let onStabilized: (() -> Void)?
+    /// プラグインエフェクトのプロバイダ(W2-13 の境界。F-1 で配線)。
+    /// 既定は空 = プラグイン未導入で、描画は従来と完全一致する(追加方式の原則)。
+    /// 呼び出し側(アプリのプレビュー・書き出し)がホストから解決して渡す。
+    public let pluginEffectProviders: [any VideoEffectProviding]
     /// 複合クリップの中身を描くとき(`compoundFrame`)の状態。通常の描画では既定のまま。
     /// 祖先の複合クリップの id(循環を描かないため)・背景を塗るか・人物の立ち絵を描くか(中身では描かない)。
     /// プレビュー用。素材が見つからない画像・動画を、黙って飛ばさず「メディアが見つかりません」の札で描く。
@@ -104,12 +108,25 @@ public struct Renderer {
     var drawsBackground = true
     var drawsPortraits = true
 
-    public init(project: Project, assets: RenderAssets, onStabilized: (() -> Void)? = nil, missingMediaPlaceholder: Bool = false, backend: RenderBackend = .auto) {
+    public init(project: Project, assets: RenderAssets, onStabilized: (() -> Void)? = nil, missingMediaPlaceholder: Bool = false, backend: RenderBackend = .auto, pluginEffectProviders: [any VideoEffectProviding] = []) {
         self.project = project
         self.assets = assets
         self.onStabilized = onStabilized
         self.missingMediaPlaceholder = missingMediaPlaceholder
         self.backend = backend
+        self.pluginEffectProviders = pluginEffectProviders
+    }
+
+    /// プラグインプロバイダが担当するエフェクト識別子の集合(小文字化済み)。プロバイダが空なら空集合。
+    var pluginEffectIDs: Set<String> {
+        Set(pluginEffectProviders.flatMap { $0.effectDescriptors.map { $0.id.lowercased() } })
+    }
+
+    /// クリップのエフェクトを解決する。プロバイダが空なら従来の resolve を builtin で包んだものと完全一致する。
+    func resolvedEffects(_ c: Clip, atClipTime r: Double) -> [ResolvedClipEffect] {
+        guard c.hasActiveEffects || c.hasActivePluginEffect(effectIDs: pluginEffectIDs) else { return [] }
+        if pluginEffectProviders.isEmpty { return EffectPipeline.resolve(c, atClipTime: r).map { .builtin($0) } }
+        return EffectPipeline.resolveAll(c, atClipTime: r, pluginProviders: pluginEffectProviders)
     }
 
     public func renderImage(t: Double) -> CGImage? {
@@ -197,17 +214,17 @@ public struct Renderer {
                     }
                     // 複合クリップで、キャンバスいっぱいに・効果なし・不透明度 100% なら、中身を親の画面に直接描く(中間の画像を作らない)。
                     // 直接描くので、まとめる前のクリップを描いたときと画素が完全に一致する
-                    if (c.type == .compound || c.type == .scene), mask == nil, c.mask == nil, c.blendMode == nil, pose.isFullCanvasCompound, !c.hasActiveEffects, !c.hasActiveWarp, pose.pixelate < 2, pose.feather <= 0.01, let child = nestedRenderer(c) {
+                    if (c.type == .compound || c.type == .scene), mask == nil, c.mask == nil, c.blendMode == nil, pose.isFullCanvasCompound, !c.hasActiveEffects, !c.hasActiveWarp, !c.hasActivePluginEffect(effectIDs: pluginEffectIDs), pose.pixelate < 2, pose.feather <= 0.01, let child = nestedRenderer(c) {
                         ctx.saveGState()
                         child.drawFrame(t: t - c.start + c.offset, into: ctx)
                         ctx.restoreGState()
                         continue
                     }
                     // エフェクトは、クリップ自身の画素(変形まで済み)にかけてから、不透明度・マスクで重ねる。無いクリップは従来の速い道
-                    var fx = c.hasActiveEffects ? EffectPipeline.resolve(c, atClipTime: t - c.start) : []
+                    var fx = resolvedEffects(c, atClipTime: t - c.start)
                     // トランジションのモザイク解除: ブロックの大きさをエフェクトとして足す(クリップ自身の設定は変えない)
                     if pose.pixelate >= 2 {
-                        fx.append(ResolvedEffect(kind: .pixelate, values: ["size": pose.pixelate], color: "#000000"))
+                        fx.append(.builtin(ResolvedEffect(kind: .pixelate, values: ["size": pose.pixelate], color: "#000000")))
                     }
                     // 境界ぼかし: 先に全体をぼかして描き、その上から「縁だけ薄い」マスクで鮮明な絵を重ねる
                     let featherActive = pose.feather > 0.01
@@ -706,7 +723,7 @@ public struct Renderer {
     /// エフェクト付きのクリップ: 作業用の範囲(枠 + はみ出しの余白。キャンバスの外の発生源も含む)だけ透明なビットマップに描き、
     /// CIFilter の連なりをかけ(`EffectPipeline`)、クリップごとのぼかしがあればその後にかけて、不透明度で重ねる。
     /// 仕上がりはキャンバスへ描くときに切れるので、見える範囲の画素は従来と同じ。
-    func drawEffectedClip(_ c: Clip, pose: ClipPose, effects fx: [ResolvedEffect], t: Double, ctx: CGContext, W: Double, H: Double) {
+    func drawEffectedClip(_ c: Clip, pose: ClipPose, effects fx: [ResolvedClipEffect], t: Double, ctx: CGContext, W: Double, H: Double) {
         // 形のマスク(クリップの `mask`)は、エフェクトとぼかしの後にかける。マスクの外は透明にして、不透明度で重ねる
         let canvas = CGRect(x: 0, y: 0, width: W, height: H)
         let resScale = (W * H / (1920.0 * 1080.0)).squareRoot()
@@ -728,7 +745,8 @@ public struct Renderer {
         let rect = CGRect(x: 0, y: 0, width: ww, height: wh)
         // 顔ぼかし: 作業範囲の画像から顔の枠を求める(同じ時刻・配置は検出を再利用)。調整レイヤーには効かない
         // 追従(track)がオンの顔ぼかしがあれば、時間方向に平滑化した枠を使う(その時刻に枠が無ければ何もぼかさない)
-        let tracking = fx.contains { $0.kind == .faceBlur && ($0.values["track"] ?? 0) >= 0.5 }
+        let builtinFx = fx.compactMap { e -> ResolvedEffect? in if case .builtin(let b) = e { return b } else { return nil } }
+        let tracking = builtinFx.contains { $0.kind == .faceBlur && ($0.values["track"] ?? 0) >= 0.5 }
         var faces: [CGRect] = []
         if tracking {
             if let canvasRect = trackedFaceRect(c, t: t, W: W, H: H), work.width > 0, work.height > 0 {
@@ -736,7 +754,7 @@ public struct Renderer {
                 faces = [CGRect(x: (canvasRect.minX - work.minX) / work.width, y: (canvasRect.minY - work.minY) / work.height,
                                 width: canvasRect.width / work.width, height: canvasRect.height / work.height)]
             }
-        } else if fx.contains(where: { $0.kind == .faceBlur }) {
+        } else if builtinFx.contains(where: { $0.kind == .faceBlur }) {
             faces = faceRects(for: c, t: t, pose: pose, image: snap)
         }
         // メッシュ/パペット変形: クリップ自身の画素を変位場で動かしてから、エフェクトをかける。
@@ -747,7 +765,7 @@ public struct Renderer {
             let imgBounds = CGRect(x: localBounds.minX, y: Double(wh) - localBounds.maxY, width: localBounds.width, height: localBounds.height)
             if let wimg = WarpRenderer.warp(snap, clip: c, bounds: imgBounds) { snapImg = wimg }
         }
-        var ci = EffectPipeline.apply(CIImage(cgImage: snapImg), effects: fx, bounds: localBounds, scale: resScale, faces: faces)
+        var ci = EffectPipeline.apply(CIImage(cgImage: snapImg), effects: fx, bounds: localBounds, scale: resScale, faces: faces, pluginProviders: pluginEffectProviders)
         if blurSigma > 0 { ci = ci.applyingGaussianBlur(sigma: blurSigma) }
         if let m = c.mask { ci = ShapeMask.apply(ci, mask: m, canvasWidth: W, canvasHeight: H, originX: work.minX, originY: work.minY) }
         guard let out = EffectPipeline.makeImage(ci, from: rect, context: ciCtx) else { return }
@@ -776,7 +794,7 @@ public struct Renderer {
         // では子側のカメラがかからないため、同じ複合でも経路によって絵が変わっていた。
         // シーン等の子 Renderer を作る経路(sceneRenderer 等)も、必ずこの作法に従うこと。
         sub.camera = nil
-        var child = Renderer(project: sub, assets: assets, onStabilized: onStabilized, missingMediaPlaceholder: missingMediaPlaceholder, backend: backend)
+        var child = Renderer(project: sub, assets: assets, onStabilized: onStabilized, missingMediaPlaceholder: missingMediaPlaceholder, backend: backend, pluginEffectProviders: pluginEffectProviders)
         child.compoundStack = compoundStack + [c.id]
         child.drawsBackground = false
         child.drawsPortraits = false
@@ -810,7 +828,7 @@ public struct Renderer {
         // (t − start + offset)でキーフレームが評価されてしまう。高速経路(drawFrame 直接描画)
         // では子側のカメラがかからないため、同じシーンでも経路によって絵が変わっていた。
         sub.camera = nil
-        var child = Renderer(project: sub, assets: assets, onStabilized: onStabilized, missingMediaPlaceholder: missingMediaPlaceholder, backend: backend)
+        var child = Renderer(project: sub, assets: assets, onStabilized: onStabilized, missingMediaPlaceholder: missingMediaPlaceholder, backend: backend, pluginEffectProviders: pluginEffectProviders)
         child.compoundStack = compoundStack + [key]
         child.drawsBackground = false
         child.drawsPortraits = false
@@ -868,13 +886,13 @@ public struct Renderer {
     /// 調整レイヤー: いまキャンバスに描いてある全部(背景と、それより前のレイヤー・クリップ)の合成結果に、
     /// クリップのエフェクトを一度かける。不透明度は元の絵との混ぜ具合(0 で何もしない)。プレビューと書き出しで同じ道。
     func applyAdjustment(_ c: Clip, t: Double, ctx: CGContext, W: Double, H: Double) {
-        let fx = c.hasActiveEffects ? EffectPipeline.resolve(c, atClipTime: t - c.start) : []
+        let fx = resolvedEffects(c, atClipTime: t - c.start)
         guard !fx.isEmpty else { return }
         let opacity = ClipPose(c, at: t).opacity
         guard opacity > 0, let snap = ctx.makeImage() else { return }
         let canvas = CGRect(x: 0, y: 0, width: W, height: H)
         let resScale = (W * H / (1920.0 * 1080.0)).squareRoot()
-        let ci = EffectPipeline.apply(CIImage(cgImage: snap), effects: fx, bounds: canvas, scale: resScale)
+        let ci = EffectPipeline.apply(CIImage(cgImage: snap), effects: fx, bounds: canvas, scale: resScale, pluginProviders: pluginEffectProviders)
         guard let out = EffectPipeline.makeImage(ci, from: canvas, context: ciCtx) else { return }
         ctx.saveGState()
         ctx.setAlpha(CGFloat(opacity))

@@ -81,6 +81,7 @@ public enum PngWavExporter {
     @discardableResult
     public static func export(project: Project, assets: RenderAssets = RenderAssets(), range: ExportRange? = nil,
                               options: PngWavOptions = .standard, to directory: URL,
+                              pluginEffectProviders: [any VideoEffectProviding] = [],
                               progress: ((Double) -> Void)? = nil) async throws -> Result {
         let p = plan(project: project, range: range, options: options)
         guard p.frameCount > 0 else { throw ExportError.emptyProject }
@@ -100,7 +101,7 @@ public enum PngWavExporter {
             }
             do {
                 // 映像: 1 コマずつ描いて書く(長尺でも 1 コマ分しかメモリに置かない)
-                let renderer = Renderer(project: project, assets: assets)
+                let renderer = Renderer(project: project, assets: assets, pluginEffectProviders: pluginEffectProviders)
                 assets.beginExportMode()
                 var last = -1.0
                 for i in 0..<p.frameCount {

@@ -68,6 +68,8 @@ enum MenuCommand: Hashable {
     case exportYmmp, exportWebVideo
     // 出力 ▸ 連番PNG+WAVで書き出す… / exo形式(.exo)で書き出す…(ショートカットは持たない)
     case exportPngWav, exportExo
+    // 出力 ▸ プラグイン形式で書き出す ▸ 形式(形式識別子。F-1 配線。ショートカットは持たない)
+    case exportPluginFormat(String)
     // 出力 ▸ 書き出しキュー(今の設定の MP4 を積む / キューを表示)と、ファイル ▸ 素材ブラウザ(ショートカットは持たない)
     case queueExport, showExportQueue, audioLibrary
     // 出力 ▸ ラウドネスを測る…、表示 ▸ スコープ…(ショートカットは持たない)
@@ -112,6 +114,10 @@ enum MenuCommand: Hashable {
     case transitionIn(TransitionKind?), transitionOut(TransitionKind?), fadeBoth, clearTransitions, crossfade, overlapCrossfade, fadeInOut
     // エフェクト
     case effectAdd(EffectKind), effectPreset(EffectPreset), effectClear, effectCopy, effectPaste, lutLoad, colorTransferLoad, autoWhiteBalance
+    // エフェクト ▸ プラグインのエフェクト(エフェクト識別子。F-1 配線。ショートカットは持たない)
+    case effectAddPlugin(String)
+    // エフェクト ▸ 顔ぼかしの一括付与 / 一括解除(F-2 配線。Core の FaceBlurBulk へ。ショートカットは持たない)
+    case faceBlurApplyAll, faceBlurRemoveAll
     // 文字(スタイルを適用 = id、文字アニメーション)
     case textStyleApply(String), textStyleApplyAll(String), textAnim(TextAnimKind), toggleCounter, toggleVertical, togglePerChar
     // 配置(ピクチャー・イン・ピクチャーの角)
@@ -357,6 +363,11 @@ struct MenuState: Equatable {
     var transitionOutKind: String?
     // エフェクト
     var canEffect = false            // 映像のクリップ(画像・動画・文字)を選んでいる
+    /// プラグインエフェクトの記述子 / プラグイン書き出し形式(F-1。組み込み分は AppServices の静的一覧)
+    var pluginEffectDescriptors: [PluginEffectDescriptor] = AppServices.pluginEffectDescriptors
+    var pluginExportFormats: [ExportFormatDescriptor] = AppServices.pluginExportFormats
+    /// 顔ぼかしが付いているクリップの総数(F-2。一括解除の有効判定とヒント。複合の中も数える)
+    var faceBlurCount = 0
     var hasEffects = false           // 選択クリップにエフェクトが 1 つでもある
     var canPasteEffects = false      // コピーしたエフェクトがある
     var canAutoColor = false         // 画像か動画のクリップを選んでいる(自動ホワイトバランスの対象)
@@ -432,6 +443,7 @@ struct MenuState: Equatable {
         hasDocument = true
         isLocked = m.isLocked
         canExport = m.canExport
+        faceBlurCount = FaceBlurBulk.count(in: m.project)
         canMarkRange = m.canMarkRange
         hasRange = m.hasRangeMarks
         hasRangeSelection = m.rangeSelection != nil
@@ -805,6 +817,13 @@ enum AppMenuSpec {
 
     static func exoExport(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .exportExo, title: "exo形式(.exo)で書き出す…", shortcut: nil, enabled: s.canEdit && s.canExport, checked: nil, hint: "AviUtl 拡張編集用")
+    }
+
+    /// 出力 ▸ プラグイン形式で書き出す ▸ 各形式(F-1。登録済みプラグインが提供する形式だけが並ぶ)。
+    static func pluginExportItems(_ s: MenuState) -> [MenuItemSpec] {
+        s.pluginExportFormats.map {
+            MenuItemSpec(command: .exportPluginFormat($0.id), title: $0.name, shortcut: nil, enabled: s.canEdit && s.canExport, checked: nil, hint: $0.detail ?? "プラグイン形式")
+        }
     }
 
     /// 出力 ▸ 書き出しキューに追加… / 書き出しキューを表示…(ショートカットは持たない)。
@@ -1184,6 +1203,19 @@ enum AppMenuSpec {
         EffectKind.allCases.map { MenuItemSpec(command: .effectAdd($0), title: $0.label, shortcut: nil, enabled: s.canEdit && s.canEffect, checked: nil) }
     }
 
+    /// クリップ ▸ エフェクト ▸ プラグインのエフェクト(F-1。登録済みプラグインが提供する種類だけが並ぶ)。
+    static func pluginEffectItems(_ s: MenuState) -> [MenuItemSpec] {
+        s.pluginEffectDescriptors.map {
+            MenuItemSpec(command: .effectAddPlugin($0.id), title: $0.label, shortcut: nil, enabled: s.canEdit && s.canEffect, checked: nil, hint: "プラグイン")
+        }
+    }
+
+    /// クリップ ▸ エフェクト ▸ 顔ぼかしの一括付与 / 一括解除(F-2。プロジェクト全体が対象で、選択は問わない)。
+    static func faceBlurItems(_ s: MenuState) -> [MenuItemSpec] {
+        [MenuItemSpec(command: .faceBlurApplyAll, title: "すべてのクリップに顔ぼかしを付ける", shortcut: nil, enabled: s.canEdit && s.hasClips, checked: nil, hint: "映像・画像・複合が対象"),
+         MenuItemSpec(command: .faceBlurRemoveAll, title: "顔ぼかしをすべて外す", shortcut: nil, enabled: s.canEdit && s.faceBlurCount > 0, checked: nil, hint: s.faceBlurCount > 0 ? "\(s.faceBlurCount) 件に付いています" : nil)]
+    }
+
     static func effectPresetItems(_ s: MenuState) -> [MenuItemSpec] {
         EffectPreset.allCases.map { MenuItemSpec(command: .effectPreset($0), title: $0.title, shortcut: nil, enabled: s.canEdit && s.canEffect, checked: nil) }
     }
@@ -1412,7 +1444,7 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, checkForUpdates, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s), apngExport(s), ymmpExport(s), webVideoExport(s), pngWavExport(s), exoExport(s)] + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), clipListItem(s), noteListItem(s)] + scriptStoryboardItems(s) + [makeProxies(s)] + [] + clipMenu(s).flatMap { $0 } + multicamItems(s) + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textVerticalItem(s), textPerCharItem(s), textCounterItem(s), dictionaryItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [sceneSplitItem(s), silenceCutItem(s)] + rangeDeleteItems(s) + [audioAutoSyncItem(s), beatMarkersItem(s), scaleDuplicateItem(s), beatPlaceItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s), colorTransferItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
+        [about, checkForUpdates, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s), apngExport(s), ymmpExport(s), webVideoExport(s), pngWavExport(s), exoExport(s)] + pluginExportItems(s) + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), clipListItem(s), noteListItem(s)] + scriptStoryboardItems(s) + [makeProxies(s)] + [] + clipMenu(s).flatMap { $0 } + multicamItems(s) + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + pluginEffectItems(s) + effectPresetItems(s) + effectActions(s) + faceBlurItems(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textVerticalItem(s), textPerCharItem(s), textCounterItem(s), dictionaryItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [sceneSplitItem(s), silenceCutItem(s)] + rangeDeleteItems(s) + [audioAutoSyncItem(s), beatMarkersItem(s), scaleDuplicateItem(s), beatPlaceItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s), colorTransferItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerColorItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + previewTierItems(s) + guideItems(s) + [previewProxy(s), fullScreen(s)] + help.flatMap { $0 }
@@ -1536,6 +1568,7 @@ enum AppMenu {
             case .exportWebVideo: m.chooseAndExportWebVideo()
             case .exportPngWav: m.chooseAndExportPngWav()
             case .exportExo: m.chooseAndExportExo()
+            case .exportPluginFormat(let id): m.chooseAndExportPluginFormat(id)
             case .queueExport: m.chooseAndQueueExport()
             case .showExportQueue: m.showExportQueueSheet = true
             case .makeProxies: m.makeProxies()
@@ -1602,6 +1635,9 @@ enum AppMenu {
             case .overlapCrossfade: m.overlapCrossfadeSelected()
             case .fadeInOut: m.fadeInOutSelected()
             case .effectAdd(let k): m.addEffectSelected(k)
+            case .effectAddPlugin(let id): m.addPluginEffectSelected(id)
+            case .faceBlurApplyAll: m.applyFaceBlurToAll()
+            case .faceBlurRemoveAll: m.removeAllFaceBlur()
             case .effectPreset(let p): m.applyEffectPreset(p)
             case .effectClear: m.clearEffectsSelected()
             case .effectCopy: m.copyEffectsSelected()
