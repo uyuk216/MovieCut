@@ -26,6 +26,12 @@ struct ClipPose {
     var x: Double, y: Double, scale: Double, rotation: Double, opacity: Double, blur: Double
     /// トランジションで位置・大きさ・回転が動いている(文字のビットマップキャッシュを使えない)。
     var transitionMoves = false
+    /// トランジションの傾斜変形(度)。
+    var skew = 0.0
+    /// トランジションのモザイクのブロック(1920×1080 での px)。
+    var pixelate = 0.0
+    /// トランジションの境界ぼかしの帯(0〜0.5)。
+    var feather = 0.0
 
     init(_ c: Clip, at t: Double) {
         if c.keyframes.isEmpty {
@@ -47,6 +53,9 @@ struct ClipPose {
         rotation += s.rotationAdd
         opacity = min(max(opacity * s.opacityMul, 0), 1)
         blur += s.blurAdd * blurScale
+        skew += s.skewXAdd
+        pixelate = max(pixelate, s.pixelateAdd)
+        feather = max(feather, s.feather)
         transitionMoves = s.movesGeometry
     }
 
@@ -57,7 +66,7 @@ struct ClipPose {
     }
 
     func isPlain(_ c: Clip) -> Bool {
-        if rotation != 0 || c.flipHOrDefault || c.flipVOrDefault { return false }
+        if rotation != 0 || skew != 0 || c.flipHOrDefault || c.flipVOrDefault { return false }
         if c.type == .text { return scale == 1 && (c.crop?.isEmpty ?? true) }
         return true
     }
@@ -66,6 +75,7 @@ struct ClipPose {
     func concat(_ c: Clip, ctx: CGContext, W: Double, H: Double) {
         ctx.translateBy(x: CGFloat(x * W), y: CGFloat(y * H))
         if rotation != 0 { ctx.rotate(by: CGFloat(rotation * .pi / 180)) }
+        if skew != 0 { ctx.concatenate(CGAffineTransform(a: 1, b: 0, c: CGFloat(tan(skew * .pi / 180)), d: 1, tx: 0, ty: 0)) }
         if c.flipHOrDefault || c.flipVOrDefault { ctx.scaleBy(x: c.flipHOrDefault ? -1 : 1, y: c.flipVOrDefault ? -1 : 1) }
         if c.type == .text, scale != 1 { ctx.scaleBy(x: CGFloat(scale), y: CGFloat(scale)) }
     }
@@ -159,7 +169,7 @@ public struct Renderer {
                     }
                     if let m = mask {
                         ctx.saveGState()
-                        Renderer.clip(ctx, mask: m, W: W, H: H)
+                        clip(ctx, mask: m, W: W, H: H)
                     }
                     // ブレンドモード: このクリップの描画全体に効かせる(終わりで必ず戻す)
                     if let blendMode = c.blendMode {
@@ -168,24 +178,44 @@ public struct Renderer {
                     }
                     // 複合クリップで、キャンバスいっぱいに・効果なし・不透明度 100% なら、中身を親の画面に直接描く(中間の画像を作らない)。
                     // 直接描くので、まとめる前のクリップを描いたときと画素が完全に一致する
-                    if c.type == .compound, mask == nil, c.mask == nil, c.blendMode == nil, pose.isFullCanvasCompound, !c.hasActiveEffects, let child = compoundRenderer(c) {
+                    if c.type == .compound, mask == nil, c.mask == nil, c.blendMode == nil, pose.isFullCanvasCompound, !c.hasActiveEffects, pose.pixelate < 2, pose.feather <= 0.01, let child = compoundRenderer(c) {
                         ctx.saveGState()
                         child.drawFrame(t: t - c.start + c.offset, into: ctx)
                         ctx.restoreGState()
                         continue
                     }
                     // エフェクトは、クリップ自身の画素(変形まで済み)にかけてから、不透明度・マスクで重ねる。無いクリップは従来の速い道
-                    let fx = c.hasActiveEffects ? EffectPipeline.resolve(c, atClipTime: t - c.start) : []
+                    var fx = c.hasActiveEffects ? EffectPipeline.resolve(c, atClipTime: t - c.start) : []
+                    // トランジションのモザイク解除: ブロックの大きさをエフェクトとして足す(クリップ自身の設定は変えない)
+                    if pose.pixelate >= 2 {
+                        fx.append(ResolvedEffect(kind: .pixelate, values: ["size": pose.pixelate], color: "#000000"))
+                    }
+                    // 境界ぼかし: 先に全体をぼかして描き、その上から「縁だけ薄い」マスクで鮮明な絵を重ねる
+                    let featherActive = pose.feather > 0.01
+                    var drawPose = pose
+                    if featherActive {
+                        var blurredPose = pose
+                        blurredPose.blur = max(pose.blur, 45 * pose.feather)
+                        drawBlurredClip(c, pose: blurredPose, t: t, ctx: ctx, W: W, H: H)
+                        ctx.saveGState()
+                        // 帯はクリップの枠に対する割合(キャンバス全体ではない)
+                        let fb = contentBounds(c, pose: pose, t: t) ?? CGRect(x: 0, y: 0, width: W, height: H)
+                        if let fm = featherMaskImage(feather: pose.feather, rect: fb) {
+                            ctx.clip(to: fb, mask: fm)
+                        }
+                        drawPose.blur = 0
+                    }
                     if !fx.isEmpty || c.mask != nil {
-                        drawEffectedClip(c, pose: pose, effects: fx, t: t, ctx: ctx, W: W, H: H)
-                    } else if pose.blur > 0 {
-                        drawBlurredClip(c, pose: pose, t: t, ctx: ctx, W: W, H: H)
+                        drawEffectedClip(c, pose: drawPose, effects: fx, t: t, ctx: ctx, W: W, H: H)
+                    } else if drawPose.blur > 0 {
+                        drawBlurredClip(c, pose: drawPose, t: t, ctx: ctx, W: W, H: H)
                     } else {
                         ctx.saveGState()
-                        ctx.setAlpha(CGFloat(pose.opacity))
-                        drawClipContent(c, pose: pose, t: t, ctx: ctx, W: W, H: H, fastFade: mask == nil && c.blendMode == nil, fadeAlpha: pose.opacity)
+                        ctx.setAlpha(CGFloat(drawPose.opacity))
+                        drawClipContent(c, pose: drawPose, t: t, ctx: ctx, W: W, H: H, fastFade: mask == nil && c.blendMode == nil && !featherActive, fadeAlpha: drawPose.opacity)
                         ctx.restoreGState()
                     }
+                    if featherActive { ctx.restoreGState() }
                     if c.blendMode != nil { ctx.restoreGState() }
                     if mask != nil { ctx.restoreGState() }
                 case .voice:
@@ -262,13 +292,13 @@ public struct Renderer {
     /// 時刻 t のクリップのトランジション補正。スライドのときだけ、クリップの枠の大きさ(画面の外へ出し切る移動量)を測る。
     func transitionState(_ c: Clip, pose: ClipPose, t: Double, W: Double, H: Double) -> TransitionState {
         var size: (w: Double, h: Double) = (0, 0)
-        let needsSize = (c.transitionIn?.known?.isSlide ?? false) || (c.transitionOut?.known?.isSlide ?? false)
+        let needsSize = (c.transitionIn?.known?.needsSize ?? false) || (c.transitionOut?.known?.needsSize ?? false)
         if needsSize, let s = objectSize(of: c, at: t), W > 0, H > 0 { size = (s.width / W, s.height / H) }
         return TransitionMath.apply(c, t: t, center: (pose.x, pose.y), size: size)
     }
 
     /// 左上原点の ctx を、トランジションの形で切り抜く(この後の描画はその内側だけ)。
-    static func clip(_ ctx: CGContext, mask: TransitionMask, W: Double, H: Double) {
+    func clip(_ ctx: CGContext, mask: TransitionMask, W: Double, H: Double) {
         switch mask {
         case .rect(let x, let y, let w, let h):
             ctx.clip(to: CGRect(x: x * W, y: y * H, width: w * W, height: h * H))
@@ -276,6 +306,11 @@ public struct Renderer {
             let R = r * (W * W + H * H).squareRoot() / 2
             ctx.addEllipse(in: CGRect(x: W / 2 - R, y: H / 2 - R, width: 2 * R, height: 2 * R))
             ctx.clip()
+        case .ruleImage(let name, let p, let s, let src):
+            guard p < 1 else { return }
+            if let img = ruleMaskImage(name: name, progress: p, softness: s, source: src, W: W, H: H) {
+                ctx.clip(to: CGRect(x: 0, y: 0, width: W, height: H), mask: img)
+            }
         case .clock(let f):
             guard f < 1 else { return }
             // 12 時から時計回り(画面では角度が増える向き)に f 周ぶんの扇形。半径は四隅に届く大きさ
@@ -294,6 +329,62 @@ public struct Renderer {
             ctx.addPath(path)
             ctx.clip()
         }
+    }
+
+    // MARK: ルールワイプ・境界ぼかしのマスク画像
+
+    /// グレースケール画素列(行優先・左上原点)からマスク用の CGImage を作る。
+    /// 描画側の座標は左上原点に反転済みで、そのまま渡すとマスクが上下逆になるため、行を逆順にする。
+    static func grayMaskImage(pixels: [UInt8], w: Int, h: Int) -> CGImage? {
+        guard w > 0, h > 0, pixels.count == w * h else { return nil }
+        var flipped = [UInt8](repeating: 0, count: w * h)
+        for j in 0..<h { flipped.replaceSubrange((h - 1 - j) * w..<(h - j) * w, with: pixels[j * w..<(j + 1) * w]) }
+        guard let provider = CGDataProvider(data: Data(flipped) as CFData) else { return nil }
+        return CGImage(width: w, height: h, bitsPerComponent: 8, bitsPerPixel: 8, bytesPerRow: w,
+                       space: CGColorSpace(name: CGColorSpace.genericGrayGamma2_2)!, bitmapInfo: [],
+                       provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)
+    }
+
+    /// マスクの解像度(速さのためキャンバスより落とす。縦横比は保つ)。
+    static func maskResolution(W: Double, H: Double) -> (w: Int, h: Int) {
+        let mw = max(2, min(Int(W.rounded()), 640))
+        let mh = max(2, Int((Double(mw) * H / max(W, 1)).rounded()))
+        return (mw, min(mh, 640))
+    }
+
+    /// ルールワイプのマスク画像。カスタム画像は素材を輝度に直してルール値にし、
+    /// 読めないときは横ルールに倒す。
+    func ruleMaskImage(name: String, progress p: Double, softness s: Double, source: String?, W: Double, H: Double) -> CGImage? {
+        let (mw, mh) = Self.maskResolution(W: W, H: H)
+        let pixels: [UInt8]
+        if name == "custom" {
+            if let src = source, let img = assets.image(at: src), let field = luminanceField(img, w: mw, h: mh) {
+                pixels = RuleWipeMath.maskPixels(field: field, width: mw, height: mh, progress: p, softness: s)
+            } else {
+                pixels = RuleWipeMath.maskPixels(.horizontal, progress: p, softness: s, width: mw, height: mh)
+            }
+        } else {
+            pixels = RuleWipeMath.maskPixels(RuleWipeKind(rawValue: name) ?? .horizontal, progress: p, softness: s, width: mw, height: mh)
+        }
+        return Self.grayMaskImage(pixels: pixels, w: mw, h: mh)
+    }
+
+    /// 境界ぼかしのマスク画像(内側が不透明、縁が透明)。大きさはクリップの枠に合わせる。
+    func featherMaskImage(feather f: Double, rect: CGRect) -> CGImage? {
+        let (mw, mh) = Self.maskResolution(W: Double(rect.width), H: Double(rect.height))
+        return Self.grayMaskImage(pixels: FeatherMath.maskPixels(feather: f, width: mw, height: mh), w: mw, h: mh)
+    }
+
+    /// 画像を w×h の輝度(ルール値 0〜1、行優先・左上原点)に直す。
+    func luminanceField(_ img: CGImage, w: Int, h: Int) -> [Double]? {
+        var bytes = [UInt8](repeating: 0, count: w * h)
+        guard let ctx = CGContext(data: &bytes, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w,
+                                  space: CGColorSpace(name: CGColorSpace.genericGrayGamma2_2)!, bitmapInfo: []) else { return nil }
+        // 左上原点の並びにする(そのまま描くと下から読むことになる)
+        ctx.translateBy(x: 0, y: CGFloat(h))
+        ctx.scaleBy(x: 1, y: -1)
+        ctx.draw(img, in: CGRect(x: 0, y: 0, width: w, height: h))
+        return RuleWipeMath.fieldFromLuminance(bytes)
     }
 
     // MARK: 口パク
