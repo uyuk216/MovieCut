@@ -487,9 +487,11 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var speakingOnly: Bool? = nil
     /// 立ち絵クリップ: true のとき、終わりをプロジェクトの終わり(ほかのクリップの終わりの最大)に合わせ続ける(後から足した声にも届く)。true のときだけ書く。
     public var followsProjectEnd: Bool? = nil
+    /// VOICEVOX のアクセント編集(ボイスクリップ)。アクセント句の列。無い・空のときはファイルに書かない(従来どおりの合成)。
+    public var voicevoxAccent: [VoicevoxAccentPhrase]? = nil
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["id", "type", "subtitleText", "tachieId", "mouthDrive", "speakingOnly", "followsProjectEnd", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "bokehShape", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "frameFlow", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "valueRef", "duck", "visualizer", "stabilize", "stabilizeRoll", "tracks", "mask", "blendMode", "group", "ruby", "figure", "note", "locked", "muted", "treatAsVoice"]
+    static let knownKeys: Set<String> = ["id", "type", "voicevoxAccent", "subtitleText", "tachieId", "mouthDrive", "speakingOnly", "followsProjectEnd", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "bokehShape", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "frameFlow", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "valueRef", "duck", "visualizer", "stabilize", "stabilizeRoll", "tracks", "mask", "blendMode", "group", "ruby", "figure", "note", "locked", "muted", "treatAsVoice"]
 
     public init() {}
 
@@ -655,6 +657,10 @@ public struct Clip: Codable, Equatable, Identifiable {
         if let raw: JSONValue = l.value("treatAsVoice") {
             if l.bool("treatAsVoice") == true { treatAsVoice = true } else { extra["treatAsVoice"] = raw }   // true 以外は捨てずに書き戻す
         }
+        // アクセント編集: 読めない型は捨てずに書き戻す。空は未設定と同じ
+        if let raw: JSONValue = l.value("voicevoxAccent") {
+            if let v: [VoicevoxAccentPhrase] = l.value("voicevoxAccent") { voicevoxAccent = v.isEmpty ? nil : v } else { extra["voicevoxAccent"] = raw }
+        }
         if let raw: JSONValue = l.value("figure") {
             if let v: Figure = l.value("figure") { figure = v } else { extra["figure"] = raw }
         }
@@ -771,6 +777,7 @@ public struct Clip: Codable, Equatable, Identifiable {
         if locked == true { try c.encode(true, forKey: AnyKey("locked")) }
         if muted == true { try c.encode(true, forKey: AnyKey("muted")) }
         if treatAsVoice == true { try c.encode(true, forKey: AnyKey("treatAsVoice")) }
+        if let a = voicevoxAccent, !a.isEmpty { try c.encode(a, forKey: AnyKey("voicevoxAccent")) }
         try c.encodeIfPresent(subtitleText, forKey: AnyKey("subtitleText"))
         try c.encodeIfPresent(tachieId, forKey: AnyKey("tachieId"))
         if let d = mouthDrive, d != .all { try c.encode(d.raw, forKey: AnyKey("mouthDrive")) }

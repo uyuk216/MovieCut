@@ -1,7 +1,7 @@
 import Foundation
 
 /// キャラの engine に担当プラグインがあればそちらで、無ければ(または解決に失敗したら)内蔵プロバイダで合成する。
-public final class PluginVoiceRoutingProvider: VoiceProvider {
+public final class PluginVoiceRoutingProvider: VoicevoxAccentProviding {
     public let host: PluginHost
     public let fallbackProvider: any VoiceProvider
 
@@ -19,5 +19,15 @@ public final class PluginVoiceRoutingProvider: VoiceProvider {
             return try await provider.synthesize(character: character, text: text, in: directory)
         }
         return try await fallbackProvider.synthesize(character: character, text: text, in: directory)
+    }
+
+    /// 解決したプロバイダ(無ければ内蔵)がアクセントに対応していれば転送し、非対応なら通常合成に落とす。
+    public func synthesizeWithAccent(character: Character, text: String, accentPhrases: [VoicevoxAccentPhrase], in directory: URL) async throws -> VoiceResult {
+        let resolved: (any VoiceProvider)? = try? host.voiceProviderIfAvailable(forEngine: character.engine)
+        let target = resolved ?? fallbackProvider
+        if let accent = target as? any VoicevoxAccentProviding {
+            return try await accent.synthesizeWithAccent(character: character, text: text, accentPhrases: accentPhrases, in: directory)
+        }
+        return try await target.synthesize(character: character, text: text, in: directory)
     }
 }
