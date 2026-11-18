@@ -761,6 +761,24 @@ struct ClipInspector: View {
         if status == .invalid { Text(".cube として読めません（何もかかりません）").font(.system(size: 10)).foregroundStyle(.red) }
     }
 
+    /// 色調転写の参照画像の名前と状態(見つからない・読めないときは赤字)。
+    @ViewBuilder private func colorTransferFileRow(_ e: Effect) -> some View {
+        let path = e.path ?? ""
+        let status: ReferenceColorCache.Status? = path.isEmpty ? nil : ReferenceColorCache.shared.status(atPath: path)
+        HStack(spacing: 6) {
+            Text(path.isEmpty ? "参照画像未選択" : (path as NSString).lastPathComponent)
+                .font(MCDesign.Font.subheadline).lineLimit(1).truncationMode(.middle)
+                .foregroundStyle(status == .ok ? Color.secondary : Color.red)
+                .help(path)
+            Spacer(minLength: 4)
+            Button("選ぶ…") { model.chooseColorTransferReference(clipId: clipId) }
+                .controlSize(.small).disabled(model.isLocked)
+                .help("色調の手本にする画像を選ぶ")
+        }
+        if status == .missing { Text("ファイルが見つかりません（何もかかりません）").font(.system(size: 10)).foregroundStyle(.red) }
+        if status == .invalid { Text("画像として読めません（何もかかりません）").font(.system(size: 10)).foregroundStyle(.red) }
+    }
+
     @ViewBuilder private func effectCard(_ c: Clip, _ i: Int) -> some View {
         let e = c.effects[i]
         let kind = e.known
@@ -786,6 +804,7 @@ struct ClipInspector: View {
                         ColorField(label: kind == .chromaKey ? "抜く色" : "色", hex: e.colorOrDefault) { model.coalescedEffectColor($0, at: i, clipId: clipId) }
                     }
                     if kind == .lut { lutFileRow(e) }
+                    if kind == .colorTransfer { colorTransferFileRow(e) }
                 }
                 .opacity(e.enabled ? 1 : 0.45)
             }

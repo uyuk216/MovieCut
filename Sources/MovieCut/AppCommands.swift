@@ -176,6 +176,7 @@ struct AppCommands: Commands {
                     items(AppMenuSpec.effectActions(s), run)
                 }
                 MenuItemView(spec: AppMenuSpec.lutLoadItem(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.colorTransferItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.autoWhiteBalanceItem(s), perform: run)
                 items(AppMenuSpec.cutoutItems(s), run)
             }

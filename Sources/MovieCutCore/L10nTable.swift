@@ -68,6 +68,8 @@ enum L10nTable {
         "AquesTalkPlayer 公式サイト": "AquesTalkPlayer Website",
         "GIFとして書き出す…": "Export as GIF…",
         "LUT を読み込む…": "Load LUT…",
+        "色調転写の参照画像…": "Color Transfer Reference…",
+        "色調転写": "Color Transfer",
         "MP4 を書き出す…": "Export MP4…",
         "Movie Cut について": "About Movie Cut",
         "アップデートを確認…": "Check for Updates…",

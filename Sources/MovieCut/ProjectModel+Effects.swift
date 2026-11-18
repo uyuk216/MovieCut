@@ -129,6 +129,39 @@ extension ProjectModel {
         return true
     }
 
+    // MARK: 色調転写
+
+    /// クリップ ▸ 色調転写の参照画像…(開くパネル → 色調転写を足す/差し替える)。
+    func chooseColorTransferReference(clipId: String? = nil) {
+        guard targetClip(clipId) != nil else { return }
+        let target = clipId ?? selectedClipId
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = [.image]
+        panel.allowsOtherFileTypes = true
+        panel.title = "色調転写の参照画像を選ぶ"
+        let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
+            guard resp == .OK, let url = panel.url, let self else { return }
+            Task { @MainActor in self.loadColorTransferReference(from: url, clipId: target) }
+        }
+        if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
+    }
+
+    /// 画像として読めると確かめてから、クリップの色調転写の参照にする(Undo は 1 回。同じファイルなら何もしない)。
+    @discardableResult
+    func loadColorTransferReference(from url: URL, clipId: String? = nil) -> Bool {
+        guard let c = targetClip(clipId) else { return false }
+        guard ColorTransfer.stats(ofFile: url.path) != nil else {
+            statusText = "参照画像を読み込めません: \(url.lastPathComponent)（画像として開けません）"
+            return false
+        }
+        var probe = c
+        guard EffectEditing.setColorTransferPath(&probe, url.path) else { return false }
+        setClipProperty({ _ = EffectEditing.setColorTransferPath(&$0, url.path) }, name: "色調転写の参照: \(url.lastPathComponent)", clipId: c.id)
+        return true
+    }
+
     @discardableResult
     func applyEffectPreset(_ preset: EffectPreset) -> Bool {
         guard let c = targetClip(nil) else { return false }
