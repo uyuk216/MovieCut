@@ -114,6 +114,20 @@ final class ProjectPortabilityTests: XCTestCase {
         XCTAssertEqual(r.unresolved, [original.path])
     }
 
+    func testRelinkDoesNotMatchWhenHashUnreadable() throws {
+        // フィンガープリントがあるのに候補のハッシュが読めない場合は、
+        // 同名・同サイズでも安全側に倒してつながない(仕様01 R-03)
+        let original = try write("movie.mp4", "real-content", in: tmp.appendingPathComponent("src"))
+        let fp = try XCTUnwrap(MediaFingerprint.compute(atPath: original.path))
+        let searchDir = tmp.appendingPathComponent("search")
+        _ = try write("movie.mp4", "real-content", in: searchDir)
+        let r = MediaRelinker.relink(missing: [original.path], fingerprints: [original.path: fp],
+                                     candidateFolders: [searchDir],
+                                     compute: { _ in nil })
+        XCTAssertTrue(r.mapping.isEmpty, "ハッシュを確認できない候補はつながない")
+        XCTAssertEqual(r.unresolved, [original.path])
+    }
+
     func testRelinkByNameAndSizeWithoutFingerprintUsesHint() throws {
         // フィンガープリントが無いプロジェクトでは、目印(MediaHint)のサイズを使い
         // ファイル名+サイズ一致で再リンクする(後方互換の経路)
