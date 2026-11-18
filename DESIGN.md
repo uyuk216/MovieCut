@@ -193,7 +193,7 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
 - **トラックターゲット(2026-11-05)**: `Project.targetTrackId`(レイヤーの `id`。設定したときだけ書く。型が違う値は `extra` に残す。レイヤーを消すと外れる)。Core `TrackTarget`(`index` / `set` / `toggle` / `usableIndex`)。使う所: `ProjectModel.addMedia`(`ClipEditing.place` の `preferredTrack`)、`addTextClip`(`appendToTopLayer(useTarget: true)`)、`SubtitleQuickAdd.add`。ロック中・重なるときは従来の置き場所。UI: レイヤーヘッダーの的(`TimelineLayout.targetRect`)とクリップ ▸ レイヤー ▸ トラックターゲットにする(`.layerTarget`)。Undo 1 回。
 - **メニュー到達性ガード(2026-11-05)**: `MenuReachabilityTests` が `AppMenu.swift` の `MenuItemSpec` を返す宣言を拾い、`AppCommands.swift` が `AppMenuSpec.<名前>` で使う宣言を出発点に、本体が呼ぶ別の宣言をたどる。届かない宣言があれば失敗する(確認用の `all` と、`all` のためだけの集約 `mediaSubtitleItems` は対象外)。このガードで、置き忘れていた `cutoutItems`(静止画の背景を抜く 2 項目)と `scriptStoryboardItems`(台本・絵コンテの書き出し)をメニューに置いた。
 - **サムネイルと波形**: 動画・画像のクリップに 16:9 のタイルの帯(拡大率に合わせた枚数。見えているタイルだけ)、音声・ボイス・動画に波形(2pt の棒、見えている部分だけ)を描く。純粋な部分は Core(`TimelineMedia.swift`): `WaveformPeaks`(1/100 秒ごとの最大の絶対値。`Accumulator` で流し読みしても `compute` と同じ。`columns(from:to:count:)` は逆再生の `from > to` で逆順、素材の外は 0。`sourceRange(for:)` は速度・逆再生を見る)と `ThumbnailPlan`(タイル数、素材の時刻 = タイルの真ん中を刻み(0.1〜60 秒。1 枚が受け持つ長さに合わせる)に切り下げてキャッシュを使い回す)。読み込み: 波形は `AVAssetReader`(左右 2 チャンネル・8 kHz・Float で、左右の大きい方を見る)、サムネイルは `AVAssetImageGenerator`(最大 256px・前後 1 秒の許容)と ImageIO(画像)。`TimelineMediaCache`(メモリのみ。`NSCache` の LRU = サムネイル 600 枚・波形 80 本、キーは パス + 更新日時 (+ 時刻))は、描画では「あれば返す・無ければ nil」で裏に依頼し(同時 2 件・待ちは 160 件まで・新しい依頼が先・失敗は覚える)、できたら 0.1 秒ごとにまとめて描き直す。できるまではクリップの色のまま(待たない)。ラベルには暗い下地を敷く。
-- **範囲選択(ルーラーの ⌥ ドラッグ)・範囲の削除は未実装**(ロードマップに残す)。
+- **範囲の削除は実装済み**(下の「範囲の削除」)。**範囲選択(ルーラーの ⌥ ドラッグ)は実装済み**(下の「範囲選択」)。
 
 計測(A6): ① タイムラインの再描画(`TimelineBenchTests`。クリップ 200 個・1400×260pt・debug ビルド・`draw` の時間の中央値): 変更前 3.81 ms → 変更後 4.20 ms(素材なしの中身。サムネイルと波形の問い合わせの分)、サムネイルと波形が全部できたあと 5.11 ms(最初の 1 回、まだ何も無いとき 3.95 ms)。② `moviecut-cli`(release、1920×1080・10 秒 60fps、画像 + 文字 + ぼかし + 音声 2 本・レイヤーの locked / solo / height つき): `frame --bench 40` 変更前 2.60 / 2.52 ms → 変更後 2.57 / 2.35 ms、`export` 4.16 / 4.13 / 4.14 倍速 → 4.14 / 4.11 / 4.15 倍速(ソロなしでも 4.12 → 4.12)。`smoke --blur --tone` 3.68 倍速。③ ソロの確認(ffmpeg volumedetect、m4a): ソロなし 平均 −24.0 / 最大 −20.2 dB → 小さい音の側をソロ 平均 −44.1 / 最大 −40.9 dB(ちょうど −20 dB)。ソロ + 消音は音が 1 つも無い扱いで、音声のみの書き出しは従来どおり「音声がありません」で断る。
 
@@ -374,11 +374,11 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
 - **見つけて直した不具合**: `Lenient.int` が `Int(d.rounded())` で変換していたため、`1e308` のような値で `Fatal error` で落ちていた。範囲外(`abs ≥ 9e18`)は読めなかったことにして既定値に任せる(通常の値は変わらない)。
 
 **速度ランプ・フレームブレンド(2026-11-02 追加。どちらも任意。既定のときは書かない)**:
-- **速度ランプ** `speedRamp: [{t, v}]`(動画・音声): `t` はクリップの頭からの秒、`v` は速度(0.25〜4)。点のあいだは速度を直線でつなぐ(イージングなし)。`speed` と `reverse` は使わない(ランプがあると逆再生は外れる)。`SpeedRamp.swift`: 素材の時刻 = offset + ∫₀ᵗ speed(区分ごとの台形の和。閉じた形)、逆変換は二分法(速度 > 0 なので単調)。`sanitized` は時刻順・0〜duration に収め、両端の点を持たせる。`ClipTiming` の `sourceTime` / `clipTime` / `sourceSpan` とプレビュー・書き出し(`Renderer`)は、ランプのあるクリップだけ積分を使う。`effectiveSpeed` は長さ全体の平均の速さ(タイムラインの札は「ランプ」)。
+- **速度ランプ** `speedRamp: [{t, v, ease?}]`(動画・音声): `t` はクリップの頭からの秒、`v` は速度(0.25〜4)。点のあいだは、始点の `ease`(キーフレームと同じ `Ease`。既定は直線で、そのときは書かない = 古いファイルはそのまま直線)で速度をつなぐ。`speed` と `reverse` は使わない(ランプがあると逆再生は外れる)。`SpeedRamp.swift`: 素材の時刻 = offset + ∫₀ᵗ speed(直線の区間は従来どおり区分ごとの台形の和、曲線の区間は `Ease.integral` の解析的な積分。どちらも閉じた形)、逆変換は二分法(速度 > 0 なので単調)。`sanitized` は時刻順・0〜duration に収め、両端の点を持たせる。`ClipTiming` の `sourceTime` / `clipTime` / `sourceSpan` とプレビュー・書き出し(`Renderer`)は、ランプのあるクリップだけ積分を使う。`effectiveSpeed` は長さ全体の平均の速さ(タイムラインの札は「ランプ」)。
 - **分割・トリム**: 分割 は左 `[0, cut]` と右 `[cut, 終わり]` に点を振り分け、右の素材の頭は `∫₀^cut`。トリム(左・右・前・後)も同じ規則で点を切る・足す(左の頭を前へ延ばすときは最初の速度のまま)。`SpeedTests` と同じく、分けても使う素材の長さは変わらないことを見る。
 - **音声**(`AudioRemap`): 範囲を読んだあと、出力の各コマ(k/sr)の素材の位置 = ∫ × sr を直線補間で読む(`resampleRamp`)。**音程は速度に従って変わる**(「音程を保つ」は効かない。時間伸縮を入れていない)。キャッシュ鍵に点の列を足す。
 - **フレームブレンド** `frameBlend: true`(動画だけ。順再生・フリーズでない・そのときの速度が 1 未満のときだけ効く): 素材の時刻を、プロジェクトの fps の格子で隣り合う 2 コマに分け、`FrameBlend.mix` で `(1−w)·A + w·B` の画素にする(CoreGraphics の描画で作るので、プレビューと書き出しが同じ)。格子は**素材の fps ではなくプロジェクトの fps** を使う(素材の fps を取っていないため。素材と格子がずれるとぼやけ方が変わる)。
-- インスペクタ: 「速度ランプを作る」(いまの速度のまま点を 2 つ)、点ごとの時刻と速度(数値欄。1 回 = 1 Undo)、「点を追加」(中央に、いまの曲線の上の値で)・「削除」(2 点は残す)・「ランプをやめる」(平均の速さの一定速度に戻す。長さと素材の長さは変わらない)。「フレームブレンド」のチェックは動画だけ。ランプを作る・外す・点の操作はメニューには出していない(インスペクタだけ)。
+- インスペクタ: 「速度ランプを作る」(いまの速度のまま点を 2 つ)、点ごとの時刻と速度(数値欄。1 回 = 1 Undo)と進み方(最後の点を除く各点のイージング。プリセットから選ぶ。1 回 = 1 Undo)、「点を追加」(中央に、いまの曲線の上の値で)・「削除」(2 点は残す)・「ランプをやめる」(平均の速さの一定速度に戻す。長さと素材の長さは変わらない)。「フレームブレンド」のチェックは動画だけ。ランプを作る・外す・点の操作はメニューには出していない(インスペクタだけ)。
 
 ## 手ぶれ補正(簡易版、2026-11-02)
 - **計算**(`Sources/MovieCutCore/Stabilizer.swift`): 素材を 30 サンプル/秒で取り、隣り合うコマの画素のずれ(`VisionMotionEstimator` = `VNTranslationalImageRegistrationRequest`、長辺 960 px に縮小して測る)を足し合わせて軌跡にする。軌跡の移動平均(両側 0.5 秒、`MotionSmoothing.smooth`)との差に強さ(0〜1)を掛けたものが、そのコマの補正量(px)。補正は `Stabilizer.warp`(先に平行移動し、中心まわりに拡大)で行い、拡大率は縁が出ない最小の値 `1 / (1 − 2m)`(m = 最大のずれ ÷ 幅)。
@@ -633,3 +633,14 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
 - `ClipEditing.deleteRange(in:from:to:ripple:)`(Core、`ClipEditing+Range.swift`): 範囲を [0, endTime] に切り詰め、全レイヤーで両端を既存の `ClipEditing.split` で割ってから、範囲に完全に入る断片を消す(offset・速度ランプ・逆再生・キーフレーム・フェードの扱いは分割と同じ。複合クリップも分割が対応するので部分的にかかっても割る)。`ripple` なら各レイヤーで範囲の終わり以降に始まるクリップを範囲の幅だけ左へ(0 未満にしない)。マーカーは動かさない。
 - 空範囲・何にも触れない・範囲に触れるクリップがロック(レイヤー / クリップ)・リップルで動かすクリップがロックのときは nil(元は変えない)。
 - アプリ側は `ProjectModel.deleteRange(ripple:)`(`ProjectModel+Range.swift`): 範囲は書き出し範囲のイン点・アウト点(`ExportRange.resolve`)。Undo 名は「範囲の削除」「範囲のリップル削除」で、書き出し範囲の解除も同じ 1 回の編集に含める。テストは `ClipRangeDeleteTests`。
+- 対象レイヤー版 `deleteRange(in:from:to:ripple:trackIndices:)`(2026-11-19 追加): 対象外のレイヤーは削除もリップルもロック検査もしない。範囲選択からの削除はこれを使う(削除の実装はこの 1 つだけ)。
+
+## 範囲選択(ルーラーの ⌥ ドラッグ、2026-11-19)
+- `RangeSelection`(Core、`RangeSelection.swift`): 時間の範囲 + 対象レイヤー(nil = 全レイヤー)。書き出し範囲(保存される)とは別の、保存しない選択で、アプリは `ProjectModel.rangeSelection`(表示の状態・Undo に載せない)に持つ。
+- タイムライン: ルーラーで ⌥ ドラッグすると青い帯(書き出し範囲の橙色とは別)で範囲を作る。動かさない ⌥ クリックは通常のルーラークリックと同じくその時刻へ移動。範囲の印(イン/アウト)を掴んだときはそちらが優先。
+- 操作: クリップ ▸ 範囲内のクリップを選択(`RangeSelectionEditing.clipSelection`。主は開始の一番早いもの)/ 範囲選択を解除 / 範囲を削除・範囲をリップル削除(範囲選択があれば書き出し範囲より優先し、対象レイヤーの範囲で `deleteRange` を呼ぶ。1 回の Undo で、選択は表示状態なので一緒にそのまま解除する。書き出し範囲の印は残す)。
+- テストは `RangeSelectionTests` と `PhaseAAppTests`。実機のマウス操作(⌥ ドラッグの見た目)は未確認。
+
+## ずらして重ねる自動配置(クリップ ▸ 重ねてクロスフェード、2026-11-19)
+- `TransitionEditing.overlapCrossfade`(Core): 選んだクリップを前へずらして、同じレイヤーの前のクリップと重ね、その重なり(既定 0.5 秒。トランジションの上限 = クリップの半分・5 秒と、前のクリップの長さで収める)で頭にフェードを付ける。長さ・offset・後ろのクリップは変えない。すでに十分重なっていればずらさず「クロスフェードにする」と同じ付け方。ずらす先は前のクリップの頭・さらに前のクリップの終わり・0 秒で止まる。ロック(レイヤー / クリップ)・映像でないクリップ・前のクリップが無い・重なりが作れないときは理由を返して何もしない。
+- アプリ側は `ProjectModel.overlapCrossfadeSelected`(1 回の Undo)。テストは `OverlapCrossfadeTests` と `PhaseAAppTests`。
