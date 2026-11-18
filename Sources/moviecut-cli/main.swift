@@ -665,7 +665,7 @@ case "silence" where args.count >= 2:
     print(String(format: "threshold=%.1f dB  min=%.2f s  pad=%.2f s", params.thresholdDb, params.minSilence, params.pad))
     func fmt(_ t: Double) -> String { String(format: "%.3f", t) }
     func report(_ c: Clip, label: String) {
-        guard let prof = SilenceDetector.analyze(clip: c) else { print("\(label): 音を読めない、または対象外(速度・逆再生あり)"); return }
+        guard let prof = SilenceDetector.analyze(clip: c) else { print("\(label): 音を読めない、または対象外"); return }
         let cuts = prof.silentRanges(params)
         let keeps = prof.keepRanges(params)
         let removed = cuts.reduce(0) { $0 + $1.length }
