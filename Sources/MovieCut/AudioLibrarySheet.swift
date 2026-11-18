@@ -107,9 +107,12 @@ struct AudioLibrarySheet: View {
                 }
             }
             if folder == nil {
-                Text(L10n.t("動画・音声・画像を入れたフォルダを選ぶと、中の素材がここに並びます。"))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, minHeight: 240, alignment: .center)
+                VStack(spacing: 10) {
+                    Text(L10n.t("動画・音声・画像を入れたフォルダを選ぶと、中の素材がここに並びます。"))
+                        .foregroundStyle(.secondary)
+                    Button(L10n.t("フォルダを選ぶ…")) { chooseFolder() }
+                }
+                .frame(maxWidth: .infinity, minHeight: 240, alignment: .center)
             } else if items.isEmpty {
                 Text(L10n.t("このフォルダに対象の素材(動画・音声・画像)はありません。"))
                     .foregroundStyle(.secondary)
