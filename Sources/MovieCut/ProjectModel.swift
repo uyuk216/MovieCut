@@ -299,6 +299,8 @@ final class ProjectModel: ObservableObject {
     @Published var showClipListSheet = false
     /// クリップ ▸ シーン一覧…(W3-01: シーンの作成・名前変更・複製・削除・配置・開く)のシート。
     @Published var showSceneListSheet = false
+    /// クリップ ▸ 台本を編集…(ボイスクリップの一覧編集)のシート。
+    @Published var showScriptTableSheet = false
     /// 同じセリフのテイク比較シート(表示の状態)と、試聴の出口・鳴らしているテイクの id
     @Published var showTakeSheet = false
     @Published var takePlayingId: String?

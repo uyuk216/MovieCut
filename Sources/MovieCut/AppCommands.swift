@@ -158,6 +158,11 @@ struct AppCommands: Commands {
                 MenuItemView(spec: AppMenuSpec.fillerCutItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.transcriptEditItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.dictionaryItem(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.scriptTableItem(s), perform: run)
+                Divider()
+                MenuItemView(spec: AppMenuSpec.saveItemTemplateItem(s), perform: run)
+                Menu(L10n.t("アイテムテンプレートを適用")) { items(AppMenuSpec.itemTemplateApplyItems(s), run) }
+                Menu(L10n.t("テンプレートからクリップを作成")) { items(AppMenuSpec.itemTemplateCreateItems(s), run) }
                 Divider()
                 Menu(L10n.t("テキスト")) {
                     Menu(L10n.t("スタイルを適用")) { items(AppMenuSpec.textStyleItems(s), run) }
@@ -277,6 +282,7 @@ struct AppCommands: Commands {
                 MenuItemView(spec: AppMenuSpec.clipListItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.noteListItem(s), perform: run)
                 items(AppMenuSpec.scriptStoryboardItems(s), run)
+                items(AppMenuSpec.scriptCSVItems(s), run)
                 Divider()
                 MenuItemView(spec: AppMenuSpec.subtitleExport(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.subtitleTranslate(s), perform: run)
