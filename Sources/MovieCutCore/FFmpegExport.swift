@@ -164,8 +164,11 @@ public enum FFmpegVideoExporter {
     public static let intermediateBitrate = 40_000_000
 
     /// 書き出し。進み具合は中間書き出しが 0〜0.7、変換が 0.7〜1。
+    /// `loudness` は通常書き出し(MP4 等)と同じ設定で、中間 MP4 の書き出しにそのまま渡す(F-3)。
+    /// 既定は無効 = 従来どおり(中間ファイルに正規化をかけない)。
     public static func export(project: Project, assets: RenderAssets = RenderAssets(), range: ExportRange? = nil,
                               format: WebVideoFormat, crf: Int = 32, to url: URL,
+                              loudness: LoudnessNormalizationSettings = .disabled,
                               progress: ((Double) -> Void)? = nil) async throws {
         guard project.endTime > 0 else { throw FFmpegExportError.emptyProject }
         guard let ffmpeg = FFmpegLocator.find() else { throw FFmpegExportError.ffmpegNotFound }
@@ -183,7 +186,7 @@ public enum FFmpegVideoExporter {
         let intermediate = tmpDir.appendingPathComponent("intermediate.mp4")
         var intermediateProject = project
         intermediateProject.codec = "h264"
-        try await Exporter(project: intermediateProject, assets: assets, range: range, videoBitrate: intermediateBitrate)
+        try await Exporter(project: intermediateProject, assets: assets, range: range, videoBitrate: intermediateBitrate, loudness: loudness)
             .export(to: intermediate) { v in progress?(v * 0.7) }
         if Task.isCancelled { throw CancellationError() }
 
