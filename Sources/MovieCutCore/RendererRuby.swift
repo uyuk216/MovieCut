@@ -55,7 +55,7 @@ extension Renderer {
     }
 
     /// 読みの輪郭を、区間 [x0, x1](行の左端から測った x)に合わせて組む。y は読みの基準線が 0(y 上向き)。
-    private func rubyPath(_ reading: String, rf: TextFont, italic: Bool, x0: Double, x1: Double) -> CGPath {
+    func rubyPath(_ reading: String, rf: TextFont, italic: Bool, x0: Double, x1: Double) -> CGPath {
         let segW = x1 - x0
         let whole = rf.layout(reading, spacing: 0, italic: italic)
         let out = CGMutablePath()
