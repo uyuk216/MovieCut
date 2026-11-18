@@ -68,13 +68,16 @@ public final class Exporter {
     public let videoBitrate: Int?
     /// 完成したミックスへのラウドネス正規化(既定は無効 = 従来どおり)。
     public let loudness: LoudnessNormalizationSettings
+    /// 描画バックエンド(#77。既定は自動 = Metal 優先・従来経路へフォールバック)。
+    public let renderBackend: RenderBackend
 
-    public init(project: Project, assets: RenderAssets, range: ExportRange? = nil, videoBitrate: Int? = nil, loudness: LoudnessNormalizationSettings = .disabled) {
+    public init(project: Project, assets: RenderAssets, range: ExportRange? = nil, videoBitrate: Int? = nil, loudness: LoudnessNormalizationSettings = .disabled, renderBackend: RenderBackend = .auto) {
         self.project = project
         self.assets = assets
         self.range = range
         self.videoBitrate = videoBitrate
         self.loudness = loudness
+        self.renderBackend = renderBackend
     }
 
     /// 正確な分数のフレームレート(29.97 → 30000/1001 など)。
@@ -121,7 +124,7 @@ public final class Exporter {
         var rp = project
         rp.width = ew; rp.height = eh
         // 専用キューの中だけで使う(AVFoundation の部品は Sendable でないので、安全は呼び出し側の約束)
-        nonisolated(unsafe) let renderer = Renderer(project: rp, assets: assets)
+        nonisolated(unsafe) let renderer = Renderer(project: rp, assets: assets, backend: renderBackend)
 
         // 先に音声をミックスする(一時ファイル)
         let mixURL = FileManager.default.temporaryDirectory.appendingPathComponent("moviecut-mix-\(UUID().uuidString).caf")

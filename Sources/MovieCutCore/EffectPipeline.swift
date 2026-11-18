@@ -229,6 +229,11 @@ public enum EffectPipeline {
 
     /// 共有の CIContext で CGImage にする(BGRA8・premultiplied・sRGB)。
     public static func makeImage(_ image: CIImage, from rect: CGRect) -> CGImage? {
-        ciContext.createCGImage(image, from: rect, format: .BGRA8, colorSpace: CGColorSpace(name: CGColorSpace.sRGB))
+        makeImage(image, from: rect, context: ciContext)
+    }
+
+    /// 指定した CIContext で CGImage にする(描画バックエンド用。形式・色空間は従来と同じ)。
+    public static func makeImage(_ image: CIImage, from rect: CGRect, context: CIContext) -> CGImage? {
+        context.createCGImage(image, from: rect, format: .BGRA8, colorSpace: CGColorSpace(name: CGColorSpace.sRGB))
     }
 }

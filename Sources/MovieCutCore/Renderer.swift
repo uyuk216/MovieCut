@@ -77,6 +77,11 @@ struct ClipPose {
 public struct Renderer {
     public let project: Project
     public let assets: RenderAssets
+    /// 描画バックエンド(#77)。既定は自動(Metal が使えれば Metal、無ければ従来経路)。
+    /// Core Image の段(エフェクト・ぼかし)だけがこの経路に載り、最終合成は従来どおり CGContext。
+    public let backend: RenderBackend
+    /// この描画で使う CIContext(バックエンド解決済み)。
+    var ciCtx: CIContext { RenderContextProvider.shared.context(for: backend) }
     /// プレビュー用。手ぶれ補正の解析が無いとき、待たずに補正なしのコマを出し、解析が終わったらこれを呼ぶ(主スレッドへの送りは呼び出し側)。
     /// nil(既定・書き出し・CLI)のときは解析が終わるまで待つので、結果は常に同じ。
     public let onStabilized: (() -> Void)?
@@ -89,11 +94,12 @@ public struct Renderer {
     var drawsBackground = true
     var drawsPortraits = true
 
-    public init(project: Project, assets: RenderAssets, onStabilized: (() -> Void)? = nil, missingMediaPlaceholder: Bool = false) {
+    public init(project: Project, assets: RenderAssets, onStabilized: (() -> Void)? = nil, missingMediaPlaceholder: Bool = false, backend: RenderBackend = .auto) {
         self.project = project
         self.assets = assets
         self.onStabilized = onStabilized
         self.missingMediaPlaceholder = missingMediaPlaceholder
+        self.backend = backend
     }
 
     public func renderImage(t: Double) -> CGImage? {
@@ -616,7 +622,7 @@ public struct Renderer {
         var ci = EffectPipeline.apply(CIImage(cgImage: snap), effects: fx, bounds: localBounds, scale: resScale, faces: faces)
         if blurSigma > 0 { ci = ci.applyingGaussianBlur(sigma: blurSigma) }
         if let m = c.mask { ci = ShapeMask.apply(ci, mask: m, canvasWidth: W, canvasHeight: H, originX: work.minX, originY: work.minY) }
-        guard let out = EffectPipeline.makeImage(ci, from: rect) else { return }
+        guard let out = EffectPipeline.makeImage(ci, from: rect, context: ciCtx) else { return }
         ctx.saveGState()
         ctx.setAlpha(CGFloat(pose.opacity))
         drawCG(ctx, out, work)
@@ -635,7 +641,7 @@ public struct Renderer {
         guard let kids = c.tracks, !kids.isEmpty, !compoundStack.contains(c.id), compoundStack.count < CompoundEditing.maxDepth else { return nil }
         var sub = project
         sub.tracks = kids
-        var child = Renderer(project: sub, assets: assets, onStabilized: onStabilized, missingMediaPlaceholder: missingMediaPlaceholder)
+        var child = Renderer(project: sub, assets: assets, onStabilized: onStabilized, missingMediaPlaceholder: missingMediaPlaceholder, backend: backend)
         child.compoundStack = compoundStack + [c.id]
         child.drawsBackground = false
         child.drawsPortraits = false
@@ -700,7 +706,7 @@ public struct Renderer {
         let canvas = CGRect(x: 0, y: 0, width: W, height: H)
         let resScale = (W * H / (1920.0 * 1080.0)).squareRoot()
         let ci = EffectPipeline.apply(CIImage(cgImage: snap), effects: fx, bounds: canvas, scale: resScale)
-        guard let out = EffectPipeline.makeImage(ci, from: canvas) else { return }
+        guard let out = EffectPipeline.makeImage(ci, from: canvas, context: ciCtx) else { return }
         ctx.saveGState()
         ctx.setAlpha(CGFloat(opacity))
         drawCG(ctx, out, canvas)
@@ -719,7 +725,7 @@ public struct Renderer {
         let ci = CIImage(cgImage: snap)
         let blurred = ci.applyingGaussianBlur(sigma: sigma)
         let rect = CGRect(x: 0, y: 0, width: W, height: H)
-        guard let out = ciContext.createCGImage(blurred, from: rect, format: .BGRA8, colorSpace: sRGB) else { return }
+        guard let out = ciCtx.createCGImage(blurred, from: rect, format: .BGRA8, colorSpace: sRGB) else { return }
         ctx.saveGState()
         ctx.setAlpha(CGFloat(pose.opacity))
         drawCG(ctx, out, rect)
@@ -756,7 +762,7 @@ public struct Renderer {
         } else {
             blurred = CIImage(cgImage: snap).clampedToExtent().applyingGaussianBlur(sigma: sigma)
         }
-        guard let out = ciContext.createCGImage(blurred, from: ciRect, format: .BGRA8, colorSpace: sRGB) else { return }
+        guard let out = ciCtx.createCGImage(blurred, from: ciRect, format: .BGRA8, colorSpace: sRGB) else { return }
         ctx.saveGState()
         if c.shapeOrDefault == "ellipse" { ctx.addEllipse(in: shapeRect) } else { ctx.addRect(shapeRect) }
         ctx.clip()
