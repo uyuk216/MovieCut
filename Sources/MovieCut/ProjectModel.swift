@@ -7,6 +7,10 @@ import MovieCutCore
 /// アプリ全体で 1 つだけ持つもの(VOICEVOX エンジンは終了時に止める)。
 enum AppServices {
     static let engine = VoicevoxEngine()
+    /// 作業メモリの予算(キャッシュが経由する単一の管理)。上限は総 RAM から決める(24GB 以上の Mac は上限なし)。
+    static let cacheBudget = CacheBudgetManager(limitBytes: MemoryBudget.currentLimitBytes(platform: .mac))
+    /// メモリ逼迫の監視(警告・緊急で予算のキャッシュを全放出)。起動時に `start()` する。
+    static let memoryPressure = MemoryPressureMonitor(manager: cacheBudget)
     /// 画面のドッキング(パネルの配置)。アプリ全体で 1 つ。静かな検証(MC_DEBUG_*)では UserDefaults に書かない。試験は差し替える。
     @MainActor static var panelDock: DockStore = makePanelDock()
     @MainActor static func makePanelDock(defaults: UserDefaults? = DebugHooks.isQuiet ? nil : DataLocations.current.defaults) -> DockStore {
