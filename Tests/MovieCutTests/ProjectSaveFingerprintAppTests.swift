@@ -66,4 +66,48 @@ final class ProjectSaveFingerprintAppTests: XCTestCase {
         let saved = try Project.decodeMigrating(from: data)
         XCTAssertEqual(Set(saved.mediaFingerprints.keys), [real.path], "未保存では相対パスは解決できないので付けない")
     }
+
+    func testMissingReferencedMediaKeepsExistingFingerprint() throws {
+        let docDir = dir.appendingPathComponent("doc", isDirectory: true)
+        let m = makeModel(projectWithClip(src: "media/gone.png"))
+        m.fileURL = docDir.appendingPathComponent("doc.mcpjc")
+        // 素材は無い(読めない)が、以前の保存で記録されていたフィンガープリント
+        let old = MediaFingerprint.compute(data: Data([4, 5, 6]), fileName: "gone.png")
+        var p = m.mirror.get()
+        p.mediaFingerprints["media/gone.png"] = old
+
+        let data = try ProjectModel.encodeForSave(p, folder: m.mirror.projectFolder, cache: m.fingerprintCache)
+        let saved = try Project.decodeMigrating(from: data)
+        XCTAssertEqual(saved.mediaFingerprints["media/gone.png"], old, "欠けている素材の記録は、再リンクの手がかりとして残す")
+    }
+
+    func testUnreferencedMediaFingerprintIsDropped() throws {
+        let docDir = dir.appendingPathComponent("doc", isDirectory: true)
+        try write([1, 2, 3], to: docDir.appendingPathComponent("media/a.png"))
+        let m = makeModel(projectWithClip(src: "media/a.png"))
+        m.fileURL = docDir.appendingPathComponent("doc.mcpjc")
+        // もうどこからも参照されていない素材の記録
+        var p = m.mirror.get()
+        p.mediaFingerprints["media/removed.png"] = MediaFingerprint.compute(data: Data([8]), fileName: "removed.png")
+
+        let data = try ProjectModel.encodeForSave(p, folder: m.mirror.projectFolder, cache: m.fingerprintCache)
+        let saved = try Project.decodeMigrating(from: data)
+        XCTAssertNil(saved.mediaFingerprints["media/removed.png"], "参照されなくなった素材の記録は残さない")
+        XCTAssertNotNil(saved.mediaFingerprints["media/a.png"])
+    }
+
+    func testReadableMediaReplacesStaleFingerprint() throws {
+        let docDir = dir.appendingPathComponent("doc", isDirectory: true)
+        try write([1, 2, 3], to: docDir.appendingPathComponent("media/a.png"))
+        let m = makeModel(projectWithClip(src: "media/a.png"))
+        m.fileURL = docDir.appendingPathComponent("doc.mcpjc")
+        // ファイルが差し替わった後の古い記録
+        var p = m.mirror.get()
+        p.mediaFingerprints["media/a.png"] = MediaFingerprint.compute(data: Data([9, 9]), fileName: "a.png")
+
+        let data = try ProjectModel.encodeForSave(p, folder: m.mirror.projectFolder, cache: m.fingerprintCache)
+        let saved = try Project.decodeMigrating(from: data)
+        XCTAssertEqual(saved.mediaFingerprints["media/a.png"], MediaFingerprint.compute(data: Data([1, 2, 3]), fileName: "a.png"),
+                       "読める素材は古い記録より新しいフィンガープリントを優先する")
+    }
 }

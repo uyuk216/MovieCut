@@ -98,8 +98,14 @@ extension ProjectModel {
 
     /// 保存データを作る(主スレッドを待たない。保存も自動保存も、この形で符号化する)。
     /// 素材のフィンガープリントを最新にしてから符号化する。編集中のプロジェクトは変えない。
+    /// 読めない(欠けている)素材は今回は付かないが、いまも参照されていれば以前の記録を残す(再リンクの手がかり)。
     nonisolated static func encodeForSave(_ p: Project, folder: String?, cache: MediaFingerprintCache) throws -> Data {
-        try MediaFingerprintCollector.attaching(to: p, projectDir: folder, compute: cache.fingerprint(atPath:)).encoded()
+        var saved = MediaFingerprintCollector.attaching(to: p, projectDir: folder, compute: cache.fingerprint(atPath:))
+        let referenced = Set(MediaFingerprintCollector.referencedSources(in: p))
+        for (src, fp) in p.mediaFingerprints where referenced.contains(src) && saved.mediaFingerprints[src] == nil {
+            saved.mediaFingerprints[src] = fp
+        }
+        return try saved.encoded()
     }
 
     /// ファイル ▸ パッケージとして保存…: 親フォルダを選び、その中に「<書類名> パッケージ」を作って
