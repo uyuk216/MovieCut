@@ -63,17 +63,38 @@ struct AudioLibrarySheet: View {
     @State private var gridMode = false
     @State private var sort: MediaBrowser.SortKey = .name
     @State private var selectedId: String?
+    /// 起点フォルダからの相対パス("" は起点そのもの)。サブフォルダ移動用(X-2)。
+    @State private var subpath: String = ""
+    @State private var subfolders: [MediaBrowser.FolderInfo] = []
     @State private var probeTask: Task<Void, Never>?
     @StateObject private var preview = AudioPreviewPlayer()
 
     private var shown: [MediaBrowser.Item] { MediaBrowser.filter(items, kind: kind, query: query, sort: sort) }
+
+    /// いま開いているフォルダ(起点 + subpath)。
+    private var currentFolder: URL? {
+        guard let folder else { return nil }
+        return subpath.isEmpty ? folder : folder.appendingPathComponent(subpath)
+    }
+
+    /// パンくずの各段(表示名と、その段までの subpath)。
+    private var breadcrumbParts: [(title: String, subpath: String)] {
+        let comps = subpath.split(separator: "/").map(String.init)
+        return comps.enumerated().map { (title: $0.element, subpath: comps.prefix($0.offset + 1).joined(separator: "/")) }
+    }
+
+    /// パンくず先頭(起点フォルダ)の表示名。
+    private var rootTitle: String {
+        guard let folder else { return "" }
+        return BuiltInLibrary.isBuiltIn(folder) ? BuiltInLibrary.title : folder.lastPathComponent
+    }
     private var selected: MediaBrowser.Item? { shown.first { $0.id == selectedId } }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(L10n.t("素材ブラウザ")).font(.title3.bold())
             HStack(spacing: 8) {
-                Text(BuiltInLibrary.isBuiltIn(folder) ? "\(BuiltInLibrary.title)(\(BuiltInLibrary.licenseNote))" : (folder?.path ?? "フォルダが選ばれていません"))
+                Text(BuiltInLibrary.isBuiltIn(folder) ? "\(BuiltInLibrary.title)(\(BuiltInLibrary.licenseNote))" : (currentFolder?.path ?? "フォルダが選ばれていません"))
                     .foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                     .accessibilityIdentifier("audio-library-folder")
                 Spacer(minLength: 8)
@@ -83,6 +104,7 @@ struct AudioLibrarySheet: View {
                 Button(L10n.t("フォルダを選ぶ…")) { chooseFolder() }
                 Button(L10n.t("再読み込み")) { reload() }.disabled(folder == nil)
             }
+            breadcrumbBar
             if folder != nil && !items.isEmpty {
                 HStack(spacing: 8) {
                     TextField("名前で検索", text: $query)
@@ -113,12 +135,9 @@ struct AudioLibrarySheet: View {
                     Button(L10n.t("フォルダを選ぶ…")) { chooseFolder() }
                 }
                 .frame(maxWidth: .infinity, minHeight: 240, alignment: .center)
-            } else if items.isEmpty {
+            } else if items.isEmpty && subfolders.isEmpty && subpath.isEmpty {
                 Text(L10n.t("このフォルダに対象の素材(動画・音声・画像)はありません。"))
                     .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, minHeight: 240, alignment: .center)
-            } else if shown.isEmpty {
-                Text(L10n.t("一致する素材はありません。")).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 240, alignment: .center)
             } else {
                 HStack(alignment: .top, spacing: 14) {
@@ -146,18 +165,135 @@ struct AudioLibrarySheet: View {
     private var browserList: some View {
         if gridMode {
             ScrollView {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 8)], spacing: 8) {
-                    ForEach(shown) { item in gridCell(item) }
+                if shown.isEmpty && subfolders.isEmpty && subpath.isEmpty {
+                    Text(L10n.t("一致する素材はありません。")).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, minHeight: 200, alignment: .center)
+                } else {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 8)], spacing: 8) {
+                        if !subpath.isEmpty { upCell }
+                        ForEach(subfolders) { f in folderCell(f) }
+                        ForEach(shown) { item in gridCell(item) }
+                    }
+                    .padding(4)
                 }
-                .padding(4)
             }
             .accessibilityIdentifier("audio-library-grid")
         } else {
-            List(shown, selection: $selectedId) { item in
-                listRow(item).tag(item.id)
+            List(selection: $selectedId) {
+                if !subpath.isEmpty || !subfolders.isEmpty {
+                    Section {
+                        if !subpath.isEmpty { upRow }
+                        ForEach(subfolders) { f in folderRow(f) }
+                    } header: {
+                        Text(L10n.t("フォルダ"))
+                    }
+                }
+                Section {
+                    if shown.isEmpty {
+                        Text(L10n.t("一致する素材はありません。")).foregroundStyle(.secondary)
+                    } else {
+                        ForEach(shown) { item in listRow(item).tag(item.id) }
+                    }
+                }
             }
             .accessibilityIdentifier("audio-library-list")
         }
+    }
+
+    /// パンくず(起点 → サブフォルダ…)。段を押すとそのフォルダへ戻る。
+    @ViewBuilder
+    private var breadcrumbBar: some View {
+        if folder != nil, !subpath.isEmpty || !subfolders.isEmpty {
+            HStack(spacing: 4) {
+                Image(systemName: "folder").foregroundStyle(.secondary)
+                Button(rootTitle) { goTo(subpath: "") }.buttonStyle(.link)
+                ForEach(Array(breadcrumbParts.enumerated()), id: \.offset) { _, part in
+                    Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.secondary)
+                    Button(part.title) { goTo(subpath: part.subpath) }.buttonStyle(.link)
+                }
+                Spacer(minLength: 0)
+            }
+            .accessibilityIdentifier("media-browser-breadcrumb")
+        }
+    }
+
+    private func folderRow(_ f: MediaBrowser.FolderInfo) -> some View {
+        Button { enter(f) } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "folder.fill").foregroundStyle(.secondary)
+                    .frame(width: 44, height: 30)
+                Text(f.name).lineLimit(1).truncationMode(.middle)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("media-browser-folder-row")
+    }
+
+    private var upRow: some View {
+        Button { goUp() } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "arrow.up").foregroundStyle(.secondary)
+                    .frame(width: 44, height: 30)
+                Text(L10n.t("一つ上のフォルダへ")).lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("media-browser-up-row")
+    }
+
+    private func folderCell(_ f: MediaBrowser.FolderInfo) -> some View {
+        VStack(spacing: 4) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 4).fill(Color.secondary.opacity(0.15))
+                Image(systemName: "folder.fill").font(.system(size: 26)).foregroundStyle(.secondary)
+            }
+            .frame(width: 88, height: 60)
+            Text(f.name).font(.caption).lineLimit(1).truncationMode(.middle)
+        }
+        .padding(4)
+        .frame(width: 96)
+        .contentShape(Rectangle())
+        .onTapGesture { enter(f) }
+        .accessibilityIdentifier("media-browser-folder-cell")
+    }
+
+    private var upCell: some View {
+        VStack(spacing: 4) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 4).fill(Color.secondary.opacity(0.15))
+                Image(systemName: "arrow.up").font(.system(size: 22)).foregroundStyle(.secondary)
+            }
+            .frame(width: 88, height: 60)
+            Text(L10n.t("一つ上へ")).font(.caption).lineLimit(1)
+        }
+        .padding(4)
+        .frame(width: 96)
+        .contentShape(Rectangle())
+        .onTapGesture { goUp() }
+        .accessibilityIdentifier("media-browser-up-cell")
+    }
+
+    /// サブフォルダへ入る。
+    private func enter(_ f: MediaBrowser.FolderInfo) {
+        subpath = f.relativePath
+        reload()
+    }
+
+    /// 一つ上のフォルダへ戻る。
+    private func goUp() {
+        subpath = (subpath as NSString).deletingLastPathComponent
+        reload()
+    }
+
+    /// パンくずで指定した段へ移動する。
+    private func goTo(subpath target: String) {
+        subpath = target
+        reload()
     }
 
     private func listRow(_ e: MediaBrowser.Item) -> some View {
@@ -198,6 +334,9 @@ struct AudioLibrarySheet: View {
                 Text(s.name).font(.headline).lineLimit(2).truncationMode(.middle)
                 Text(Self.infoText(s)).font(.caption).foregroundStyle(s.unreadable ? .red : .secondary)
                 if s.kind == .audio {
+                    AudioWaveformView(item: s)
+                }
+                if s.kind == .audio {
                     Button {
                         preview.toggle(s.url)
                     } label: {
@@ -231,6 +370,7 @@ struct AudioLibrarySheet: View {
             guard resp == .OK, let url = panel.url else { return }
             AudioLibraryStore.setFolder(url)
             folder = url
+            subpath = ""
             reload()
         }
     }
@@ -238,14 +378,17 @@ struct AudioLibrarySheet: View {
     /// 同梱素材を一覧にする(初回は作る)。選んだフォルダの記憶は変えない。
     private func useBuiltIn() {
         folder = BuiltInLibrary.ensureInstalled()
+        subpath = ""
         reload()
     }
 
     /// 一覧を読み直す。長さと読めるかは後から 1 件ずつ確かめて、確かめたものから行に反映する(読み込み中も操作できる)。
     private func reload() {
         probeTask?.cancel()
-        guard let f = folder else { items = []; return }
-        items = MediaBrowser.scan(folder: f)
+        guard let f = folder else { items = []; subfolders = []; return }
+        let current = subpath.isEmpty ? f : f.appendingPathComponent(subpath)
+        items = MediaBrowser.scan(folder: current)
+        subfolders = MediaBrowser.subfolders(of: current, root: f)
         selectedId = nil
         let targets = items
         probeTask = Task { @MainActor in
