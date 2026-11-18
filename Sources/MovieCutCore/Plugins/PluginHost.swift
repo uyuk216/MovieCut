@@ -1,0 +1,214 @@
+import Foundation
+
+/// プラグインまわりの失敗。
+public enum PluginError: Error, Equatable {
+/// manifest.json の内容が不正。
+case invalidManifest(url: URL, reason: String)
+/// 登録されていないプラグイン id。
+case notRegistered(pluginID: String)
+/// 担当プラグインが見つからない engine 識別子。
+case noVoicePlugin(engineID: String)
+/// プラグインは見つかったが音声プロバイダを持っていない。
+case voiceProviderMissing(pluginID: String)
+/// ライセンス検証で拒否された。
+case licenseDenied(pluginID: String, result: LicenseVerificationResult)
+/// アプリバージョンがプラグインの最小要件を満たさない。
+case incompatibleAppVersion(pluginID: String, required: String, current: String)
+}
+
+/// 実体化されたプラグイン。本体が提供するサービスをここに集約する。
+///
+/// 今は音声(`VoiceProvider`)だけが接続点。importer / effect / exporter のフックは
+/// 将来ここに口を追加する想定で、マニフェスト側の種別だけ先に定義してある。
+public struct LoadedPlugin {
+public var manifest: PluginManifest
+public var directory: URL
+/// 音声フックの実体。音声を提供しないプラグインでは nil。
+public var voiceProvider: (any VoiceProvider)?
+
+public init(manifest: PluginManifest, directory: URL, voiceProvider: (any VoiceProvider)? = nil) {
+self.manifest = manifest
+self.directory = directory
+self.voiceProvider = voiceProvider
+}
+}
+
+/// プラグイン本体の実体化を担うローダ。
+///
+/// 動的ライブラリ(.bundle /.dylib)の読み込みはまだ行わない。
+/// 理由: 署名・公証・サンドボックスとの兼ね合いと、プラグイン配布形式(ユーザーのサーバから
+/// 暗号化パッケージを落とす方式)が未確定なため。まず「マニフェスト登録 → 初回使用時にだけ
+/// ローダ経由で実体化」という基盤の形を固定し、実体化手段はこのプロトコルの裏側に閉じ込める。
+/// 将来はバンドル読み込みローダを差し込むだけで移行できる。
+public protocol PluginLoader: AnyObject {
+/// プラグイン本体を実体化する。`PluginHost` からは初回使用時に 1 回だけ呼ばれる。
+func loadPlugin(manifest: PluginManifest, directory: URL) throws -> LoadedPlugin
+}
+
+/// クロージャで実体化方法を与えるローダ。テストと、アプリ組み込みプラグインの登録に使う。
+public final class ClosurePluginLoader: PluginLoader {
+private let body: (PluginManifest, URL) throws -> LoadedPlugin
+public init(_ body: @escaping (PluginManifest, URL) throws -> LoadedPlugin) { self.body = body}
+public func loadPlugin(manifest: PluginManifest, directory: URL) throws -> LoadedPlugin {
+try body(manifest, directory)
+}
+}
+
+/// 登録済みプラグインの管理と遅延読み込み。
+///
+/// - 登録(`register`)時点ではマニフェストしか持たない。本体は読み込まない。
+/// - 本体の実体化は `loadIfNeeded` / `voiceProvider(forEngine:)` の初回呼び出し時だけ。
+/// - 実体化したかどうかは `isLoaded(pluginID:)` / `loadedPluginIDs` で外から観測できる(テスト用に公開)。
+/// - `requiresLicense` なプラグインは、実体化の前にライセンス検証を通す。検証に使う
+/// コードは `setLicenseCode(_:forPluginID:)` で渡す(保存は呼び出し側の責務。ここでは保持のみ)。
+public final class PluginHost {
+/// 互換性判定に使うアプリバージョン。
+public let appVersion: String
+/// ライセンス照合先のデバイス ID。
+public let deviceID: String
+
+private let loader: any PluginLoader
+private let licenseVerifier: (any LicenseVerifying)?
+
+private var discoveredByID: [String: DiscoveredPlugin] = [:]
+private var registrationOrder: [String] = []
+private var loadedByID: [String: LoadedPlugin] = [:]
+private var licenseCodes: [String: String] = [:]
+private let lock = NSLock()
+
+public init(loader: any PluginLoader,
+licenseVerifier: (any LicenseVerifying)? = nil,
+deviceID: String = "",
+appVersion: String = "1.0.0") {
+self.loader = loader
+self.licenseVerifier = licenseVerifier
+self.deviceID = deviceID
+self.appVersion = appVersion
+}
+
+// MARK: - 登録(マニフェストのみ。本体は読まない)
+
+/// 探索結果をまとめて登録する。同 id の再登録は先勝ち。
+public func register(_ result: PluginDiscoveryResult) {
+for plugin in result.plugins { register(plugin)}
+}
+
+public func register(_ plugin: DiscoveredPlugin) {
+lock.withLock {
+guard discoveredByID[plugin.manifest.id] == nil else { return}
+discoveredByID[plugin.manifest.id] = plugin
+registrationOrder.append(plugin.manifest.id)
+}
+}
+
+public func register(manifest: PluginManifest, directory: URL) {
+register(DiscoveredPlugin(manifest: manifest,
+directory: directory,
+manifestURL: directory.appendingPathComponent(PluginDiscovery.manifestFileName)))
+}
+
+/// 登録済みマニフェストの一覧(登録順)。
+public var registeredManifests: [PluginManifest] {
+lock.withLock { registrationOrder.compactMap { discoveredByID[$0]?.manifest}}
+}
+
+public func manifest(forPluginID pluginID: String) -> PluginManifest? {
+lock.withLock { discoveredByID[pluginID]?.manifest}
+}
+
+// MARK: - 遅延読み込みの観測
+
+/// そのプラグインの本体が既に実体化されているか。
+public func isLoaded(pluginID: String) -> Bool {
+lock.withLock { loadedByID[pluginID] != nil}
+}
+
+/// 実体化済みプラグイン id の集合。
+public var loadedPluginIDs: Set<String> {
+lock.withLock { Set(loadedByID.keys)}
+}
+
+// MARK: - ライセンス
+
+/// プラグインに使うライセンスコードを設定する(検証は実体化の直前に行う)。
+public func setLicenseCode(_ code: String?, forPluginID pluginID: String) {
+lock.withLock {
+if let code { licenseCodes[pluginID] = code} else { licenseCodes.removeValue(forKey: pluginID)}
+}
+}
+
+/// ライセンス検証だけを先に行う(設定画面などで使う想定)。検証器が無い/不要なプラグインは `.valid`。
+public func verifyLicense(forPluginID pluginID: String) -> LicenseVerificationResult {
+let snapshot: (PluginManifest?, String?) = lock.withLock {
+(discoveredByID[pluginID]?.manifest, licenseCodes[pluginID])
+}
+guard let manifest = snapshot.0 else { return .notFound}
+guard manifest.requiresLicense, let licenseVerifier else { return .valid }
+guard let code = snapshot.1, !code.isEmpty else { return .notFound}
+return licenseVerifier.verify(pluginID: pluginID, licenseCode: code, deviceID: deviceID)
+}
+
+// MARK: - 実体化
+
+/// プラグイン本体を取得する。未実体化ならここで初めてローダを呼ぶ(結果は保持し、2 回目以降は再利用)。
+public func loadIfNeeded(pluginID: String) throws -> LoadedPlugin {
+let already: LoadedPlugin? = lock.withLock { loadedByID[pluginID]}
+if let already { return already}
+
+let discovered: DiscoveredPlugin? = lock.withLock { discoveredByID[pluginID]}
+guard let discovered else { throw PluginError.notRegistered(pluginID: pluginID)}
+let manifest = discovered.manifest
+
+guard manifest.isCompatible(withAppVersion: appVersion) else {
+throw PluginError.incompatibleAppVersion(pluginID: pluginID,
+required: manifest.minimumAppVersion ?? "",
+current: appVersion)
+}
+
+if manifest.requiresLicense, let licenseVerifier {
+let code: String? = lock.withLock { licenseCodes[pluginID]}
+guard let code, !code.isEmpty else {
+throw PluginError.licenseDenied(pluginID: pluginID, result: .notFound)
+}
+let result = licenseVerifier.verify(pluginID: pluginID, licenseCode: code, deviceID: deviceID)
+guard result == .valid else {
+throw PluginError.licenseDenied(pluginID: pluginID, result: result)
+}
+}
+
+let loaded = try loader.loadPlugin(manifest: manifest, directory: discovered.directory)
+return lock.withLock {
+if let existing = loadedByID[pluginID] { return existing}
+loadedByID[pluginID] = loaded
+return loaded
+}
+}
+
+// MARK: - 音声フック
+
+/// キャラの `engine` 識別子を担当するプラグインの `VoiceProvider` を解決する。
+/// 該当プラグインはこの呼び出しで初めて実体化される(遅延読み込み)。
+/// 担当プラグインが登録されていなければ nil(呼び出し側がコア既定の扱いに落とせるよう、ここでは投げない版)。
+public func voiceProviderIfAvailable(forEngine engineID: String) throws -> (any VoiceProvider)? {
+guard let manifest = registeredManifests.first(where: { $0.handlesVoiceEngine(engineID)}) else { return nil}
+let loaded = try loadIfNeeded(pluginID: manifest.id)
+return loaded.voiceProvider
+}
+
+/// `voiceProviderIfAvailable` の「無ければエラー」版。
+public func voiceProvider(forEngine engineID: String) throws -> any VoiceProvider {
+guard let manifest = registeredManifests.first(where: { $0.handlesVoiceEngine(engineID)}) else {
+throw PluginError.noVoicePlugin(engineID: engineID)
+}
+let loaded = try loadIfNeeded(pluginID: manifest.id)
+guard let provider = loaded.voiceProvider else {
+throw PluginError.voiceProviderMissing(pluginID: manifest.id)
+}
+return provider
+}
+
+/// キャラから直接解決する(接続点: `Character.engine` が解決キー)。
+public func voiceProvider(for character: Character) throws -> any VoiceProvider {
+try voiceProvider(forEngine: character.engine)
+}
+}

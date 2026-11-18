@@ -62,3 +62,11 @@ public final class ToneVoiceProvider: VoiceProvider {
         try file.write(from: buf)
     }
 }
+
+/// 音声ファイルの長さ(秒)を読む小さな道具(合成結果に限らず、取り込んだ音声にも使う)。
+public enum WavFile {
+    public static func duration(of url: URL) throws -> Double {
+        let f = try AVAudioFile(forReading: url)
+        return Double(f.length) / f.processingFormat.sampleRate
+    }
+}
