@@ -255,6 +255,8 @@ struct AppCommands: Commands {
                 Divider()
                 MenuItemView(spec: AppMenuSpec.gifExport(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.apngExport(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.ymmpExport(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.webVideoExport(s), perform: run)
                 Divider()
                 MenuItemView(spec: AppMenuSpec.loudnessItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.clipListItem(s), perform: run)
