@@ -8,7 +8,8 @@ import Foundation
 ///
 /// 速さの扱いも内蔵と同一: キャラの `speed`(%表記、標準 100。ゆっくり 130% は speed = 130)を
 /// そのまま受け取り、キャッシュキーに含める。AquesTalkPlayer のコマンドライン
-/// (`-P` / `-T` / `-W` のみ)に速さの指定は無いため、引数には含めない(内蔵も同じ)。
+/// (`-P` / `-T` / `-W` のみ)に速さの指定は無いため引数には含めず、100・未指定以外では
+/// 生成後の WAV に音程保持の時間伸縮(`VoiceTimeStretch`、内蔵と共有の部品)をかけて反映する。
 public struct AquesTalkPluginSynthesizer {
     /// 標準のインストール先(表示・案内用)。
     public static let playerPath = "/Applications/AquesTalkPlayer.app/Contents/MacOS/AquesTalkPlayer"
@@ -44,8 +45,19 @@ public struct AquesTalkPluginSynthesizer {
         let key = VoiceCache.key([.string("aq"), .string(executable?.path ?? "say"), .string(text), .opt(AquesTalkPresets.playerName(voice)), .opt(speed)])
         if let hit = cache.hit(forKey: key) { return hit }
         let out = try cache.url(forKey: key)
-        let inv = invocation(text: text, voice: voice, out: out)
-        try await Self.run(executable: inv.executable, arguments: inv.arguments, expecting: out)
+        // 速さ 100・未指定では従来どおり無変換で作る(参照 WAV とのバイト一致を保つ互換条件)。
+        guard VoiceTimeStretch.needsStretch(speed: speed), let speed else {
+            let inv = invocation(text: text, voice: voice, out: out)
+            try await Self.run(executable: inv.executable, arguments: inv.arguments, expecting: out)
+            return out
+        }
+        // 速さは AquesTalkPlayer の引数に無いので、一度テンポラリへ生成してから音程保持の
+        // 時間伸縮(`VoiceTimeStretch`)をかけてキャッシュの場所へ置く。say 代用のときも同じ。
+        let raw = FileManager.default.temporaryDirectory.appendingPathComponent("moviecut-aq-\(UUID().uuidString).wav")
+        defer { try? FileManager.default.removeItem(at: raw) }
+        let inv = invocation(text: text, voice: voice, out: raw)
+        try await Self.run(executable: inv.executable, arguments: inv.arguments, expecting: raw)
+        try VoiceTimeStretch.apply(input: raw, speedPercent: speed, output: out)
         return out
     }
 
