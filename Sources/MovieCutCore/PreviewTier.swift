@@ -8,17 +8,17 @@ import Foundation
 public enum PreviewTier: String, Equatable, Sendable, CaseIterable {
     /// フル解像度・フル fps。
     case full
-    /// 解像度 1/4(scale 0.25)・fps そのまま。
+    /// 解像度 1/4(面積比。縦横それぞれ 1/2)・fps そのまま。
     case reduced
-    /// 解像度 1/16(scale 0.0625)・fps 半分。
+    /// 解像度 1/16(面積比。縦横それぞれ 1/4)・fps 半分。
     case minimal
 
-    /// 描画スケール(幅・高さそれぞれに掛ける)。
+    /// 描画スケール(幅・高さそれぞれに掛ける倍率)。仕様の解像度比(1/4・1/16)は面積比なので、縦横の倍率は 1/2・1/4 になる。
     public var resolutionScale: Double {
         switch self {
         case .full: return 1.0
-        case .reduced: return 0.25
-        case .minimal: return 0.0625
+        case .reduced: return 0.5
+        case .minimal: return 0.25
         }
     }
 

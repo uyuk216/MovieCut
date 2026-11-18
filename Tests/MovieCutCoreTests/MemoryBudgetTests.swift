@@ -166,20 +166,22 @@ final class PreviewTierTests: XCTestCase {
     func testMiddleIsQuarterResolutionSameFPS() {
         XCTAssertEqual(PreviewTier.tier(forLimitBytes: 12 * gib), .reduced)
         XCTAssertEqual(PreviewTier.tier(forLimitBytes: 2 * gib), .reduced)
-        XCTAssertEqual(PreviewTier.reduced.resolutionScale, 0.25)
+        XCTAssertEqual(PreviewTier.reduced.resolutionScale, 0.5, "面積 1/4 = 縦横それぞれ 1/2")
         XCTAssertEqual(PreviewTier.reduced.fpsScale, 1.0)
         XCTAssertEqual(PreviewTier.reduced.effectiveFPS(base: 60), 60)
         let s = PreviewTier.reduced.effectiveSize(width: 1920, height: 1080)
-        XCTAssertEqual(s.width, 480); XCTAssertEqual(s.height, 270)
+        XCTAssertEqual(s.width, 960); XCTAssertEqual(s.height, 540)
+        XCTAssertEqual(s.width * s.height, 1920 * 1080 / 4, "面積が 1/4")
     }
 
     func testLowIsSixteenthResolutionHalfFPS() {
         XCTAssertEqual(PreviewTier.tier(forLimitBytes: gib / 2), .minimal)
-        XCTAssertEqual(PreviewTier.minimal.resolutionScale, 0.0625)
+        XCTAssertEqual(PreviewTier.minimal.resolutionScale, 0.25, "面積 1/16 = 縦横それぞれ 1/4")
         XCTAssertEqual(PreviewTier.minimal.fpsScale, 0.5)
         XCTAssertEqual(PreviewTier.minimal.effectiveFPS(base: 60), 30)
         let s = PreviewTier.minimal.effectiveSize(width: 1920, height: 1080)
-        XCTAssertEqual(s.width, 120); XCTAssertEqual(s.height, 68) // 1080*0.0625=67.5 → 68
+        XCTAssertEqual(s.width, 480); XCTAssertEqual(s.height, 270) // 1080*0.25=270
+        XCTAssertEqual(s.width * s.height, 1920 * 1080 / 16, "面積が 1/16")
     }
 
     func testTierFromRAMAndPlatform() {
