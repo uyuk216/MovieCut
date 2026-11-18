@@ -62,6 +62,8 @@ struct ContentView: View {
             Divider()
             // キャラクター・プレビュー・プロパティ・タイムライン(初期配置はこれまでの画面と同じ。並べ替えは DockLayout)
             DockHost(model: model, store: dock)
+            Divider()
+            StatusBar(model: model)
         }
         .frame(minWidth: 1100, minHeight: 700)
         .background(MCDesign.Color.background)
@@ -147,9 +149,6 @@ struct ContentView: View {
 
 struct ToolbarBar: View {
     @ObservedObject var model: ProjectModel
-    /// ツールバーの幅(解像度・fps は狭いときに省く)。測るまでは広い扱い。
-    @State private var width: CGFloat = 10_000
-
     /// 解像度・fps の表示を出す最小のツールバー幅。これより狭いときは時刻の .help に回す。
     static let resolutionMinWidth: CGFloat = 1280
     static func showsResolution(forWidth w: CGFloat) -> Bool { w >= resolutionMinWidth }
@@ -191,30 +190,43 @@ struct ToolbarBar: View {
                     .help(L10n.t("選択中のクリップを削除(Delete)"))
             }
             Divider().frame(height: 18)
-            // 再生コントロール(⏮ ▶ 時刻 解像度·fps)は、プレビューの下ではなくここに置く
-            TransportBar(model: model, showsResolution: Self.showsResolution(forWidth: width))
+            // 再生コントロール(⏮ ▶ 時刻)は、プレビューの下ではなくここに置く。解像度・fps は下部のステータスバーへ移した
+            TransportBar(model: model, showsResolution: false)
             Spacer(minLength: 12)
-            Text(statusLine)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.tail)
         }
         .labelStyle(.titleAndIcon)
         .padding(.horizontal, MCDesign.Spacing.m)
         .padding(.vertical, MCDesign.Spacing.xs)
         .background(MCDesign.Color.barBackground.opacity(0.5))
-        .background(GeometryReader { g in
-            Color.clear
-                .onAppear { width = g.size.width }
-                .onChange(of: g.size.width) { _, w in width = w }
-        })
     }
+}
 
-    private var statusLine: String {
-        if !model.statusText.isEmpty { return model.statusText }
-        let n = model.project.allClips.count
-        return n > 0 ? "クリップ \(n) 個" : ""
+// MARK: - ステータスバー(ウィンドウ下部)
+
+/// 左: 状態文(従来ツールバー右端にあった文と同じ出所)。右: クリップ数・解像度・fps。
+struct StatusBar: View {
+    @ObservedObject var model: ProjectModel
+
+    /// 左に出す状態文。statusText が空のときは何も出さない(クリップ数は右に常時出す)。
+    static func leftText(_ model: ProjectModel) -> String { model.statusText }
+    static func clipCountText(_ n: Int) -> String { "クリップ \(n) 個" }
+
+    var body: some View {
+        HStack(spacing: MCDesign.Spacing.m) {
+            Text(Self.leftText(model))
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Spacer(minLength: MCDesign.Spacing.m)
+            Text(L10n.t(Self.clipCountText(model.project.allClips.count)))
+            Text(TransportBar.chipText(model))
+        }
+        .font(MCDesign.Font.subheadline)
+        .monospacedDigit()
+        .foregroundStyle(MCDesign.Color.textSecondary)
+        .padding(.horizontal, MCDesign.Spacing.m)
+        .padding(.vertical, MCDesign.Spacing.xs)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(MCDesign.Color.barBackground.opacity(0.5))
     }
 }
 
