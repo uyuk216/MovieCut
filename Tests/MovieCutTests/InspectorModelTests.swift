@@ -36,6 +36,22 @@ final class SpeakersStub: URLProtocol {
 final class InspectorModelTests: XCTestCase {
     var tone: ToneVoiceProvider!
 
+    /// 音声の作り直し系のテストは、「後ろのクリップをずらす」設定(voiceAutoRipple、既定オフ)が
+    /// オフである前提で書かれている。テストホストの UserDefaults に残った値の影響を受けないよう、
+    /// このクラスの間はオフに固定し、終わったら元の値に戻す(VoiceRippleAppTests と同じ作法)。
+    private var savedRipple = false
+
+    override func setUp() {
+        super.setUp()
+        savedRipple = VoiceRippleSettings.enabled
+        VoiceRippleSettings.enabled = false
+    }
+
+    override func tearDown() {
+        VoiceRippleSettings.enabled = savedRipple
+        super.tearDown()
+    }
+
     private func makeModel() -> ProjectModel {
         let m = ProjectModel(project: .new())
         tone = ToneVoiceProvider(durations: [1.0, 2.5], frequencies: [220, 330])
