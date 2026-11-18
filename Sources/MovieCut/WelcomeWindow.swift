@@ -147,6 +147,7 @@ struct WelcomeView: View {
         }
         .opacity(missing ? 0.45 : 1)
         .padding(.vertical, 3)
+        .help(missing ? L10n.t("ファイルが移動・削除されています。一覧から削除できます") : "")
     }
 }
 
