@@ -30,6 +30,10 @@ final class ExportPanelOptions: NSObject {
     private let documentName: String
     private let kindPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let ratePopup = NSPopUpButton(frame: .zero, pullsDown: false)
+    /// 完成ミックスのラウドネス正規化(既定オフ)と目標値。ピーク上限は Core 既定(-1 dBTP)のまま。
+    static let loudnessTargetChoices: [Double] = [-11, -14, -16, -18, -20]
+    private let loudnessBox = NSButton(checkboxWithTitle: "ラウドネス正規化", target: nil, action: nil)
+    private let loudnessPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     weak var panel: NSSavePanel?
     /// 「現在の設定」で書き出すときのコーデック(ProRes なら .mov)。
     private let projectCodec: String
@@ -49,6 +53,26 @@ final class ExportPanelOptions: NSObject {
             ratePopup.addItem(withTitle: r.map { String(format: "%g Mbps", $0) } ?? "プリセットの既定")
         }
         ratePopup.selectItem(at: 0)
+        loudnessBox.state = .off
+        loudnessBox.target = self
+        loudnessBox.action = #selector(loudnessToggled(_:))
+        loudnessBox.setAccessibilityIdentifier("export-loudness")
+        for t in Self.loudnessTargetChoices {
+            loudnessPopup.addItem(withTitle: String(format: "%g LUFS", t) + (t == LoudnessNormalizationSettings.defaultTargetLUFS ? "(YouTube)" : ""))
+        }
+        loudnessPopup.selectItem(at: Self.loudnessTargetChoices.firstIndex(of: LoudnessNormalizationSettings.defaultTargetLUFS) ?? 0)
+        loudnessPopup.isEnabled = false
+        loudnessPopup.setAccessibilityIdentifier("export-loudness-target")
+    }
+
+    @objc func loudnessToggled(_ sender: Any?) { loudnessPopup.isEnabled = loudnessBox.state == .on }
+
+    /// 選んだラウドネス正規化の設定(チェックがオフなら .disabled)。
+    var selectedLoudness: LoudnessNormalizationSettings {
+        guard loudnessBox.state == .on else { return .disabled }
+        let i = loudnessPopup.indexOfSelectedItem
+        let t = i >= 0 && i < Self.loudnessTargetChoices.count ? Self.loudnessTargetChoices[i] : LoudnessNormalizationSettings.defaultTargetLUFS
+        return .enabled(targetLUFS: t)
     }
 
     var selectedChoice: ExportChoice { choices[max(0, min(kindPopup.indexOfSelectedItem, choices.count - 1))] }
@@ -75,8 +99,9 @@ final class ExportPanelOptions: NSObject {
 
     /// 保存パネルのアクセサリ(範囲のチェックがあれば上に置く)。
     func accessoryView(rangeBox: NSButton?) -> NSView {
-        let rows: [(String, NSView)] = [("書き出しの種類", kindPopup), ("ビットレート", ratePopup)]
-        let h: CGFloat = CGFloat(rows.count + (rangeBox == nil ? 0 : 1)) * 30 + 8
+        let rows: [(String, NSView)] = [("書き出しの種類", kindPopup), ("ビットレート", ratePopup), ("目標ラウドネス", loudnessPopup)]
+        // 行: 範囲(あれば)+ 種類・ビットレート + ラウドネスのチェック + 目標ラウドネス
+        let h: CGFloat = CGFloat(rows.count + 1 + (rangeBox == nil ? 0 : 1)) * 30 + 8
         let wrap = NSView(frame: NSRect(x: 0, y: 0, width: 380, height: h))
         var y = h - 30
         if let box = rangeBox {
@@ -85,10 +110,15 @@ final class ExportPanelOptions: NSObject {
             y -= 30
         }
         for (label, control) in rows {
+            if label == "目標ラウドネス" {
+                loudnessBox.frame = NSRect(x: 12, y: y, width: 360, height: 22)
+                wrap.addSubview(loudnessBox)
+                y -= 30
+            }
             let l = NSTextField(labelWithString: label)
             l.frame = NSRect(x: 12, y: y + 2, width: 96, height: 20)
             control.frame = NSRect(x: 112, y: y, width: 250, height: 24)
-            control.setAccessibilityIdentifier(label == "ビットレート" ? "export-bitrate" : "export-kind")
+            if label != "目標ラウドネス" { control.setAccessibilityIdentifier(label == "ビットレート" ? "export-bitrate" : "export-kind") }
             wrap.addSubview(l)
             wrap.addSubview(control)
             y -= 30

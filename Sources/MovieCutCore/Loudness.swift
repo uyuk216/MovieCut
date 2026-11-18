@@ -68,7 +68,11 @@ public final class LoudnessMeter {
     }
 
     public func finish() -> LoudnessReport {
-        let tp = max(truePeakL.peak, truePeakR.peak)
+        // 末尾の補間出力は、後続のサンプルが来るまで評価されない。写し(値型)でゼロを流して末尾の山を拾う。
+        var tpL = truePeakL, tpR = truePeakR
+        tpL.flush(); tpR.flush()
+        // トゥルーピークはサンプルピークを下回らない(下限として取り込む)
+        let tp = max(tpL.peak, tpR.peak, Double(samplePeak))
         return LoudnessReport(
             integrated: Self.integratedLoudness(hops: hops),
             shortTermMax: Self.shortTermMax(hops: hops),
@@ -145,6 +149,11 @@ struct TruePeakDetector {
             peak = max(peak, abs(acc))
         }
         head = (head + 1) % Self.taps
+    }
+
+    /// 入力の末尾を越えるぶんの補間出力を評価する。ゼロを `taps` 個入れて履歴をすべてゼロへ押し出す。
+    mutating func flush() {
+        for _ in 0..<Self.taps { push(0) }
     }
 }
 

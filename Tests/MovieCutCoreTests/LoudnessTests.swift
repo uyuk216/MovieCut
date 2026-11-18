@@ -106,4 +106,32 @@ final class LoudnessTests: XCTestCase {
         let x = sine(hz: 440, amplitude: 0.3, seconds: 3)
         XCTAssertEqual(measure(left: x, right: x), measure(left: x, right: x))
     }
+
+    func testTruePeakInVeryLastSamplesIsNotDropped() {
+        // 無音の後、末尾の 8 サンプルだけが 12 kHz・位相 45°・振幅 1.0 のバースト(標本は ±0.707、標本ピーク −3.01 dBFS)
+        // 補間の遅延ぶんは後続のサンプルが無いと評価されないので、フラッシュが無いと山を取りこぼす
+        var x = [Float](repeating: 0, count: 48_000)
+        for k in 0..<8 {
+            x.append(Float(sin(2 * Double.pi * 12_000 * Double(k) / 48_000 + .pi / 4)))
+        }
+        let r = measure(left: x, right: x)
+        XCTAssertEqual(r.samplePeakDb, -3.01, accuracy: 0.05)
+        XCTAssertEqual(r.truePeakDb, 0.0, accuracy: 0.3, "末尾の山(標本の間)を拾う")
+        XCTAssertGreaterThan(r.truePeakDb, r.samplePeakDb + 2.5)
+    }
+
+    func testTruePeakOfLastSampleImpulseIsNotDropped() {
+        // 末尾 1 サンプルだけ 1.0 のインパルス。補間の山は約 −0.2 dBTP
+        var x = [Float](repeating: 0, count: 48_000)
+        x.append(1.0)
+        XCTAssertEqual(measure(left: x, right: x).truePeakDb, 0.0, accuracy: 0.3)
+    }
+
+    func testFinishCalledTwiceGivesSameReport() {
+        // フラッシュは写しに対して行うので、finish を 2 回呼んでも同じレポート
+        let x = sine(hz: 1000, amplitude: 0.5, seconds: 1)
+        let meter = LoudnessMeter()
+        x.withUnsafeBufferPointer { p in meter.add(p.baseAddress!, p.baseAddress!, p.count) }
+        XCTAssertEqual(meter.finish(), meter.finish())
+    }
 }

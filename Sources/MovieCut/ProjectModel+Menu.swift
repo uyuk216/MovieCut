@@ -69,8 +69,9 @@ extension ProjectModel {
             let useRange = rangeBox?.state == .on ? range : nil
             let choice = options.selectedChoice
             let bitrate = options.selectedBitrate
+            let loudness = options.selectedLoudness
             Task { @MainActor in
-                if case .success(let u) = await self.runExport(to: url, preset: choice.preset, spec: choice.spec, bitrateMbps: bitrate, range: useRange) {
+                if case .success(let u) = await self.runExport(to: url, preset: choice.preset, spec: choice.spec, bitrateMbps: bitrate, range: useRange, loudness: loudness) {
                     NSWorkspace.shared.activateFileViewerSelecting([u])
                 }
             }
