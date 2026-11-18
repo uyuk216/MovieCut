@@ -804,6 +804,12 @@ public struct Renderer {
         guard !compoundStack.contains(key), compoundStack.count < SceneEditing.maxDepth else { return nil }
         var sub = project
         sub.tracks = scene.tracks
+        // 子 Renderer 用プロジェクトでは camera を落とす(compoundRenderer と共通の作法)。
+        // カメラ変換は最上位の `render` の最終段で 1 回だけかけるものなので、子が camera を
+        // 持ち込むと `renderImage` 経由のフレーム経路(sceneFrame)で二重にかかり、しかも子時刻
+        // (t − start + offset)でキーフレームが評価されてしまう。高速経路(drawFrame 直接描画)
+        // では子側のカメラがかからないため、同じシーンでも経路によって絵が変わっていた。
+        sub.camera = nil
         var child = Renderer(project: sub, assets: assets, onStabilized: onStabilized, missingMediaPlaceholder: missingMediaPlaceholder, backend: backend)
         child.compoundStack = compoundStack + [key]
         child.drawsBackground = false

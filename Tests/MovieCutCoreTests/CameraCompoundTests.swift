@@ -88,6 +88,22 @@ final class CameraCompoundTests: XCTestCase {
     }
 
 
+    /// 左赤/右青の画像をシーン定義に入れ、シーンフレーム経由で参照するプロジェクト。
+    /// `sceneScale == 1` のとき高速経路(drawFrame 直接描画)、それ以外はフレーム経路(sceneFrame)を通る。
+    func sceneProject(src: String, camera: CameraSettings?, sceneScale: Double?, sceneStart: Double = 0) -> Project {
+        var scene = SceneDefinition(); scene.name = "導入"
+        var inner = Track(); inner.clips = [halvesImageClip(src: src)]
+        scene.tracks = [inner]
+        var sc = Clip(); sc.id = "sceneclip"; sc.type = .scene; sc.sceneId = scene.id
+        sc.start = sceneStart; sc.duration = 10
+        sc.scale = sceneScale
+        var p = Project(); p.width = 200; p.height = 100; p.fps = 30; p.bg = "#000000"
+        p.scenes = [scene]
+        var tr = Track(); tr.clips = [sc]; p.tracks = [tr]
+        p.camera = camera
+        return p
+    }
+
     /// 2 枚の画素の最大の差(チャンネルごと)。配列そのものを XCTAssertEqual に渡すと
     /// 失敗時に全画素がログへ出るので、差の最大値だけを比べる。
     func maxDiff(_ a: Pixels, _ b: Pixels) -> Int {
@@ -182,6 +198,56 @@ final class CameraCompoundTests: XCTestCase {
         let plain = try render(plainProject(src: src, camera: nil), 0.5)
         let fast = try render(compoundProject(src: src, camera: nil, compoundScale: nil), 0.5)
         let frame = try render(compoundProject(src: src, camera: nil, compoundScale: 0.999), 0.5)
+        XCTAssertEqual(boundaryX(plain), 100)
+        XCTAssertEqual(maxDiff(fast, plain), 0, "カメラ未設定の高速経路は従来と完全一致")
+        XCTAssertEqual(classMismatchCount(frame, fast), 0, "カメラ未設定でも両経路は一致する")
+    }
+
+    // MARK: シーン版回帰テスト(統合時の追加修正: sceneRenderer も compoundRenderer と同じ作法)
+
+    /// カメラ有効+シーンクリップで、高速経路(scale=1.0)とフレーム経路(scale=0.999)が
+    /// 同じ絵になり、単独適用の正解(境界 150)とも一致する。
+    /// 修正前は sceneFrame 経由で子側でもカメラがかかり、二重適用になっていた。
+    func testCameraSceneFastAndFramePathsAgreeAndMatchSingleApplication() throws {
+        let src = try halvesPNG()
+        var pan = CameraSettings(); pan.x = 0.25
+
+        let plain = try render(plainProject(src: src, camera: pan), 0.5)
+        assertCorrectPan(plain, "単独(シーンなし)")
+
+        let fast = try render(sceneProject(src: src, camera: pan, sceneScale: nil), 0.5)
+        assertCorrectPan(fast, "シーン・高速経路")
+        XCTAssertEqual(maxDiff(fast, plain), 0, "高速経路は単独適用と画素一致する")
+
+        let frame = try render(sceneProject(src: src, camera: pan, sceneScale: 0.999), 0.5)
+        assertCorrectPan(frame, "シーン・フレーム経路")
+        XCTAssertEqual(classMismatchCount(frame, fast), 0, "フレーム経路は高速経路と画素の色割り当てが一致する(経路で絵が変わらない)")
+    }
+
+    /// カメラキーフレーム+開始時刻がずれたシーンクリップでも、カメラは親時刻で 1 回だけ評価される。
+    func testCameraKeyframeSceneEvaluatesCameraOnceAtParentTime() throws {
+        let src = try halvesPNG()
+        var cam = CameraSettings()
+        cam.keyframes["x"] = [Keyframe(t: 0, v: 0.5), Keyframe(t: 2, v: 0.25)]
+
+        let plain = try render(plainProject(src: src, camera: cam), 2)
+        assertCorrectPan(plain, "単独(キーフレーム・シーン)")
+
+        let fast = try render(sceneProject(src: src, camera: cam, sceneScale: nil, sceneStart: 1), 2)
+        assertCorrectPan(fast, "シーン・高速経路(キーフレーム)")
+        XCTAssertEqual(maxDiff(fast, plain), 0, "高速経路は単独適用と画素一致する")
+
+        let frame = try render(sceneProject(src: src, camera: cam, sceneScale: 0.999, sceneStart: 1), 2)
+        assertCorrectPan(frame, "シーン・フレーム経路(キーフレーム)")
+        XCTAssertEqual(classMismatchCount(frame, fast), 0, "フレーム経路は高速経路と画素の色割り当てが一致する")
+    }
+
+    /// カメラ未設定のシーンは従来どおり(両経路とも画素一致・境界 100 のまま)。
+    func testNoCameraScenePathsUnchanged() throws {
+        let src = try halvesPNG()
+        let plain = try render(plainProject(src: src, camera: nil), 0.5)
+        let fast = try render(sceneProject(src: src, camera: nil, sceneScale: nil), 0.5)
+        let frame = try render(sceneProject(src: src, camera: nil, sceneScale: 0.999), 0.5)
         XCTAssertEqual(boundaryX(plain), 100)
         XCTAssertEqual(maxDiff(fast, plain), 0, "カメラ未設定の高速経路は従来と完全一致")
         XCTAssertEqual(classMismatchCount(frame, fast), 0, "カメラ未設定でも両経路は一致する")
