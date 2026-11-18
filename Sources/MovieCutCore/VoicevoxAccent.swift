@@ -1,7 +1,7 @@
 import Foundation
 
 /// VOICEVOX の mora(音の最小単位)。audio_query 応答の accent_phrases[].moras[] と同じ形。
-public struct VoicevoxMora: Codable, Equatable, Sendable {
+public struct VoicevoxAccentMora: Codable, Equatable, Sendable {
     public var text: String
     public var consonant: String?
     public var consonantLength: Double?
@@ -27,12 +27,12 @@ public struct VoicevoxMora: Codable, Equatable, Sendable {
 
 /// VOICEVOX のアクセント句。`accent` は核位置(0 = 平板、n = n モーラ目の直後で下がる)。
 public struct VoicevoxAccentPhrase: Codable, Equatable, Sendable {
-    public var moras: [VoicevoxMora]
+    public var moras: [VoicevoxAccentMora]
     public var accent: Int
-    public var pauseMora: VoicevoxMora?
+    public var pauseMora: VoicevoxAccentMora?
     public var isInterrogative: Bool?
 
-    public init(moras: [VoicevoxMora], accent: Int, pauseMora: VoicevoxMora? = nil, isInterrogative: Bool? = nil) {
+    public init(moras: [VoicevoxAccentMora], accent: Int, pauseMora: VoicevoxAccentMora? = nil, isInterrogative: Bool? = nil) {
         self.moras = moras
         self.accent = accent
         self.pauseMora = pauseMora

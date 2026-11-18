@@ -28,8 +28,8 @@ private final class PlainMockVoice: VoiceProvider, @unchecked Sendable {
 
 final class ClipVoicevoxAccentTests: XCTestCase {
     private let phrases = [VoicevoxAccentPhrase(moras: [
-        VoicevoxMora(text: "コ", consonant: "k", consonantLength: 0.1, vowel: "o", vowelLength: 0.1, pitch: 5.5),
-        VoicevoxMora(text: "ン", vowel: "N", vowelLength: 0.1, pitch: 5.6)], accent: 1, pauseMora: nil, isInterrogative: false)]
+        VoicevoxAccentMora(text: "コ", consonant: "k", consonantLength: 0.1, vowel: "o", vowelLength: 0.1, pitch: 5.5),
+        VoicevoxAccentMora(text: "ン", vowel: "N", vowelLength: 0.1, pitch: 5.6)], accent: 1, pauseMora: nil, isInterrogative: false)]
 
     private func json(_ c: Clip) throws -> [String: Any] {
         try JSONSerialization.jsonObject(with: JSONEncoder().encode(c)) as! [String: Any]

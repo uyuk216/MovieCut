@@ -76,7 +76,7 @@ final class VoicevoxAccentTests: XCTestCase {
     }
 
     func testCodableSnakeCaseKeys() throws {
-        let m = VoicevoxMora(text: "ア", vowel: "a", vowelLength: 0.1, pitch: 5)
+        let m = VoicevoxAccentMora(text: "ア", vowel: "a", vowelLength: 0.1, pitch: 5)
         let data = try JSONEncoder().encode(VoicevoxAccentPhrase(moras: [m], accent: 1, pauseMora: m, isInterrogative: true))
         let s = String(decoding: data, as: UTF8.self)
         XCTAssertTrue(s.contains("\"vowel_length\""))
