@@ -295,6 +295,8 @@ final class ProjectModel: ObservableObject {
     }()
     /// プレビューと共有する素材キャッシュ(書き出しは別に作る: 書き出し専用モードがあるため)。
     let assets = RenderAssets()
+    /// プレビュー画質の設定変更の購読(deinit で外す)。
+    private var previewTierObserver: NSObjectProtocol?
     /// 立ち絵パーツの先読み(`ProjectModel+Prewarm`): 先読み済みの指紋と、主スレッドでの予約の有無
     var prewarmSignature: Int?
     var prewarmScheduled = false
@@ -363,6 +365,17 @@ final class ProjectModel: ObservableObject {
         NotificationCenter.default.addObserver(forName: ProxySettings.didChange, object: nil, queue: .main) { _ in
             a?.setPreviewProxies(ProxySettings.enabled(), lookup: ProjectModel.previewProxyPath)
         }
+        // メモリ予算(アプリ全体で 1 つ)と、プレビュー画質の縮小率を、この書類の素材キャッシュへ。画質の設定が変わったら縮小率だけ付け直す。
+        assets.setBudgetManager(AppServices.cacheBudget)
+        assets.setPreviewVideoScale(currentPreviewTier().resolutionScale)
+        nonisolated(unsafe) weak let tierAssets: RenderAssets? = assets
+        previewTierObserver = NotificationCenter.default.addObserver(forName: PreviewTierStore.didChange, object: nil, queue: .main) { _ in
+            tierAssets?.setPreviewVideoScale(PreviewTierStore.effectiveTier().resolutionScale)
+        }
+    }
+
+    deinit {
+        if let previewTierObserver { NotificationCenter.default.removeObserver(previewTierObserver) }
     }
 
     var documentName: String {
@@ -370,6 +383,9 @@ final class ProjectModel: ObservableObject {
     }
 
     var effectiveUndoManager: UndoManager { undoManager ?? fallbackUndoManager }
+
+    /// いまのプレビュー画質(上書きがなければ作業メモリの予算から決まる実効階級)。
+    func currentPreviewTier() -> PreviewTier { PreviewTierStore.effectiveTier() }
 
     /// 編集中は触らせない(書き出し・音声生成)。
     var isLocked: Bool { isExporting || busyMessage != nil }
