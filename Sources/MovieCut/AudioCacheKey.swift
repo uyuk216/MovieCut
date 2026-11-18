@@ -35,6 +35,7 @@ struct AudioCacheKey: Hashable {
                 if let fx = c.audioFx, fx.isActive { extras += "|fx=\(fx.cacheToken)" }
                 if c.hasPan { extras += "|pan=\(c.panOrDefault)" }
                 if c.hasDuck, Clip.supportsDuck(c) { extras += "|duck=\(c.duck!.cacheToken)" }
+                if c.type == .audio, c.isTreatedAsVoice { extras += "|voice" }   // 声の指定は BGM のダッキングを変えるので鍵に入れる
                 if c.hasVolumeKeys { extras += "|vk=" + (c.keyframes["volume"] ?? []).map { "\($0.t):\($0.v):\($0.ease.token)" }.joined(separator: ",") }
                 items.append("\(c.type.rawValue)|\(src)|\(c.start)|\(c.duration)|\(c.offset)|\(c.volumeOrDefault)|\(date)\(fade)\(remap)\(extras)")
             }

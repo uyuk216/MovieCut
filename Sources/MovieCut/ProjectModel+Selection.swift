@@ -184,6 +184,23 @@ extension ProjectModel {
         return edit(on ? "クリップの消音" : "消音を解除") { $0 = p }
     }
 
+    /// クリップ ▸ 音声 ▸ 声として扱う / 声として扱うのをやめる。選んだ音声クリップが全部指定済みなら解除、そうでなければ全部指定。1 回の Undo。
+    /// ロックされたレイヤー・クリップは変えない(複合クリップの中に入っているときは、見えているレイヤーが対象)。
+    @discardableResult
+    func toggleTreatAsVoiceSelected() -> Bool {
+        guard !isLocked, ClipEditing.hasVoiceDesignatable(selectedClipIDs, in: project) else { return false }
+        let on = !ClipEditing.allTreatedAsVoice(selectedClipIDs, in: project)
+        return setTreatedAsVoice(ids: selectedClipIDs, on)
+    }
+
+    /// 声の指定を切り替える(インスペクタのトグル・メニュー共通)。1 回の Undo。ロックされたものは変えない。
+    @discardableResult
+    func setTreatedAsVoice(ids: Set<String>, _ on: Bool) -> Bool {
+        guard !isLocked, let p = ClipEditing.setClipsTreatedAsVoice(in: project, ids: ids, on) else { return false }
+        flushCoalesced()
+        return edit(on ? "声として扱う" : "声として扱うのをやめる") { $0 = p }
+    }
+
     @discardableResult
     func toggleLayerLock(_ index: Int) -> Bool {
         guard !isLocked, project.tracks.indices.contains(index),

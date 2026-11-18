@@ -1983,6 +1983,8 @@ final class TimelineCanvas: NSView {
         add(allLocked ? "クリップのロックを解除" : "クリップをロック", enabled: !m.selectedClipIDs.isEmpty) { m.toggleClipLockSelected() }
         let allMuted = ClipEditing.allMuted(m.selectedClipIDs, in: m.project)
         add(allMuted ? "クリップの消音を解除" : "クリップを消音", enabled: ClipEditing.hasMutable(m.selectedClipIDs, in: m.project)) { m.toggleClipMuteSelected() }
+        let allVoice = ClipEditing.allTreatedAsVoice(m.selectedClipIDs, in: m.project)
+        add(allVoice ? "声として扱うのをやめる" : "声として扱う", enabled: ClipEditing.hasVoiceDesignatable(m.selectedClipIDs, in: m.project)) { m.toggleTreatAsVoiceSelected() }
         menu.addItem(.separator())
         add("コピー", enabled: !m.selectedClipIDs.isEmpty) { m.copySelection() }
         add("切り取り", enabled: !m.selectedClipIDs.isEmpty) { m.cutSelection() }

@@ -71,6 +71,8 @@ enum MenuCommand: Hashable {
     case clipLock
     // クリップ ▸ クリップを消音 / 消音を解除(音のあるクリップと複合クリップ。ショートカットなし)
     case clipMute
+    // クリップ ▸ 音声 ▸ 声として扱う / 声として扱うのをやめる(音声クリップ。BGM の自動ダッキングの引き金。ショートカットなし)
+    case treatAsVoice
     case split, delete, addText, addBlur, addAdjustment, addVisualizer, addQRCode, addCharacter, makeVoices
     // 図形(クリップ ▸ 図形を追加 ▸ 種類。ショートカットは持たない)
     case addShape(FigureKind)
@@ -275,6 +277,9 @@ struct MenuState: Equatable {
     /// 選んだクリップに消音できるもの(音のある型・複合クリップ)があるか / それが全部消音済みか(メニューは「消音を解除」になる)
     var canMuteClip = false
     var clipsMuted = false
+    /// 選んだクリップに声として扱う指定ができるもの(音声クリップ)があるか / それが全部指定済みか(メニューは「声として扱うのをやめる」になる)
+    var canTreatAsVoice = false
+    var clipsTreatedAsVoice = false
     var layerSolo = false
     /// 対象のレイヤーがトラックターゲット(新しく足すクリップの行き先)
     var layerIsTarget = false
@@ -449,6 +454,8 @@ struct MenuState: Equatable {
         clipsLocked = LayerEditing.allClipsLocked(m.selectedClipIDs, in: m.project)
         canMuteClip = ClipEditing.hasMutable(m.selectedClipIDs, in: m.project)
         clipsMuted = ClipEditing.allMuted(m.selectedClipIDs, in: m.project)
+        canTreatAsVoice = ClipEditing.hasVoiceDesignatable(m.selectedClipIDs, in: m.project)
+        clipsTreatedAsVoice = ClipEditing.allTreatedAsVoice(m.selectedClipIDs, in: m.project)
         canSplit = m.canSplit
         canRoll = m.canRoll
         canSlip = m.canSlip
@@ -869,6 +876,12 @@ enum AppMenuSpec {
                      enabled: s.canEdit && s.canMuteClip, checked: nil, hint: "このクリップだけ鳴らさない")
     }
 
+    /// クリップ ▸ 音声 ▸ 声として扱う / 声として扱うのをやめる(選択の状態でラベルが変わる。ショートカットなし)。
+    static func treatAsVoiceItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .treatAsVoice, title: s.clipsTreatedAsVoice ? "声として扱うのをやめる" : "声として扱う", shortcut: nil,
+                     enabled: s.canEdit && s.canTreatAsVoice, checked: nil, hint: "録音した話し声で BGM を下げる")
+    }
+
     static func clipTrim(_ s: MenuState) -> [MenuItemSpec] {
         [MenuItemSpec(command: .trimBefore, title: "再生位置より前を切り落とす", shortcut: MenuShortcut(key: "[", modifiers: [.option, .command]), enabled: s.canEdit && s.canTrim, checked: nil),
          MenuItemSpec(command: .trimAfter, title: "再生位置より後ろを切り落とす", shortcut: MenuShortcut(key: "]", modifiers: [.option, .command]), enabled: s.canEdit && s.canTrim, checked: nil),
@@ -1171,6 +1184,7 @@ enum AppMenuSpec {
                 MenuItemSpec(command: .audioVolumeUp, title: "音量を上げる（+3 dB）", shortcut: nil, enabled: on, checked: nil),
                 MenuItemSpec(command: .audioVolumeDown, title: "音量を下げる（−3 dB）", shortcut: nil, enabled: on, checked: nil),
                 MenuItemSpec(command: .audioDuckToggle, title: "自動ダッキングを切り替え（声があるとき BGM を下げる）", shortcut: nil, enabled: s.canEdit && s.canDuck, checked: s.canDuck ? s.isDucking : nil),
+                treatAsVoiceItem(s),
                 MenuItemSpec(command: .audioClear, title: "音声エフェクトをすべて外す", shortcut: nil, enabled: s.canEdit && s.hasAudioFx, checked: nil)]
     }
 
@@ -1455,6 +1469,7 @@ enum AppMenu {
             case .selectAllClips: m.selectAllClips()
             case .clipLock: m.toggleClipLockSelected()
             case .clipMute: m.toggleClipMuteSelected()
+            case .treatAsVoice: m.toggleTreatAsVoiceSelected()
             case .layerLock: if let i = m.targetLayerIndex { m.toggleLayerLock(i) }
             case .layerSolo: if let i = m.targetLayerIndex { m.toggleLayerSolo(i) }
             case .layerTarget: if let i = m.targetLayerIndex { m.toggleTrackTarget(i) }

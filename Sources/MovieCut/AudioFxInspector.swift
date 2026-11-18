@@ -85,6 +85,7 @@ struct AudioFxPanel: View {
                 delayGroup(c)
                 normalizeGroup(c)
                 duckGroup(c)
+                voiceDesignationToggle(c)
             }
             .controlSize(.small)
             .disabled(model.isLocked)
@@ -267,6 +268,21 @@ extension AudioFxPanel {
             } label: {
                 Text("自動ダッキング").font(.system(size: 12, weight: .semibold)).foregroundStyle(on ? Color.primary : Color.secondary)
             }
+        }
+    }
+
+    /// 録音した話し声などの音声クリップを「声」として扱う(BGM の自動ダッキングの引き金になる)。音声クリップだけ。
+    @ViewBuilder fileprivate func voiceDesignationToggle(_ c: Clip) -> some View {
+        if ClipEditing.supportsVoiceDesignation(c) {
+            VStack(alignment: .leading, spacing: 4) {
+                Toggle("声として扱う", isOn: Binding(get: { c.isTreatedAsVoice }, set: { v in
+                    model.setTreatedAsVoice(ids: [clipId], v)
+                }))
+                .toggleStyle(.checkbox)
+                Text("オンにすると、このクリップがある間、自動ダッキングをオンにした BGM を下げます。音や映像は変わりません。")
+                    .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.top, 4)
         }
     }
 

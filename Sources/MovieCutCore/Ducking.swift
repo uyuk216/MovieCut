@@ -58,6 +58,8 @@ public struct Duck: Codable, Equatable, Sendable {
 
 public extension Clip {
     var hasDuck: Bool { duck?.isActive ?? false }
+    /// ダッキングの「声」の元になるクリップ: ボイスクリップ、または声として扱う指定をした音声クリップ。
+    var isVoiceSource: Bool { type == .voice || (type == .audio && isTreatedAsVoice) }
     /// ダッキングを設定できるクリップ(BGM などの音声クリップ。フリーズは無音)。
     static func supportsDuck(_ c: Clip) -> Bool { c.type == .audio && !c.isFreeze }
 }
@@ -72,11 +74,11 @@ public enum Ducking {
         public init(start: Double, end: Double) { self.start = start; self.end = end }
     }
 
-    /// 声として扱うクリップ: 音の出る(src があり、長さがあり、音量が 0 でない)ボイスクリップ。消音・ソロで鳴らないレイヤーは除く。
+    /// 声として扱うクリップ: 音の出る(src があり、長さがあり、音量が 0 でない)ボイスクリップと、声として扱う指定をした音声クリップ。消音・ソロで鳴らないレイヤーは除く。
     public static func voiceSpans(in project: Project) -> [Span] {
         var spans: [Span] = []
         // 複合クリップの中の声も数える(`audibleClips` は中身を平らにした列)
-        for c in CompoundEditing.audibleClips(in: project) where c.type == .voice {
+        for c in CompoundEditing.audibleClips(in: project) where c.isVoiceSource {
             guard let s = c.src, !s.isEmpty, c.duration > 0, c.volumeOrDefault > 0 else { continue }
             spans.append(Span(start: c.start, end: c.start + c.duration))
         }
