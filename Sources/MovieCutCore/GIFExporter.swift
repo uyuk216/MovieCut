@@ -75,7 +75,7 @@ public enum GIFExporter {
     /// キャンセル・失敗のときは一時ファイルを消し、既存の `url` は変えない。進み具合は 0〜1。
     @discardableResult
     public static func export(project: Project, assets: RenderAssets = RenderAssets(), range: ExportRange? = nil,
-                              options: GIFOptions = .standard, to url: URL, progress: ((Double) -> Void)? = nil) async throws -> Result {
+                              options: GIFOptions = .standard, to url: URL, pluginEffectProviders: [any VideoEffectProviding] = [], progress: ((Double) -> Void)? = nil) async throws -> Result {
         let p = plan(project: project, range: range, options: options)
         guard p.frames > 0 else { throw ExportError.emptyProject }
         guard p.width > 0, p.height > 0 else { throw ExportError.noOutputSize(width: project.width, height: project.height) }
@@ -87,7 +87,7 @@ public enum GIFExporter {
         let work = Task.detached(priority: .userInitiated) { () throws -> Result in
             // ImageIO は途中の書きかけを `part` の隣(名前に印が付く)に置くことがあるので、同じ名前で始まるものを全部消す
             func cleanup() { ImageIOPartFiles.remove(part) }
-            let renderer = Renderer(project: scaled, assets: assets)
+            let renderer = Renderer(project: scaled, assets: assets, pluginEffectProviders: pluginEffectProviders)
             // dest を手放してから後始末できるよう、描いて書く部分を内側の関数にする
             func write() throws {
             guard let dest = CGImageDestinationCreateWithURL(part as CFURL, UTType.gif.identifier as CFString, p.frames, nil) else {

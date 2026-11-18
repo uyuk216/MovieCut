@@ -68,7 +68,7 @@ extension ProjectModel {
         let frames = GIFExporter.plan(project: snapshot, range: range, options: options).frames
         return await runJob(title: "GIF を書き出しています", fileName: url.lastPathComponent, notices: [],
                             success: "\(url.lastPathComponent) に \(frames) コマの GIF を書き出しました", result: url) { progress in
-            try await GIFExporter.export(project: snapshot, range: range, options: options, to: url, progress: progress)
+            try await GIFExporter.export(project: snapshot, range: range, options: options, to: url, pluginEffectProviders: AppServices.pluginEffectProviders, progress: progress)
         }
     }
 }

@@ -83,12 +83,18 @@ public enum MidiError: Error, Equatable, CustomStringConvertible {
     case notMIDI
     case truncated
     case unsupportedFormat(Int)
+    /// 総尺が取り込み上限を超えた(F-4 のガード。巨大な WAV を作らないため、取り込まない)。
+    case tooLong(seconds: Double, limit: Double)
+    /// ノート数が取り込み上限を超えた(F-4 のガード。病的に密なファイルで描画が爆発しないように)。
+    case tooManyNotes(count: Int, limit: Int)
 
     public var description: String {
         switch self {
         case .notMIDI: return "MIDI ファイルとして読み取れませんでした"
         case .truncated: return "MIDI ファイルが途中で終わっています"
         case .unsupportedFormat(let f): return "対応していない MIDI フォーマットです(\(f))"
+        case .tooLong(let s, let limit): return "MIDI が長すぎます(\(Int(s.rounded())) 秒。上限は \(Int(limit)) 秒です)"
+        case .tooManyNotes(let n, let limit): return "MIDI のノートが多すぎます(\(n) 個。上限は \(limit) 個です)"
         }
     }
 }

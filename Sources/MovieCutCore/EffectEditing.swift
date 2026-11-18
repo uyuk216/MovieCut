@@ -112,6 +112,24 @@ public enum EffectEditing {
         return true
     }
 
+    /// プラグインエフェクトを記述子の初期値に戻す(引数・色。有効/無効と並びはそのまま。その引数のキーは消す)。
+    /// 内蔵の種類では使わない(そちらは reset(_:at:))。プラグイン未導入の環境では呼び出し側が記述子を持てないので何も起きない。
+    @discardableResult
+    public static func reset(_ c: inout Clip, at index: Int, descriptor: PluginEffectDescriptor) -> Bool {
+        guard c.effects.indices.contains(index), c.effects[index].known == nil,
+              c.effects[index].kind.trimmingCharacters(in: .whitespaces).lowercased() == descriptor.id.lowercased() else { return false }
+        let before = c
+        var fresh = Effect(kind: descriptor.id)
+        for s in descriptor.params { fresh.params[s.key] = s.defaultValue }
+        fresh.color = descriptor.defaultColor
+        fresh.enabled = c.effects[index].enabled
+        fresh.extra = c.effects[index].extra
+        fresh.path = c.effects[index].path
+        c.effects[index] = fresh
+        for s in descriptor.params { c.keyframes[EffectKey.make(index, s.key)] = nil }
+        return c != before
+    }
+
     /// 初期値に戻す(引数・色。有効/無効と並びはそのまま。その引数のキーは消す)。
     @discardableResult
     public static func reset(_ c: inout Clip, at index: Int) -> Bool {

@@ -16,7 +16,7 @@ extension AppMenuSpec {
         if s.isLocked { return "書き出し中・音声生成中は使えません" }
         switch spec.command {
         case .export, .exportPreset, .exportCustomPreset, .saveCustomPreset, .exportStill, .exportSequence,
-             .exportThumbnail, .exportThumbnailCandidates, .exportGIF, .exportAPNG, .exportYmmp, .exportWebVideo, .exportPngWav, .exportExo, .queueExport, .measureLoudness:
+             .exportThumbnail, .exportThumbnailCandidates, .exportGIF, .exportAPNG, .exportYmmp, .exportWebVideo, .exportPngWav, .exportExo, .exportPluginFormat, .queueExport, .measureLoudness:
             return "書き出せるクリップがありません"
         case .rangeIn, .rangeOut: return "書き出し範囲を指定できる状態ではありません"
         case .rangeDelete, .rangeRippleDelete: return s.canMarkRange ? "先にイン点・アウト点で範囲を指定してください" : "書き出し範囲を指定できる状態ではありません"
@@ -86,7 +86,9 @@ extension AppMenuSpec {
         case .transitionIn, .transitionOut, .fadeBoth, .crossfade: return "映像のクリップを選んでください"
         case .clearTransitions: return "トランジションがありません"
         case .fadeInOut: return "映像か音のクリップを選んでください"
-        case .effectAdd, .effectPreset, .lutLoad, .colorTransferLoad: return "エフェクトを付けられるクリップを選んでください"
+        case .effectAdd, .effectAddPlugin, .effectPreset, .lutLoad, .colorTransferLoad: return "エフェクトを付けられるクリップを選んでください"
+        case .faceBlurApplyAll: return "顔ぼかしを付けられるクリップがありません(映像・画像・複合が対象です)"
+        case .faceBlurRemoveAll: return "顔ぼかしが付いているクリップがありません"
         case .audioAutoSync: return AudioSyncEditing.selectionHint
         case .autoWhiteBalance: return "画像か動画のクリップを選んでください"
         case .copyChaptersColor: return "その色のマーカーがありません"

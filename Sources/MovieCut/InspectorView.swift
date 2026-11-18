@@ -807,14 +807,21 @@ struct ClipInspector: View {
     @ViewBuilder private func effectCard(_ c: Clip, _ i: Int) -> some View {
         let e = c.effects[i]
         let kind = e.known
-        let canReset: Bool = { var p = c; return EffectEditing.reset(&p, at: i) }()
+        // プラグインエフェクト(F-1): 内蔵の種類でなければ、プラグインの記述子で名前と引数を出す。
+        let pluginDesc = kind == nil ? model.pluginEffectDescriptor(for: e.kind) : nil
+        let canReset: Bool = {
+            var p = c
+            if EffectEditing.reset(&p, at: i) { return true }
+            if let pluginDesc { var q = c; return EffectEditing.reset(&q, at: i, descriptor: pluginDesc) }
+            return false
+        }()
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 2) {
                 Toggle("", isOn: Binding(get: { e.enabled }, set: { model.setEffectEnabled($0, at: i, clipId: clipId) }))
                     .toggleStyle(.checkbox).labelsHidden().help("オン/オフ")
-                Text(kind?.label ?? "未対応: \(e.kind)")
+                Text(kind?.label ?? pluginDesc?.label ?? "未対応: \(e.kind)")
                     .font(MCDesign.Font.calloutSemibold)
-                    .foregroundStyle(kind == nil || !e.enabled ? Color.secondary : Color.primary)
+                    .foregroundStyle((kind == nil && pluginDesc == nil) || !e.enabled ? Color.secondary : Color.primary)
                     .lineLimit(1)
                 Spacer(minLength: 4)
                 iconButton("arrow.counterclockwise", help: "初期値に戻す", enabled: canReset) { model.resetEffect(at: i, clipId: clipId) }
@@ -832,6 +839,12 @@ struct ClipInspector: View {
                     if kind == .colorTransfer { colorTransferFileRow(e) }
                 }
                 .opacity(e.enabled ? 1 : 0.45)
+            } else if let pluginDesc {
+                // プラグインエフェクトの引数(記述子の仕様。編集の経路は内蔵と同じ fx.<番号>.<引数>)。
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(pluginDesc.params, id: \.key) { effectSlider(c, i, $0) }
+                }
+                .opacity(e.enabled ? 1 : 0.45)
             }
         }
         .padding(8)
@@ -847,6 +860,12 @@ struct ClipInspector: View {
         HStack(spacing: 8) {
             Menu {
                 ForEach(EffectKind.allCases, id: \.rawValue) { k in Button(k.label) { model.addEffect(k, clipId: clipId) } }
+                if !AppServices.pluginEffectDescriptors.isEmpty {
+                    Divider()
+                    Section("プラグイン") {
+                        ForEach(AppServices.pluginEffectDescriptors, id: \.id) { d in Button(d.label) { model.addPluginEffect(d, clipId: clipId) } }
+                    }
+                }
             } label: { Text("＋ 追加") }
                 .menuStyle(.button)
                 .fixedSize()

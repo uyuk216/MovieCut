@@ -170,10 +170,16 @@ struct AppCommands: Commands {
                 Divider()
                 Menu(L10n.t("エフェクト")) {
                     items(AppMenuSpec.effectKindItems(s), run)
+                    if !s.pluginEffectDescriptors.isEmpty {
+                        Divider()
+                        items(AppMenuSpec.pluginEffectItems(s), run)
+                    }
                     Divider()
                     Menu(L10n.t("プリセット")) { items(AppMenuSpec.effectPresetItems(s), run) }
                     Divider()
                     items(AppMenuSpec.effectActions(s), run)
+                    Divider()
+                    items(AppMenuSpec.faceBlurItems(s), run)
                 }
                 MenuItemView(spec: AppMenuSpec.lutLoadItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.colorTransferItem(s), perform: run)
@@ -259,6 +265,13 @@ struct AppCommands: Commands {
                 MenuItemView(spec: AppMenuSpec.webVideoExport(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.pngWavExport(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.exoExport(s), perform: run)
+                Menu(L10n.t("プラグイン形式で書き出す")) {
+                    if s.pluginExportFormats.isEmpty {
+                        Text(L10n.t("プラグイン形式はありません"))
+                    } else {
+                        items(AppMenuSpec.pluginExportItems(s), run)
+                    }
+                }
                 Divider()
                 MenuItemView(spec: AppMenuSpec.loudnessItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.clipListItem(s), perform: run)
