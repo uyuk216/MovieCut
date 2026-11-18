@@ -161,7 +161,7 @@ public struct Renderer {
                     drawVisualizer(c, t: t, ctx: ctx, W: W, H: H)
                 case .shape:
                     drawShape(c, t: t, ctx: ctx, W: W, H: H)
-                case .image, .video, .text, .compound, .tachie:
+                case .image, .video, .text, .compound, .scene, .tachie:
                     var pose = ClipPose(c, at: t)
                     var mask: TransitionMask?
                     if c.hasTransition {
@@ -184,7 +184,7 @@ public struct Renderer {
                     }
                     // 複合クリップで、キャンバスいっぱいに・効果なし・不透明度 100% なら、中身を親の画面に直接描く(中間の画像を作らない)。
                     // 直接描くので、まとめる前のクリップを描いたときと画素が完全に一致する
-                    if c.type == .compound, mask == nil, c.mask == nil, c.blendMode == nil, pose.isFullCanvasCompound, !c.hasActiveEffects, pose.pixelate < 2, pose.feather <= 0.01, let child = compoundRenderer(c) {
+                    if (c.type == .compound || c.type == .scene), mask == nil, c.mask == nil, c.blendMode == nil, pose.isFullCanvasCompound, !c.hasActiveEffects, pose.pixelate < 2, pose.feather <= 0.01, let child = nestedRenderer(c) {
                         ctx.saveGState()
                         child.drawFrame(t: t - c.start + c.offset, into: ctx)
                         ctx.restoreGState()
@@ -454,10 +454,12 @@ public struct Renderer {
     /// 順序: 切り抜き → 反転 → 拡大 → (クリップの中心まわりに)回転 → (x, y) へ移動。何も変形しないクリップは従来と同じ描き方。
     func drawClipContent(_ c: Clip, pose: ClipPose, t: Double, ctx: CGContext, W: Double, H: Double, fastFade: Bool = false, fadeAlpha: Double = 1) {
         switch c.type {
-        case .image, .video, .compound:
+        case .image, .video, .compound, .scene:
             var img: CGImage?
             if c.type == .compound {
                 img = compoundFrame(c, t: t)
+            } else if c.type == .scene {
+                img = sceneFrame(c, t: t)
             } else if let src = c.src {
                 img = c.type == .image ? (c.playsAnimation == true ? assets.animatedImage(at: src, elapsed: max(0, t - c.start) * c.effectiveSpeed + c.offset) : assets.image(at: src)) : videoFrame(c, src: src, at: t)
             }
@@ -467,7 +469,7 @@ public struct Renderer {
             }
             guard var im = img, im.width > 0, im.height > 0 else {
                 // 画像が取れなかったとき、素材ファイルが無ければ札を出す(プレビューのみ。存在確認はここでだけ)
-                if missingMediaPlaceholder, c.type != .compound, MissingMediaPlaceholder.isMissing(c) {
+                if missingMediaPlaceholder, c.type != .compound, c.type != .scene, MissingMediaPlaceholder.isMissing(c) {
                     drawMissingPlaceholder(c, pose: pose, ctx: ctx, W: W, H: H)
                 }
                 return
@@ -633,7 +635,7 @@ public struct Renderer {
         let W = Double(project.width), H = Double(project.height)
         let pose = ClipPose(c, at: t)
         switch c.type {
-        case .compound:
+        case .compound, .scene:
             // 中身はキャンバスと同じ大きさ(枠は全体)
             let crop = c.cropOrDefault
             return CGSize(width: W * crop.keptWidth * pose.scale, height: H * crop.keptHeight * pose.scale)
@@ -747,6 +749,34 @@ public struct Renderer {
         sub.tracks = kids
         var child = Renderer(project: sub, assets: assets, onStabilized: onStabilized, missingMediaPlaceholder: missingMediaPlaceholder, backend: backend)
         child.compoundStack = compoundStack + [c.id]
+        child.drawsBackground = false
+        child.drawsPortraits = false
+        return child
+    }
+
+    /// 入れ子クリップ(複合・シーン)の中身を描く `Renderer`。種類で解決先が違うだけで、扱いは同じ。
+    func nestedRenderer(_ c: Clip) -> Renderer? {
+        c.type == .scene ? sceneRenderer(c) : compoundRenderer(c)
+    }
+
+    /// シーンクリップの中身を、その頭からの時刻で、キャンバスと同じ大きさの透明な画像に描く(複合クリップと同じ経路)。
+    /// シーン内時刻 = クリップの頭からの時刻 + `offset`(窓の頭)。窓の外(シーン尺を超えた分)は、子側のクリップが
+    /// その時刻に存在しないので自然に切り取られる。参照先が無い・循環・深すぎる・中身が無いときは nil(何も描かない)。
+    func sceneFrame(_ c: Clip, t: Double) -> CGImage? {
+        guard let child = sceneRenderer(c) else { return nil }
+        return child.renderImage(t: t - c.start + c.offset)
+    }
+
+    /// シーンクリップの参照先を描く `Renderer`(背景・人物の立ち絵は描かない。祖先スタックは複合と共有し、
+    /// シーンは "scene:<id>" の印で積むので、シーン→複合→同じシーンのような混在した循環も止まる)。
+    func sceneRenderer(_ c: Clip) -> Renderer? {
+        guard let sid = c.sceneId, let scene = project.scene(withId: sid), !scene.tracks.isEmpty else { return nil }
+        let key = "scene:\(sid)"
+        guard !compoundStack.contains(key), compoundStack.count < SceneEditing.maxDepth else { return nil }
+        var sub = project
+        sub.tracks = scene.tracks
+        var child = Renderer(project: sub, assets: assets, onStabilized: onStabilized, missingMediaPlaceholder: missingMediaPlaceholder, backend: backend)
+        child.compoundStack = compoundStack + [key]
         child.drawsBackground = false
         child.drawsPortraits = false
         return child

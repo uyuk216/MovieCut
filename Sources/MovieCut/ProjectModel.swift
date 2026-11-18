@@ -150,7 +150,7 @@ final class ProjectModel: ObservableObject {
         didSet {
             projectRevision &+= 1
             if !compoundPath.isEmpty, let r = scopeRoot, let e = CompoundScope.embed(view: project, into: r, path: compoundPath) { scopeRoot = e }
-            mirror.set(compoundPath.isEmpty ? project : (scopeRoot ?? project))
+            mirror.set(rootProject)
             schedulePrewarm()
         }
     }
@@ -158,8 +158,16 @@ final class ProjectModel: ObservableObject {
     @Published var compoundPath: [String] = []
     /// 中に入っているあいだの書類全体(根)。入っていないときは nil。
     var scopeRoot: Project?
+    /// 「シーンを開いて編集」で入っているシーンの id(W3-01)。入っていないときは nil。複合スコープとは同時に入らない(入る側で断る)。
+    @Published var editingSceneId: String? = nil
+    /// シーンの中にいるあいだの書類全体(根)。入っていないときは nil。
+    var sceneScopeRoot: Project?
     /// 書類全体(中に入っていても根を返す。保存・Undo・書き出しの単位)。
-    var rootProject: Project { compoundPath.isEmpty ? project : (scopeRoot ?? project) }
+    var rootProject: Project {
+        let base = compoundPath.isEmpty ? project : (scopeRoot ?? project)
+        if let sid = editingSceneId, let sr = sceneScopeRoot, let e = SceneScope.embed(view: base, into: sr, sceneId: sid) { return e }
+        return base
+    }
     nonisolated let mirror: ProjectMirror
     /// 保存・自動保存のときの素材フィンガープリントの記録(ハッシュの読み直しを減らす)。保存の写しを作る側からも読める。
     nonisolated let fingerprintCache = MediaFingerprintCache()
@@ -269,6 +277,8 @@ final class ProjectModel: ObservableObject {
     @Published var showFindSheet = false
     /// 出力 ▸ 使用クリップ一覧…(表・TSV コピー・CSV 書き出し)のシート。
     @Published var showClipListSheet = false
+    /// クリップ ▸ シーン一覧…(W3-01: シーンの作成・名前変更・複製・削除・配置・開く)のシート。
+    @Published var showSceneListSheet = false
     /// 同じセリフのテイク比較シート(表示の状態)と、試聴の出口・鳴らしているテイクの id
     @Published var showTakeSheet = false
     @Published var takePlayingId: String?
@@ -475,7 +485,10 @@ final class ProjectModel: ObservableObject {
     static let lockedNotice = "ロックされたレイヤー・クリップは編集できません"
 
     private func replace(with newView: Project, name: String) {
-        guard let rootNew = compoundPath.isEmpty ? newView : scopeRoot.flatMap({ CompoundScope.embed(view: newView, into: $0, path: compoundPath) }) else { return }
+        // シーンの中にいるあいだは、見え方をシーンの定義へ戻してから根にする(複合スコープとは同時に入らない)
+        var rootCandidate = newView
+        if let sid = editingSceneId, let sr = sceneScopeRoot, let e = SceneScope.embed(view: newView, into: sr, sceneId: sid) { rootCandidate = e }
+        guard let rootNew = compoundPath.isEmpty ? rootCandidate : scopeRoot.flatMap({ CompoundScope.embed(view: rootCandidate, into: $0, path: compoundPath) }) else { return }
         applyRoot(rootNew, name: name)
     }
 
@@ -487,7 +500,12 @@ final class ProjectModel: ObservableObject {
         var path = compoundPath
         while !path.isEmpty, CompoundScope.view(of: rootNew, path: path) == nil { path.removeLast() }
         let newView = path.isEmpty ? rootNew : (CompoundScope.view(of: rootNew, path: path) ?? rootNew)
-        let new = newView
+        var new = newView
+        // シーンの中にいるあいだは、根からシーンの見え方を取り直す(シーンが消えていたら一番上へ戻る)
+        if let sid = editingSceneId {
+            if let v = SceneScope.view(of: rootNew, sceneId: sid) { sceneScopeRoot = rootNew; new = v }
+            else { editingSceneId = nil; sceneScopeRoot = nil }
+        }
         scopeRoot = path.isEmpty ? nil : rootNew
         if path != compoundPath { compoundPath = path }
         project = new
@@ -737,6 +755,7 @@ final class ProjectModel: ObservableObject {
     /// 直接の書き出しを始めてよいか。書き出し中、またはキューの件が動いている間は始めない(同時に 2 つ走らせない)。
     func directExportBlocked() -> Bool {
         exitAllCompoundScopes()   // 書き出しは書類全体。複合クリップの中にいるときは、先に一番上へ戻る
+        exitSceneScope()          // シーンの中にいるときも同じ(中身は根へ戻し済みなので、見え方を戻すだけ)
         if isExporting { return true }
         if (exportQueueOverride ?? AppServices.exportQueue).queue.isBusy {
             statusText = "書き出しキューが動いています。終わってから書き出してください"

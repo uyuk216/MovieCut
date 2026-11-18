@@ -88,6 +88,7 @@ struct ContentView: View {
         .sheet(isPresented: $model.showTranscriptEditSheet) { TranscriptEditSheet(model: model) }
         .sheet(isPresented: $model.showFindSheet) { FindReplaceSheet(model: model) }
         .sheet(isPresented: $model.showClipListSheet) { ClipListSheet(model: model) }
+        .sheet(isPresented: $model.showSceneListSheet) { SceneListSheet(model: model) }
         .sheet(isPresented: Binding(get: { model.candidateSession != nil }, set: { if !$0 { model.cancelCandidateSwap() } })) { CandidateSwapSheet(model: model) }
         .sheet(isPresented: $model.showSubclipSheet) { SubclipBatchSheet(model: model) }
         .sheet(isPresented: $model.showTakeSheet) { TakeCompareSheet(model: model) }
