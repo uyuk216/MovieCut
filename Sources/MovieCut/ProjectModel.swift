@@ -18,12 +18,28 @@ enum AppServices {
             },
             AquesTalkPlugin.manifest.id: {
                 LoadedPlugin(manifest: AquesTalkPlugin.manifest, directory: dir, voiceProvider: AquesTalkPluginProvider(project: project))
+            },
+            InvertEffectPlugin.manifest.id: {
+                LoadedPlugin(manifest: InvertEffectPlugin.manifest, directory: dir, effectProvider: InvertEffectProvider())
+            },
+            PosterizeEffectPlugin.manifest.id: {
+                LoadedPlugin(manifest: PosterizeEffectPlugin.manifest, directory: dir, effectProvider: PosterizeEffectProvider())
+            },
+            GIFExportPlugin.manifest.id: {
+                LoadedPlugin(manifest: GIFExportPlugin.manifest, directory: dir, exportBackend: GIFExportBackend())
+            },
+            ProjectInfoExportPlugin.manifest.id: {
+                LoadedPlugin(manifest: ProjectInfoExportPlugin.manifest, directory: dir, exportBackend: ProjectInfoExportBackend())
             }
         ])
         let host = PluginHost(loader: loader)
         host.register(PluginDiscovery.discover(in: [dir]))
         host.register(manifest: VoicevoxPlugin.manifest, directory: dir)
         host.register(manifest: AquesTalkPlugin.manifest, directory: dir)
+        host.register(manifest: InvertEffectPlugin.manifest, directory: dir)
+        host.register(manifest: PosterizeEffectPlugin.manifest, directory: dir)
+        host.register(manifest: GIFExportPlugin.manifest, directory: dir)
+        host.register(manifest: ProjectInfoExportPlugin.manifest, directory: dir)
         return host
     }
     /// 作業メモリの予算(キャッシュが経由する単一の管理)。上限は総 RAM から決める(24GB 以上の Mac は上限なし)。
