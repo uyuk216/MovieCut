@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE dictionary SYSTEM "file://localhost/System/Library/DTDs/sdef.dtd">
+<!-- Movie Cut の AppleScript 定義(フェーズ D-3 / X-4)。
+     make-app.sh が .app の Resources に同梱し、Info.plist の NSAppleScriptEnabled / OSAScriptingDefinition で有効になる。
+     実体は Sources/MovieCut/ScriptCommands.swift(Core の AutomationExport に委譲)。 -->
+<dictionary>
+  <suite name="Movie Cut Suite" code="McCt" description="Movie Cut の自動化(書き出しと情報の取得)">
+    <command name="export project" code="McCtExpo" description="プロジェクトを動画ファイルに書き出します。書き出し先はプロジェクトと同じフォルダ(プリセット指定時はその提案名)です">
+      <cocoa class="ExportProjectScriptCommand"/>
+      <direct-parameter type="file" description="プロジェクトファイル"/>
+      <parameter name="output" code="Outp" type="file" optional="yes" description="書き出し先ファイル(省略時は自動)">
+        <cocoa key="output"/>
+      </parameter>
+      <parameter name="preset" code="Prst" type="text" optional="yes" description="プリセット名(youtube1080 など、または保存したプリセット名。省略時はプロジェクトの設定)">
+        <cocoa key="preset"/>
+      </parameter>
+      <result type="file" description="書き出したファイル"/>
+    </command>
+    <command name="project info" code="McCtInfo" description="プロジェクトの大きさ・長さ・クリップ数をテキストで返します">
+      <cocoa class="ProjectInfoScriptCommand"/>
+      <direct-parameter type="file" description="プロジェクトファイル"/>
+      <result type="text" description="プロジェクトの要約"/>
+    </command>
+  </suite>
+</dictionary>
