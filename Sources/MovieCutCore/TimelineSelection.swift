@@ -217,7 +217,10 @@ extension ClipEditing {
             ids.append(c.id)
         }
         // 1 つも貼れなかったときは、足したレイヤーも含めて何も変えない
-        return ids.isEmpty ? nil : PasteResult(project: p, newIds: ids, skipped: skipped)
+        guard !ids.isEmpty else { return nil }
+        // グループ: 貼ったコピーが貼り付け先の既存グループと混ざらないよう、重なる ID は新しいグループへ振り直す
+        ClipGrouping.isolateCopiedGroups(newIds: Set(ids), in: &p)
+        return PasteResult(project: p, newIds: ids, skipped: skipped)
     }
 }
 

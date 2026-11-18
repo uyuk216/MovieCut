@@ -475,6 +475,9 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var locked: Bool? = nil
     /// クリップ単位の消音。true のときだけファイルに書く(書き出し・再生・ラウドネスで鳴らさない。映像・波形は変えない)。
     public var muted: Bool? = nil
+    /// クリップ単位の無効化。true のときだけファイルに書く(描画・音声の両方に出ない。消音は音だけ、レイヤーの非表示は行全体が対象で、これはクリップ単体)。
+    /// グループ制御の「まとめて有効/無効」はこの値をグループ全員分まとめて切り替える(`ClipGrouping`)。
+    public var disabled: Bool? = nil
     /// 録音した音声クリップを「声」として扱う指定(BGM の自動ダッキングの引き金になる)。true のときだけファイルに書く。
     public var treatAsVoice: Bool? = nil
     /// 字幕に出す文(ボイスクリップ)。無いときは読み上げる文 `text` が字幕。空文字は「字幕なし」。読み上げ(口パクの母音判定を含む)は常に `text`。
@@ -491,7 +494,7 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var voicevoxAccent: [VoicevoxAccentPhrase]? = nil
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["id", "type", "voicevoxAccent", "subtitleText", "tachieId", "mouthDrive", "speakingOnly", "followsProjectEnd", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "bokehShape", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "frameFlow", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "valueRef", "duck", "visualizer", "stabilize", "stabilizeRoll", "tracks", "mask", "blendMode", "group", "ruby", "figure", "note", "locked", "muted", "treatAsVoice"]
+    static let knownKeys: Set<String> = ["id", "type", "voicevoxAccent", "subtitleText", "tachieId", "mouthDrive", "speakingOnly", "followsProjectEnd", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "bokehShape", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "frameFlow", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "valueRef", "duck", "visualizer", "stabilize", "stabilizeRoll", "tracks", "mask", "blendMode", "group", "ruby", "figure", "note", "locked", "muted", "disabled", "treatAsVoice"]
 
     public init() {}
 
@@ -526,6 +529,8 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var isClipLocked: Bool { locked == true }
     /// このクリップ自身が消音されているか(レイヤーの消音とは別)。
     public var isMuted: Bool { muted ?? false }
+    /// このクリップ自身が無効化されているか(描画・音声の両方に出ない)。
+    public var isDisabled: Bool { disabled ?? false }
     /// 声として扱う指定があるか(音声クリップ向け)。
     public var isTreatedAsVoice: Bool { treatAsVoice ?? false }
     /// トランジションが 1 つでもあるか(描画の速い道の判定)。
@@ -654,6 +659,9 @@ public struct Clip: Codable, Equatable, Identifiable {
         if let raw: JSONValue = l.value("muted") {
             if l.bool("muted") == true { muted = true } else { extra["muted"] = raw }   // true 以外は捨てずに書き戻す
         }
+        if let raw: JSONValue = l.value("disabled") {
+            if l.bool("disabled") == true { disabled = true } else { extra["disabled"] = raw }   // true 以外は捨てずに書き戻す
+        }
         if let raw: JSONValue = l.value("treatAsVoice") {
             if l.bool("treatAsVoice") == true { treatAsVoice = true } else { extra["treatAsVoice"] = raw }   // true 以外は捨てずに書き戻す
         }
@@ -776,6 +784,7 @@ public struct Clip: Codable, Equatable, Identifiable {
         if let n = note, !n.isEmpty { try c.encode(n, forKey: AnyKey("note")) }
         if locked == true { try c.encode(true, forKey: AnyKey("locked")) }
         if muted == true { try c.encode(true, forKey: AnyKey("muted")) }
+        if disabled == true { try c.encode(true, forKey: AnyKey("disabled")) }
         if treatAsVoice == true { try c.encode(true, forKey: AnyKey("treatAsVoice")) }
         if let a = voicevoxAccent, !a.isEmpty { try c.encode(a, forKey: AnyKey("voicevoxAccent")) }
         try c.encodeIfPresent(subtitleText, forKey: AnyKey("subtitleText"))
