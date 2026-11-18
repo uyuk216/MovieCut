@@ -34,7 +34,7 @@ func parseFps(_ s: String) -> Double {
 }
 
 /// 書き出して、進み具合(約10%ごと)を stderr、最後に コマ数・秒・実時間比 を stdout に出す。
-func runExport(_ p: Project, to url: URL, preset: ExportPreset? = nil, spec: ExportSpec? = nil, bitrateMbps: Double? = nil, range: ExportRange? = nil) async throws {
+func runExport(_ p: Project, to url: URL, preset: ExportPreset? = nil, spec: ExportSpec? = nil, bitrateMbps: Double? = nil, range: ExportRange? = nil, loudness: LoudnessNormalizationSettings = .disabled) async throws {
     let chosen = spec ?? preset?.spec
     let audioOnly = chosen?.audioOnly ?? false
     let resolved = chosen?.apply(to: p) ?? p
@@ -47,7 +47,7 @@ func runExport(_ p: Project, to url: URL, preset: ExportPreset? = nil, spec: Exp
     }
     var nextMark = 0.1
     let t0 = Date()
-    try await ExportJob.run(project: p, preset: preset, spec: spec, bitrateMbps: bitrateMbps, range: range, to: url) { v in
+    try await ExportJob.run(project: p, preset: preset, spec: spec, bitrateMbps: bitrateMbps, range: range, to: url, loudness: loudness) { v in
         if v >= nextMark - 1e-9 {
             FileHandle.standardError.write(Data(String(format: "  %3.0f%%\n", v * 100).utf8))
             nextMark = (v * 10 + 1e-9).rounded(.down) / 10 + 0.1
@@ -287,7 +287,7 @@ case "rig-frame" where args.count >= 2:
         }
     } catch { fail("rig-frame: \(error)") }
 case "export" where args.count >= 3:
-    // export <in.mcpjc> <out.mp4|out.m4a> [--range a:b|project] [--preset <組み込み名 または保存したプリセット名>] [--bitrate 8(Mbps)] [--size WxH] [--fps 29.97] [--codec h264|hevc]
+    // export <in.mcpjc> <out.mp4|out.m4a> [--loudness [--loudness-target -14]] [--range a:b|project] [--preset <組み込み名 または保存したプリセット名>] [--bitrate 8(Mbps)] [--size WxH] [--fps 29.97] [--codec h264|hevc]
     // --preset はプロジェクトの写しに当てるだけ(入力ファイルは変えない)。--size / --codec は、プリセットの前に当てる。
     do {
         var p = try Project.load(from: URL(fileURLWithPath: args[1]))
@@ -314,8 +314,17 @@ case "export" where args.count >= 3:
             guard let v = Double(b), let ok = ExportSpec.validBitrate(v) else { fail("--bitrate は \(Int(ExportSpec.bitrateRangeMbps.lowerBound))〜\(Int(ExportSpec.bitrateRangeMbps.upperBound)) の Mbps(例 8)") }
             bitrate = ok
         }
+        // --loudness で完成ミックスを目標ラウドネスへ正規化(--loudness-target <LUFS> は既定 -14、-36〜-5 に丸める)。--loudness 無しの --loudness-target は誤指定として止める。
+        var loudness = LoudnessNormalizationSettings.disabled
+        if let t = optValue("--loudness-target") {
+            guard args.contains("--loudness") else { fail("--loudness-target は --loudness と一緒に指定してください") }
+            guard let v = Double(t), v.isFinite else { fail("--loudness-target は LUFS の数値(例 -14)") }
+            loudness = .enabled(targetLUFS: LoudnessNormalizationSettings.clampedTarget(v))
+        } else if args.contains("--loudness") {
+            loudness = .youtube
+        }
         let range = parseRange(p)
-        try await runExport(p, to: URL(fileURLWithPath: args[2]), preset: preset, spec: spec, bitrateMbps: bitrate, range: range)
+        try await runExport(p, to: URL(fileURLWithPath: args[2]), preset: preset, spec: spec, bitrateMbps: bitrate, range: range, loudness: loudness)
     } catch { fail("書き出せませんでした: \(error.localizedDescription)") }
 case "loudness" where args.count >= 2:
     // loudness <project> [--range a:b|project]: 書き出しと同じミックスダウンを BS.1770 で測る(読み取りのみ・自動では音量を変えない)
@@ -760,5 +769,5 @@ case "smoke":
         try await runExport(p, to: URL(fileURLWithPath: outPath))
     } catch { fail("書き出せませんでした: \(error.localizedDescription)") }
 default:
-    fail("usage:\n  moviecut-cli info <file.ymproj>\n  moviecut-cli new <out.ymproj>\n  moviecut-cli export <in.mcpjc> <out.mp4|out.m4a> [--range a:b|project] [--preset youtube1080|youtube1080p60|youtube4k|short|shorts|tiktok|reels|x720|x1080|light|audio|<保存したプリセット名>] [--bitrate 8(Mbps)] [--size WxH] [--fps 29.97] [--codec h264|hevc|prores422|prores4444] [--bg #rrggbb|transparent]\n  moviecut-cli smoke --out <mp4> [--size WxH] [--fps 23.976] [--codec h264|hevc] [--blur] [--tone] [--save-project p.ymproj]\n  moviecut-cli speak (--voicevox <id> [--speed --pitch --intonation --pre --post --pause] | --voice <preset> [--speed]) --text <t> --out <wav>\n  moviecut-cli speakers | deps | script <script.txt> --out <p.ymproj> [--template <既存プロジェクト>] [--clean] [--size WxH] [--fps 29.97] [--bg #rrggbb|transparent] [--char <キャラ名>] [--dict <辞書.txt>] [--pre 0.03] [--post 0.03] [--pause 0.65] [--subtitle-y 0.68]\n  moviecut-cli rig-frame <フォルダ|.psd> --out <png> [--mouth あ|い|う|え|お|open|closed] [--blink] [--pick 眉=2,目=5] [--expr 名前] [--height 1080] [--bench N] [--list]\n  moviecut-cli migrate <旧形式.mcpjc> <出力.mcpjc>   (キャラの立ち絵を立ち絵素材+クリップへ移す)\n  moviecut-cli psd-info <file.psd>\n  moviecut-cli frame <in.ymproj> --t <sec> --out <png|jpg> [--size WxH] [--bench N]\n  moviecut-cli gif <in.mcpjc> --out <x.gif> [--fps 10] [--width 480] [--range a:b|project]\n  moviecut-cli apng <in.mcpjc> --out <x.png> [--fps 15] [--width 480] [--loop 0] [--bg transparent] [--range a:b|project]\n  moviecut-cli sequence <in.mcpjc> --out <dir> [--format png|jpeg] [--name base] [--range a:b|project] [--fps 30] [--size WxH]\n  moviecut-cli addvideo <in.ymproj> <clip.mp4> <out.ymproj>\n  moviecut-cli addimage <in.ymproj> <image.png> <out.ymproj> [--start 0] [--duration 5]\n  moviecut-cli genclips <N> <out.ymproj>\n  moviecut-cli silence <project|media> [--threshold -40] [--min 0.4] [--pad 0.1]\n  moviecut-cli scenes <project|media> [--threshold 0.35] [--interval 0.25] [--min 0.5]\n  moviecut-cli beats <project|media> [--all]\n  moviecut-cli subs <project> --out <x.srt|x.vtt>\n  moviecut-cli subtitle-check <project>\n  moviecut-cli transcribe <media|project> --out <x.srt|x.vtt> [--clip 0] [--locale ja-JP]\n  moviecut-cli chapters <project> [--color red|orange|yellow|green|blue|purple|gray|teal]\n  moviecut-cli loudness <project> [--range a:b|project]\n  moviecut-cli project-info <project>   (JSON。読み取り専用)\n  moviecut-cli ai script --theme <t> [--chars キャラ1,キャラ3] [--lines 12] --provider-cmd \"claude -p\" [--timeout 120] [--out x.txt] [--show-prompt]")
+    fail("usage:\n  moviecut-cli info <file.ymproj>\n  moviecut-cli new <out.ymproj>\n  moviecut-cli export <in.mcpjc> <out.mp4|out.m4a> [--range a:b|project] [--preset youtube1080|youtube1080p60|youtube4k|short|shorts|tiktok|reels|x720|x1080|light|audio|<保存したプリセット名>] [--bitrate 8(Mbps)] [--size WxH] [--fps 29.97] [--codec h264|hevc|prores422|prores4444] [--bg #rrggbb|transparent] [--loudness [--loudness-target -14(LUFS)]]\n  moviecut-cli smoke --out <mp4> [--size WxH] [--fps 23.976] [--codec h264|hevc] [--blur] [--tone] [--save-project p.ymproj]\n  moviecut-cli speak (--voicevox <id> [--speed --pitch --intonation --pre --post --pause] | --voice <preset> [--speed]) --text <t> --out <wav>\n  moviecut-cli speakers | deps | script <script.txt> --out <p.ymproj> [--template <既存プロジェクト>] [--clean] [--size WxH] [--fps 29.97] [--bg #rrggbb|transparent] [--char <キャラ名>] [--dict <辞書.txt>] [--pre 0.03] [--post 0.03] [--pause 0.65] [--subtitle-y 0.68]\n  moviecut-cli rig-frame <フォルダ|.psd> --out <png> [--mouth あ|い|う|え|お|open|closed] [--blink] [--pick 眉=2,目=5] [--expr 名前] [--height 1080] [--bench N] [--list]\n  moviecut-cli migrate <旧形式.mcpjc> <出力.mcpjc>   (キャラの立ち絵を立ち絵素材+クリップへ移す)\n  moviecut-cli psd-info <file.psd>\n  moviecut-cli frame <in.ymproj> --t <sec> --out <png|jpg> [--size WxH] [--bench N]\n  moviecut-cli gif <in.mcpjc> --out <x.gif> [--fps 10] [--width 480] [--range a:b|project]\n  moviecut-cli apng <in.mcpjc> --out <x.png> [--fps 15] [--width 480] [--loop 0] [--bg transparent] [--range a:b|project]\n  moviecut-cli sequence <in.mcpjc> --out <dir> [--format png|jpeg] [--name base] [--range a:b|project] [--fps 30] [--size WxH]\n  moviecut-cli addvideo <in.ymproj> <clip.mp4> <out.ymproj>\n  moviecut-cli addimage <in.ymproj> <image.png> <out.ymproj> [--start 0] [--duration 5]\n  moviecut-cli genclips <N> <out.ymproj>\n  moviecut-cli silence <project|media> [--threshold -40] [--min 0.4] [--pad 0.1]\n  moviecut-cli scenes <project|media> [--threshold 0.35] [--interval 0.25] [--min 0.5]\n  moviecut-cli beats <project|media> [--all]\n  moviecut-cli subs <project> --out <x.srt|x.vtt>\n  moviecut-cli subtitle-check <project>\n  moviecut-cli transcribe <media|project> --out <x.srt|x.vtt> [--clip 0] [--locale ja-JP]\n  moviecut-cli chapters <project> [--color red|orange|yellow|green|blue|purple|gray|teal]\n  moviecut-cli loudness <project> [--range a:b|project]\n  moviecut-cli project-info <project>   (JSON。読み取り専用)\n  moviecut-cli ai script --theme <t> [--chars キャラ1,キャラ3] [--lines 12] --provider-cmd \"claude -p\" [--timeout 120] [--out x.txt] [--show-prompt]")
 }
