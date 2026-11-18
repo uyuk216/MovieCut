@@ -304,6 +304,8 @@ public enum WhisperAudioConverter {
             var convError: NSError?
             let status = conv.convert(to: outBuf, error: &convError) { _, inStatus in
                 if finished { inStatus.pointee = .endOfStream; return nil }
+                // EOF で read すると eofErr(-39) が投げられるため、読む前に終端を判定する。
+                if file.framePosition >= file.length { finished = true; inStatus.pointee = .endOfStream; return nil }
                 do {
                     inBuf.frameLength = 0
                     try file.read(into: inBuf, frameCount: inChunk)
