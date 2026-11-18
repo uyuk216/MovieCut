@@ -284,8 +284,12 @@ struct InspectorView: View {
                     case .character(let id):
                         CharacterInspector(model: model, speakers: speakers, charId: id).id(id)
                     case .none:
-                        Text("クリップを選ぶと設定が出ます。")
-                            .font(.callout).foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("クリップを選ぶと、ここで編集できます")
+                                .font(.callout).foregroundStyle(.secondary)
+                            Text("タイムライン上のクリップをクリックして選びます。")
+                                .font(.caption).foregroundStyle(.tertiary)
+                        }
                     }
                 }
                 .padding(.horizontal, 12)
