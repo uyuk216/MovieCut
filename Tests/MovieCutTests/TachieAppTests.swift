@@ -73,4 +73,36 @@ final class TachieAppTests: XCTestCase {
         m.removeTachie(id: id)
         XCTAssertEqual(m.project.tachies.count, 1, "ロックされたクリップを含む削除は断る")
     }
+
+    func testTachieImageSettersAreOneUndoStepAndSkipNoChange() {
+        let (m, id) = model()
+        var steps = undoSteps(m)
+        let u = URL(fileURLWithPath: "/x/a.gif")
+        m.setTachieImage(tachieId: id, slot: .open, url: u); steps += 1
+        XCTAssertEqual(m.tachie(id)?.imgOpen, "/x/a.gif"); XCTAssertEqual(undoSteps(m), steps)
+        m.setTachieImage(tachieId: id, slot: .open, url: u); XCTAssertEqual(undoSteps(m), steps, "同じ画像は載せない")
+        m.setTachieImage(tachieId: id, slot: .blink, url: nil); XCTAssertEqual(undoSteps(m), steps, "無い画像の外しは載せない")
+        m.setTachieImage(tachieId: id, slot: .blink, url: u); steps += 1
+        m.setTachieImage(tachieId: id, slot: .closed, url: URL(fileURLWithPath: "/x/c.png")); steps += 1
+        XCTAssertEqual(m.tachie(id)?.imgClosed, "/x/c.png"); XCTAssertEqual(undoSteps(m), steps)
+        m.setTachieImage(tachieId: id, slot: .open, url: nil); steps += 1
+        XCTAssertNil(m.tachie(id)?.imgOpen); XCTAssertEqual(undoSteps(m), steps)
+        m.effectiveUndoManager.undo()
+        XCTAssertEqual(m.tachie(id)?.imgOpen, "/x/a.gif", "外しは Undo 1 回で戻る")
+    }
+
+    func testTachieVowelImageSetterIsOneUndoStepAndDropsEmptyDictionary() {
+        let (m, id) = model()
+        var steps = undoSteps(m)
+        let u = URL(fileURLWithPath: "/x/a.png")
+        m.setTachieVowelImage(tachieId: id, key: "a", url: u); steps += 1
+        XCTAssertEqual(m.tachie(id)?.imgVowels, ["a": "/x/a.png"]); XCTAssertEqual(undoSteps(m), steps)
+        m.setTachieVowelImage(tachieId: id, key: "a", url: u); XCTAssertEqual(undoSteps(m), steps, "同じ画像は載せない")
+        m.setTachieVowelImage(tachieId: id, key: "i", url: nil); XCTAssertEqual(undoSteps(m), steps, "無い母音の外しは載せない")
+        m.setTachieVowelImage(tachieId: id, key: "z", url: u); XCTAssertEqual(undoSteps(m), steps, "未知のキーは断る")
+        m.setTachieVowelImage(tachieId: id, key: "a", url: nil); steps += 1
+        XCTAssertNil(m.tachie(id)?.imgVowels, "空になったら項目ごと消す"); XCTAssertEqual(undoSteps(m), steps)
+        m.effectiveUndoManager.undo()
+        XCTAssertEqual(m.tachie(id)?.imgVowels?["a"], "/x/a.png")
+    }
 }
