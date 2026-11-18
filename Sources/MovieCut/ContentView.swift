@@ -589,6 +589,9 @@ struct SettingsSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text(L10n.t("設定")).font(.title3.bold())
+            Text(L10n.t("この設定はプロジェクトごとに保存されます（音声サーバーの許可など一部はこのMac全体の設定です）"))
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             GroupBox(L10n.t("動画")) {
                 Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 10) {
                     GridRow(alignment: .top) {
