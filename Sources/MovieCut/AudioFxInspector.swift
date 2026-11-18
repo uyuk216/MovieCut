@@ -84,6 +84,7 @@ struct AudioFxPanel: View {
                 reverbGroup(c)
                 delayGroup(c)
                 normalizeGroup(c)
+                AudioFxExtendedPanel(model: model, clipId: clipId, forceExpanded: forceExpanded)
                 duckGroup(c)
                 voiceDesignationToggle(c)
             }
