@@ -415,13 +415,13 @@ struct MenuState: Equatable {
         previewTier = PreviewTierStore.current
         previewGuides = PreviewGuideStore.current
         templateNames = ProjectTemplateLibrary.names
-        itemTemplateNames = ItemTemplateLibraryCache.names
         let rc = RecentProjectsController.shared
         recentItems = rc.recents.entries.map { RecentMenuItem(path: $0.path, name: $0.name, missing: rc.isMissing($0)) }
         welcomeAtLaunch = WelcomeSettings.showAtLaunch()
         previewProxyEnabled = ProxySettings.enabled()
         dockVisible = Set(DockPanel.allCases.filter { AppServices.panelDock.layout.isVisible($0) })
         guard let m = model else { return }
+        itemTemplateNames = ItemTemplateLibraryCache.names
         hasDocument = true
         isLocked = m.isLocked
         canExport = m.canExport
