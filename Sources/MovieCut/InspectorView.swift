@@ -18,6 +18,31 @@ struct InspectorSection: View {
     }
 }
 
+/// 空状態の案内カード(アイコン + 見出し + 説明文)。未選択・複数選択のインスペクタで使う。
+struct InspectorGuideCard: View {
+    let symbol: String
+    let heading: String
+    let message: String
+    var body: some View {
+        VStack(spacing: MCDesign.Spacing.s) {
+            Image(systemName: symbol)
+                .font(.system(size: 28, weight: .light))
+                .foregroundStyle(MCDesign.Color.accent)
+            Text(L10n.t(heading)).font(MCDesign.Font.headline)
+            Text(L10n.t(message))
+                .font(MCDesign.Font.callout)
+                .foregroundStyle(MCDesign.Color.textSecondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(MCDesign.Spacing.l)
+        .frame(maxWidth: .infinity)
+        .background(MCDesign.Color.control, in: RoundedRectangle(cornerRadius: MCDesign.Radius.panel))
+        .overlay(RoundedRectangle(cornerRadius: MCDesign.Radius.panel).stroke(MCDesign.Color.divider))
+        .accessibilityElement(children: .combine)
+    }
+}
+
 /// 項目のキーフレームの操作(◇ と ◀ ▶)に必要なもの。
 struct KeyframeControl {
     var state: KeyframeEditing.KeyState
@@ -284,8 +309,7 @@ struct InspectorView: View {
                     case .character(let id):
                         CharacterInspector(model: model, speakers: speakers, charId: id).id(id)
                     case .none:
-                        Text("クリップを選ぶと設定が出ます。")
-                            .font(.callout).foregroundStyle(.secondary)
+                        InspectorGuideCard(symbol: "cursorarrow.click.2", heading: "クリップが選ばれていません", message: "クリップを選ぶと設定が出ます。")
                     }
                 }
                 .padding(.horizontal, 12)
@@ -317,8 +341,7 @@ struct MultiSelectionInspector: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(Title.selected(count)).font(.system(size: 14, weight: .semibold))
-            Text(Title.hint).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            InspectorGuideCard(symbol: "square.on.square", heading: Title.selected(count), message: Title.hint)
             HStack(spacing: 8) {
                 Button(Title.duplicate) { model.duplicateSelected() }
                 Button(Title.delete) { model.deleteSelected() }
