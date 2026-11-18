@@ -124,7 +124,8 @@ final class TubeProcessor {
 
     init(_ t: AudioFx.Tube, sr: Double) {
         g = pow(10, t.driveDb / 20)
-        norm = tanh(g + bias) - tanh(bias)
+        // 正側と負側のうち広い方で割る(非対称さは保ったまま、|出力| が 1 を超えないように)
+        norm = max(tanh(g + bias) - tanh(bias), tanh(bias) - tanh(bias - g))
         mix = Float(t.mix); dry = 1 - mix
         lpCoef = 1 - exp(-2 * Double.pi * 6500 / sr)
     }
