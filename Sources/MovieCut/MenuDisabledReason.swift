@@ -20,6 +20,8 @@ extension AppMenuSpec {
             return "書き出せるクリップがありません"
         case .rangeIn, .rangeOut: return "書き出し範囲を指定できる状態ではありません"
         case .rangeDelete, .rangeRippleDelete: return s.canMarkRange ? "先にイン点・アウト点で範囲を指定してください" : "書き出し範囲を指定できる状態ではありません"
+        case .selectClipsInRange, .clearRangeSelection: return "先にルーラーで ⌥ ドラッグして範囲を選んでください"
+        case .overlapCrossfade: return "映像のクリップを選んでください"
         case .rangeClear: return "書き出し範囲が指定されていません"
         case .rangeFromSelection: return s.canMarkRange ? "クリップを選んでください" : "書き出し範囲を指定できる状態ではありません"
         case .prevGap, .nextGap: return "空白がありません(クリップが途切れていません)"

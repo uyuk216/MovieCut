@@ -173,13 +173,13 @@ final class TransitionAppTests: XCTestCase {
         let acts = AppMenuSpec.transitionActions(s)
         XCTAssertEqual(acts.map(\.title), ["両方にフェードを付ける", "トランジションをすべて外す"])
         XCTAssertEqual(acts[0].shortcut?.display, "⌥⌘F")
-        XCTAssertEqual(AppMenuSpec.transitionQuick(s).map(\.title), ["クロスフェードにする", "フェードイン・アウトを付ける"])
+        XCTAssertEqual(AppMenuSpec.transitionQuick(s).map(\.title), ["クロスフェードにする", "重ねてクロスフェード", "フェードイン・アウトを付ける"])
         XCTAssertTrue(AppMenuSpec.transitionQuick(s).allSatisfy(\.enabled))
         // 無効の条件
         let none = state()
         for list in [AppMenuSpec.transitionKindItems(none, edge: .in), AppMenuSpec.transitionActions(none), AppMenuSpec.transitionQuick(none)] { XCTAssertTrue(list.allSatisfy { !$0.enabled }) }
         let audioOnly = state { $0.canFadeInOut = true }
-        XCTAssertFalse(AppMenuSpec.transitionQuick(audioOnly)[0].enabled); XCTAssertTrue(AppMenuSpec.transitionQuick(audioOnly)[1].enabled)
+        XCTAssertFalse(AppMenuSpec.transitionQuick(audioOnly)[0].enabled); XCTAssertFalse(AppMenuSpec.transitionQuick(audioOnly)[1].enabled); XCTAssertTrue(AppMenuSpec.transitionQuick(audioOnly)[2].enabled)
         XCTAssertFalse(AppMenuSpec.transitionActions(state { $0.canTransition = true })[1].enabled, "外すものが無い")
         let locked = state { $0.isLocked = true; $0.canTransition = true; $0.hasTransitions = true; $0.canFadeInOut = true }
         XCTAssertTrue((AppMenuSpec.transitionKindItems(locked, edge: .in) + AppMenuSpec.transitionActions(locked) + AppMenuSpec.transitionQuick(locked)).allSatisfy { !$0.enabled })

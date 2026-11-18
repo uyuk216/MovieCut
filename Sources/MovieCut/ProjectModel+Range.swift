@@ -37,10 +37,43 @@ extension ProjectModel {
         return edit("書き出し範囲の解除", enforcesLock: false) { $0 = ExportRangeEditing.clearing($0) }
     }
 
-    /// クリップ ▸ 範囲を削除 / 範囲をリップル削除: 書き出し範囲(イン〜アウト)の中身を全レイヤーから取り除く。
+    /// 範囲選択(ルーラーの ⌥ ドラッグ)があるか。
+    var hasRangeSelection: Bool { rangeSelection != nil }
+
+    /// クリップ ▸ 範囲選択を解除(ファイルは変えない・Undo に載せない)。
+    func clearRangeSelection() { rangeSelection = nil }
+
+    /// クリップ ▸ 範囲内のクリップを選択: 範囲選択にかかるクリップをまとめて選ぶ(選択だけなので Undo に載せない)。
+    @discardableResult
+    func selectClipsInRangeSelection() -> Bool {
+        guard let sel = rangeSelection else { return false }
+        let cs = RangeSelectionEditing.clipSelection(in: project, selection: sel)
+        guard cs.count > 0 else { statusText = "範囲にクリップがありません"; return false }
+        setSelection(cs)
+        statusText = "範囲のクリップ \(cs.count) 件を選びました"
+        return true
+    }
+
+    /// クリップ ▸ 範囲を削除 / 範囲をリップル削除: 範囲選択があればそちらを、無ければ書き出し範囲(イン〜アウト)の中身を取り除く。
     /// 範囲の解除も同じ編集に含め、1 回の Undo で全部戻る。範囲が無い・何にも触れない・ロックに触れるときは何もしない。
     @discardableResult
     func deleteRange(ripple: Bool) -> Bool {
+        // 範囲選択(⌥ ドラッグ)があれば書き出し範囲より優先する。削除は Core の deleteRange(対象レイヤー版)に任せ、1 回の Undo。
+        // 選択は表示状態なので、削除と一緒にそのまま解除する(選択自体は Undo の対象外)。書き出し範囲の印はそのまま残す。
+        if let sel = rangeSelection {
+            guard canMarkRange else { return false }
+            flushCoalesced()
+            guard let p = ClipEditing.deleteRange(in: project, from: sel.start, to: sel.end, ripple: ripple, trackIndices: sel.trackIndices) else {
+                statusText = "範囲に削除できるクリップがないか、ロックされたクリップに触れています"
+                return false
+            }
+            let name = ripple ? "範囲のリップル削除" : "範囲の削除"
+            guard edit(name, { $0 = p }) else { return false }
+            rangeSelection = nil
+            selectedClipId = nil
+            statusText = ripple ? "範囲を詰めて削除しました" : "範囲を削除しました"
+            return true
+        }
         guard canMarkRange, let r = ExportRange.resolve(rangeIn: project.rangeIn, rangeOut: project.rangeOut, endTime: project.endTime) else { return false }
         flushCoalesced()
         guard let p = ClipEditing.deleteRange(in: project, from: r.start, to: r.end, ripple: ripple) else {

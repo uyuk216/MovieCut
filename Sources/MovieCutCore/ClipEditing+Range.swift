@@ -10,12 +10,19 @@ extension ClipEditing {
     /// - Returns: 新しいプロジェクト。範囲が空・何にも触れない、範囲に触れるクリップがロックされている(レイヤーのロック含む)、
     ///   リップルで詰めるクリップがロックされている、のときは nil(元は変えない)。
     public static func deleteRange(in project: Project, from: Double, to: Double, ripple: Bool) -> Project? {
+        deleteRange(in: project, from: from, to: to, ripple: ripple, trackIndices: nil)
+    }
+
+    /// 対象レイヤーを限った範囲の削除(範囲選択から使う)。`trackIndices` が nil なら全レイヤー(上の関数とまったく同じ)。
+    /// 対象外のレイヤーは削除もリップルの詰めもせず、ロックの検査もしない(対象外のロックは削除を止めない)。
+    public static func deleteRange(in project: Project, from: Double, to: Double, ripple: Bool, trackIndices: Set<Int>?) -> Project? {
         let a = max(0, from), b = min(project.endTime, to)
         let width = b - a
         guard width > timeEpsilon else { return nil }
 
         // ロック: 範囲に触れるクリップ、リップルなら詰められるクリップがロックされていれば、全体を中止する
-        for tr in project.tracks {
+        for (ti, tr) in project.tracks.enumerated() {
+            if let s = trackIndices, !s.contains(ti) { continue }
             for c in tr.clips {
                 let end = c.start + c.duration
                 let touches = c.start < b - timeEpsilon && end > a + timeEpsilon
@@ -26,6 +33,7 @@ extension ClipEditing {
 
         var p = project
         for ti in p.tracks.indices {
+            if let s = trackIndices, !s.contains(ti) { continue }
             var out: [Clip] = []
             for c in p.tracks[ti].clips {
                 // 両端で割る(端のごく近くでは割らない)。右の断片は新しい id、左は元の id のまま
