@@ -7,6 +7,21 @@ import MovieCutCore
 /// アプリ全体で 1 つだけ持つもの(VOICEVOX エンジンは終了時に止める)。
 enum AppServices {
     static let engine = VoicevoxEngine()
+    /// プラグインの置き場(`Application Support/MovieCut/Plugins`。版ごとのフォルダ名は DataLocations に従う)。
+    static var pluginsDirectory: URL { DataLocations.current.root.appendingPathComponent("Plugins", isDirectory: true) }
+    /// プラグインホストを作る。組み込みの VOICEVOX プラグインと、プラグインフォルダの探索結果を登録する(探索の失敗は無視)。
+    static func makePluginHost(for project: Project) -> PluginHost {
+        let dir = pluginsDirectory
+        let loader = BuiltinPluginLoader([
+            VoicevoxPlugin.manifest.id: {
+                LoadedPlugin(manifest: VoicevoxPlugin.manifest, directory: dir, voiceProvider: VoicevoxPluginProvider(project: project, engine: AppServices.engine))
+            }
+        ])
+        let host = PluginHost(loader: loader)
+        host.register(PluginDiscovery.discover(in: [dir]))
+        host.register(manifest: VoicevoxPlugin.manifest, directory: dir)
+        return host
+    }
     /// 作業メモリの予算(キャッシュが経由する単一の管理)。上限は総 RAM から決める(24GB 以上の Mac は上限なし)。
     static let cacheBudget = CacheBudgetManager(limitBytes: MemoryBudget.currentLimitBytes(platform: .mac))
     /// メモリ逼迫の監視(警告・緊急で予算のキャッシュを全放出)。起動時に `start()` する。
@@ -323,7 +338,7 @@ final class ProjectModel: ObservableObject {
     /// プロキシの作成(出力 ▸ プロキシを作成)と AI 画像生成(クリップ ▸ AIで画像を作る)の取り消し。
     var proxyCancel: (() -> Void)?
     var imageGenCancel: (() -> Void)?
-    var voiceProviderFactory: (Project) -> VoiceProvider = { RealVoiceProvider(project: $0, engine: AppServices.engine) }
+    var voiceProviderFactory: (Project) -> VoiceProvider = { project in PluginVoiceRoutingProvider(host: AppServices.makePluginHost(for: project), fallback: RealVoiceProvider(project: project, engine: AppServices.engine)) }
     /// タイムラインの「全体表示」(タイムラインのビューが差し込む)。
     var onFitTimeline: () -> Void = {}
     /// 表示 ▸ 選択クリップにズーム(キャンバスが実装する)。

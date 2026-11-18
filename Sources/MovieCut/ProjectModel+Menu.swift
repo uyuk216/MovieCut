@@ -18,6 +18,10 @@ extension RealVoiceProvider: VoiceFallbackReporting {
     var didUseFallback: Bool { enginesUsed.contains("say") }
 }
 
+extension PluginVoiceRoutingProvider: VoiceFallbackReporting {
+    var didUseFallback: Bool { (fallbackProvider as? VoiceFallbackReporting)?.didUseFallback ?? false }
+}
+
 /// メニュー(M5)とツールバーが共有する操作。ロジックはここに 1 つだけ置く。
 extension ProjectModel {
     static let kyokoWarning = "AquesTalkPlayer が見つからないので、macOS の Kyoko で代わりに読み上げます。"
