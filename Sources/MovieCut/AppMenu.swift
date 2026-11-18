@@ -5,7 +5,7 @@ import MovieCutCore
 enum MenuCommand: Hashable {
     case about, settings, videoSettings
     case checkForUpdates
-    case addMedia, importPSD, importRigFolder, importRigPSD, export, exportPreset(ExportPreset), exportCustomPreset(String), saveCustomPreset
+    case addMedia, importPSD, importSVG, importMIDI, importImageSequence, importRigFolder, importRigPSD, export, exportPreset(ExportPreset), exportCustomPreset(String), saveCustomPreset
     // 字幕(B3)とチャプター
     case importSubtitles, exportSubtitles, generateSubtitles, copyChapters, copyChaptersColor(MarkerColor)
     // 字幕を AI で翻訳して SRT に書き出す(ショートカットは持たない)
@@ -615,6 +615,9 @@ enum AppMenuSpec {
     static func file(_ s: MenuState) -> [MenuItemSpec] {
         [MenuItemSpec(command: .addMedia, title: "素材を追加…", shortcut: cmd("i"), enabled: s.canEdit, checked: nil),
          MenuItemSpec(command: .importPSD, title: "PSDを読み込む…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "レイヤーごとに画像クリップへ"),
+         MenuItemSpec(command: .importSVG, title: "SVGを読み込む…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "指定解像度で画像化して配置"),
+         MenuItemSpec(command: .importMIDI, title: "MIDIを読み込む…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "音声化して配置、ノートはマーカーに"),
+         MenuItemSpec(command: .importImageSequence, title: "連番画像を読み込む…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "APNGにまとめてアニメーション素材に"),
          MenuItemSpec(command: .importRigFolder, title: "立ち絵パーツのフォルダを読み込む…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "眉・目・口などを重ねて動かす"),
          MenuItemSpec(command: .importRigPSD, title: "PSDから立ち絵を作る…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "グループ名からパーツに分ける"),
          MenuItemSpec(command: .audioLibrary, title: "素材ブラウザを開く…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "BGM・効果音のフォルダ"),
@@ -1421,6 +1424,9 @@ enum AppMenu {
             case .settings, .videoSettings: m.openSettings()
             case .addMedia: m.chooseAndAddMedia()
             case .importPSD: m.chooseAndImportPSD()
+            case .importSVG: m.chooseAndImportSVG()
+            case .importMIDI: m.chooseAndImportMIDI()
+            case .importImageSequence: m.chooseAndImportImageSequence()
             case .importRigFolder: m.chooseAndImportRigFolder()
             case .importRigPSD: m.chooseAndImportRigPSD()
             case .export: m.chooseAndExport()

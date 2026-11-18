@@ -46,14 +46,26 @@ extension ProjectModel {
     @discardableResult
     func addMedia(urls allUrls: [URL], at time: Double? = nil) async -> [String] {
         guard !isLocked else { return [] }
-        let psds = allUrls.filter { PSDImporter.isPSD(path: $0.path) }
-        let urls = allUrls.filter { !PSDImporter.isPSD(path: $0.path) }
+        // 変換が要る形式(SVG / MIDI)とフォルダ(連番画像)は、先に専用の取り込みへ回す(PSD と同じ流儀)
+        var specialIds: [String] = []
+        let folders = allUrls.filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true }
+        for f in folders { specialIds += await importSequenceFolder(f, at: time) }
+        let svgs = allUrls.filter { SVGImporter.isSVG(path: $0.path) }
+        if !svgs.isEmpty { specialIds += await importSVGFiles(urls: svgs, at: time) }
+        let midis = allUrls.filter { MidiImporter.isMIDI(path: $0.path) }
+        if !midis.isEmpty { specialIds += await importMIDIFiles(urls: midis, at: time) }
+        let handled = Set(folders.map(\.path) + svgs.map(\.path) + midis.map(\.path))
+        let rest = allUrls.filter { !handled.contains($0.path) }
+        let psds = rest.filter { PSDImporter.isPSD(path: $0.path) }
+        let urls = rest.filter { !PSDImporter.isPSD(path: $0.path) }
         if !psds.isEmpty {
             let psdIds = await importPSDFiles(urls: psds, at: time)
-            if urls.isEmpty { return psdIds }
+            if urls.isEmpty { return specialIds + psdIds }
+        } else if urls.isEmpty {
+            return specialIds
         }
         let files = urls.filter { ClipEditing.isSupportedMedia(path: $0.path) }
-        guard !files.isEmpty else { return [] }
+        guard !files.isEmpty else { return specialIds }
         var media: [(path: String, kind: ClipType, duration: Double)] = []
         for u in files {
             let kind = ClipEditing.kindOf(path: u.path)
@@ -64,7 +76,7 @@ extension ProjectModel {
         edit("素材の追加") { p in ids = ClipEditing.place(media: media, at: t, preferredTrack: TrackTarget.index(in: p), in: &p); UnusedMedia.register(media.map(\.path), in: &p) }
         selectedClipId = ids.last
         statusText = "\(ids.count) 個の素材を追加しました"
-        return ids
+        return specialIds + ids
     }
 
     /// タイムラインへのドロップ(Finder・素材ブラウザ共通): 落とした時刻を吸着して、落とした行のレイヤーへ置く。
@@ -72,14 +84,25 @@ extension ProjectModel {
     @discardableResult
     func dropMedia(urls allUrls: [URL], dropTime: Double, rowIndex: Int?) async -> [String] {
         guard !isLocked else { return [] }
-        let psds = allUrls.filter { PSDImporter.isPSD(path: $0.path) }
-        let urls = allUrls.filter { !PSDImporter.isPSD(path: $0.path) }
+        var specialIds: [String] = []
+        let folders = allUrls.filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true }
+        for f in folders { specialIds += await importSequenceFolder(f, at: dropTime) }
+        let svgs = allUrls.filter { SVGImporter.isSVG(path: $0.path) }
+        if !svgs.isEmpty { specialIds += await importSVGFiles(urls: svgs, at: dropTime) }
+        let midis = allUrls.filter { MidiImporter.isMIDI(path: $0.path) }
+        if !midis.isEmpty { specialIds += await importMIDIFiles(urls: midis, at: dropTime) }
+        let handled = Set(folders.map(\.path) + svgs.map(\.path) + midis.map(\.path))
+        let rest = allUrls.filter { !handled.contains($0.path) }
+        let psds = rest.filter { PSDImporter.isPSD(path: $0.path) }
+        let urls = rest.filter { !PSDImporter.isPSD(path: $0.path) }
         if !psds.isEmpty {
             let psdIds = await importPSDFiles(urls: psds, at: dropTime)
-            if urls.isEmpty { return psdIds }
+            if urls.isEmpty { return specialIds + psdIds }
+        } else if urls.isEmpty {
+            return specialIds
         }
         let files = urls.filter { ClipEditing.isSupportedMedia(path: $0.path) }
-        guard !files.isEmpty else { return [] }
+        guard !files.isEmpty else { return specialIds }
         var media: [(path: String, kind: ClipType, duration: Double)] = []
         for u in files {
             let kind = ClipEditing.kindOf(path: u.path)
@@ -89,10 +112,10 @@ extension ProjectModel {
                                            playhead: currentTime, pps: pps, snapEnabled: snapEnabled)
         var ids: [String] = []
         edit("素材のドロップ") { p in ids = ClipEditing.place(media: media, at: place.start, preferredTrack: place.track, in: &p); UnusedMedia.register(media.map(\.path), in: &p) }
-        guard !ids.isEmpty else { return [] }
+        guard !ids.isEmpty else { return specialIds }
         selectedClipId = ids.last
         statusText = "\(ids.count) 個の素材を追加しました"
-        return ids
+        return specialIds + ids
     }
 
     /// 「テキスト」ボタン: 一番上のレイヤーの再生ヘッド位置に 3 秒の文字を足して選択する。
@@ -168,7 +191,7 @@ extension ProjectModel {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
-        panel.allowedContentTypes = (ClipEditing.mediaExtensions + ["psd"]).compactMap { UTType(filenameExtension: $0) }
+        panel.allowedContentTypes = (ClipEditing.mediaExtensions + ["psd", "svg", "mid", "midi"]).compactMap { UTType(filenameExtension: $0) }
         panel.title = "素材を追加"
         let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
             guard resp == .OK else { return }
