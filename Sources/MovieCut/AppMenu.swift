@@ -132,6 +132,8 @@ enum MenuCommand: Hashable {
     case motionTrack
     // 複合クリップ: まとめる・解除(ショートカットは持たない)
     case compoundGroup, compoundUngroup, compoundEnter, compoundExit
+    // グループ制御(緩いグループ): 付ける・外す・有効/無効・複合化で合成(ショートカットは持たない)
+    case groupClips, ungroupClips, groupToggleDisabled, groupToCompound
     // 編集 ▸ 検索と置換(テロップとセリフの一括置換。ショートカットは持たない)
     case findReplace
     // クリップ ▸ 読み辞書を編集…(台本から声を作るときの読み替え。プロジェクトに保存。ショートカットは持たない)
@@ -385,6 +387,8 @@ struct MenuState: Equatable {
     var isStabilized = false         // 選択クリップの手ぶれ補正がオン
     var canAutoReframe = false       // 映像・画像を選んでいる(縦動画に自動リフレームできる)
     var canMotionTrack = false       // 文字・図形・画像を選んでいて、下に映像・画像のレイヤーがある(動きに追従できる)
+    var selectionHasGroup = false    // 選択中のクリップがグループに入っている
+    var selectionGroupDisabled = false   // 選択のグループ全員が無効化されている
     var canCompoundGroup = false     // 2 つ以上のクリップを選んでいる(まとめられる)
     var canCompoundUngroup = false   // 選択が複合クリップ(解除できる)
     var canCompoundEnter = false     // 選択が中身のある複合クリップ(中に入って編集できる)
@@ -466,6 +470,8 @@ struct MenuState: Equatable {
             layerHeight = LayerHeight.of(m.project.tracks[li])
         }
         clipsLocked = LayerEditing.allClipsLocked(m.selectedClipIDs, in: m.project)
+        selectionHasGroup = m.selectionHasGroup
+        selectionGroupDisabled = m.selectionGroupAllDisabled
         canMuteClip = ClipEditing.hasMutable(m.selectedClipIDs, in: m.project)
         clipsMuted = ClipEditing.allMuted(m.selectedClipIDs, in: m.project)
         canTreatAsVoice = ClipEditing.hasVoiceDesignatable(m.selectedClipIDs, in: m.project)
@@ -890,7 +896,17 @@ enum AppMenuSpec {
          MenuItemSpec(command: .compoundGroup, title: "複合クリップにまとめる", shortcut: nil, enabled: s.canEdit && s.canCompoundGroup, checked: nil),
          MenuItemSpec(command: .compoundUngroup, title: "複合クリップを解除", shortcut: nil, enabled: s.canEdit && s.canCompoundUngroup, checked: nil),
          MenuItemSpec(command: .compoundEnter, title: "複合クリップの中を編集", shortcut: nil, enabled: s.canEdit && s.canCompoundEnter, checked: nil, hint: "タイムラインで複合クリップをダブルクリックしても入れます"),
-         MenuItemSpec(command: .compoundExit, title: "複合クリップから出る", shortcut: nil, enabled: s.hasDocument && s.isInsideCompound, checked: nil)]
+         MenuItemSpec(command: .compoundExit, title: "複合クリップから出る", shortcut: nil, enabled: s.hasDocument && s.isInsideCompound, checked: nil),
+         MenuItemSpec(command: .groupClips, title: "グループにする", shortcut: nil, enabled: s.canEdit && s.selectionCount >= 2, checked: nil, hint: "レイヤーをまたいで、まとめて移動・複製・削除"),
+         MenuItemSpec(command: .ungroupClips, title: "グループを解除", shortcut: nil, enabled: s.canEdit && s.selectionHasGroup, checked: nil),
+         groupDisabledItem(s),
+         MenuItemSpec(command: .groupToCompound, title: "グループを複合クリップにまとめる(画像を合成)", shortcut: nil, enabled: s.canEdit && s.selectionHasGroup, checked: nil, hint: "合成は複合クリップの描画が担当")]
+    }
+
+    /// クリップ ▸ グループを無効にする / 有効にする(選択のグループの状態でラベルが変わる。ショートカットなし)。
+    static func groupDisabledItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .groupToggleDisabled, title: s.selectionGroupDisabled ? "グループを有効にする" : "グループを無効にする", shortcut: nil,
+                     enabled: s.canEdit && s.selectionHasGroup, checked: nil, hint: "無効にすると絵も音も出ません")
     }
 
     /// クリップ ▸ クリップをロック / ロックを解除(選択の状態でラベルが変わる。ショートカットなし)。
@@ -1584,6 +1600,10 @@ enum AppMenu {
             case .stabilizeToggle: m.toggleStabilizeSelected()
             case .autoReframe: m.autoReframeSelected()
             case .motionTrack: m.trackMotionSelected()
+            case .groupClips: m.groupSelectedClips()
+            case .ungroupClips: m.ungroupSelectedClips()
+            case .groupToggleDisabled: m.toggleGroupDisabledSelected()
+            case .groupToCompound: m.compoundSelectedGroup()
             case .compoundGroup: m.groupSelectedCompound()
             case .compoundUngroup: m.ungroupSelectedCompound()
             case .compoundEnter: m.enterCompound()
