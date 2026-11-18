@@ -93,6 +93,7 @@ struct ContentView: View {
         .sheet(isPresented: $model.showTakeSheet) { TakeCompareSheet(model: model) }
         .sheet(isPresented: $model.showNoteListSheet) { NoteListSheet(model: model) }
         .sheet(isPresented: $model.showUnusedMediaSheet) { UnusedMediaSheet(model: model) }
+        .sheet(item: $model.relinkReport) { report in RelinkResultSheet(model: model, report: report) }
         .sheet(isPresented: $model.showExportQueueSheet) { ExportQueueSheet(controller: AppServices.exportQueue) { model.showExportQueueSheet = false } }
         .onChange(of: model.showAudioLibrary) { _, open in
             // 素材ブラウザは非モーダルの別ウインドウ(開いたままタイムラインへドラッグできる)

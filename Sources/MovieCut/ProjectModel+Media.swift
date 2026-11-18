@@ -1,6 +1,19 @@
 import AppKit
 import MovieCutCore
 
+/// 素材の場所の再指定の結果: つながった素材(旧 → 新)と、見つからなかった素材(旧パス)。結果のシートに出す。
+struct MediaRelinkReport: Identifiable {
+    struct Link: Identifiable, Equatable {
+        /// 旧パス(対応表のキー)。プロジェクト内で一意。
+        var id: String { from }
+        var from: String
+        var to: String
+    }
+    let id = UUID()
+    var relinked: [Link]
+    var unresolved: [String]
+}
+
 /// 素材の欠落: 書き出し前の確認、開いたときの案内、場所の再指定、パッケージ保存(ロジックは Core の `MissingMedia` / `MediaPackage`)。
 extension ProjectModel {
     /// 欠けている素材があれば、書き出しを止める文言を出して true。無ければ false。
@@ -61,20 +74,38 @@ extension ProjectModel {
         if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
     }
 
-    /// フォルダの中を再帰的に探し、ファイル名(目印があればサイズも)で差し替える。差し替えた数を返す(0 なら何も変えない)。
+    /// フォルダの中を再帰的に探し、欠けた素材を差し替える(ロジックは Core の `MediaRelinker`)。
+    /// フィンガープリントのある素材はハッシュが一致したものだけつなぐ。つながった数を返す(0 なら何も変えない)。
+    /// つながった素材と見つからなかった素材の一覧を `relinkReport` に出し、結果のシートを表示する。
     @discardableResult
     func relinkMedia(in folder: URL) -> Int {
         guard !isLocked else { return 0 }
-        let index = MissingMedia.index(root: folder)
         let dir = fileURL?.deletingLastPathComponent().path
-        let r = MissingMedia.relink(project, candidates: index, projectDir: dir)
-        guard r.relinked > 0 else {
-            statusText = "フォルダ内に一致する素材が見つかりませんでした(欠けている素材 \(r.stillMissing) 件)"
+        let r = MediaRelinker.relinkProject(project, projectDir: dir, candidateFolders: [folder])
+        let applied = !r.mapping.isEmpty && edit("素材の場所の再指定") { $0 = MediaRelinker.applying(r.mapping, to: $0) }
+        let linked = applied ? r.mapping.count : 0
+        let links = applied ? r.mapping.keys.sorted().map { MediaRelinkReport.Link(from: $0, to: r.mapping[$0] ?? "") } : []
+        if !links.isEmpty || !r.unresolved.isEmpty {
+            relinkReport = MediaRelinkReport(relinked: links, unresolved: r.unresolved)
+        }
+        guard linked > 0 else {
+            statusText = "フォルダ内に一致する素材が見つかりませんでした(欠けている素材 \(r.unresolved.count) 件)"
             return 0
         }
-        edit("素材の場所の再指定") { $0 = r.project }
-        statusText = "素材 \(r.relinked) 件の場所を直しました。残り \(r.stillMissing) 件"
-        return r.relinked
+        statusText = "素材 \(linked) 件の場所を直しました。残り \(r.unresolved.count) 件"
+        return linked
+    }
+
+    /// 保存データを作る(主スレッドを待たない。保存も自動保存も、この形で符号化する)。
+    /// 素材のフィンガープリントを最新にしてから符号化する。編集中のプロジェクトは変えない。
+    /// 読めない(欠けている)素材は今回は付かないが、いまも参照されていれば以前の記録を残す(再リンクの手がかり)。
+    nonisolated static func encodeForSave(_ p: Project, folder: String?, cache: MediaFingerprintCache) throws -> Data {
+        var saved = MediaFingerprintCollector.attaching(to: p, projectDir: folder, compute: cache.fingerprint(atPath:))
+        let referenced = Set(MediaFingerprintCollector.referencedSources(in: p))
+        for (src, fp) in p.mediaFingerprints where referenced.contains(src) && saved.mediaFingerprints[src] == nil {
+            saved.mediaFingerprints[src] = fp
+        }
+        return try saved.encoded()
     }
 
     /// ファイル ▸ パッケージとして保存…: 親フォルダを選び、その中に「<書類名> パッケージ」を作って
