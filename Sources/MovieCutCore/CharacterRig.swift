@@ -686,7 +686,8 @@ public extension RigFrameCache {
 
 public enum RigImageLoader {
     /// 長辺が maxPixel 以下になるよう縮めて読む(大きな PNG を原寸で保持しない)。
-    public static func thumbnail(_ path: String, maxPixel: Int) -> CGImage? {
+    /// `frameIndex` はアニメーション画像のコマ番号(既定 0 = 従来どおり先頭)。
+    public static func thumbnail(_ path: String, maxPixel: Int, frameIndex: Int = 0) -> CGImage? {
         guard let src = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil) else { return nil }
         let opts: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
@@ -694,7 +695,7 @@ public enum RigImageLoader {
             kCGImageSourceThumbnailMaxPixelSize: max(1, maxPixel),
             kCGImageSourceShouldCacheImmediately: true,
         ]
-        return CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary)
+        return CGImageSourceCreateThumbnailAtIndex(src, max(0, frameIndex), opts as CFDictionary)
     }
 }
 
@@ -725,14 +726,17 @@ public final class RigFrameCache {
     /// 高さ `height` の立ち絵(重ねるパス = 下から順)。パーツが 1 枚も読めなければ nil。
     /// 画像の大きさは最初に読めたパーツのもの。他のパーツは同じ大きさに合わせて描く。
     /// `offsets` は `paths` と同じ並びの位置の補正(基準キャンバスの画素単位、右・下が正)。空(または全部ゼロ)なら従来の置き方。
-    public func frame(paths: [String], height: Int, offsets: [PartOffset] = [], alignment: PartAlignment = .bottom) -> CGImage? {
+    /// `frames` は `paths` と同じ並びのアニメーション画像のコマ番号。空(または全部 0)なら従来どおり(キーも従来のまま)。
+    public func frame(paths: [String], height: Int, offsets: [PartOffset] = [], alignment: PartAlignment = .bottom, frames: [Int] = []) -> CGImage? {
         guard !paths.isEmpty, height > 0 else { return nil }
         let offs = offsets.count == paths.count && offsets.contains(where: { !$0.isZero }) ? offsets : []
+        let fr = frames.count == paths.count && frames.contains(where: { $0 > 0 }) ? frames.map { max(0, $0) } : []
         var key = paths.joined(separator: "\u{1f}") + "\u{1e}\(height)"
         if !offs.isEmpty { key += "\u{1e}" + offs.map { "\($0.dx),\($0.dy)" }.joined(separator: ";") }
         if alignment != .bottom { key += "\u{1e}" + alignment.rawValue }
+        if !fr.isEmpty { key += "\u{1e}f" + fr.map(String.init).joined(separator: ",") }
         lock.lock()
-        if let f = frames[key] { touch(&frameOrder, key); lock.unlock(); return f }
+        if let f = self.frames[key] { touch(&frameOrder, key); lock.unlock(); return f }
         lock.unlock()
 
         guard let first = paths.compactMap({ nativeSize($0) }).first else { return nil }
@@ -746,7 +750,7 @@ public final class RigFrameCache {
         for (pi, p) in paths.enumerated() {
             // 読む大きさは、そのパーツを描く大きさ(基準より大きいパーツを縮めすぎて、描くときに引き伸ばさない)
             let pm = nativeSize(p).map { Int((Double(max($0.w, $0.h)) * scale).rounded(.up)) } ?? max(cw, ch)
-            guard let img = part(p, maxPixel: max(cw, ch, pm)) else { continue }
+            guard let img = part(p, maxPixel: max(cw, ch, pm), frameIndex: fr.isEmpty ? 0 : fr[pi]) else { continue }
             // 大きさが違うパーツ(同じ幅で高さだけ違う など)は拡大縮小せず、左右は中央・縦は `alignment`(既定は下)に揃えて置く
             var rect = CGRect(x: 0, y: 0, width: cw, height: ch)
             if let ns = nativeSize(p), ns.w != first.w || ns.h != first.h {
@@ -764,8 +768,8 @@ public final class RigFrameCache {
         guard drew, let out = ctx.makeImage() else { return nil }
         lock.lock()
         composeCount += 1
-        frames[key] = out; touch(&frameOrder, key)
-        while frameOrder.count > frameLimit { frames.removeValue(forKey: frameOrder.removeFirst()) }
+        self.frames[key] = out; touch(&frameOrder, key)
+        while frameOrder.count > frameLimit { self.frames.removeValue(forKey: frameOrder.removeFirst()) }
         lock.unlock()
         return out
     }
@@ -786,15 +790,17 @@ public final class RigFrameCache {
         return s
     }
 
-    private func part(_ path: String, maxPixel: Int) -> CGImage? {
-        let key = "\(path)\u{1e}\(maxPixel)"
+    private func part(_ path: String, maxPixel: Int, frameIndex: Int = 0) -> CGImage? {
+        let key = frameIndex > 0 ? "\(path)\u{1e}\(maxPixel)\u{1e}f\(frameIndex)" : "\(path)\u{1e}\(maxPixel)"
         lock.lock()
         if let p = parts[key] { touch(&partOrder, key); lock.unlock(); return p }
-        if missing.contains(path) { lock.unlock(); return nil }
+        // 失敗の記録: パス単位は「ファイル自体が無い」(nativeSize が記録)、キー単位は「この大きさ・このコマの読み込み失敗」。
+        // 1 コマの失敗でそのパスの全コマ・全サイズを止めないよう、part の失敗はキー単位で覚える。
+        if missing.contains(path) || missing.contains(key) { lock.unlock(); return nil }
         lock.unlock()
-        let img = RigImageLoader.thumbnail(path, maxPixel: maxPixel)
+        let img = RigImageLoader.thumbnail(path, maxPixel: maxPixel, frameIndex: frameIndex)
         lock.lock(); defer { lock.unlock() }
-        guard let img else { missing.insert(path); return nil }
+        guard let img else { missing.insert(key); return nil }
         loadCount += 1
         parts[key] = img; touch(&partOrder, key)
         while partOrder.count > partLimit { parts.removeValue(forKey: partOrder.removeFirst()) }
