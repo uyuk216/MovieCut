@@ -759,6 +759,16 @@ final class TimelineCanvas: NSView {
         TimelinePalette.accent.withAlphaComponent(0.9).setStroke(); b.stroke()
     }
 
+    /// 消音の印(濃い下地に白い「消」)。
+    private func drawMuteGlyph(in b: NSRect, ctx: CGContext) {
+        ctx.saveGState()
+        NSColor(white: 0, alpha: 0.45).setFill()
+        NSBezierPath(roundedRect: b.insetBy(dx: -2, dy: -2), xRadius: 4, yRadius: 4).fill()
+        ("消" as NSString).draw(at: NSPoint(x: b.minX, y: b.minY - 1),
+                              withAttributes: [.font: NSFont.systemFont(ofSize: 10, weight: .bold), .foregroundColor: NSColor.white])
+        ctx.restoreGState()
+    }
+
     /// 小さな錠前(本体の四角と、つるの弧)。
     private func drawLockGlyph(in b: NSRect, ctx: CGContext) {
         ctx.saveGState()
@@ -823,6 +833,11 @@ final class TimelineCanvas: NSView {
         }
         // ロックの印(右上の小さな錠前)。ロックされたクリップだけ。狭いクリップには出さない
         if c.isClipLocked && r.width >= 24 { drawLockGlyph(in: NSRect(x: r.maxX - 15, y: r.minY + 3, width: 11, height: 11), ctx: ctx) }
+        // 消音の印(右上、錠前の左の小さな「消」)。消音されたクリップだけ。狭いクリップには出さない
+        if c.isMuted && r.width >= 24 {
+            let x = r.maxX - 15 - (c.isClipLocked && r.width >= 24 ? 17 : 0)
+            drawMuteGlyph(in: NSRect(x: x, y: r.minY + 3, width: 11, height: 11), ctx: ctx)
+        }
         var textLeft = r.minX + 7 + (hasNoteBadge ? 15 : 0)
         if let lb = leftBorder {
             // 左端の 3pt の線(キャラの色そのまま)
@@ -1966,6 +1981,8 @@ final class TimelineCanvas: NSView {
         }
         let allLocked = LayerEditing.allClipsLocked(m.selectedClipIDs, in: m.project)
         add(allLocked ? "クリップのロックを解除" : "クリップをロック", enabled: !m.selectedClipIDs.isEmpty) { m.toggleClipLockSelected() }
+        let allMuted = ClipEditing.allMuted(m.selectedClipIDs, in: m.project)
+        add(allMuted ? "クリップの消音を解除" : "クリップを消音", enabled: ClipEditing.hasMutable(m.selectedClipIDs, in: m.project)) { m.toggleClipMuteSelected() }
         menu.addItem(.separator())
         add("コピー", enabled: !m.selectedClipIDs.isEmpty) { m.copySelection() }
         add("切り取り", enabled: !m.selectedClipIDs.isEmpty) { m.cutSelection() }

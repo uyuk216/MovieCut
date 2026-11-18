@@ -19,6 +19,7 @@ struct AudioCacheKey: Hashable {
             for c in tr.clips where c.type == .audio || c.type == .voice || c.type == .video {
                 // ミキサーが読み飛ばすもの(src なし・長さ 0 以下)は音に関係しない
                 guard let src = c.src, !src.isEmpty, c.duration > 0, !c.isFreeze else { continue }   // フリーズフレームは無音
+                if c.isMuted { continue }   // クリップ単位の消音は、無いのと同じ(鍵は消音の切り替えで変わる)
                 let date = fileDate(src).map { String($0.timeIntervalSinceReferenceDate) } ?? "-"
                 // フェードがあるときだけ鍵に足す(無いプロジェクトの鍵は従来と同じ)
                 let fade = c.hasAudioFade ? "|fade=\(c.fadeInOrDefault),\(c.fadeOutOrDefault),\(c.fadeCurve ?? "linear")" : ""

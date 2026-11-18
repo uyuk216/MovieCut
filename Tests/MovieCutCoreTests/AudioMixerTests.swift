@@ -107,6 +107,18 @@ final class AudioMixerTests: XCTestCase {
         XCTAssertEqual(try AudioMixer.mixdownDetailed(project: p, to: tmp.appendingPathComponent("m2.caf")).sourceCount, 0)
     }
 
+    func testMutedClipIsSilentButOthersStillSound() throws {
+        let a = try sine("a.wav")
+        var m = clip(src: a, duration: 1); m.muted = true
+        let p = project([[m]])
+        let (out, _) = try mix(p)
+        XCTAssertEqual(try AudioFixture.peak(out, from: 0, to: 1), 0)
+        XCTAssertEqual(try AudioMixer.mixdownDetailed(project: p, to: tmp.appendingPathComponent("m3.caf")).sourceCount, 0)
+        // 消音していないクリップは鳴る
+        let (out2, _) = try mix(project([[m, clip(src: a, start: 0, duration: 1)]]))
+        XCTAssertGreaterThan(try AudioFixture.peak(out2, from: 0, to: 1), 0.1)
+    }
+
     func testVolumeHalvesAmplitude() throws {
         let a = try sine("a.wav")
         let (full, _) = try mix(project([[clip(src: a, duration: 1)]]))

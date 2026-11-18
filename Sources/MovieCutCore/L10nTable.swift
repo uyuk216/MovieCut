@@ -4,6 +4,8 @@ import Foundation
 enum L10nTable {
     static let english: [String: String] = [
         "クリップをロック": "Lock Clips",
+        "クリップを消音": "Mute Clips",
+        "クリップの消音を解除": "Unmute Clips",
         "クリップのロックを解除": "Unlock Clips",
         "ファイル": "File",
         "編集": "Edit",

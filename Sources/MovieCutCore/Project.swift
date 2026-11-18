@@ -469,6 +469,8 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var note: String? = nil
     /// クリップ単位のロック。true のときだけファイルに書く(移動・トリム・分割・削除・プロパティ編集を断る。`LayerEditing`)。
     public var locked: Bool? = nil
+    /// クリップ単位の消音。true のときだけファイルに書く(書き出し・再生・ラウドネスで鳴らさない。映像・波形は変えない)。
+    public var muted: Bool? = nil
     /// 字幕に出す文(ボイスクリップ)。無いときは読み上げる文 `text` が字幕。空文字は「字幕なし」。読み上げ(口パクの母音判定を含む)は常に `text`。
     public var subtitleText: String? = nil
     /// 立ち絵クリップの素材(`Project.tachies` の id)。
@@ -481,7 +483,7 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var followsProjectEnd: Bool? = nil
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["id", "type", "subtitleText", "tachieId", "mouthDrive", "speakingOnly", "followsProjectEnd", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "bokehShape", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "frameFlow", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "valueRef", "duck", "visualizer", "stabilize", "stabilizeRoll", "tracks", "mask", "blendMode", "group", "ruby", "figure", "note", "locked"]
+    static let knownKeys: Set<String> = ["id", "type", "subtitleText", "tachieId", "mouthDrive", "speakingOnly", "followsProjectEnd", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "bokehShape", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "frameFlow", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "valueRef", "duck", "visualizer", "stabilize", "stabilizeRoll", "tracks", "mask", "blendMode", "group", "ruby", "figure", "note", "locked", "muted"]
 
     public init() {}
 
@@ -514,6 +516,8 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var hasKeyframes: Bool { !keyframes.isEmpty }
     /// このクリップ自身がロックされているか(レイヤーのロックとは別)。
     public var isClipLocked: Bool { locked == true }
+    /// このクリップ自身が消音されているか(レイヤーの消音とは別)。
+    public var isMuted: Bool { muted ?? false }
     /// トランジションが 1 つでもあるか(描画の速い道の判定)。
     public var hasTransition: Bool { transitionIn != nil || transitionOut != nil }
     public var fadeInOrDefault: Double { max(0, fadeIn ?? 0) }
@@ -637,6 +641,9 @@ public struct Clip: Codable, Equatable, Identifiable {
         if let raw: JSONValue = l.value("locked") {
             if l.bool("locked") == true { locked = true } else { extra["locked"] = raw }   // true 以外は捨てずに書き戻す
         }
+        if let raw: JSONValue = l.value("muted") {
+            if l.bool("muted") == true { muted = true } else { extra["muted"] = raw }   // true 以外は捨てずに書き戻す
+        }
         if let raw: JSONValue = l.value("figure") {
             if let v: Figure = l.value("figure") { figure = v } else { extra["figure"] = raw }
         }
@@ -751,6 +758,7 @@ public struct Clip: Codable, Equatable, Identifiable {
         if let f = figure?.normalized { try c.encode(f, forKey: AnyKey("figure")) }
         if let n = note, !n.isEmpty { try c.encode(n, forKey: AnyKey("note")) }
         if locked == true { try c.encode(true, forKey: AnyKey("locked")) }
+        if muted == true { try c.encode(true, forKey: AnyKey("muted")) }
         try c.encodeIfPresent(subtitleText, forKey: AnyKey("subtitleText"))
         try c.encodeIfPresent(tachieId, forKey: AnyKey("tachieId"))
         if let d = mouthDrive, d != .all { try c.encode(d.raw, forKey: AnyKey("mouthDrive")) }

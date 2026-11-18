@@ -69,6 +69,8 @@ enum MenuCommand: Hashable {
     // A6: クリップのコピー / 切り取り / 貼り付け / 全選択(ショートカットは持たない: ⌘C ⌘X ⌘V ⌘A は responder chain が受ける)と、レイヤー
     case copyClips, cutClips, pasteClips, selectAllClips, layerLock, layerSolo, layerTarget, layerDelete, layerHeight(LayerHeight)
     case clipLock
+    // クリップ ▸ クリップを消音 / 消音を解除(音のあるクリップと複合クリップ。ショートカットなし)
+    case clipMute
     case split, delete, addText, addBlur, addAdjustment, addVisualizer, addQRCode, addCharacter, makeVoices
     // 図形(クリップ ▸ 図形を追加 ▸ 種類。ショートカットは持たない)
     case addShape(FigureKind)
@@ -270,6 +272,9 @@ struct MenuState: Equatable {
     var layerLocked = false
     /// 選んだクリップが全部ロック済み(メニューは「ロックを解除」になる)
     var clipsLocked = false
+    /// 選んだクリップに消音できるもの(音のある型・複合クリップ)があるか / それが全部消音済みか(メニューは「消音を解除」になる)
+    var canMuteClip = false
+    var clipsMuted = false
     var layerSolo = false
     /// 対象のレイヤーがトラックターゲット(新しく足すクリップの行き先)
     var layerIsTarget = false
@@ -442,6 +447,8 @@ struct MenuState: Equatable {
             layerHeight = LayerHeight.of(m.project.tracks[li])
         }
         clipsLocked = LayerEditing.allClipsLocked(m.selectedClipIDs, in: m.project)
+        canMuteClip = ClipEditing.hasMutable(m.selectedClipIDs, in: m.project)
+        clipsMuted = ClipEditing.allMuted(m.selectedClipIDs, in: m.project)
         canSplit = m.canSplit
         canRoll = m.canRoll
         canSlip = m.canSlip
@@ -833,6 +840,7 @@ enum AppMenuSpec {
         [MenuItemSpec(command: .split, title: "クリップを分割", shortcut: nil, enabled: s.canEdit && s.canSplit, checked: nil, hint: "S"),
          MenuItemSpec(command: .duplicate, title: "クリップを複製", shortcut: cmd("d"), enabled: s.canEdit && s.hasSelection, checked: nil),
          clipLockItem(s),
+         clipMuteItem(s),
          fitTachie(s),
          MenuItemSpec(command: .delete, title: "クリップを削除", shortcut: nil, enabled: s.canEdit && s.hasSelection, checked: nil, hint: "⌫"),
          MenuItemSpec(command: .rippleDelete, title: "すき間を詰めて削除", shortcut: MenuShortcut(key: .delete, modifiers: [.option, .command]), enabled: s.canEdit && s.hasSelection, checked: nil),
@@ -853,6 +861,12 @@ enum AppMenuSpec {
     static func clipLockItem(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .clipLock, title: s.clipsLocked ? "クリップのロックを解除" : "クリップをロック", shortcut: nil,
                      enabled: s.canEdit && s.hasSelection, checked: nil, hint: "移動・トリム・分割・削除を防ぐ")
+    }
+
+    /// クリップ ▸ クリップを消音 / 消音を解除(選択の状態でラベルが変わる。ショートカットなし)。
+    static func clipMuteItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .clipMute, title: s.clipsMuted ? "クリップの消音を解除" : "クリップを消音", shortcut: nil,
+                     enabled: s.canEdit && s.canMuteClip, checked: nil, hint: "このクリップだけ鳴らさない")
     }
 
     static func clipTrim(_ s: MenuState) -> [MenuItemSpec] {
@@ -1440,6 +1454,7 @@ enum AppMenu {
             case .pasteClips: m.pasteClips()
             case .selectAllClips: m.selectAllClips()
             case .clipLock: m.toggleClipLockSelected()
+            case .clipMute: m.toggleClipMuteSelected()
             case .layerLock: if let i = m.targetLayerIndex { m.toggleLayerLock(i) }
             case .layerSolo: if let i = m.targetLayerIndex { m.toggleLayerSolo(i) }
             case .layerTarget: if let i = m.targetLayerIndex { m.toggleTrackTarget(i) }

@@ -171,6 +171,19 @@ extension ProjectModel {
         return edit(on ? "クリップのロック" : "クリップのロック解除") { $0 = p }
     }
 
+    /// クリップ ▸ クリップを消音 / 消音を解除。選んだ音のあるクリップが全部消音済みなら解除、そうでなければ全部消音。1 回の Undo。
+    /// ロックされたレイヤー・クリップは変えない(複合クリップの中に入っているときは、見えているレイヤーが対象)。
+    @discardableResult
+    func toggleClipMuteSelected() -> Bool {
+        guard !isLocked, ClipEditing.hasMutable(selectedClipIDs, in: project) else { return false }
+        let on = !ClipEditing.allMuted(selectedClipIDs, in: project)
+        guard let p = ClipEditing.setClipsMuted(in: project, ids: selectedClipIDs, on) else {
+            statusText = Self.lockedNotice
+            return false
+        }
+        return edit(on ? "クリップの消音" : "消音を解除") { $0 = p }
+    }
+
     @discardableResult
     func toggleLayerLock(_ index: Int) -> Bool {
         guard !isLocked, project.tracks.indices.contains(index),

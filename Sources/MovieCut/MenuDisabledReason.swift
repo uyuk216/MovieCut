@@ -55,6 +55,7 @@ extension AppMenuSpec {
         case .trimBefore, .trimAfter: return "再生位置がクリップの途中にありません"
         case .layerDelete: return s.hasLayerTarget ? (s.layerDeleteBlocked ?? "今の状態では使えません") : "レイヤーかクリップを選んでください"
         case .clipLock: return "クリップを選んでください"
+        case .clipMute: return "音声・ボイス・動画・複合クリップを選んでください"
         case .rollEdit: return "同じレイヤーでぴったり隣り合うクリップを 1 つ選んでください(ロックされたものは不可)"
         case .rippleTrimHead: return s.canRippleHead ? "今の状態では使えません" : "再生位置がクリップの途中にあるクリップを 1 つ選んでください(ロックされたものは不可)"
         case .rippleTrimTail: return s.canRippleTail ? "今の状態では使えません" : "再生位置がクリップの途中にあるクリップを 1 つ選んでください(ロックされたものは不可)"
