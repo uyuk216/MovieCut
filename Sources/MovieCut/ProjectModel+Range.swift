@@ -37,6 +37,23 @@ extension ProjectModel {
         return edit("書き出し範囲の解除", enforcesLock: false) { $0 = ExportRangeEditing.clearing($0) }
     }
 
+    /// クリップ ▸ 範囲を削除 / 範囲をリップル削除: 書き出し範囲(イン〜アウト)の中身を全レイヤーから取り除く。
+    /// 範囲の解除も同じ編集に含め、1 回の Undo で全部戻る。範囲が無い・何にも触れない・ロックに触れるときは何もしない。
+    @discardableResult
+    func deleteRange(ripple: Bool) -> Bool {
+        guard canMarkRange, let r = ExportRange.resolve(rangeIn: project.rangeIn, rangeOut: project.rangeOut, endTime: project.endTime) else { return false }
+        flushCoalesced()
+        guard let p = ClipEditing.deleteRange(in: project, from: r.start, to: r.end, ripple: ripple) else {
+            statusText = "範囲に削除できるクリップがないか、ロックされたクリップに触れています"
+            return false
+        }
+        let name = ripple ? "範囲のリップル削除" : "範囲の削除"
+        guard edit(name, { $0 = ExportRangeEditing.clearing(p) }) else { return false }
+        selectedClipId = nil
+        statusText = ripple ? "範囲を詰めて削除しました" : "範囲を削除しました"
+        return true
+    }
+
     /// ループ再生が効いている範囲(ループがオフ・範囲が無いときは nil)。
     var activeLoopRange: ExportRange? { trimLoop ?? (rangeLoop ? project.exportRange : nil) }
 

@@ -605,3 +605,8 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
 - 意図的な例外: 画面全体はダーク固定(`.preferredColorScheme(.dark)`)。動画編集という用途と、タイムライン/プレビューのキャンバスが暗色前提で設計されているため。外枠はセマンティックカラー化してあるので、将来ライトモードに対応する余地は残してある。
 - タイムラインのクリップ種別色(`TimelinePalette`)はキャンバス上の機能色なので対象外(従来どおり)。
 - アプリアイコンは `Resources/AppIcon.icns`(青→藍の角丸四角 + 再生三角 + タイムラインの帯。再生成は `Scripts/make-icon.sh`、絵は `Scripts/icon-draw.swift`)。`make-app.sh` があればバンドルへ取り込み、`CFBundleIconFile` で指す。
+
+## 範囲の削除(クリップ ▸ 範囲を削除 / 範囲をリップル削除、2026-11-18)
+- `ClipEditing.deleteRange(in:from:to:ripple:)`(Core、`ClipEditing+Range.swift`): 範囲を [0, endTime] に切り詰め、全レイヤーで両端を既存の `ClipEditing.split` で割ってから、範囲に完全に入る断片を消す(offset・速度ランプ・逆再生・キーフレーム・フェードの扱いは分割と同じ。複合クリップも分割が対応するので部分的にかかっても割る)。`ripple` なら各レイヤーで範囲の終わり以降に始まるクリップを範囲の幅だけ左へ(0 未満にしない)。マーカーは動かさない。
+- 空範囲・何にも触れない・範囲に触れるクリップがロック(レイヤー / クリップ)・リップルで動かすクリップがロックのときは nil(元は変えない)。
+- アプリ側は `ProjectModel.deleteRange(ripple:)`(`ProjectModel+Range.swift`): 範囲は書き出し範囲のイン点・アウト点(`ExportRange.resolve`)。Undo 名は「範囲の削除」「範囲のリップル削除」で、書き出し範囲の解除も同じ 1 回の編集に含める。テストは `ClipRangeDeleteTests`。

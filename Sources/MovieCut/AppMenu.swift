@@ -42,6 +42,8 @@ enum MenuCommand: Hashable {
     case aiScript, aiChapters, aiTitles, aiRewrite, aiSettings
     // 書き出し範囲(イン / アウト / 解除)と、静止画・連番画像の書き出し
     case rangeIn, rangeOut, rangeClear, exportStill, exportSequence
+    // 書き出し範囲の中身を全レイヤーから削除(リップルは後ろを詰める)
+    case rangeDelete, rangeRippleDelete
     // タイムラインの問い合わせ: 前後の空白(黒穴)へ・再生位置のクリップを選ぶ・短いクリップを選ぶ・選んだ範囲を書き出し範囲に
     case prevGap, nextGap, selectClipAtPlayhead, cycleOverlapping, selectShortClips, rangeFromSelection, speechShare
     // 選んだクリップの元素材の使用範囲(ソースの使用範囲)を表示し、その頭へ移す
@@ -714,6 +716,12 @@ enum AppMenuSpec {
          MenuItemSpec(command: .rangeFromSelection, title: "選択クリップの範囲を書き出し範囲に", shortcut: nil, enabled: s.canEdit && s.canMarkRange && s.hasSelectionSpan, checked: nil, hint: "頭から終わりまで")]
     }
 
+    /// クリップ ▸ 範囲を削除 / 範囲をリップル削除(書き出し範囲のイン・アウトの間を全レイヤーから取り除く)。ショートカットは持たない。
+    static func rangeDeleteItems(_ s: MenuState) -> [MenuItemSpec] {
+        [MenuItemSpec(command: .rangeDelete, title: "範囲を削除", shortcut: nil, enabled: s.canEdit && s.canMarkRange && s.hasRange, checked: nil, hint: "イン点〜アウト点"),
+         MenuItemSpec(command: .rangeRippleDelete, title: "範囲をリップル削除", shortcut: nil, enabled: s.canEdit && s.canMarkRange && s.hasRange, checked: nil, hint: "後ろを詰める")]
+    }
+
     /// 出力 ▸ 現在のフレームを画像で書き出す… / 連番画像を書き出す…
     static func imageExportItems(_ s: MenuState) -> [MenuItemSpec] {
         [MenuItemSpec(command: .exportStill, title: "現在のフレームを画像で書き出す…", shortcut: nil, enabled: s.canEdit && s.canExport, checked: nil, hint: "PNG / JPEG"),
@@ -1298,7 +1306,7 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, checkForUpdates, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s), apngExport(s)] + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), clipListItem(s), noteListItem(s)] + scriptStoryboardItems(s) + [makeProxies(s)] + [] + clipMenu(s).flatMap { $0 } + multicamItems(s) + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textVerticalItem(s), textPerCharItem(s), textCounterItem(s), dictionaryItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [sceneSplitItem(s), silenceCutItem(s), audioAutoSyncItem(s), beatMarkersItem(s), scaleDuplicateItem(s), beatPlaceItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
+        [about, checkForUpdates, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s), apngExport(s)] + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), clipListItem(s), noteListItem(s)] + scriptStoryboardItems(s) + [makeProxies(s)] + [] + clipMenu(s).flatMap { $0 } + multicamItems(s) + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textVerticalItem(s), textPerCharItem(s), textCounterItem(s), dictionaryItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [sceneSplitItem(s), silenceCutItem(s)] + rangeDeleteItems(s) + [audioAutoSyncItem(s), beatMarkersItem(s), scaleDuplicateItem(s), beatPlaceItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerColorItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + guideItems(s) + [previewProxy(s), fullScreen(s)] + help.flatMap { $0 }
@@ -1389,6 +1397,8 @@ enum AppMenu {
             case .rangeIn: m.setRangeInAtCurrent()
             case .rangeOut: m.setRangeOutAtCurrent()
             case .rangeClear: m.clearExportRange()
+            case .rangeDelete: m.deleteRange(ripple: false)
+            case .rangeRippleDelete: m.deleteRange(ripple: true)
             case .rangeFromSelection: m.setRangeFromSelection()
             case .prevGap: m.seekGap(forward: false)
             case .nextGap: m.seekGap(forward: true)
