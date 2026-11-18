@@ -9,17 +9,21 @@ enum AppServices {
     static let engine = VoicevoxEngine()
     /// プラグインの置き場(`Application Support/MovieCut/Plugins`。版ごとのフォルダ名は DataLocations に従う)。
     static var pluginsDirectory: URL { DataLocations.current.root.appendingPathComponent("Plugins", isDirectory: true) }
-    /// プラグインホストを作る。組み込みの VOICEVOX プラグインと、プラグインフォルダの探索結果を登録する(探索の失敗は無視)。
+    /// プラグインホストを作る。組み込みの VOICEVOX / AquesTalk プラグインと、プラグインフォルダの探索結果を登録する(探索の失敗は無視)。
     static func makePluginHost(for project: Project) -> PluginHost {
         let dir = pluginsDirectory
         let loader = BuiltinPluginLoader([
             VoicevoxPlugin.manifest.id: {
                 LoadedPlugin(manifest: VoicevoxPlugin.manifest, directory: dir, voiceProvider: VoicevoxPluginProvider(project: project, engine: AppServices.engine))
+            },
+            AquesTalkPlugin.manifest.id: {
+                LoadedPlugin(manifest: AquesTalkPlugin.manifest, directory: dir, voiceProvider: AquesTalkPluginProvider(project: project))
             }
         ])
         let host = PluginHost(loader: loader)
         host.register(PluginDiscovery.discover(in: [dir]))
         host.register(manifest: VoicevoxPlugin.manifest, directory: dir)
+        host.register(manifest: AquesTalkPlugin.manifest, directory: dir)
         return host
     }
     /// 作業メモリの予算(キャッシュが経由する単一の管理)。上限は総 RAM から決める(24GB 以上の Mac は上限なし)。

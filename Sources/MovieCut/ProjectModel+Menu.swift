@@ -19,7 +19,14 @@ extension RealVoiceProvider: VoiceFallbackReporting {
 }
 
 extension PluginVoiceRoutingProvider: VoiceFallbackReporting {
-    var didUseFallback: Bool { (fallbackProvider as? VoiceFallbackReporting)?.didUseFallback ?? false }
+    var didUseFallback: Bool {
+        if (fallbackProvider as? VoiceFallbackReporting)?.didUseFallback ?? false { return true }
+        // AquesTalk プラグイン経由で合成した場合は内蔵の記録が残らないので、読み込み済みのプラグイン側の記録も見る。
+        guard host.isLoaded(pluginID: AquesTalkPlugin.manifest.id),
+              let provider = try? host.voiceProviderIfAvailable(forEngine: "aquestalk"),
+              let aq = provider as? AquesTalkPluginProvider else { return false }
+        return aq.enginesUsed.contains("say")
+    }
 }
 
 /// メニュー(M5)とツールバーが共有する操作。ロジックはここに 1 つだけ置く。
