@@ -553,8 +553,8 @@ struct ClipInspector: View {
         MultilineField(label: "読み上げ文", value: c.text ?? "", focusRequest: model.textFocusRequest, onLive: { _ in }, onCommit: { t in Task { await model.setVoiceText(t, clipId: clipId) } })
         Text("入力欄を離れるか Cmd+Return で、音声を作り直します。口パクは読み上げ文の音に合わせます。")
             .font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
-        // アクセントは VOICEVOX のキャラだけ(AquesTalk では出さない)
-        if model.project.characters.first(where: { $0.id == c.charId })?.engine == "voicevox" {
+        // アクセントは VOICEVOX 系のキャラだけ(AquesTalk では出さない)
+        if let engine = model.project.characters.first(where: { $0.id == c.charId })?.engine, VoicevoxFamily.isVoicevoxStyleEngine(engine) {
             Button(c.voicevoxAccent == nil ? "アクセント編集…" : "アクセント編集…（保存済み）") { showAccentSheet = true }
                 .controlSize(.small)
                 .disabled(model.isLocked)
@@ -1327,10 +1327,12 @@ struct CharacterInspector: View {
                     Picker("", selection: Binding(get: { c.engine }, set: { model.characterEngineChanged(charId: charId, to: $0) })) {
                         Text("VOICEVOX").tag("voicevox")
                         Text("ゆっくり (AquesTalk)").tag("aquestalk")
+                        Text("COEIROINK").tag("coeiroink")
+                        Text("SHAREVOX").tag("sharevox")
                     }
                     .labelsHidden()
                 }
-                if c.engine == "voicevox" { voicevoxFields(c) } else { aquestalkFields(c) }
+                if c.engine == "voicevox" { voicevoxFields(c) } else if VoicevoxFamily.isAdditionalEngine(c.engine) { familyFields(c) } else { aquestalkFields(c) }
                 if !c.hasVoiceChosen {
                     HStack(alignment: .center, spacing: 8) {
                         Image(systemName: "info.circle.fill").foregroundStyle(.orange)
@@ -1400,6 +1402,25 @@ struct CharacterInspector: View {
             num("高さ", .pitch, step: 0.01, decimals: 2)
             num("抑揚", .intonation, step: 0.05, decimals: 2)
         }
+    }
+
+    /// COEIROINK / SHAREVOX の項目。話者カタログは VOICEVOX の接続先専用のため、話者は数値 ID の直接入力にする。
+    @ViewBuilder private func familyFields(_ c: Character) -> some View {
+        let speaker = c.speaker ?? 3
+        let name = VoicevoxFamily.displayName(forEngine: c.engine) ?? c.engine
+        let base = VoicevoxFamily.spec(forEngine: c.engine)?.defaultBaseURL ?? ""
+        InspectorField(label: "話者ID") {
+            NumField(value: Double(speaker), step: 1, decimals: 0, clamp: { max(0, min(100000, $0.rounded())) },
+                     onCommit: { v in model.setCharacterProperty({ $0.speaker = Int(max(0, min(100000, v.rounded()))) }, name: "話者の変更", charId: charId) },
+                     onStep: { v in model.coalescedCharacterProperty({ $0.speaker = Int(max(0, min(100000, v.rounded()))) }, name: "話者の変更", charId: charId) })
+        }
+        num("話す速さ", .speed, step: 0.05, decimals: 2)
+        HStack(alignment: .top, spacing: 10) {
+            num("高さ", .pitch, step: 0.01, decimals: 2)
+            num("抑揚", .intonation, step: 0.05, decimals: 2)
+        }
+        Text("\(name) を起動してから合成します(自動起動はしません)。既定の接続先は \(base) です。話者IDはエンジンの話者一覧(/speakers)で確認できます。")
+            .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
     }
 
     @ViewBuilder private func aquestalkFields(_ c: Character) -> some View {

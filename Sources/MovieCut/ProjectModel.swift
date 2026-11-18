@@ -19,6 +19,12 @@ enum AppServices {
             AquesTalkPlugin.manifest.id: {
                 LoadedPlugin(manifest: AquesTalkPlugin.manifest, directory: dir, voiceProvider: AquesTalkPluginProvider(project: project))
             },
+            CoeiroinkPlugin.manifest.id: {
+                LoadedPlugin(manifest: CoeiroinkPlugin.manifest, directory: dir, voiceProvider: CoeiroinkPlugin.makeProvider())
+            },
+            SharevoxPlugin.manifest.id: {
+                LoadedPlugin(manifest: SharevoxPlugin.manifest, directory: dir, voiceProvider: SharevoxPlugin.makeProvider())
+            },
             InvertEffectPlugin.manifest.id: {
                 LoadedPlugin(manifest: InvertEffectPlugin.manifest, directory: dir, effectProvider: InvertEffectProvider())
             },
@@ -36,6 +42,8 @@ enum AppServices {
         host.register(PluginDiscovery.discover(in: [dir]))
         host.register(manifest: VoicevoxPlugin.manifest, directory: dir)
         host.register(manifest: AquesTalkPlugin.manifest, directory: dir)
+        host.register(manifest: CoeiroinkPlugin.manifest, directory: dir)
+        host.register(manifest: SharevoxPlugin.manifest, directory: dir)
         host.register(manifest: InvertEffectPlugin.manifest, directory: dir)
         host.register(manifest: PosterizeEffectPlugin.manifest, directory: dir)
         host.register(manifest: GIFExportPlugin.manifest, directory: dir)
