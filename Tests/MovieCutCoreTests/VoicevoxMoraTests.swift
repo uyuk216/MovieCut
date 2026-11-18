@@ -134,6 +134,54 @@ final class VoicevoxMoraTests: XCTestCase {
         XCTAssertEqual(RenderAssets().visemes(src: wav.path, text: text, offset: 0, duration: 1), legacy)
     }
 
+    // MARK: 壊れたサイドカー(レビューブロッカー修正の回帰)
+
+    func testDecodeSidecarRejectsMalformedTimelines() {
+        func dec(_ json: String) -> [TimedViseme]? { VoicevoxMora.decodeSidecar(Data(json.utf8)) }
+        // 巨大だが有限な値(従来は timedFrames の Int 変換でトラップした)
+        XCTAssertNil(dec("{\"version\":1,\"segments\":[{\"v\":\"a\",\"s\":0,\"e\":1e100}]}"))
+        // 負・逆転・重なり・開始順でない・上限超え
+        XCTAssertNil(dec("{\"version\":1,\"segments\":[{\"v\":\"a\",\"s\":-0.1,\"e\":1}]}"))
+        XCTAssertNil(dec("{\"version\":1,\"segments\":[{\"v\":\"a\",\"s\":1,\"e\":0.5}]}"))
+        XCTAssertNil(dec("{\"version\":1,\"segments\":[{\"v\":\"a\",\"s\":0,\"e\":1},{\"v\":\"i\",\"s\":0.5,\"e\":1.5}]}"))
+        XCTAssertNil(dec("{\"version\":1,\"segments\":[{\"v\":\"a\",\"s\":1,\"e\":2},{\"v\":\"i\",\"s\":0,\"e\":0.5}]}"))
+        XCTAssertNil(dec("{\"version\":1,\"segments\":[{\"v\":\"a\",\"s\":0,\"e\":86401}]}"))
+        // 版は整数の 1 ちょうどのみ(1.5 / true を 1 とみなさない)
+        XCTAssertNil(dec("{\"version\":1.5,\"segments\":[{\"v\":\"a\",\"s\":0,\"e\":1}]}"))
+        XCTAssertNil(dec("{\"version\":true,\"segments\":[{\"v\":\"a\",\"s\":0,\"e\":1}]}"))
+        // 接触する区間(end == 次の start)と長さ 0 は正常
+        XCTAssertNotNil(dec("{\"version\":1,\"segments\":[{\"v\":\"a\",\"s\":0,\"e\":1},{\"v\":\"i\",\"s\":1,\"e\":1},{\"v\":\"u\",\"s\":1,\"e\":2}]}"))
+    }
+
+    func testTimedFramesWithHugeValuesDoNotCrash() {
+        let huge = LipSync.timedFrames(segments: [TimedViseme(vowel: .a, start: 0, end: 1e100)], frameCount: 24)
+        XCTAssertEqual(huge, [Viseme](repeating: .a, count: 24), "巨大な終端は全コマ分へクランプ")
+        let beyond = LipSync.timedFrames(segments: [TimedViseme(vowel: .a, start: 1e100, end: 2e100)], frameCount: 24)
+        XCTAssertEqual(beyond, [Viseme](repeating: .closed, count: 24))
+        let weird = LipSync.timedFrames(segments: [
+            TimedViseme(vowel: .a, start: .nan, end: 1),
+            TimedViseme(vowel: .i, start: 0, end: .infinity),
+            TimedViseme(vowel: .u, start: -1e100, end: -1),
+            TimedViseme(vowel: .e, start: -5, end: 0.1),
+        ], frameCount: 12)
+        XCTAssertEqual(weird.count, 12)
+        XCTAssertEqual(weird[0], .e, "負の開始は 0 にクランプされる")
+        XCTAssertEqual(weird[11], .closed, "非有限の区間は効かない")
+    }
+
+    func testVisemesFallsBackWithMalformedSidecarFile() throws {
+        let wav = tmp.appendingPathComponent("v2.wav")
+        try AudioFixture.writeSine(wav, segments: [(1, 0.3)])
+        let text = "あいうえお"
+        let env = try XCTUnwrap(RenderAssets().mouthEnvelope(for: wav.path))
+        let legacy = LipSync.frames(moras: LipSync.moras(of: text), envelope: env, range: 0..<Int(ceil(1 * 60.0)))
+        for bad in ["{\"version\":1,\"segments\":[{\"v\":\"a\",\"s\":0,\"e\":1e100}]}",
+                    "{\"version\":1,\"segments\":[{\"v\":\"a\",\"s\":1,\"e\":0.5}]}"] {
+            try Data(bad.utf8).write(to: VoicevoxMora.sidecarURL(forWav: wav.path))
+            XCTAssertEqual(RenderAssets().visemes(src: wav.path, text: text, offset: 0, duration: 1), legacy, "壊れたサイドカーは従来のエンベロープ比例に戻る")
+        }
+    }
+
     // MARK: LipSync カタカナ
 
     func testKatakanaMatchesHiragana() {

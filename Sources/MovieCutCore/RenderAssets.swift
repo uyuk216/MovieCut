@@ -206,7 +206,8 @@ public final class RenderAssets {
         // サイドカー(VOICEVOX のモーラタイミング)があれば優先。更新時刻をキーに含め、有無・差し替えがキャッシュへ反映される
         let sidecar = VoicevoxMora.sidecarURL(forWav: src)
         let stamp = (try? FileManager.default.attributesOfItem(atPath: sidecar.path)[.modificationDate] as? Date)?.timeIntervalSince1970
-        let key = "\(src)|\(offset)|\(duration)|\(text)" + (stamp.map { "|vv\($0)" } ?? "")
+        // スタンプは text より前の独立フィールドにする(text の末尾へ連結すると "|vv<mtime>" を含む text とキーが衝突し得る)
+        let key = "\(src)\u{1f}\(offset)\u{1f}\(duration)\u{1f}\(stamp.map { String($0) } ?? "-")\u{1f}\(text)"
         lock.lock()
         if let c = visemeCache[key] { budget?.touch(budgetKey("viseme", key)); lock.unlock(); return c }
         lock.unlock()
