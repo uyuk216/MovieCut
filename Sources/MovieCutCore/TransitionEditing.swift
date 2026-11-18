@@ -211,4 +211,68 @@ public enum TransitionEditing {
         p.tracks[loc.track].clips[loc.index] = nc
         return .applied(p, seconds: d, underId: o.id)
     }
+
+    // MARK: ずらして重ねる自動配置
+
+    public enum OverlapCrossfadeResult: Equatable {
+        case applied(Project, seconds: Double, shiftedBy: Double)
+        case notSupported        // 映像のクリップではない(前のクリップも含む)
+        case noPreviousClip      // 同じレイヤーに前のクリップが無い
+        case locked              // クリップ・レイヤーがロックされている
+        case noRoom              // 前へずらす余地が無く、重なりも作れない
+    }
+
+    /// ずらして重ねる: 選んだクリップを前へずらして、同じレイヤーの前のクリップと重ね、その重なりでクロスフェードにする。
+    /// クリップの長さ・素材の頭(offset)は変えず、開始だけを前に動かす(後ろのクリップは動かない = 隙間は後ろに残る)。
+    /// すでに十分重なっていれば、ずらさずに `crossfade` と同じ付け方をする。
+    /// 重なりの長さは `requested`(既定 0.5 秒)を、トランジションの上限(クリップの半分・5 秒)と前のクリップの長さで収める。
+    /// ずらした先が、前のクリップの頭・さらに前のクリップの終わり・0 秒のどれにもぶつからない範囲で止める。
+    /// ロックされたクリップ・レイヤーには使わない。変わらなければ結果は `.applied` にならない(各 case で理由を返す)。
+    public static func overlapCrossfade(in project: Project, clipId: String, duration requested: Double = Transition.defaultDuration) -> OverlapCrossfadeResult {
+        guard let loc = ClipEditing.locate(clipId, in: project) else { return .notSupported }
+        let track = project.tracks[loc.track]
+        let c = track.clips[loc.index]
+        guard supportsVideo(c.type) else { return .notSupported }
+        if track.isLocked || c.isClipLocked { return .locked }
+        let eps = ClipEditing.timeEpsilon
+        // 前のクリップ: 同じレイヤーで、頭が自分以前にあり、終わりが一番遅いもの(すでに重なっているものも含む)
+        var prev: Clip?
+        for o in track.clips where o.id != c.id && o.start <= c.start + eps {
+            if prev == nil || o.start + o.duration > prev!.start + prev!.duration { prev = o }
+        }
+        guard let pv = prev else { return .noPreviousClip }
+        guard supportsVideo(pv.type) else { return .notSupported }
+        // ずらした先の壁: 前のクリップより前に終わるクリップの終わりの最大
+        var wall = 0.0
+        for o in track.clips where o.id != c.id && o.id != pv.id {
+            let oEnd = o.start + o.duration
+            if oEnd <= pv.start + eps { wall = max(wall, oEnd) }
+        }
+        let existing = max(0, pv.start + pv.duration - c.start)
+        var want = min(Transition.clampedDuration(requested.isFinite ? requested : Transition.defaultDuration, clipDuration: c.duration), pv.duration)
+        want = round3(want)
+        guard want >= minCrossfadeOverlap - eps else { return .noRoom }
+        var shift = 0.0
+        if existing < want - eps {
+            let maxShift = c.start - max(pv.start, wall, 0)
+            shift = min(want - existing, max(0, maxShift))
+            if shift <= eps {
+                // ずらす余地が無い: 既存の重なりだけで作る(無ければ断る)
+                guard existing >= minCrossfadeOverlap - eps else { return .noRoom }
+                want = round3(Transition.clampedDuration(existing, clipDuration: c.duration))
+                shift = 0
+            } else {
+                want = round3(existing + shift)
+            }
+        }
+        var p = project
+        var nc = c
+        nc.start = max(0, c.start - shift)
+        var tr = c.transitionIn ?? Transition(.fade, duration: want)
+        tr.kind = TransitionKind.fade.rawValue
+        tr.duration = want
+        nc.transitionIn = tr
+        p.tracks[loc.track].clips[loc.index] = nc
+        return .applied(p, seconds: want, shiftedBy: round3(shift))
+    }
 }

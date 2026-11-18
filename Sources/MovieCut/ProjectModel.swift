@@ -297,6 +297,8 @@ final class ProjectModel: ObservableObject {
     @Published var rangeLoop = false
     /// トリム点・選択クリップの反復再生の範囲(表示の状態。保存せず Undo にも載せない。止まると nil に戻る)。
     @Published var trimLoop: ExportRange?
+    /// 範囲選択(ルーラーの ⌥ ドラッグ。表示の状態。保存せず Undo にも載せない)。範囲の削除・範囲内のクリップ選択の対象。
+    @Published var rangeSelection: RangeSelection?
     /// 重なったクリップの音だけの試聴(表示の状態。保存せず Undo にも載せない)。オンの間、止まっている再生位置を動かすと対象のクリップだけが短く鳴る。
     @Published var auditionOn = false
     /// 試聴している(solo にしている)クリップの id。

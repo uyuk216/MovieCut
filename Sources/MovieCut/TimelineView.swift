@@ -220,6 +220,13 @@ final class TimelineCanvas: NSView {
         var base = Project()
     }
     private(set) var rangeDrag: RangeDrag?
+    /// ルーラーの ⌥ ドラッグによる範囲選択。プロジェクトは変えず、モデルの表示状態(rangeSelection)だけを作る。
+    struct RangeSelectDrag {
+        var anchorTime: Double
+        var downPoint: NSPoint
+        var active = false
+    }
+    private(set) var rangeSelectDrag: RangeSelectDrag?
     /// 印の掴める幅(pt)。
     static let rangeGrab: CGFloat = 5
     /// 選択クリップの下端の菱形(キーフレーム)を押している最中の操作。動かさずに離せばその時刻へ移動、動かせば全項目のキーをまとめて動かす。
@@ -343,6 +350,20 @@ final class TimelineCanvas: NSView {
             NSRect(x: xb - 6, y: 2, width: 6, height: 2).fill()
             NSRect(x: xb - 6, y: rh - 8, width: 6, height: 2).fill()
         }
+    }
+
+    /// 範囲選択: ルーラーに青い帯を引き、クリップ領域にも薄く通す(書き出し範囲の橙色とは別の色)。
+    private func drawRangeSelection() {
+        guard let sel = model?.rangeSelection else { return }
+        let rh = TimelineLayout.rulerHeight
+        let xa = geometry.x(forTime: sel.start), xb = geometry.x(forTime: sel.end)
+        TimelinePalette.accent.withAlphaComponent(0.25).setFill()
+        NSRect(x: min(xa, xb), y: 0, width: abs(xb - xa), height: rh).fill()
+        TimelinePalette.accent.setFill()
+        NSRect(x: xa, y: 0, width: 2, height: rh).fill()
+        NSRect(x: xb - 2, y: 0, width: 2, height: rh).fill()
+        TimelinePalette.accent.withAlphaComponent(0.06).setFill()
+        NSRect(x: min(xa, xb), y: rh, width: abs(xb - xa), height: max(0, bounds.height - rh)).fill()
     }
 
     private func drawMarkerFlags(ctx: CGContext) {
@@ -1198,6 +1219,7 @@ final class TimelineCanvas: NSView {
             k += 1
         }
         drawExportRange()
+        drawRangeSelection()
         drawMarkerFlags(ctx: ctx)
         ctx.restoreGState()
         // 左上の角と下線
@@ -1358,6 +1380,8 @@ final class TimelineCanvas: NSView {
         if p.y < TimelineLayout.rulerHeight {
             if let isIn = rangeEdgeHit(at: p), let m = model, !m.isLocked {
                 rangeDrag = RangeDrag(isIn: isIn, downPoint: p)     // 範囲の印: ドラッグで動かす(離したときに 1 回の Undo)
+            } else if modifiers.contains(.option), p.x >= hw, let m = model, !m.isLocked {
+                rangeSelectDrag = RangeSelectDrag(anchorTime: geometry.time(forX: p.x), downPoint: p)   // ⌥ ドラッグ: 範囲選択
             } else if let m = markerHit(at: p) {
                 markerDrag = MarkerDrag(id: m.id, downPoint: p, downTime: m.time)    // 旗: クリックで移動、ドラッグで動かす
             } else if p.x >= hw {
@@ -1430,6 +1454,16 @@ final class TimelineCanvas: NSView {
 
     func mouseDragged(to p: NSPoint) {
         if isScrubbing { scrub(to: p); return }
+        if var sd = rangeSelectDrag {
+            if !sd.active {
+                guard abs(p.x - sd.downPoint.x) >= Self.dragThreshold else { return }
+                sd.active = true
+                rangeSelectDrag = sd
+            }
+            model?.rangeSelection = MovieCutCore.RangeSelection.make(from: sd.anchorTime, to: geometry.time(forX: p.x), endTime: project.endTime)
+            needsDisplay = true
+            return
+        }
         if var rd = rangeDrag {
             if !rd.active {
                 guard abs(p.x - rd.downPoint.x) >= Self.dragThreshold, let m = model else { return }
@@ -1530,6 +1564,12 @@ final class TimelineCanvas: NSView {
 
     func mouseUp() {
         mouseIsDown = false
+        if let sd = rangeSelectDrag {
+            rangeSelectDrag = nil
+            if !sd.active { model?.playback.seek(to: max(0, sd.anchorTime)) }
+            needsDisplay = true
+            return
+        }
         if let rd = rangeDrag {
             rangeDrag = nil
             if rd.active {
