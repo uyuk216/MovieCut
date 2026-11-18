@@ -37,6 +37,8 @@ public final class RenderAssets {
     private var sessionVideoScale = 1.0
     /// メモリ予算マネージャ(nil なら従来どおり無制限)。設定時だけデータキャッシュを登録する。
     private var budget: CacheBudgetManager?
+    /// このインスタンス専用の名前空間。予算マネージャは全書類で 1 つを共有するので、素材パスが同じでも書類どうしでキーが衝突しないようにする。
+    private let budgetNamespace = UUID().uuidString
 
     /// オプティカルフロー補間のフロー(素材のコマの組ごと。プレビューと書き出しで同じ組を何度も描くので、求めた動きを覚えておく)。
     public let flowCache = FlowCache()
@@ -44,6 +46,11 @@ public final class RenderAssets {
     public let rigCache = RigFrameCache()
 
     public init() {}
+
+    /// 予算マネージャのキー: `"<名前空間>|<種類>:<対象>"`。登録・touch・削除はすべてこのメソッドを通す。
+    func budgetKey(_ kind: String, _ id: String) -> String {
+        "\(budgetNamespace)|\(kind):\(id)"
+    }
 
     /// メモリ予算マネージャを設定する(nil で解除)。設定後に読んだ画像・エンベロープなどが予算の対象になる。
     public func setBudgetManager(_ manager: CacheBudgetManager?) {
@@ -103,7 +110,7 @@ public final class RenderAssets {
     /// 画像(ImageIO)。パスをキーにキャッシュする。
     public func image(at path: String) -> CGImage? {
         lock.lock()
-        if let i = images[path] { budget?.touch("image:" + path); lock.unlock(); return i }
+        if let i = images[path] { budget?.touch(budgetKey("image", path)); lock.unlock(); return i }
         if missingImages.contains(path) { lock.unlock(); return nil }
         let url = URL(fileURLWithPath: path)
         guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),
@@ -116,14 +123,14 @@ public final class RenderAssets {
         let mgr = budget
         lock.unlock()
         let cost = img.bytesPerRow > 0 ? img.bytesPerRow * img.height : img.width * img.height * 4
-        registerBudget(mgr, key: "image:" + path, cost: cost) { $0.images[path] = nil }
+        registerBudget(mgr, key: budgetKey("image", path), cost: cost) { $0.images[path] = nil }
         return img
     }
 
     /// 口パク用のエンベロープ: チャンネル 0 の 1/60 秒ごとの RMS(renderer.js getBuffer と同じ)。
     public func mouthEnvelope(for path: String) -> [Float]? {
         lock.lock()
-        if let e = envelopes[path] { budget?.touch("envelope:" + path); lock.unlock(); return e }
+        if let e = envelopes[path] { budget?.touch(budgetKey("envelope", path)); lock.unlock(); return e }
         if missingEnvelopes.contains(path) { lock.unlock(); return nil }
         guard let env = Self.computeEnvelope(path) else {
             missingEnvelopes.insert(path)
@@ -133,7 +140,7 @@ public final class RenderAssets {
         envelopes[path] = env
         let mgr = budget
         lock.unlock()
-        registerBudget(mgr, key: "envelope:" + path, cost: env.count * 4) { $0.envelopes[path] = nil }
+        registerBudget(mgr, key: budgetKey("envelope", path), cost: env.count * 4) { $0.envelopes[path] = nil }
         return env
     }
 
@@ -141,12 +148,12 @@ public final class RenderAssets {
     public func mouthStates(for path: String) -> [Bool]? {
         guard let env = mouthEnvelope(for: path) else { return nil }
         lock.lock()
-        if let s = mouthStateCache[path] { budget?.touch("mouth:" + path); lock.unlock(); return s }
+        if let s = mouthStateCache[path] { budget?.touch(budgetKey("mouth", path)); lock.unlock(); return s }
         let s = MouthGate.states(env)
         mouthStateCache[path] = s
         let mgr = budget
         lock.unlock()
-        registerBudget(mgr, key: "mouth:" + path, cost: s.count) { $0.mouthStateCache[path] = nil }
+        registerBudget(mgr, key: budgetKey("mouth", path), cost: s.count) { $0.mouthStateCache[path] = nil }
         return s
     }
 
@@ -154,7 +161,7 @@ public final class RenderAssets {
     public func visemes(src: String, text: String, offset: Double, duration: Double) -> [Viseme]? {
         let key = "\(src)|\(offset)|\(duration)|\(text)"
         lock.lock()
-        if let c = visemeCache[key] { budget?.touch("viseme:" + key); lock.unlock(); return c }
+        if let c = visemeCache[key] { budget?.touch(budgetKey("viseme", key)); lock.unlock(); return c }
         lock.unlock()
         var result: [Viseme]? = nil
         if let env = mouthEnvelope(for: src) {
@@ -162,7 +169,7 @@ public final class RenderAssets {
             result = LipSync.frames(moras: LipSync.moras(of: text), envelope: env, range: lo..<max(lo, hi))
         }
         lock.lock(); visemeCache[key] = .some(result); let mgr = budget; lock.unlock()
-        registerBudget(mgr, key: "viseme:" + key, cost: (result?.count ?? 0) * 64) { $0.visemeCache[key] = nil }
+        registerBudget(mgr, key: budgetKey("viseme", key), cost: (result?.count ?? 0) * 64) { $0.visemeCache[key] = nil }
         return result
     }
 
@@ -194,15 +201,15 @@ public final class RenderAssets {
         guard let sp = Self.vizSourceProject(project, source: source) else { return mixEnvelope(for: project) }
         let key = Self.mixKey(sp)
         lock.lock()
-        if let v = vizEnvelopes[key] { budget?.touch("vizEnv:" + key); lock.unlock(); return v }
+        if let v = vizEnvelopes[key] { budget?.touch(budgetKey("vizEnv", key)); lock.unlock(); return v }
         guard let env = Self.computeMix(sp, assets: self, wantMono: false)?.env else { lock.unlock(); return nil }
         let mgr = budget
         let dropped = vizEnvelopes.count >= 8 ? Array(vizEnvelopes.keys) : []
         if !dropped.isEmpty { vizEnvelopes.removeAll() }
         vizEnvelopes[key] = env
         lock.unlock()
-        dropped.forEach { mgr?.remove("vizEnv:" + $0, callEvict: false) }
-        registerBudget(mgr, key: "vizEnv:" + key, cost: env.count * 4) { $0.vizEnvelopes[key] = nil }
+        dropped.forEach { mgr?.remove(budgetKey("vizEnv", $0), callEvict: false) }
+        registerBudget(mgr, key: budgetKey("vizEnv", key), cost: env.count * 4) { $0.vizEnvelopes[key] = nil }
         return env
     }
 
@@ -211,7 +218,7 @@ public final class RenderAssets {
         let sp = Self.vizSourceProject(project, source: source) ?? project
         let key = Self.mixKey(sp) + "|\(count)"
         lock.lock()
-        if let v = vizSpectra[key] { budget?.touch("vizSpec:" + key); lock.unlock(); return v }
+        if let v = vizSpectra[key] { budget?.touch(budgetKey("vizSpec", key)); lock.unlock(); return v }
         guard let mix = Self.computeMix(sp, assets: self, wantMono: true), let mono = mix.mono else { lock.unlock(); return nil }
         let out = SpectrumAnalyzer.analyze(mono: mono, sampleRate: mix.sampleRate, count: count, frames: mix.env.count)
         let mgr = budget
@@ -219,8 +226,8 @@ public final class RenderAssets {
         if !dropped.isEmpty { vizSpectra.removeAll() }
         vizSpectra[key] = out
         lock.unlock()
-        dropped.forEach { mgr?.remove("vizSpec:" + $0, callEvict: false) }
-        registerBudget(mgr, key: "vizSpec:" + key, cost: out.count * 4) { $0.vizSpectra[key] = nil }
+        dropped.forEach { mgr?.remove(budgetKey("vizSpec", $0), callEvict: false) }
+        registerBudget(mgr, key: budgetKey("vizSpec", key), cost: out.count * 4) { $0.vizSpectra[key] = nil }
         return out
     }
 

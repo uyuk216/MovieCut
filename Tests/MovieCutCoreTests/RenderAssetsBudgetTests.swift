@@ -40,18 +40,18 @@ final class RenderAssetsBudgetTests: XCTestCase {
 
         XCTAssertNotNil(assets.image(at: a))
         XCTAssertNotNil(assets.image(at: b))
-        XCTAssertEqual(mgr.keysInLRUOrder, ["image:" + a, "image:" + b])
+        XCTAssertEqual(mgr.keysInLRUOrder, [assets.budgetKey("image", a), assets.budgetKey("image", b)])
         XCTAssertNotNil(assets.image(at: c))
         // 最も古い a が落ちる
-        XCTAssertFalse(mgr.contains("image:" + a))
-        XCTAssertTrue(mgr.contains("image:" + b))
-        XCTAssertTrue(mgr.contains("image:" + c))
+        XCTAssertFalse(mgr.contains(assets.budgetKey("image", a)))
+        XCTAssertTrue(mgr.contains(assets.budgetKey("image", b)))
+        XCTAssertTrue(mgr.contains(assets.budgetKey("image", c)))
         XCTAssertLessThanOrEqual(mgr.totalBytes, mgr.limitBytes ?? 0)
 
         // 落ちた画像も再取得できる(再登録で b が落ちる)
         XCTAssertNotNil(assets.image(at: a))
-        XCTAssertTrue(mgr.contains("image:" + a))
-        XCTAssertFalse(mgr.contains("image:" + b))
+        XCTAssertTrue(mgr.contains(assets.budgetKey("image", a)))
+        XCTAssertFalse(mgr.contains(assets.budgetKey("image", b)))
     }
 
     func testImageHitTouchesToMostRecent() throws {
@@ -64,8 +64,8 @@ final class RenderAssetsBudgetTests: XCTestCase {
         _ = assets.image(at: a); _ = assets.image(at: b)
         _ = assets.image(at: a)   // a を使い直す → b が最古
         _ = assets.image(at: c)
-        XCTAssertTrue(mgr.contains("image:" + a))
-        XCTAssertFalse(mgr.contains("image:" + b))
+        XCTAssertTrue(mgr.contains(assets.budgetKey("image", a)))
+        XCTAssertFalse(mgr.contains(assets.budgetKey("image", b)))
     }
 
     func testPurgeAllThenImagesReload() throws {
@@ -89,6 +89,47 @@ final class RenderAssetsBudgetTests: XCTestCase {
         assets.setBudgetManager(mgr)
         XCTAssertNotNil(assets.image(at: a))   // 既存キャッシュのヒット: 登録されない
         XCTAssertEqual(mgr.count, 0)
+    }
+
+    func testTwoAssetsSharingManagerKeepSeparateEntries() throws {
+        let a = try writePNG("a.png")
+        let probe = try XCTUnwrap(RenderAssets().image(at: a))
+        let cost = Int64(probe.bytesPerRow * probe.height)
+        let mgr = CacheBudgetManager(limitBytes: nil)
+        let first = RenderAssets(), second = RenderAssets()
+        first.setBudgetManager(mgr)
+        second.setBudgetManager(mgr)
+        // 同じ素材を両方の書類で読む
+        XCTAssertNotNil(first.image(at: a))
+        XCTAssertNotNil(second.image(at: a))
+        // 別キーなので 2 件ぶん入り、合計も 2 件分
+        XCTAssertEqual(mgr.count, 2)
+        XCTAssertTrue(mgr.contains(first.budgetKey("image", a)))
+        XCTAssertTrue(mgr.contains(second.budgetKey("image", a)))
+        XCTAssertEqual(mgr.totalBytes, cost * 2)
+    }
+
+    func testSharedManagerEvictsAcrossInstances() throws {
+        let a = try writePNG("a.png"), b = try writePNG("b.png"), c = try writePNG("c.png")
+        let probe = try XCTUnwrap(RenderAssets().image(at: a))
+        let cost = Int64(probe.bytesPerRow * probe.height)
+        // 2 枚ぶん + 少しだけ入る上限
+        let mgr = CacheBudgetManager(limitBytes: cost * 2 + cost / 2)
+        let first = RenderAssets(), second = RenderAssets()
+        first.setBudgetManager(mgr)
+        second.setBudgetManager(mgr)
+        XCTAssertNotNil(first.image(at: a))    // 最も古い
+        XCTAssertNotNil(second.image(at: b))
+        XCTAssertNotNil(second.image(at: c))   // 3 件目(別インスタンス)→ first の a が落ちる
+        XCTAssertFalse(mgr.contains(first.budgetKey("image", a)))
+        XCTAssertTrue(mgr.contains(second.budgetKey("image", b)))
+        XCTAssertTrue(mgr.contains(second.budgetKey("image", c)))
+        // first の辞書からも消えているので、再取得すると台帳に戻る(残っていれば命中して登録されない)
+        XCTAssertNotNil(first.image(at: a))
+        XCTAssertTrue(mgr.contains(first.budgetKey("image", a)))
+        // 古い second の b が落ち、second の c は残る
+        XCTAssertFalse(mgr.contains(second.budgetKey("image", b)))
+        XCTAssertTrue(mgr.contains(second.budgetKey("image", c)))
     }
 
     func testScaledPixelSizeAndClamp() {
