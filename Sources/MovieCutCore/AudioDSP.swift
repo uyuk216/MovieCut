@@ -401,7 +401,7 @@ final class DelayProcessor {
 
 // MARK: - 処理の連なり(ノイズ除去 → ゲート → EQ → コンプレッサー → リバーブ → ディレイ → リミッター)
 
-/// 1 つのクリップにかける ノイズ除去 → EQ → コンプレッサー → リバーブ → ディレイ。ブロックごとに `process` を呼ぶと、状態が続く。
+/// 1 つのクリップにかける ノイズ除去 → ゲート → EQ → コンプレッサー → リバーブ → ディレイ → 拡張エフェクト → リミッター。ブロックごとに `process` を呼ぶと、状態が続く。
 final class AudioFxChain {
     private let denoise: DenoiseProcessor?
     private let gate: GateProcessor?
@@ -410,6 +410,7 @@ final class AudioFxChain {
     private let comp: CompressorProcessor?
     private let reverb: ReverbProcessor?
     private let delay: DelayProcessor?
+    private let extended: ExtendedChain?
 
     init(_ fx: AudioFx, sr: Double) {
         // 強(スペクトル)のときは、ミキサーが入力の側でかける(`SpectralDenoiseSource`)ので、ここでは簡易版を使わない
@@ -420,6 +421,7 @@ final class AudioFxChain {
         comp = fx.compressor.flatMap { $0.isActive ? CompressorProcessor($0, sr: sr) : nil }
         reverb = fx.reverb.flatMap { $0.isActive ? ReverbProcessor($0, sr: sr) : nil }
         delay = fx.delay.flatMap { $0.isActive ? DelayProcessor($0, sr: sr) : nil }
+        extended = fx.extended.flatMap { $0.isActive ? ExtendedChain($0, sr: sr) : nil }
     }
 
     func process(_ l: UnsafeMutablePointer<Float>, _ r: UnsafeMutablePointer<Float>, _ n: Int) {
@@ -429,6 +431,7 @@ final class AudioFxChain {
         comp?.process(l, r, n)
         reverb?.process(l, r, n)
         delay?.process(l, r, n)
+        extended?.process(l, r, n)
         limiter?.process(l, r, n)
     }
 }
