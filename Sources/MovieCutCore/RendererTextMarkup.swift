@@ -159,9 +159,11 @@ extension Renderer {
                 let segText = String(segIndices.map { plainChars[$0] })
                 if buildPaths {
                     let seg = styledSegment(f, segText, spacing: effSpacing, italic: effItalic)
-                    for (k, gi) in segIndices.enumerated() {
-                        _ = gi
-                        geoms.append(StyledCharGeom(x: cursor + seg.xs[k], advance: seg.advances[k], path: seg.paths[k], font: f, size: effSize))
+                    for (k, _) in segIndices.enumerated() {
+                        // 輪郭は文字の左端を原点に直す(グリフ位置は seg.xs 側で持つ。二重に数えない)
+                        var t = CGAffineTransform(translationX: CGFloat(-seg.xs[k]), y: 0)
+                        let p = seg.paths[k].copy(using: &t) ?? seg.paths[k]
+                        geoms.append(StyledCharGeom(x: cursor + seg.xs[k], advance: seg.advances[k], path: p, font: f, size: effSize))
                     }
                     cursor += seg.advances.reduce(0, +)
                 } else {
