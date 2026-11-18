@@ -633,3 +633,8 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
 - `ClipEditing.deleteRange(in:from:to:ripple:)`(Core、`ClipEditing+Range.swift`): 範囲を [0, endTime] に切り詰め、全レイヤーで両端を既存の `ClipEditing.split` で割ってから、範囲に完全に入る断片を消す(offset・速度ランプ・逆再生・キーフレーム・フェードの扱いは分割と同じ。複合クリップも分割が対応するので部分的にかかっても割る)。`ripple` なら各レイヤーで範囲の終わり以降に始まるクリップを範囲の幅だけ左へ(0 未満にしない)。マーカーは動かさない。
 - 空範囲・何にも触れない・範囲に触れるクリップがロック(レイヤー / クリップ)・リップルで動かすクリップがロックのときは nil(元は変えない)。
 - アプリ側は `ProjectModel.deleteRange(ripple:)`(`ProjectModel+Range.swift`): 範囲は書き出し範囲のイン点・アウト点(`ExportRange.resolve`)。Undo 名は「範囲の削除」「範囲のリップル削除」で、書き出し範囲の解除も同じ 1 回の編集に含める。テストは `ClipRangeDeleteTests`。
+
+## アイテムテンプレート・台本編集ウィンドウ・台本CSV(2026-11-19、第2波バッチE #8/#41/#42)
+- **アイテムテンプレート(#8)**: Core `ItemTemplate` / `ItemTemplateStore`。クリップ 1 個の設定一式を `Templates/item-templates.json` に保存(組み込み 3 件 + 最大 100 件、プロジェクトには入らない)。既存クリップへの適用は見た目・振る舞いだけを写し、素材・セリフ・字幕文・キャラ・開始・長さは残す。新規作成は写しを丸ごと土台にする。メニューは クリップ ▸ 選択クリップをアイテムテンプレートとして保存… / アイテムテンプレートを適用 / テンプレートからクリップを作成(各 1 回の Undo)。
+- **台本編集ウィンドウ(#41)**: Core `ScriptTable` + `ScriptTableSheet`。ボイスクリップを開始順に一覧し、キャラ・セリフ・字幕(なし指定つき)・表情を編集。保存はまとめて 1 回の Undo。音声は変えず、作り直しは既存の「音声の作り直し」。
+- **台本CSV(#42)**: Core `ScriptCSV` 拡張。列は「キャラ,セリフ,読み,字幕,表情」(BOM・CRLF・RFC 4180)。字幕の空は「指定なし」、 `""` は「字幕なし」。従来の 3 列形式・見出しの並べ替え・1 列形式も従来どおり読める。書き出し → 読み込みの往復でクリップの text / subtitleText / 表情が保たれる(往復テスト)。仕様の正は `docs/台本CSVとアイテムテンプレート.md`。
