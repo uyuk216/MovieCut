@@ -32,6 +32,11 @@ public final class RenderAssets {
     private var proxyCache: [String: String?] = [:]
     /// 今の順次読みがプレビューの再生か(書き出しの順次読みと区別する)。
     private var previewSession = false
+    /// プレビュー再生の動画フレームの縮小率(0 < scale ≤ 1、既定 1)。`beginExportMode(preview: true)` で `sessionVideoScale` に確定する。
+    private var previewVideoScale = 1.0
+    private var sessionVideoScale = 1.0
+    /// メモリ予算マネージャ(nil なら従来どおり無制限)。設定時だけデータキャッシュを登録する。
+    private var budget: CacheBudgetManager?
 
     /// オプティカルフロー補間のフロー(素材のコマの組ごと。プレビューと書き出しで同じ組を何度も描くので、求めた動きを覚えておく)。
     public let flowCache = FlowCache()
@@ -39,6 +44,36 @@ public final class RenderAssets {
     public let rigCache = RigFrameCache()
 
     public init() {}
+
+    /// メモリ予算マネージャを設定する(nil で解除)。設定後に読んだ画像・エンベロープなどが予算の対象になる。
+    public func setBudgetManager(_ manager: CacheBudgetManager?) {
+        lock.lock(); budget = manager; lock.unlock()
+    }
+
+    /// プレビュー再生の動画フレームの縮小率。0 < scale ≤ 1 にそろえる。次の `beginExportMode(preview: true)` から効く。
+    public func setPreviewVideoScale(_ scale: Double) {
+        lock.lock(); previewVideoScale = Self.clampedVideoScale(scale); lock.unlock()
+    }
+
+    static func clampedVideoScale(_ scale: Double) -> Double {
+        guard scale.isFinite, scale > 0 else { return 1 }
+        return min(1, scale)
+    }
+
+    /// 縮小後の大きさ(generator の `maximumSize` 用)。各辺は最小 1px。
+    static func scaledPixelSize(_ size: CGSize, scale: Double) -> CGSize {
+        let s = clampedVideoScale(scale)
+        return CGSize(width: max(1, (size.width * s).rounded()), height: max(1, (size.height * s).rounded()))
+    }
+
+    /// 予算マネージャへ登録する。**`lock` を解放してから呼ぶこと**(登録で他エントリの onEvict が走り、それが `lock` を取る)。
+    private func registerBudget(_ manager: CacheBudgetManager?, key: String, cost: Int, evict: @escaping (RenderAssets) -> Void) {
+        guard let manager else { return }
+        manager.register(key: key, cost: Int64(cost)) { [weak self] in
+            guard let self else { return }
+            self.lock.lock(); evict(self); self.lock.unlock()
+        }
+    }
 
     /// プレビューのプロキシを使うか。`lookup` は元のパスからプロキシのパスを返す(無ければ nil)。
     /// 書き出しで使う `RenderAssets` には呼ばない(既定はオフ)。
@@ -67,39 +102,51 @@ public final class RenderAssets {
 
     /// 画像(ImageIO)。パスをキーにキャッシュする。
     public func image(at path: String) -> CGImage? {
-        lock.lock(); defer { lock.unlock() }
-        if let i = images[path] { return i }
-        if missingImages.contains(path) { return nil }
+        lock.lock()
+        if let i = images[path] { budget?.touch("image:" + path); lock.unlock(); return i }
+        if missingImages.contains(path) { lock.unlock(); return nil }
         let url = URL(fileURLWithPath: path)
         guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),
               let img = CGImageSourceCreateImageAtIndex(src, 0, nil) else {
             missingImages.insert(path)
+            lock.unlock()
             return nil
         }
         images[path] = img
+        let mgr = budget
+        lock.unlock()
+        let cost = img.bytesPerRow > 0 ? img.bytesPerRow * img.height : img.width * img.height * 4
+        registerBudget(mgr, key: "image:" + path, cost: cost) { $0.images[path] = nil }
         return img
     }
 
     /// 口パク用のエンベロープ: チャンネル 0 の 1/60 秒ごとの RMS(renderer.js getBuffer と同じ)。
     public func mouthEnvelope(for path: String) -> [Float]? {
-        lock.lock(); defer { lock.unlock() }
-        if let e = envelopes[path] { return e }
-        if missingEnvelopes.contains(path) { return nil }
+        lock.lock()
+        if let e = envelopes[path] { budget?.touch("envelope:" + path); lock.unlock(); return e }
+        if missingEnvelopes.contains(path) { lock.unlock(); return nil }
         guard let env = Self.computeEnvelope(path) else {
             missingEnvelopes.insert(path)
+            lock.unlock()
             return nil
         }
         envelopes[path] = env
+        let mgr = budget
+        lock.unlock()
+        registerBudget(mgr, key: "envelope:" + path, cost: env.count * 4) { $0.envelopes[path] = nil }
         return env
     }
 
     /// 口の開閉(`MouthGate` のヒステリシス)を 1/60 秒ごとに。エンベロープから決まるので、結果も素材ごとにキャッシュする。
     public func mouthStates(for path: String) -> [Bool]? {
         guard let env = mouthEnvelope(for: path) else { return nil }
-        lock.lock(); defer { lock.unlock() }
-        if let s = mouthStateCache[path] { return s }
+        lock.lock()
+        if let s = mouthStateCache[path] { budget?.touch("mouth:" + path); lock.unlock(); return s }
         let s = MouthGate.states(env)
         mouthStateCache[path] = s
+        let mgr = budget
+        lock.unlock()
+        registerBudget(mgr, key: "mouth:" + path, cost: s.count) { $0.mouthStateCache[path] = nil }
         return s
     }
 
@@ -107,14 +154,15 @@ public final class RenderAssets {
     public func visemes(src: String, text: String, offset: Double, duration: Double) -> [Viseme]? {
         let key = "\(src)|\(offset)|\(duration)|\(text)"
         lock.lock()
-        if let c = visemeCache[key] { lock.unlock(); return c }
+        if let c = visemeCache[key] { budget?.touch("viseme:" + key); lock.unlock(); return c }
         lock.unlock()
         var result: [Viseme]? = nil
         if let env = mouthEnvelope(for: src) {
             let lo = Int(floor(offset * LipSync.envelopeRate)), hi = Int(ceil((offset + duration) * LipSync.envelopeRate))
             result = LipSync.frames(moras: LipSync.moras(of: text), envelope: env, range: lo..<max(lo, hi))
         }
-        lock.lock(); visemeCache[key] = .some(result); lock.unlock()
+        lock.lock(); visemeCache[key] = .some(result); let mgr = budget; lock.unlock()
+        registerBudget(mgr, key: "viseme:" + key, cost: (result?.count ?? 0) * 64) { $0.visemeCache[key] = nil }
         return result
     }
 
@@ -145,11 +193,16 @@ public final class RenderAssets {
     public func vizEnvelope(for project: Project, source: String?) -> [Float]? {
         guard let sp = Self.vizSourceProject(project, source: source) else { return mixEnvelope(for: project) }
         let key = Self.mixKey(sp)
-        lock.lock(); defer { lock.unlock() }
-        if let v = vizEnvelopes[key] { return v }
-        guard let env = Self.computeMix(sp, assets: self, wantMono: false)?.env else { return nil }
-        if vizEnvelopes.count >= 8 { vizEnvelopes.removeAll() }
+        lock.lock()
+        if let v = vizEnvelopes[key] { budget?.touch("vizEnv:" + key); lock.unlock(); return v }
+        guard let env = Self.computeMix(sp, assets: self, wantMono: false)?.env else { lock.unlock(); return nil }
+        let mgr = budget
+        let dropped = vizEnvelopes.count >= 8 ? Array(vizEnvelopes.keys) : []
+        if !dropped.isEmpty { vizEnvelopes.removeAll() }
         vizEnvelopes[key] = env
+        lock.unlock()
+        dropped.forEach { mgr?.remove("vizEnv:" + $0, callEvict: false) }
+        registerBudget(mgr, key: "vizEnv:" + key, cost: env.count * 4) { $0.vizEnvelopes[key] = nil }
         return env
     }
 
@@ -157,12 +210,17 @@ public final class RenderAssets {
     public func vizSpectrum(for project: Project, source: String?, count: Int) -> [Float]? {
         let sp = Self.vizSourceProject(project, source: source) ?? project
         let key = Self.mixKey(sp) + "|\(count)"
-        lock.lock(); defer { lock.unlock() }
-        if let v = vizSpectra[key] { return v }
-        guard let mix = Self.computeMix(sp, assets: self, wantMono: true), let mono = mix.mono else { return nil }
+        lock.lock()
+        if let v = vizSpectra[key] { budget?.touch("vizSpec:" + key); lock.unlock(); return v }
+        guard let mix = Self.computeMix(sp, assets: self, wantMono: true), let mono = mix.mono else { lock.unlock(); return nil }
         let out = SpectrumAnalyzer.analyze(mono: mono, sampleRate: mix.sampleRate, count: count, frames: mix.env.count)
-        if vizSpectra.count >= 8 { vizSpectra.removeAll() }
+        let mgr = budget
+        let dropped = vizSpectra.count >= 8 ? Array(vizSpectra.keys) : []
+        if !dropped.isEmpty { vizSpectra.removeAll() }
         vizSpectra[key] = out
+        lock.unlock()
+        dropped.forEach { mgr?.remove("vizSpec:" + $0, callEvict: false) }
+        registerBudget(mgr, key: "vizSpec:" + key, cost: out.count * 4) { $0.vizSpectra[key] = nil }
         return out
     }
 
@@ -253,7 +311,11 @@ public final class RenderAssets {
     /// 書き出しモード: 動画フレームを AVAssetReader で前から順に読む(時刻が戻ったときだけ generator)。
     /// `preview: true` はプレビューの再生(順次読み)。プロキシが使えるのはこの場合だけ(書き出しは preview を付けない)。
     public func beginExportMode(preview: Bool = false) {
-        lock.lock(); exportMode = true; previewSession = preview; lock.unlock()
+        lock.lock()
+        exportMode = true
+        previewSession = preview
+        sessionVideoScale = preview ? previewVideoScale : 1   // 書き出しは常に等倍
+        lock.unlock()
     }
 
     /// 書き出しモードを終えて、読み取り用のリソースを手放す。
@@ -261,6 +323,7 @@ public final class RenderAssets {
         lock.lock()
         exportMode = false
         previewSession = false
+        sessionVideoScale = 1
         let seqs = sequentials
         let revs = reversers
         sequentials = [:]
@@ -280,7 +343,8 @@ public final class RenderAssets {
             lock.lock()
             if videoSizes[path] == nil {
                 // プロキシのコマは小さいので、大きさは元の素材から取る(プレビューの取っ手・配置の計算に使う)
-                let proxied = sourcePathLocked(path) != path
+                // プレビュー縮小のコマも同じ(配置・取っ手が縮小に引きずられないように)
+                let proxied = sourcePathLocked(path) != path || (previewSession && sessionVideoScale < 1)
                 lock.unlock()
                 let size = proxied ? Self.naturalSize(ofVideo: path) ?? CGSize(width: img.width, height: img.height) : CGSize(width: img.width, height: img.height)
                 lock.lock()
@@ -320,7 +384,8 @@ public final class RenderAssets {
         if exportMode, !missingVideos.contains(src) {
             var seq = sequentials[src]
             if seq == nil {
-                seq = SequentialVideoFrames(url: URL(fileURLWithPath: src)) { [unowned self] t in self.generatorFrame(path: src, time: t, exact: exact) }
+                let scale = previewSession ? sessionVideoScale : 1
+                seq = SequentialVideoFrames(url: URL(fileURLWithPath: src), scale: scale) { [unowned self] t in self.generatorFrame(path: src, time: t, exact: exact) }
                 sequentials[src] = seq
             }
             lock.unlock()
@@ -334,11 +399,18 @@ public final class RenderAssets {
     func generatorFrame(path: String, time: Double, exact: Bool = false) -> CGImage? {
         lock.lock()
         if missingVideos.contains(path) { lock.unlock(); return nil }
-        let key = exact ? path + "\u{0}exact" : path
+        // プレビュー再生中だけ縮小。キーに印を足して、等倍・exact の generator と混ざらないようにする
+        let scale = previewSession ? sessionVideoScale : 1
+        let shrink = scale < 1
+        var key = shrink ? path + "\u{0}scale\(scale)" : path
+        if exact { key += "\u{0}exact" }
         var gen = generators[key]
         if gen == nil {
             let g = AVAssetImageGenerator(asset: AVURLAsset(url: URL(fileURLWithPath: path)))
             g.appliesPreferredTrackTransform = true
+            if shrink, let nat = Self.naturalSize(ofVideo: path) {
+                g.maximumSize = Self.scaledPixelSize(nat, scale: scale)
+            }
             let tol = exact ? CMTime.zero : CMTime(value: 1, timescale: 120)
             g.requestedTimeToleranceBefore = tol
             g.requestedTimeToleranceAfter = tol
