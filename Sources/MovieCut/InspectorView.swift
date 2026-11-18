@@ -10,7 +10,7 @@ struct InspectorSection: View {
     var body: some View {
         HStack(spacing: 8) {
             Text(L10n.t(title))
-                .font(.system(size: 12, weight: .semibold))
+                .font(MCDesign.Font.calloutSemibold)
                 .foregroundStyle(.secondary)
             Rectangle().fill(Color(nsColor: .separatorColor)).frame(height: 1)
         }
@@ -47,7 +47,7 @@ struct KeyframeDiamond: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: Self.symbol(state))
-                .font(.system(size: 13))
+                .font(MCDesign.Font.body)
                 .foregroundStyle(state == .none ? Color.secondary : Color.accentColor)
                 .frame(width: 22, height: 22)
                 .contentShape(Rectangle())
@@ -67,7 +67,7 @@ struct InspectorField<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 2) {
-                Text(label).font(.system(size: 12)).foregroundStyle(.secondary)
+                Text(label).font(MCDesign.Font.callout).foregroundStyle(.secondary)
                 if let key, key.state != .none {
                     Button(action: key.prev) { Image(systemName: "chevron.left").font(MCDesign.Font.badge).frame(width: 16, height: 16).contentShape(Rectangle()) }
                         .buttonStyle(.plain).disabled(!key.canPrev).help("前のキーフレームへ")
@@ -170,7 +170,7 @@ struct ColorField: View {
                 ColorPicker("", selection: Binding(get: { Color(hex: hex) }, set: { onChange($0.hexString) }), supportsOpacity: false)
                     .labelsHidden()
                     .frame(width: 56, height: 28)
-                Text(hex.uppercased()).font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
+                Text(hex.uppercased()).font(MCDesign.Font.monospaced(11)).foregroundStyle(.secondary)
             }
         }
     }
@@ -193,7 +193,7 @@ struct MultilineField: View {
     var body: some View {
         InspectorField(label: label) {
             TextEditor(text: $draft)
-                .font(.system(size: 13))
+                .font(MCDesign.Font.body)
                 .focused($focused)
                 .scrollContentBackground(.hidden)
                 .padding(4)
@@ -226,7 +226,7 @@ struct PortraitThumb: View {
             if let image {
                 Image(nsImage: image).resizable().scaledToFit().padding(2)
             } else {
-                Text(path == nil ? "なし" : "…").font(.system(size: 11)).foregroundStyle(.tertiary)
+                Text(path == nil ? "なし" : "…").font(MCDesign.Font.subheadline).foregroundStyle(.tertiary)
             }
         }
         .frame(width: 64, height: 64)
@@ -459,10 +459,10 @@ struct ClipInspector: View {
         if let c = clip {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 6) {
-                    Text(kindName(c.type)).font(.system(size: 12, weight: .semibold))
+                    Text(kindName(c.type)).font(MCDesign.Font.calloutSemibold)
                     if let src = c.src, c.type != .voice {
                         Text(URL(fileURLWithPath: src).lastPathComponent)
-                            .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                            .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                     }
                 }
                 InspectorSection(title: "タイミング")
@@ -472,7 +472,7 @@ struct ClipInspector: View {
                 }
                 if let usage = SourceUsage.label(of: c) {
                     HStack(spacing: 8) {
-                        Text(usage).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                        Text(usage).font(MCDesign.Font.subheadline).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                         Button("この区間へ") { model.showSourceUsage() }
                             .controlSize(.small)
                             .help("再生位置をクリップの頭へ移し、元素材の使用範囲を状態欄に出す")
@@ -511,7 +511,7 @@ struct ClipInspector: View {
         InspectorSection(title: "グループ")
         if let g = c.group {
             Text("グループのメンバー（\(ClipGrouping.members(of: g, in: model.project).count) 個）")
-                .font(.system(size: 12)).foregroundStyle(.secondary)
+                .font(MCDesign.Font.callout).foregroundStyle(.secondary)
             HStack(spacing: 8) {
                 Button("全員を選択") { model.selectGroupMembers(of: clipId) }
                 Button("このクリップを外す") { model.setClipProperty(\.group, to: nil, name: "グループから外す", clipId: clipId) }
@@ -520,7 +520,7 @@ struct ClipInspector: View {
             .disabled(model.isLocked)
         } else {
             Text("グループに入っていません。2 つ以上選んで「グループにする」と、押したときに全員が選ばれ、ドラッグでまとめて動かせます。")
-                .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -535,7 +535,7 @@ struct ClipInspector: View {
         }
         MultilineField(label: "読み上げ文", value: c.text ?? "", focusRequest: model.textFocusRequest, onLive: { _ in }, onCommit: { t in Task { await model.setVoiceText(t, clipId: clipId) } })
         Text("入力欄を離れるか Cmd+Return で、音声を作り直します。口パクは読み上げ文の音に合わせます。")
-            .font(.system(size: 11)).foregroundStyle(.secondary)
+            .font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
         let noSubtitle = c.subtitleText == ""
         Toggle("字幕なし", isOn: Binding(get: { noSubtitle }, set: { v in model.setVoiceSubtitleText(clipId: clipId, text: v ? "" : nil) }))
             .toggleStyle(.checkbox)
@@ -564,7 +564,7 @@ struct ClipInspector: View {
         InspectorSection(title: c.isFreeze ? "フリーズフレーム" : "速度")
         if c.isFreeze {
             Text("素材の \(String(format: "%.3f", c.offset)) 秒のコマを止めています。長さは「長さ（秒）」で変えられます。")
-                .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         } else {
             let sp = c.effectiveSpeed
             InspectorField(label: "速度（倍）") {
@@ -594,14 +594,14 @@ struct ClipInspector: View {
                 .disabled(sp == 1 || c.rampPoints != nil)
                 .help("オフにすると、速くしたぶん音が高く、遅くしたぶん低くなります（速度ランプの音は音程が速度に従います）")
             HStack(spacing: 6) {
-                Text("元の長さ → 新しい長さ").font(.system(size: 12)).foregroundStyle(.secondary)
+                Text("元の長さ → 新しい長さ").font(MCDesign.Font.callout).foregroundStyle(.secondary)
                 Spacer(minLength: 4)
                 Text(ClipTiming.lengthReadout(for: c)).font(.system(size: 12).monospacedDigit())
             }
             rampSection(c)
             if c.type == .video {
                 HStack(spacing: 6) {
-                    Text("コマの補間（速度が 1 未満のとき）").font(.system(size: 12)).foregroundStyle(.secondary)
+                    Text("コマの補間（速度が 1 未満のとき）").font(MCDesign.Font.callout).foregroundStyle(.secondary)
                     Spacer(minLength: 4)
                     Picker("", selection: Binding(get: { c.frameInterpolation }, set: { model.setFrameInterpolation($0, clipId: clipId) })) {
                         ForEach(FrameInterpolation.allCases, id: \.self) { Text($0.label).tag($0) }
@@ -621,7 +621,7 @@ struct ClipInspector: View {
         let kids = c.tracks ?? []
         let n = kids.reduce(0) { $0 + $1.clips.count }
         Text("レイヤー \(kids.count)・クリップ \(n)。位置・効果・トランジションは、この複合クリップ全体にかかります。中身を直すには「複合クリップを解除」します。")
-            .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
     }
 
     /// 手ぶれ補正(映像クリップ)。オンオフは強さ 0 と同じ(0 はファイルに書かない)。つまみは 1 回の Undo。
@@ -684,7 +684,7 @@ struct ClipInspector: View {
     @ViewBuilder private func rampSection(_ c: Clip) -> some View {
         if let pts = c.rampPoints {
             Text("速度ランプ（点のあいだは速度を直線でつなぎます。音は音程が速度に従います）")
-                .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             ForEach(Array(pts.enumerated()), id: \.offset) { i, p in
                 HStack(spacing: 6) {
                     Text("\(i + 1)").font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary).frame(width: 14)
@@ -692,7 +692,7 @@ struct ClipInspector: View {
                              clamp: { min(max($0, 0), c.duration) },
                              onCommit: { v in model.setSpeedRampPoint(clipId: clipId, index: i, t: v) },
                              onStep: { v in model.setSpeedRampPoint(clipId: clipId, index: i, t: v) })
-                    Text("秒 ×").font(.system(size: 11)).foregroundStyle(.secondary)
+                    Text("秒 ×").font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
                     NumField(value: p.v, step: 0.05, decimals: 2,
                              clamp: { ClipTiming.clampSpeed($0) },
                              onCommit: { v in model.setSpeedRampPoint(clipId: clipId, index: i, v: v) },
@@ -749,7 +749,7 @@ struct ClipInspector: View {
         let status: LUTCache.Status? = path.isEmpty ? nil : LUTCache.shared.status(atPath: path)
         HStack(spacing: 6) {
             Text(path.isEmpty ? "ファイル未選択" : (path as NSString).lastPathComponent)
-                .font(.system(size: 11)).lineLimit(1).truncationMode(.middle)
+                .font(MCDesign.Font.subheadline).lineLimit(1).truncationMode(.middle)
                 .foregroundStyle(status == .ok ? Color.secondary : Color.red)
                 .help(path)
             Spacer(minLength: 4)
@@ -770,7 +770,7 @@ struct ClipInspector: View {
                 Toggle("", isOn: Binding(get: { e.enabled }, set: { model.setEffectEnabled($0, at: i, clipId: clipId) }))
                     .toggleStyle(.checkbox).labelsHidden().help("オン/オフ")
                 Text(kind?.label ?? "未対応: \(e.kind)")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(MCDesign.Font.calloutSemibold)
                     .foregroundStyle(kind == nil || !e.enabled ? Color.secondary : Color.primary)
                     .lineLimit(1)
                 Spacer(minLength: 4)
@@ -797,7 +797,7 @@ struct ClipInspector: View {
     @ViewBuilder private func effectSections(_ c: Clip) -> some View {
         InspectorSection(title: "エフェクト")
         if c.effects.isEmpty {
-            Text("エフェクトはありません").font(.system(size: 12)).foregroundStyle(.secondary)
+            Text("エフェクトはありません").font(MCDesign.Font.callout).foregroundStyle(.secondary)
         }
         ForEach(0..<c.effects.count, id: \.self) { effectCard(c, $0) }
         HStack(spacing: 8) {
@@ -844,7 +844,7 @@ struct ClipInspector: View {
     @ViewBuilder private func transitionRow(_ c: Clip, _ edge: TransitionEdge) -> some View {
         let tr = TransitionEditing.transition(c, edge)
         HStack(alignment: .center, spacing: 8) {
-            Text(edge.label).font(.system(size: 12)).foregroundStyle(.secondary).frame(width: 28, alignment: .leading)
+            Text(edge.label).font(MCDesign.Font.callout).foregroundStyle(.secondary).frame(width: 28, alignment: .leading)
             kindPicker(c, edge)
         }
         if let tr {
@@ -868,7 +868,7 @@ struct ClipInspector: View {
             Toggle("映像のトランジションと同じ長さで音声もフェード",
                    isOn: Binding(get: { TransitionEditing.isAudioLinked(c) }, set: { model.setAudioLinked($0, clipId: clipId) }))
                 .toggleStyle(.checkbox)
-                .font(.system(size: 12))
+                .font(MCDesign.Font.callout)
                 .disabled(!c.hasTransition && !TransitionEditing.isAudioLinked(c))
         }
     }
@@ -1157,7 +1157,7 @@ struct CharacterInspector: View {
             VStack(alignment: .leading, spacing: 8) {
                 InspectorSection(title: "基本")
                 Text("キャラクターは声と字幕の設定だけを持ちます。立ち絵は「立ち絵素材」とタイムラインの立ち絵クリップで扱います。")
-                    .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 InspectorField(label: "名前") {
                     NameField(value: c.name) { n in model.setCharacterProperty({ $0.name = n }, name: "キャラの名前の変更", charId: charId) }
                 }
@@ -1171,7 +1171,7 @@ struct CharacterInspector: View {
                         }), supportsOpacity: false)
                             .labelsHidden()
                             .frame(width: 56, height: 28)
-                        Text(c.subtitleColor?.uppercased() ?? "文字スタイルの色").font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
+                        Text(c.subtitleColor?.uppercased() ?? "文字スタイルの色").font(MCDesign.Font.monospaced(11)).foregroundStyle(.secondary)
                         Button("既定に戻す") { model.setCharacterProperty({ $0.subtitleColor = nil }, name: "話し手の字幕の色を外す", charId: charId) }
                             .controlSize(.small)
                             .disabled(c.subtitleColor == nil)
@@ -1190,7 +1190,7 @@ struct CharacterInspector: View {
                 if !c.hasVoiceChosen {
                     HStack(alignment: .center, spacing: 8) {
                         Image(systemName: "info.circle.fill").foregroundStyle(.orange)
-                        Text(L10n.t("声がまだ選ばれていません")).font(.system(size: 11)).foregroundStyle(.secondary)
+                        Text(L10n.t("声がまだ選ばれていません")).font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
                         Spacer(minLength: 4)
                         Button(L10n.t("おすすめ音声設定…")) { showPresets = true }
                             .buttonStyle(.borderedProminent)
@@ -1237,7 +1237,7 @@ struct CharacterInspector: View {
             InspectorField(label: "話者") {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small)
-                    Text("読み込み中…").font(.system(size: 12)).foregroundStyle(.secondary)
+                    Text("読み込み中…").font(MCDesign.Font.callout).foregroundStyle(.secondary)
                 }
             }
         case .unavailable:
@@ -1247,7 +1247,7 @@ struct CharacterInspector: View {
                          onStep: { v in model.coalescedCharacterProperty({ $0.speaker = Int(max(0, min(100000, v.rounded()))) }, name: "話者の変更", charId: charId) })
             }
             Text("VOICEVOX につながらないため、話者の一覧を出せません。話者ID を直接入れてください(起動すると一覧になります)。")
-                .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Button("もう一度つなぐ") { Task { await speakers.load(baseURL: model.project.voicevoxUrl) } }
                 .controlSize(.small)
         }

@@ -252,7 +252,7 @@ struct LeftPanel: View {
                 .padding(.bottom, 6)
             ZStack(alignment: .topLeading) {
                 TextEditor(text: $scriptText)
-                    .font(.system(size: 13))
+                    .font(MCDesign.Font.body)
                     .scrollContentBackground(.hidden)
                     .padding(4)
                     .background(Color(nsColor: .textBackgroundColor))
@@ -260,7 +260,7 @@ struct LeftPanel: View {
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(nsColor: .separatorColor)))
                 if scriptText.isEmpty {
                     Text(ScriptHelp.placeholder)
-                        .font(.system(size: 13))
+                        .font(MCDesign.Font.body)
                         .foregroundStyle(.tertiary)
                         .padding(.horizontal, 9).padding(.vertical, 5)
                         .allowsHitTesting(false)
@@ -311,7 +311,7 @@ struct CharacterRow: View {
             rowButton
             if selected, let onDelete {
                 Button(action: onDelete) {
-                    Image(systemName: "xmark").font(.system(size: 10, weight: .semibold))
+                    Image(systemName: "xmark").font(MCDesign.Font.badge)
                 }
                 .buttonStyle(.borderless)
                 .disabled(!canDelete)
@@ -328,7 +328,7 @@ struct CharacterRow: View {
                 Circle().fill(Color(hex: ch.color)).frame(width: 11, height: 11)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(ch.name).font(.system(size: 13, weight: .medium)).lineLimit(1)
-                    Text(engineLabel).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                    Text(engineLabel).font(MCDesign.Font.subheadline).foregroundStyle(.secondary).lineLimit(1)
                 }
                 Spacer()
             }
@@ -396,7 +396,7 @@ struct TransportBar: View {
             // 解像度・fps は映像の上に重ねず、再生コントロールの時刻の右に小さく出す(狭い幅では省く)
             if showsResolution {
                 Text(Self.chipText(model))
-                    .font(.system(size: 11))
+                    .font(MCDesign.Font.subheadline)
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
                     .help(L10n.t("プロジェクトの解像度とフレームレート(出力メニューで変えられます)"))
