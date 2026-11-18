@@ -82,18 +82,26 @@ public struct LoudnessNormalizationPlan: Equatable, Sendable {
 }
 
 public enum LoudnessNormalization {
-    /// 純粋関数。統合が −∞(無音)または無効なら適用 0。
+    /// 純粋関数。無効なら適用 0。完全な無音(統合も真のピークも −∞)も適用 0。
+    /// 統合が −∞ でもピークが有限なら(400 ms 未満で momentary 窓が埋まらないクリップ)、ピーク上限だけを適用する。
     /// ピーク上限は増幅のときだけでなく、目標へ下げるときも効く(`ceiling − truePeak` が下限)。
     public static func plan(report: LoudnessReport, settings: LoudnessNormalizationSettings) -> LoudnessNormalizationPlan {
         let target = LoudnessNormalizationSettings.clampedTarget(settings.targetLUFS)
         let ceiling = LoudnessNormalizationSettings.clampedCeiling(settings.truePeakCeilingDbTP)
-        guard report.integrated.isFinite else {
-            return LoudnessNormalizationPlan(measured: report, requestedGainDb: 0, appliedGainDb: 0, limitedByTruePeak: false, linearGain: 1)
-        }
-        let requested = target - report.integrated
         guard settings.enabled else {
+            let requested = report.integrated.isFinite ? target - report.integrated : 0
             return LoudnessNormalizationPlan(measured: report, requestedGainDb: requested, appliedGainDb: 0, limitedByTruePeak: false, linearGain: 1)
         }
+        guard report.integrated.isFinite else {
+            // 目標へ合わせるゲインは定義できないので 0。ピークが測れていれば上限だけ効かせる。
+            guard report.truePeakDb.isFinite else {
+                return LoudnessNormalizationPlan(measured: report, requestedGainDb: 0, appliedGainDb: 0, limitedByTruePeak: false, linearGain: 1)
+            }
+            let gain = min(0, ceiling - report.truePeakDb)
+            return LoudnessNormalizationPlan(measured: report, requestedGainDb: 0, appliedGainDb: gain,
+                                             limitedByTruePeak: gain < 0, linearGain: pow(10, gain / 20))
+        }
+        let requested = target - report.integrated
         var gain = requested
         var limited = false
         if report.truePeakDb.isFinite, report.truePeakDb + gain > ceiling {
@@ -181,7 +189,11 @@ public enum LoudnessNormalization {
     public static func logLine(_ plan: LoudnessNormalizationPlan, settings: LoudnessNormalizationSettings) -> String {
         func f(_ v: Double) -> String { v.isFinite ? String(format: "%.1f", v) : "-∞" }
         let m = plan.measured
-        if !m.integrated.isFinite { return "ラウドネス正規化: 無音のため変更しません" }
+        if !m.integrated.isFinite && !m.truePeakDb.isFinite { return "ラウドネス正規化: 無音のため変更しません" }
+        if !m.integrated.isFinite {
+            return "ラウドネス正規化: 統合ラウドネスを測れない(400 ms 未満など)ため、トゥルーピーク上限 \(f(settings.truePeakCeilingDbTP)) dBTP のみ適用: "
+                + "計測 \(f(m.truePeakDb)) dBTP → 適用ゲイン \(String(format: "%+.1f", plan.appliedGainDb)) dB"
+        }
         return "ラウドネス正規化: 計測 \(f(m.integrated)) LUFS(トゥルーピーク \(f(m.truePeakDb)) dBTP) → 目標 \(f(settings.targetLUFS)) LUFS、"
             + "適用ゲイン \(String(format: "%+.1f", plan.appliedGainDb)) dB" + (plan.limitedByTruePeak ? "(トゥルーピーク上限 \(f(settings.truePeakCeilingDbTP)) dBTP で制限)" : "")
     }

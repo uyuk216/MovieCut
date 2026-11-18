@@ -119,6 +119,39 @@ final class LoudnessNormalizationTests: XCTestCase {
         XCTAssertTrue(off.isNoOp)
     }
 
+    func testPlanShortClipWithoutIntegratedAppliesOnlyTruePeakCeiling() {
+        // 400 ms 未満は統合が −∞ でもピークは測れている。上限 −1 dBTP へ −3 dB 下げる。目標への増幅は定義できないので 0
+        let p = LoudnessNormalization.plan(report: report(integrated: -.infinity, truePeak: 2.0), settings: .youtube)
+        XCTAssertEqual(p.appliedGainDb, -3, accuracy: 1e-12)
+        XCTAssertTrue(p.limitedByTruePeak)
+        XCTAssertEqual(p.requestedGainDb, 0)
+        XCTAssertEqual(p.linearGain, pow(10, -3.0 / 20), accuracy: 1e-12)
+        XCTAssertFalse(p.isNoOp)
+    }
+
+    func testPlanShortClipQuietPeakIsNoOp() {
+        // 統合は −∞ だがピークは上限内: 増幅はしない
+        let p = LoudnessNormalization.plan(report: report(integrated: -.infinity, truePeak: -5.0), settings: .youtube)
+        XCTAssertEqual(p.appliedGainDb, 0)
+        XCTAssertFalse(p.limitedByTruePeak)
+        XCTAssertTrue(p.isNoOp)
+    }
+
+    func testPlanTrueSilenceWithIntegratedMinusInfinityAppliesZero() {
+        let p = LoudnessNormalization.plan(report: report(integrated: -.infinity, truePeak: -.infinity), settings: .youtube)
+        XCTAssertEqual(p.appliedGainDb, 0)
+        XCTAssertEqual(p.requestedGainDb, 0)
+        XCTAssertFalse(p.limitedByTruePeak)
+        XCTAssertTrue(p.isNoOp)
+    }
+
+    func testPlanDisabledWithIntegratedMinusInfinityAppliesZeroEvenIfPeakIsHigh() {
+        let p = LoudnessNormalization.plan(report: report(integrated: -.infinity, truePeak: 2.0), settings: .disabled)
+        XCTAssertEqual(p.appliedGainDb, 0)
+        XCTAssertFalse(p.limitedByTruePeak)
+        XCTAssertTrue(p.isNoOp)
+    }
+
     func testSettingsDefaultsAndClamping() {
         XCTAssertFalse(LoudnessNormalizationSettings().enabled)
         XCTAssertEqual(LoudnessNormalizationSettings().targetLUFS, -14)
@@ -152,6 +185,26 @@ final class LoudnessNormalizationTests: XCTestCase {
         XCTAssertEqual(try frameCount(output), try frameCount(input), "フレーム数は完全一致")
         XCTAssertEqual(try frameCount(input), 5 * 48_000)
         XCTAssertEqual(result.plan.appliedGainDb, 5.99, accuracy: 0.3)
+    }
+
+    func testNormalizeShortLoudClipAppliesTruePeakCeilingWithoutIntegrated() throws {
+        // 300 ms(< 400 ms)の 1 kHz 振幅 1.0 は統合が測れず −∞、ピークは 0 dBTP 付近。上限 −1 dBTP まで下げられる
+        let dir = try makeTempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let x = sine(hz: 1000, amplitude: 1.0, seconds: 0.3)
+        let input = dir.appendingPathComponent("in.caf"), output = dir.appendingPathComponent("out.caf")
+        try writeCAF(left: x, right: x, to: input)
+        let before = try LoudnessAnalysis.measureFile(input)
+        XCTAssertFalse(before.integrated.isFinite, "400 ms 未満なので統合は −∞")
+        XCTAssertGreaterThan(before.truePeakDb, -1.0)
+
+        let result = try LoudnessNormalization.normalize(input: input, output: output, settings: .youtube)
+        XCTAssertEqual(result.outputURL, output, "統合が −∞ でも減衰が必要なので適用ファイルができる")
+        XCTAssertTrue(result.plan.limitedByTruePeak)
+        XCTAssertLessThan(result.plan.appliedGainDb, 0)
+        let after = try LoudnessAnalysis.measureFile(output)
+        print("[loudnorm short] before=\(before.truePeakDb) dBTP, applied=\(result.plan.appliedGainDb) dB, after=\(after.truePeakDb) dBTP")
+        XCTAssertLessThanOrEqual(after.truePeakDb, -1.0 + 0.05)
+        XCTAssertEqual(try frameCount(output), try frameCount(input))
     }
 
     func testNormalizeLimitedFileStaysUnderCeiling() throws {
