@@ -66,6 +66,8 @@ public struct DataLocations: Sendable {
     public var qrCodes: URL { root.appendingPathComponent("QRCodes", isDirectory: true) }
     public var aiImages: URL { root.appendingPathComponent("AIImages", isDirectory: true) }
     public var psdCache: URL { root.appendingPathComponent("PSDCache", isDirectory: true) }
+    /// 入力形式の拡充(SVG の PNG 化・MIDI の WAV 化・連番画像の APNG 化)のキャッシュ。
+    public var inputCache: URL { root.appendingPathComponent("InputCache", isDirectory: true) }
     public var cutouts: URL { root.appendingPathComponent("Cutouts", isDirectory: true) }
     /// 世代バックアップ(保存のたびの写し)。プロジェクトごとのフォルダがこの下に作られる。
     public var versions: URL { root.appendingPathComponent("Versions", isDirectory: true) }
@@ -74,7 +76,7 @@ public struct DataLocations: Sendable {
 
     /// 版が持つフォルダ・ファイルの全部(重なり検査・説明用)。
     public var allPaths: [URL] {
-        [fonts, proxies, voices, templates, exportPresets, recovery, qrCodes, aiImages, psdCache, cutouts, versions, builtinMedia]
+        [fonts, proxies, voices, templates, exportPresets, recovery, qrCodes, aiImages, psdCache, cutouts, versions, builtinMedia, inputCache]
     }
 
     /// 設定(UserDefaults)の置き場。personal は従来の `.standard`。
