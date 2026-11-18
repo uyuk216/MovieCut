@@ -17,7 +17,7 @@ extension Renderer {
                        cacheable: Bool, style: TextStyle?, visible: Int?, charAnim: CharAnimSpec?) {
         let fillC = parseHexColor(color) ?? parseHexColor("#ffffff")!
         let outC = parseHexColor(outline) ?? parseHexColor("#000000")!
-        let f = TextCache.font(name: font, size: size, bold: style?.boldOrDefault ?? true)
+        let f = TextCache.font(name: font, size: size, bold: style?.boldOrDefault ?? true, weight: style?.weightValue)
         let spacing = style?.letterSpacingOrDefault ?? 0
         let lineHeight = style?.lineHeightOrDefault ?? TextStyle.defaultLineHeight
         let align = style?.alignOrDefault ?? .center

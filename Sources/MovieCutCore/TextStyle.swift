@@ -99,6 +99,38 @@ public struct TextStyle: Codable, Equatable, Sendable {
         public var label: String { switch self { case .left: return "左"; case .center: return "中央"; case .right: return "右" } }
     }
 
+    /// 文字の太さ(ウェイト)。値は CoreText のウェイト値(kCTFontWeightTrait 相当)。
+    public enum FontWeight: String, CaseIterable, Sendable {
+        case thin, light, regular, medium, semibold, bold, heavy, black
+        public var value: Double {
+            switch self {
+            case .thin: return -0.6
+            case .light: return -0.4
+            case .regular: return 0.0
+            case .medium: return 0.23
+            case .semibold: return 0.3
+            case .bold: return 0.4
+            case .heavy: return 0.56
+            // 較正: 最も近い太さの面を選ぶ方式のため、Black 面のトレイト値のばらつきに合わせて 0.8 にしている。
+            // Rounded Mplus 1c は Bold=0.4 / ExtraBold=0.6 / Black=0.8(実測)。ヒラギノ W8/W9 や Helvetica Neue CondensedBlack は 0.62。
+            // 0.62 だと Rounded Mplus 1c で ExtraBold(0.6) に落ちるが、0.8 なら 0.62 の面しか無いフォントでも最重量の面に届く。
+            case .black: return 0.8
+            }
+        }
+        public var label: String {
+            switch self {
+            case .thin: return "細字"
+            case .light: return "軽め"
+            case .regular: return "標準"
+            case .medium: return "中太"
+            case .semibold: return "やや太"
+            case .bold: return "太字"
+            case .heavy: return "極太"
+            case .black: return "黒"
+            }
+        }
+    }
+
     public var shadow: Shadow?
     public var box: Box?
     public var gradient: Gradient?
@@ -110,6 +142,9 @@ public struct TextStyle: Codable, Equatable, Sendable {
     public var align: String?
     /// 太字。未設定 = 太字(従来どおり。書体に太字が無ければ疑似ボールド)。false = 標準の太さ。
     public var bold: Bool?
+    /// 太さ(`FontWeight` の rawValue。align と同じく文字列で持つ)。未設定 = 自動(従来どおり `bold` で決まる)。
+    /// 設定したときはその太さで固定し、`bold` は描画の解決では無視する(疑似ボールドも使わない)。
+    public var weight: String?
     /// 斜体(斜めに傾ける)。未設定 = しない。
     public var italic: Bool?
     /// カラオケ字幕(話している部分の色つけ)。未設定 = しない。文字クリップの装飾の一部なので、保存したスタイルにも入る。
@@ -118,7 +153,7 @@ public struct TextStyle: Codable, Equatable, Sendable {
     public var vertical: Bool?
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["shadow", "box", "gradient", "letterSpacing", "lineHeight", "align", "bold", "italic", "highlight", "vertical"]
+    static let knownKeys: Set<String> = ["shadow", "box", "gradient", "letterSpacing", "lineHeight", "align", "bold", "weight", "italic", "highlight", "vertical"]
     public static let defaultLineHeight = 1.2
 
     public init() {}
@@ -132,12 +167,12 @@ public struct TextStyle: Codable, Equatable, Sendable {
         let l = Lenient(c: try decoder.container(keyedBy: AnyKey.self), known: Self.knownKeys)
         shadow = l.value("shadow"); box = l.value("box"); gradient = l.value("gradient")
         letterSpacing = l.double("letterSpacing"); lineHeight = l.double("lineHeight"); align = l.string("align")
-        bold = l.bool("bold"); italic = l.bool("italic")
+        bold = l.bool("bold"); weight = l.string("weight"); italic = l.bool("italic")
         highlight = l.value("highlight")
         vertical = l.bool("vertical")
         extra = l.extra()
         // 読めなかった項目は捨てずに、そのまま書き戻す
-        for key in ["shadow", "box", "gradient", "letterSpacing", "lineHeight", "align", "bold", "italic", "highlight", "vertical"] {
+        for key in ["shadow", "box", "gradient", "letterSpacing", "lineHeight", "align", "bold", "weight", "italic", "highlight", "vertical"] {
             guard let raw: JSONValue = l.value(key), raw != .null else { continue }
             let ok: Bool
             switch key {
@@ -148,6 +183,7 @@ public struct TextStyle: Codable, Equatable, Sendable {
             case "lineHeight": ok = lineHeight != nil
             case "align": ok = align != nil
             case "bold": ok = bold != nil
+            case "weight": ok = weight != nil
             case "highlight": ok = highlight != nil
             case "vertical": ok = vertical != nil
             default: ok = italic != nil
@@ -166,6 +202,7 @@ public struct TextStyle: Codable, Equatable, Sendable {
         try c.encodeIfPresent(lineHeight, forKey: AnyKey("lineHeight"))
         try c.encodeIfPresent(align, forKey: AnyKey("align"))
         try c.encodeIfPresent(bold, forKey: AnyKey("bold"))
+        try c.encodeIfPresent(weight, forKey: AnyKey("weight"))
         try c.encodeIfPresent(italic, forKey: AnyKey("italic"))
         try c.encodeIfPresent(highlight, forKey: AnyKey("highlight"))
         try c.encodeIfPresent(vertical, forKey: AnyKey("vertical"))
@@ -173,19 +210,21 @@ public struct TextStyle: Codable, Equatable, Sendable {
 
     /// 何も設定していない(知らない項目も無い)。
     public var isEmpty: Bool {
-        shadow == nil && box == nil && gradient == nil && letterSpacing == nil && lineHeight == nil && align == nil && bold == nil && italic == nil && highlight == nil && vertical == nil && extra.isEmpty
+        shadow == nil && box == nil && gradient == nil && letterSpacing == nil && lineHeight == nil && align == nil && bold == nil && weight == nil && italic == nil && highlight == nil && vertical == nil && extra.isEmpty
     }
 
     public var letterSpacingOrDefault: Double { Self.clamp(letterSpacing ?? 0, -50...200, 0) }
     public var lineHeightOrDefault: Double { Self.clamp(lineHeight ?? Self.defaultLineHeight, 0.6...3, Self.defaultLineHeight) }
     public var alignOrDefault: Align { align.flatMap(Align.init(rawValue:)) ?? .center }
     public var boldOrDefault: Bool { bold ?? true }
+    /// 太さの指定(未設定・読めない文字列は nil = 自動)。
+    public var weightValue: FontWeight? { weight.flatMap(FontWeight.init(rawValue:)) }
     public var italicOrDefault: Bool { italic ?? false }
     public var verticalOrDefault: Bool { vertical ?? false }
 
     /// 1 行の画素(影・グラデーション・字形)に関わる設定がある(行のビットマップを別の道で作る)。箱・揃え・行間は行の絵に関係しない。
     var affectsLine: Bool {
-        (shadow?.opacity ?? 0) > 0 || gradient != nil || letterSpacingOrDefault != 0 || italicOrDefault || !boldOrDefault
+        (shadow?.opacity ?? 0) > 0 || gradient != nil || letterSpacingOrDefault != 0 || italicOrDefault || !boldOrDefault || weightValue != nil
     }
 
     /// 行のビットマップのキャッシュ鍵に足す文字列(`affectsLine` に関わる項目だけ)。
@@ -193,6 +232,7 @@ public struct TextStyle: Codable, Equatable, Sendable {
         var s = "\(letterSpacingOrDefault)|\(italicOrDefault)|\(boldOrDefault)"
         if let sh = shadow { s += "|s\(sh.color),\(sh.dx),\(sh.dy),\(sh.blur),\(sh.opacity)" }
         if let g = gradient { s += "|g\(g.color1),\(g.color2),\(g.angle)" }
+        if let w = weightValue { s += "|w\(w.rawValue)" }
         return s
     }
 
@@ -203,6 +243,7 @@ public struct TextStyle: Codable, Equatable, Sendable {
         if let v = letterSpacing { s.letterSpacing = Self.clamp(v, -50...200, 0) }
         if let v = lineHeight { s.lineHeight = Self.clamp(v, 0.6...3, Self.defaultLineHeight) }
         if let a = align, Align(rawValue: a) == nil { s.align = nil }
+        if let w = weight, FontWeight(rawValue: w) == nil { s.weight = nil }
         s.highlight = highlight?.normalized
         if vertical == false { s.vertical = nil }  // 既定の値は書かない
         return s
