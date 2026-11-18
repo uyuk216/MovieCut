@@ -227,12 +227,14 @@ struct LeftPanel: View {
                 Spacer()
                 Button(L10n.t("＋")) { model.addCharacter() }
                     .help(L10n.t("キャラクターを追加"))
+                    .accessibilityLabel(L10n.t("キャラクターを追加"))
             }
             .padding(.bottom, 8)
             ScrollView {
                 VStack(spacing: 6) {
                     ForEach(model.project.characters) { ch in
-                        CharacterRow(ch: ch, speakerName: ch.speaker.flatMap { speakers.label(for: $0) }, selected: ch.id == model.effectiveSelectedCharId) { model.selectCharacter(ch.id) }
+                        CharacterRow(ch: ch, speakerName: ch.speaker.flatMap { speakers.label(for: $0) }, selected: ch.id == model.effectiveSelectedCharId, canDelete: model.project.characters.count > 1,
+                                     onDelete: { model.requestDeleteCharacter(ch.id) }) { model.selectCharacter(ch.id) }
                             .contextMenu {
                                 Button(L10n.t("このキャラを消す"), role: .destructive) { model.requestDeleteCharacter(ch.id) }
                                     .disabled(model.project.characters.count <= 1)
@@ -250,7 +252,7 @@ struct LeftPanel: View {
                 .padding(.bottom, 6)
             ZStack(alignment: .topLeading) {
                 TextEditor(text: $scriptText)
-                    .font(.system(size: 13))
+                    .font(MCDesign.Font.body)
                     .scrollContentBackground(.hidden)
                     .padding(4)
                     .background(Color(nsColor: .textBackgroundColor))
@@ -258,7 +260,7 @@ struct LeftPanel: View {
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(nsColor: .separatorColor)))
                 if scriptText.isEmpty {
                     Text(ScriptHelp.placeholder)
-                        .font(.system(size: 13))
+                        .font(MCDesign.Font.body)
                         .foregroundStyle(.tertiary)
                         .padding(.horizontal, 9).padding(.vertical, 5)
                         .allowsHitTesting(false)
@@ -271,6 +273,11 @@ struct LeftPanel: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 6)
                     .help(L10n.t("表情の画像を差し替えるか、表情を消してください(キャラのパネルの「表情」)"))
+            }
+            if model.project.characters.isEmpty {
+                Text(L10n.t("先にキャラクターを追加してください"))
+                    .font(.caption).foregroundStyle(.secondary)
+                    .padding(.top, 6)
             }
             Button {
                 Task { await model.generateVoicesFromScript() }
@@ -292,17 +299,36 @@ struct CharacterRow: View {
     /// VOICEVOX の話者一覧が読めていれば「キャラ2（ノーマル）」
     var speakerName: String?
     let selected: Bool
+    /// 選択中の行だけに出す削除ボタン(右クリックのメニューと同じ操作)。キャラが 1 件のときは押せない。
+    var canDelete = true
+    var onDelete: (() -> Void)? = nil
     let action: () -> Void
 
     private var engineLabel: String { L10n.t(CharacterRowSubtitle.text(for: ch, speakerName: speakerName)) }
 
     var body: some View {
+        ZStack(alignment: .trailing) {
+            rowButton
+            if selected, let onDelete {
+                Button(action: onDelete) {
+                    Image(systemName: "xmark").font(MCDesign.Font.badge)
+                }
+                .buttonStyle(.borderless)
+                .disabled(!canDelete)
+                .help(L10n.t(canDelete ? "このキャラを消す" : "キャラクターが 1 件のときは消せません"))
+                .accessibilityLabel(L10n.t("このキャラを消す"))
+                .padding(.trailing, 8)
+            }
+        }
+    }
+
+    private var rowButton: some View {
         Button(action: action) {
             HStack(spacing: 8) {
                 Circle().fill(Color(hex: ch.color)).frame(width: 11, height: 11)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(ch.name).font(.system(size: 13, weight: .medium)).lineLimit(1)
-                    Text(engineLabel).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                    Text(engineLabel).font(MCDesign.Font.subheadline).foregroundStyle(.secondary).lineLimit(1)
                 }
                 Spacer()
             }
@@ -357,8 +383,10 @@ struct TransportBar: View {
         HStack(spacing: 10) {
             Button(Title.toStart) { model.playback.goToStart() }
                 .help(L10n.t("先頭へ(Home)"))
+                .accessibilityLabel(L10n.t("先頭へ"))
             Button(model.isPlaying ? Title.pause : Title.play) { model.playback.togglePlay() }
                 .help(L10n.t("再生 / 一時停止(Space)"))
+                .accessibilityLabel(L10n.t(model.isPlaying ? "一時停止" : "再生"))
                 .disabled(model.isLocked)
             Text("\(timecode(model.currentTime)) / \(timecode(model.project.endTime))")
                 .monospacedDigit()
@@ -368,7 +396,7 @@ struct TransportBar: View {
             // 解像度・fps は映像の上に重ねず、再生コントロールの時刻の右に小さく出す(狭い幅では省く)
             if showsResolution {
                 Text(Self.chipText(model))
-                    .font(.system(size: 11))
+                    .font(MCDesign.Font.subheadline)
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
                     .help(L10n.t("プロジェクトの解像度とフレームレート(出力メニューで変えられます)"))
@@ -601,6 +629,9 @@ struct SettingsSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text(L10n.t("設定")).font(.title3.bold())
+            Text(L10n.t("この設定はプロジェクトごとに保存されます（音声サーバーの許可など一部はこのMac全体の設定です）"))
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             GroupBox(L10n.t("動画")) {
                 Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 10) {
                     GridRow(alignment: .top) {
