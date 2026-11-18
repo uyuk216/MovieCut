@@ -6,6 +6,12 @@ import MovieCutCore
 extension ProjectModel {
     static let transcribeUndoName = "音声から字幕を作る"
 
+    /// Whisper(外部の whisper.cpp)で文字にする入口。進み・キャンセル・Undo・編集ガードは `transcribeSelectedToSubtitles(transcriber:)` と同じ。
+    @discardableResult
+    func transcribeSelectedToSubtitlesWithWhisper() async -> Bool {
+        await transcribeSelectedToSubtitles(transcriber: WhisperTranscriber())
+    }
+
     /// 選んでいるクリップを文字にして「字幕」レイヤーに足す。Undo は 1 回。認識結果が無ければ何も変えない。
     /// キャンセルは状態欄に出して何も変えない。失敗(許可なし・利用不可など)は日本語のエラーを出す。
     @discardableResult

@@ -18,6 +18,8 @@ enum MenuCommand: Hashable {
     case multicamCreate, multicamSwitch, multicamCut(Int)
     // 音声から字幕を作る(オンデバイスの音声認識。選んでいるクリップ)
     case transcribeSubtitles
+    // 音声から字幕を作る(Whisper。外部の whisper.cpp を使う第 2 のエンジン)
+    case transcribeWhisper
     // 素材(欠落の再指定)
     case relinkMedia
     // ファイル ▸ 未使用の素材…(ショートカットは持たない)
@@ -635,6 +637,11 @@ enum AppMenuSpec {
     /// 出力 ▸ 音声から字幕を作る…(選んでいる音のあるクリップを音声認識し、字幕レイヤーに文字クリップを足す。ショートカットなし)。
     static func transcribeSubtitles(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .transcribeSubtitles, title: "音声から字幕を作る…", shortcut: nil, enabled: s.canEdit && s.canTranscribe, checked: nil, hint: "音声認識")
+    }
+
+    /// 出力 ▸ 音声から字幕を作る（Whisper）…(同じ条件。外部の whisper.cpp で認識する。ショートカットなし)。
+    static func transcribeWhisperSubtitles(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .transcribeWhisper, title: "音声から字幕を作る（Whisper）…", shortcut: nil, enabled: s.canEdit && s.canTranscribe, checked: nil, hint: "Whisper")
     }
 
     /// ファイル ▸ 素材の場所を再指定…(欠けている素材があるときだけ。フォルダを選んで探し直す)。
@@ -1338,7 +1345,7 @@ enum AppMenuSpec {
 
     /// 字幕と素材の項目(ファイル ▸ 字幕・素材のまとまり。式が長すぎて型検査が遅くなるので分けてある)。
     static func mediaSubtitleItems(_ s: MenuState) -> [MenuItemSpec] {
-        [subtitleImport(s), mediaRelink(s), unusedMediaItem(s), restoreVersionItem(s), packageSave(s), addSubtitle(s), subtitleExport(s), subtitleTranslate(s), subtitleGenerate(s), transcribeSubtitles(s), chapterCopy(s)]
+        [subtitleImport(s), mediaRelink(s), unusedMediaItem(s), restoreVersionItem(s), packageSave(s), addSubtitle(s), subtitleExport(s), subtitleTranslate(s), subtitleGenerate(s), transcribeSubtitles(s), transcribeWhisperSubtitles(s), chapterCopy(s)]
             + cutoutItems(s)
     }
 
@@ -1403,6 +1410,7 @@ enum AppMenu {
             case .translateSubtitles: m.openAITranslateSubtitles()
             case .generateSubtitles: m.generateSubtitlesFromScript()
             case .transcribeSubtitles: Task { await m.transcribeSelectedToSubtitles() }
+            case .transcribeWhisper: Task { await m.transcribeSelectedToSubtitlesWithWhisper() }
             case .relinkMedia: m.chooseAndRelinkMedia()
             case .unusedMedia: m.showUnusedMediaSheet = true
             case .restoreVersion: m.showVersionRestore()

@@ -522,6 +522,43 @@ struct SettingsSheet: View {
         }
     }
 
+    private func chooseWhisperExecutable() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.treatsFilePackagesAsDirectories = true
+        panel.message = "whisper.cpp の実行ファイル(whisper-cli)を選んでください"
+        panel.prompt = "選ぶ"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        // シンボリックリンク(Homebrew など)は実体に直してから検証する(Core の WhisperLocator と同じ)。
+        let real = url.resolvingSymlinksInPath().standardizedFileURL.path
+        switch ExecutableTrust.validate(path: real) {
+        case .success:
+            whisperPath = url.path; whisperMessage = ""
+            SecuritySettings.setWhisperPath(url.path)
+        case .failure(let why):
+            whisperMessage = why.message
+        }
+    }
+
+    private func chooseWhisperModel() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.init(filenameExtension: "bin") ?? .data]
+        panel.message = "Whisper のモデル(ggml-base.bin など)を選んでください"
+        panel.prompt = "選ぶ"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard WhisperLocator.validateModel(path: url.path) != nil else {
+            whisperMessage = L10n.t("モデルは .bin のファイルを選んでください。")
+            return
+        }
+        whisperModelPath = url.path; whisperMessage = ""
+        SecuritySettings.setWhisperModelPath(url.path)
+    }
+
     @ObservedObject var model: ProjectModel
     @Environment(\.dismiss) private var dismiss
     @State private var draft: VideoSettingsDraft
@@ -533,6 +570,9 @@ struct SettingsSheet: View {
     @State private var remoteHosts = SecuritySettings.remoteVoiceHosts().joined(separator: ", ")
     @State private var aquesPath = SecuritySettings.aquestalkPath() ?? ""
     @State private var aquesMessage = ""
+    @State private var whisperPath = SecuritySettings.whisperPath() ?? ""
+    @State private var whisperModelPath = SecuritySettings.whisperModelPath() ?? ""
+    @State private var whisperMessage = ""
     private let original: VideoSettingsDraft
     private static let customFpsTag = "custom"
 
@@ -667,6 +707,35 @@ struct SettingsSheet: View {
                     }
                     if !aquesMessage.isEmpty { Text(aquesMessage).font(.caption).foregroundStyle(.red) }
                     Text(L10n.t("安全のため、実行するのは /Applications・アプリ内・Application Support の AquesTalk フォルダ・ここで選んだファイルだけです。プロジェクトファイルに書かれたコマンドは実行しません。"))
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }.padding(8)
+            }
+            GroupBox(L10n.t("Whisper（文字起こし）")) {
+                VStack(alignment: .leading, spacing: 4) {
+                    let exe = WhisperLocator.resolve()
+                    let mdl = WhisperLocator.resolveModel()
+                    Text(exe.map { "\(L10n.t("使う実行ファイル")): \($0.path)" } ?? L10n.t("実行ファイル(whisper-cli)が見つかりません。"))
+                        .font(.caption).textSelection(.enabled)
+                    Text(mdl.map { "\(L10n.t("使うモデル")): \($0.path)" } ?? L10n.t("モデルが未配置です。"))
+                        .font(.caption).textSelection(.enabled)
+                    HStack {
+                        Button(L10n.t("実行ファイルを選ぶ…")) { chooseWhisperExecutable() }
+                        if !whisperPath.isEmpty {
+                            Button(L10n.t("実行ファイルの選択を解除")) { whisperPath = ""; whisperMessage = ""; SecuritySettings.setWhisperPath(nil) }
+                        }
+                    }
+                    HStack {
+                        Button(L10n.t("モデルを選ぶ…")) { chooseWhisperModel() }
+                        if !whisperModelPath.isEmpty {
+                            Button(L10n.t("モデルの選択を解除")) { whisperModelPath = ""; whisperMessage = ""; SecuritySettings.setWhisperModelPath(nil) }
+                        }
+                    }
+                    if !whisperMessage.isEmpty { Text(whisperMessage).font(.caption).foregroundStyle(.red) }
+                    Text(L10n.t("置き場所(Application Support 内)に whisper-cli と ggml-*.bin を置くか、上のボタンで選びます。Homebrew の whisper-cpp も自動で探します。"))
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    Text("\(DataLocations.current.supportFolderName)/Whisper/")
+                        .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                    Text(L10n.t("モデルはアプリに入っていません。初回に自分で ggml-base.bin などをダウンロードしてください(日本語は base 以上がおすすめ)。認識は端末内で行い、音声は外に送りません。"))
                         .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }.padding(8)
             }

@@ -9,6 +9,8 @@ public enum SecuritySettings {
     static let allowRemoteVoiceKey = "security.allowRemoteVoice"
     static let remoteVoiceHostsKey = "security.remoteVoiceHosts"
     static let aquestalkPathKey = "security.aquestalkPath"
+    static let whisperPathKey = "security.whisperPath"
+    static let whisperModelPathKey = "security.whisperModelPath"
 
     /// リモートの音声サーバーを許可するか(既定は許可しない)。
     public static func allowRemoteVoice(_ d: UserDefaults = DataLocations.current.defaults) -> Bool {
@@ -42,6 +44,24 @@ public enum SecuritySettings {
     }
     public static func setAquestalkPath(_ path: String?, to d: UserDefaults = DataLocations.current.defaults) {
         if let path, !path.isEmpty { d.set(path, forKey: aquestalkPathKey) } else { d.removeObject(forKey: aquestalkPathKey) }
+    }
+
+    /// 利用者がファイルパネルで選んだ whisper.cpp 実行ファイルの場所(無ければ nil。プロジェクトには保存しない)。
+    public static func whisperPath(_ d: UserDefaults = DataLocations.current.defaults) -> String? {
+        let s = d.string(forKey: whisperPathKey) ?? ""
+        return s.isEmpty ? nil : s
+    }
+    public static func setWhisperPath(_ path: String?, to d: UserDefaults = DataLocations.current.defaults) {
+        if let path, !path.isEmpty { d.set(path, forKey: whisperPathKey) } else { d.removeObject(forKey: whisperPathKey) }
+    }
+
+    /// 利用者がファイルパネルで選んだ Whisper モデル(ggml-*.bin)の場所(無ければ nil)。
+    public static func whisperModelPath(_ d: UserDefaults = DataLocations.current.defaults) -> String? {
+        let s = d.string(forKey: whisperModelPathKey) ?? ""
+        return s.isEmpty ? nil : s
+    }
+    public static func setWhisperModelPath(_ path: String?, to d: UserDefaults = DataLocations.current.defaults) {
+        if let path, !path.isEmpty { d.set(path, forKey: whisperModelPathKey) } else { d.removeObject(forKey: whisperModelPathKey) }
     }
 }
 

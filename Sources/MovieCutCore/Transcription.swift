@@ -41,6 +41,10 @@ public enum TranscriptionError: Error, LocalizedError, Equatable {
     case noAudio
     /// 認識の途中で失敗した(詳細は画面用の文)
     case failed(String)
+    /// whisper.cpp の実行ファイルが見つからない
+    case whisperNotInstalled
+    /// Whisper のモデル(ggml-*.bin)が見つからない
+    case whisperModelMissing
 
     public var errorDescription: String? {
         switch self {
@@ -60,6 +64,10 @@ public enum TranscriptionError: Error, LocalizedError, Equatable {
             return "このクリップには音がありません。音のある素材か、音声のクリップを選んでください。"
         case .failed(let detail):
             return "音声を文字にできませんでした: \(detail)"
+        case .whisperNotInstalled:
+            return "whisper.cpp(whisper-cli)が見つかりません。設定の「Whisper(文字起こし)」で実行ファイルを選ぶか、\(WhisperLocator.supportFolderDisplayPath) に置いてください(Homebrew なら brew install whisper-cpp)。手順は docs/Whisper文字起こし.md を参照してください。"
+        case .whisperModelMissing:
+            return "Whisper のモデル(ggml-*.bin)が見つかりません。\(WhisperLocator.supportFolderDisplayPath) に置くか、設定の「Whisper(文字起こし)」でモデルを選んでください。日本語は ggml-base 以上を推奨します。"
         }
     }
 }
