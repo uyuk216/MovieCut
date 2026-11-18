@@ -473,6 +473,10 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var sceneId: String? = nil
     /// 形のマスク(キャンバスの矩形・楕円。省いたときは何もしない)。
     public var mask: ClipMask? = nil
+    /// メッシュ変形(格子の制御点をずらす変形。`MeshPuppet`)。無いとき・全点が元の位置のときは描画不変。設定したときだけ書く。
+    public var meshWarp: MeshWarp? = nil
+    /// パペット変形(ピンを打って関節のように曲げる変形。`MeshPuppet`)。無いとき・全ピン元の位置のときは描画不変。設定したときだけ書く。
+    public var puppetWarp: PuppetWarp? = nil
     /// ブレンドモード(下のレイヤーとの合成方法)。無いときは通常。設定したときだけ書く。
     public var blendMode: ClipBlendMode? = nil
     /// グループ ID(同じ値のクリップをまとめて扱う。`ClipGrouping`)。無いときはグループ無し。設定したときだけ書く。
@@ -508,7 +512,7 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var voicevoxAccent: [VoicevoxAccentPhrase]? = nil
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["id", "type", "voicevoxAccent", "subtitleText", "tachieId", "mouthDrive", "speakingOnly", "followsProjectEnd", "playsAnimation", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "bokehShape", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "frameFlow", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "valueRef", "duck", "visualizer", "stabilize", "stabilizeRoll", "tracks", "sceneId", "mask", "blendMode", "group", "ruby", "figure", "note", "locked", "muted", "disabled", "treatAsVoice"]
+    static let knownKeys: Set<String> = ["id", "type", "voicevoxAccent", "subtitleText", "tachieId", "mouthDrive", "speakingOnly", "followsProjectEnd", "playsAnimation", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "bokehShape", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "frameFlow", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "valueRef", "duck", "visualizer", "stabilize", "stabilizeRoll", "tracks", "sceneId", "mask", "meshWarp", "puppetWarp", "blendMode", "group", "ruby", "figure", "note", "locked", "muted", "disabled", "treatAsVoice"]
 
     public init() {}
 
@@ -661,6 +665,13 @@ public struct Clip: Codable, Equatable, Identifiable {
         }
         if let raw: JSONValue = l.value("mask") {
             if let v: ClipMask = l.value("mask") { mask = v } else { extra["mask"] = raw }
+        }
+        // メッシュ/パペット変形: 読めない型は捨てずにそのまま書き戻す
+        if let raw: JSONValue = l.value("meshWarp") {
+            if let v: MeshWarp = l.value("meshWarp") { meshWarp = v } else { extra["meshWarp"] = raw }
+        }
+        if let raw: JSONValue = l.value("puppetWarp") {
+            if let v: PuppetWarp = l.value("puppetWarp") { puppetWarp = v } else { extra["puppetWarp"] = raw }
         }
         // 複合クリップの中身: 読めなければ捨てずにそのまま書き戻す
         if let raw: JSONValue = l.value("tracks") {
@@ -816,6 +827,8 @@ public struct Clip: Codable, Equatable, Identifiable {
         if let t = tracks { try c.encode(t, forKey: AnyKey("tracks")) }
         try c.encodeIfPresent(sceneId, forKey: AnyKey("sceneId"))
         try c.encodeIfPresent(mask, forKey: AnyKey("mask"))
+        try c.encodeIfPresent(meshWarp, forKey: AnyKey("meshWarp"))
+        try c.encodeIfPresent(puppetWarp, forKey: AnyKey("puppetWarp"))
         if let m = blendMode { try c.encode(m.rawValue, forKey: AnyKey("blendMode")) }
         try c.encodeIfPresent(group, forKey: AnyKey("group"))
         if !ruby.isEmpty { try c.encode(ruby, forKey: AnyKey("ruby")) }

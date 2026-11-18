@@ -500,6 +500,7 @@ struct ClipInspector: View {
                 if Clip.supportsSpeed(c.type) { speedSections(c) }
                 if StabilizeEditing.supports(c) { stabilizeSections(c) }
                 if Clip.supportsEffects(c.type) { maskSections(c) }
+                if Clip.supportsWarp(c.type) { warpSections(c) }
                 if (c.type == .video || c.type == .audio) && !c.isFreeze {
                     InspectorSection(title: "音声")
                     slider("音量", .volume, step: 0.05, format: Self.pct)
@@ -689,6 +690,77 @@ struct ClipInspector: View {
             }))
             .toggleStyle(.checkbox)
         }
+    }
+
+    // MARK: メッシュ変形・パペット変形(数値編集。プレビュー上のドラッグは未達)
+
+    @ViewBuilder private func warpSections(_ c: Clip) -> some View {
+        InspectorSection(title: "メッシュ変形")
+        Toggle("格子で変形する", isOn: Binding(get: { c.meshWarp != nil }, set: { on in
+            if on { model.ensureMeshWarp(clipId: clipId) } else { model.clearMeshWarp(clipId: clipId) }
+        }))
+        .toggleStyle(.checkbox)
+        if let m = c.meshWarp {
+            HStack(spacing: 12) {
+                Stepper("列 \(m.cols)", value: Binding(get: { m.cols }, set: { model.setMeshGrid(cols: $0, rows: m.rows, clipId: clipId) }), in: MeshWarp.minGrid...MeshWarp.maxGrid)
+                Stepper("行 \(m.rows)", value: Binding(get: { m.rows }, set: { model.setMeshGrid(cols: m.cols, rows: $0, clipId: clipId) }), in: MeshWarp.minGrid...MeshWarp.maxGrid)
+            }
+            .disabled(model.isLocked)
+            ForEach(Array(m.points.enumerated()), id: \.offset) { i, pt in
+                let home = m.home(index: i)
+                HStack(spacing: 6) {
+                    Text("点\(i + 1)（\(Int(home.x * Double(m.cols - 1)) + 1),\(Int(home.y * Double(m.rows - 1)) + 1)）")
+                        .font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary)
+                    Button("元に戻す") { model.resetMeshPoint(index: i, clipId: clipId) }
+                        .controlSize(.mini)
+                        .disabled(model.isLocked || (abs(pt.x - home.x) < 1e-9 && abs(pt.y - home.y) < 1e-9))
+                }
+                warpSlider("横", pt.x) { v in model.liveMeshPoint(clipId: clipId, index: i, x: v, y: pt.y) }
+                warpSlider("縦", pt.y) { v in model.liveMeshPoint(clipId: clipId, index: i, x: pt.x, y: v) }
+            }
+            Text("制御点を元の位置からずらすと、その周りが引っ張られて変形します。全点が元の位置のときは変形しません。")
+                .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
+        InspectorSection(title: "パペット変形")
+        Toggle("ピンで変形する", isOn: Binding(get: { c.puppetWarp != nil }, set: { on in
+            if on { model.ensurePuppetWarp(clipId: clipId) } else { model.clearPuppetWarp(clipId: clipId) }
+        }))
+        .toggleStyle(.checkbox)
+        if let pw = c.puppetWarp {
+            HStack(spacing: 8) {
+                Button("ピンを追加（中央）") { model.addPuppetPin(fixed: false, clipId: clipId) }
+                Button("固定ピンを追加") { model.addPuppetPin(fixed: true, clipId: clipId) }
+            }
+            .controlSize(.small)
+            .disabled(model.isLocked || pw.pins.count >= PuppetWarp.maxPins)
+            warpSlider("影響半径", pw.radius, range: PuppetWarp.radiusRange) { v in model.livePuppetRadius(clipId: clipId, v) }
+            ForEach(Array(pw.pins.enumerated()), id: \.offset) { i, pin in
+                HStack(spacing: 6) {
+                    Text("ピン\(i + 1)").font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary)
+                    Toggle("固定", isOn: Binding(get: { pin.fixed }, set: { model.setPuppetPinFixed(index: i, $0, clipId: clipId) }))
+                        .toggleStyle(.checkbox)
+                    Button("削除") { model.removePuppetPin(index: i, clipId: clipId) }
+                        .controlSize(.mini)
+                }
+                .disabled(model.isLocked)
+                if pin.fixed {
+                    Text("元の位置（\(Int(pin.hx * 100))%, \(Int(pin.hy * 100))%）に固定されています")
+                        .font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
+                } else {
+                    warpSlider("横", pin.x) { v in model.livePuppetPin(clipId: clipId, index: i, x: v, y: pin.y) }
+                    warpSlider("縦", pin.y) { v in model.livePuppetPin(clipId: clipId, index: i, x: pin.x, y: v) }
+                }
+            }
+            Text("ピンの元の位置は追加した場所（中央）です。ピンを動かすと、影響半径の内側が滑らかに追従します。固定ピンの周りは動きません。")
+                .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func warpSlider(_ label: String, _ value: Double, range: ClosedRange<Double> = -0.5...1.5, change: @escaping (Double) -> Void) -> some View {
+        LiveSlider(label: label, value: value, range: range, step: 0.01, format: Self.pct,
+                   begin: { model.beginGesture() },
+                   change: change,
+                   end: { model.commitGesture(ProjectModel.warpUndoName) })
     }
 
     private func maskSlider(_ label: String, _ value: Double, _ key: WritableKeyPath<ClipMask, Double>, range: ClosedRange<Double>) -> some View {

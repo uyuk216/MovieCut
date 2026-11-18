@@ -184,7 +184,7 @@ public struct Renderer {
                     }
                     // 複合クリップで、キャンバスいっぱいに・効果なし・不透明度 100% なら、中身を親の画面に直接描く(中間の画像を作らない)。
                     // 直接描くので、まとめる前のクリップを描いたときと画素が完全に一致する
-                    if (c.type == .compound || c.type == .scene), mask == nil, c.mask == nil, c.blendMode == nil, pose.isFullCanvasCompound, !c.hasActiveEffects, pose.pixelate < 2, pose.feather <= 0.01, let child = nestedRenderer(c) {
+                    if (c.type == .compound || c.type == .scene), mask == nil, c.mask == nil, c.blendMode == nil, pose.isFullCanvasCompound, !c.hasActiveEffects, !c.hasActiveWarp, pose.pixelate < 2, pose.feather <= 0.01, let child = nestedRenderer(c) {
                         ctx.saveGState()
                         child.drawFrame(t: t - c.start + c.offset, into: ctx)
                         ctx.restoreGState()
@@ -211,7 +211,7 @@ public struct Renderer {
                         }
                         drawPose.blur = 0
                     }
-                    if !fx.isEmpty || c.mask != nil {
+                    if !fx.isEmpty || c.mask != nil || c.hasActiveWarp {
                         drawEffectedClip(c, pose: drawPose, effects: fx, t: t, ctx: ctx, W: W, H: H)
                     } else if drawPose.blur > 0 {
                         drawBlurredClip(c, pose: drawPose, t: t, ctx: ctx, W: W, H: H)
@@ -699,7 +699,8 @@ public struct Renderer {
         let resScale = (W * H / (1920.0 * 1080.0)).squareRoot()
         let blurSigma = min(300, pose.blur)
         let bounds = contentBounds(c, pose: pose, t: t) ?? canvas
-        let margin = EffectPipeline.margin(of: fx, scale: resScale) + 3 * blurSigma
+        let warpMargin = c.hasActiveWarp ? c.warpMaxDisplacement * max(bounds.width, bounds.height) + 2 : 0
+        let margin = EffectPipeline.margin(of: fx, scale: resScale) + 3 * blurSigma + warpMargin
         let work = Renderer.effectWorkRect(bounds: bounds, margin: margin, canvas: canvas)
         guard !work.isNull, work.width >= 1, work.height >= 1 else { return }
         let ww = Int(work.width), wh = Int(work.height)
@@ -725,7 +726,15 @@ public struct Renderer {
         } else if fx.contains(where: { $0.kind == .faceBlur }) {
             faces = faceRects(for: c, t: t, pose: pose, image: snap)
         }
-        var ci = EffectPipeline.apply(CIImage(cgImage: snap), effects: fx, bounds: localBounds, scale: resScale, faces: faces)
+        // メッシュ/パペット変形: クリップ自身の画素を変位場で動かしてから、エフェクトをかける。
+        // 変形が無い・identity のクリップは hasActiveWarp が false で、ここには来ない(従来と完全一致)。
+        var snapImg = snap
+        if c.hasActiveWarp {
+            // localBounds は CI 座標(左下原点)。画像の画素(左上原点)へ直す
+            let imgBounds = CGRect(x: localBounds.minX, y: Double(wh) - localBounds.maxY, width: localBounds.width, height: localBounds.height)
+            if let wimg = WarpRenderer.warp(snap, clip: c, bounds: imgBounds) { snapImg = wimg }
+        }
+        var ci = EffectPipeline.apply(CIImage(cgImage: snapImg), effects: fx, bounds: localBounds, scale: resScale, faces: faces)
         if blurSigma > 0 { ci = ci.applyingGaussianBlur(sigma: blurSigma) }
         if let m = c.mask { ci = ShapeMask.apply(ci, mask: m, canvasWidth: W, canvasHeight: H, originX: work.minX, originY: work.minY) }
         guard let out = EffectPipeline.makeImage(ci, from: rect, context: ciCtx) else { return }
