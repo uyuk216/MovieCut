@@ -109,15 +109,43 @@ public enum CompoundEditing {
     static func window(_ clips: [Clip], from x: Double, duration d: Double) -> [Clip] {
         var out: [Clip] = []
         for c in clips {
-            var k = c
             let s = c.start, e = c.start + c.duration
             if e <= x + ClipEditing.timeEpsilon || s >= x + d - ClipEditing.timeEpsilon { continue }
-            if s < x - ClipEditing.timeEpsilon, let (_, right) = ClipEditing.split(k, at: x) { k = right }
-            if k.start + k.duration > x + d + ClipEditing.timeEpsilon, let (left, _) = ClipEditing.split(k, at: x + d) { k = left }
+            // 窓にすっぽり収まるものは切らずにずらすだけ(分割を通さない。理由は windowTrimStart 参照)
+            if s >= x - ClipEditing.timeEpsilon, e <= x + d + ClipEditing.timeEpsilon {
+                var k = c
+                k.start = grid(k.start - x)
+                out.append(k)
+                continue
+            }
+            var k = windowTrimStart(c, from: x)
+            k = windowTrimEnd(k, from: x, duration: d)
             k.start = grid(k.start - x)
             out.append(k)
         }
         return out
+    }
+
+    // 窓またぎの分割を `window` 本体から分けたのはスタック対策(バッチO統合で顕在化)。
+    // `ClipEditing.split` の結果処理は Clip(約3.2KB)のコピーを多数積むため、分割を含む関数の
+    // フレームが 150KB を超える。窓に収まる大半のクリップまで同じフレームで処理すると、
+    // 音声ミックス経由(ビジュアライザ→ミックス→ダッキング→audibleClips)の深い呼び出しでは
+    // 協調スレッドのスタックが溢れる(Clip に項目が増えた統合で顕在化した)。
+    // 分割が要るのは窓をまたぐものだけで、その場合も頭側・尾側を別々に処理してピークを下げる。
+    // 処理内容・結果は従来と完全に同じ。
+
+    /// 窓の頭をまたぐものを、頭で切った右側にする(またいでいなければそのまま)。
+    private static func windowTrimStart(_ c: Clip, from x: Double) -> Clip {
+        var k = c
+        if k.start < x - ClipEditing.timeEpsilon, let (_, right) = ClipEditing.split(k, at: x) { k = right }
+        return k
+    }
+
+    /// 窓の尾をまたぐものを、尾で切った左側にする(またいでいなければそのまま)。
+    private static func windowTrimEnd(_ c: Clip, from x: Double, duration d: Double) -> Clip {
+        var k = c
+        if k.start + k.duration > x + d + ClipEditing.timeEpsilon, let (left, _) = ClipEditing.split(k, at: x + d) { k = left }
+        return k
     }
 
     /// 複製・貼り付け用: クリップと、その中のすべての子に新しい id を振る(元と id が重ならないように)。
