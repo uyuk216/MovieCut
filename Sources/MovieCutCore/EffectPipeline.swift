@@ -12,6 +12,13 @@ public struct ResolvedEffect: Equatable, Sendable {
     public func v(_ key: String) -> Double { values[key] ?? kind.spec(key)?.defaultValue ?? 0 }
 }
 
+/// 解決済みエフェクト 1 件(内蔵かプラグインか)。クリップの並び順を保ったまま混ぜて扱うための統合形。
+/// プラグイン未登録時は `.builtin` だけが並び、従来の `resolve` / `apply` と完全に同じ結果になる。
+public enum ResolvedClipEffect: Equatable, Sendable {
+    case builtin(ResolvedEffect)
+    case plugin(ResolvedPluginEffect)
+}
+
 /// エフェクトを CIFilter の連なりにして画像にかける(UI にも Undo にも依存しない純粋な処理)。
 ///
 /// - 入力はクリップ 1 枚ぶんの画素(透明な背景に、回転・拡大・切り抜きまで済んだクリップを描いたもの)。出力も同じ範囲。
@@ -53,22 +60,60 @@ public enum EffectPipeline {
         }
     }
 
+    /// 内蔵エフェクト 1 件の解決(時刻 `r` での引数確定)。何もしない・対象外なら nil。
+    private static func resolvedBuiltin(_ e: Effect, index i: Int, in c: Clip, atClipTime r: Double) -> ResolvedEffect? {
+        guard e.enabled, let kind = e.known else { return nil }
+        var vals: [String: Double] = [:]
+        for s in kind.params {
+            // 顔ぼかしの「モザイクの大きさ」は、書かれていない古い設定では強さから決める(描き方を変えない)
+            if kind == .faceBlur, s.key == "size", e.params["size"] == nil, c.keyframes[EffectKey.make(i, s.key)] == nil { continue }
+            var v = e.value(s.key)
+            if !c.keyframes.isEmpty, let ks = c.keyframes[EffectKey.make(i, s.key)], let kv = Animation.interpolate(ks, at: r) { v = s.clamp(kv) }
+            vals[s.key] = v
+        }
+        if isIdentity(kind, { vals[$0] ?? 0 }) { return nil }
+        if kind == .lut || kind == .colorTransfer, (e.path ?? "").isEmpty { return nil }
+        return ResolvedEffect(kind: kind, values: vals, color: e.colorOrDefault, path: e.path)
+    }
+
+    /// プラグインエフェクト 1 件の解決。担当プロバイダが無ければ nil(従来どおり「知らない種類は何もしない」)。
+    /// 引数の確定は内蔵と同じ流儀(記述子の仕様でクランプ、キーフレームは "fx.<番号>.<引数名>" を補間)。
+    private static func resolvedPlugin(_ e: Effect, index i: Int, in c: Clip, atClipTime r: Double, provider: any VideoEffectProviding, descriptor: PluginEffectDescriptor) -> ResolvedPluginEffect? {
+        guard e.enabled else { return nil }
+        var vals: [String: Double] = [:]
+        for s in descriptor.params {
+            var v = s.clamp(e.params[s.key] ?? s.defaultValue)
+            if !c.keyframes.isEmpty, let ks = c.keyframes[EffectKey.make(i, s.key)], let kv = Animation.interpolate(ks, at: r) { v = s.clamp(kv) }
+            vals[s.key] = v
+        }
+        if provider.isIdentity(effectID: descriptor.id, values: vals) { return nil }
+        return ResolvedPluginEffect(descriptor: descriptor, values: vals, color: e.color ?? descriptor.defaultColor ?? "#000000")
+    }
+
     /// クリップの時刻 `r`(頭からの秒)で効くエフェクトの列(無効・未知・何もしないものを除く)。キーが無ければ設定値そのまま(速い)。
     public static func resolve(_ c: Clip, atClipTime r: Double) -> [ResolvedEffect] {
-        var out: [ResolvedEffect] = []
+        c.effects.enumerated().compactMap { resolvedBuiltin($0.element, index: $0.offset, in: c, atClipTime: r) }
+    }
+
+    /// 内蔵 + プラグインを、クリップの並び順を保って解決する統合版。
+    ///
+    /// `pluginProviders` が空なら結果は `resolve` の内蔵分だけになり、従来と完全に同一になる(追加方式の原則)。
+    /// プラグインの識別子は内蔵の `EffectKind` に無いものだけが対象で、内蔵と同名の文字列は内蔵が優先される。
+    public static func resolveAll(_ c: Clip, atClipTime r: Double, pluginProviders: [any VideoEffectProviding]) -> [ResolvedClipEffect] {
+        var out: [ResolvedClipEffect] = []
         for (i, e) in c.effects.enumerated() {
-            guard e.enabled, let kind = e.known else { continue }
-            var vals: [String: Double] = [:]
-            for s in kind.params {
-                // 顔ぼかしの「モザイクの大きさ」は、書かれていない古い設定では強さから決める(描き方を変えない)
-                if kind == .faceBlur, s.key == "size", e.params["size"] == nil, c.keyframes[EffectKey.make(i, s.key)] == nil { continue }
-                var v = e.value(s.key)
-                if !c.keyframes.isEmpty, let ks = c.keyframes[EffectKey.make(i, s.key)], let kv = Animation.interpolate(ks, at: r) { v = s.clamp(kv) }
-                vals[s.key] = v
+            if let b = resolvedBuiltin(e, index: i, in: c, atClipTime: r) {
+                out.append(.builtin(b))
+                continue
             }
-            if isIdentity(kind, { vals[$0] ?? 0 }) { continue }
-            if kind == .lut || kind == .colorTransfer, (e.path ?? "").isEmpty { continue }
-            out.append(ResolvedEffect(kind: kind, values: vals, color: e.colorOrDefault, path: e.path))
+            // 内蔵として解決されなかったもののうち、プラグイン担当の識別子だけをプラグインとして解決する。
+            // ただし「内蔵だが何もしない値」だった場合はプラグインにも回さない(二重適用の防止)。
+            guard e.enabled, e.known == nil else { continue }
+            guard let provider = pluginProviders.first(where: { $0.descriptor(forEffectID: e.kind) != nil }),
+                  let descriptor = provider.descriptor(forEffectID: e.kind) else { continue }
+            if let p = resolvedPlugin(e, index: i, in: c, atClipTime: r, provider: provider, descriptor: descriptor) {
+                out.append(.plugin(p))
+            }
         }
         return out
     }
@@ -122,6 +167,30 @@ public enum EffectPipeline {
             img = applyOne(e, img, rect: rect, bounds: bounds, scale: scale, faces: faces)
         }
         return img
+    }
+
+    /// 統合版の適用。内蔵は従来の `applyOne`、プラグインは担当プロバイダへ委譲する(並び順どおり)。
+    /// プロバイダが見つからない・nil を返したプラグインエフェクトは何もしない(従来の「未知の種類」と同じ)。
+    /// プラグインエフェクトは絵の外へはみ出さない前提で、作業範囲の拡大(`margin`)には数えない。
+    public static func apply(_ image: CIImage, effects: [ResolvedClipEffect], bounds: CGRect, scale: Double, faces: [CGRect] = [], pluginProviders: [any VideoEffectProviding]) -> CIImage {
+        let rect = image.extent
+        var img = image
+        for e in effects {
+            switch e {
+            case .builtin(let b):
+                img = applyOne(b, img, rect: rect, bounds: bounds, scale: scale, faces: faces)
+            case .plugin(let p):
+                guard let provider = pluginProviders.first(where: { $0.descriptor(forEffectID: p.effectID) != nil }),
+                      let out = provider.apply(effectID: p.effectID, image: img, values: p.values, color: p.color, bounds: bounds, scale: scale) else { continue }
+                img = out
+            }
+        }
+        return img
+    }
+
+    /// 統合版のはみ出し幅。プラグインエフェクトは範囲を広げない前提で 0 として数える。
+    public static func margin(of fx: [ResolvedClipEffect], scale: Double) -> Double {
+        margin(of: fx.compactMap { if case .builtin(let b) = $0 { return b } else { return nil } }, scale: scale)
     }
 
     static func applyOne(_ e: ResolvedEffect, _ img: CIImage, rect: CGRect, bounds: CGRect, scale: Double, faces: [CGRect] = []) -> CIImage {
