@@ -75,11 +75,11 @@ final class MenuUndoSweepTests: XCTestCase {
              .importSubtitles, .exportSubtitles, .translateSubtitles,
              .transcribeSubtitles, .transcribeWhisper, .relinkMedia, .packageSave, .addFont, .addSubtitle, .addTachie, .rollEdit, .slipEdit, .multicamCreate, .multicamSwitch, .removeBackground, .toggleRangeLoop, .toggleTrimLoop, .toggleClipLoop, .toggleAudition, .cycleAudition, .toggleVoiceRipple, .transferClips, .subclipBatch, .trimLoopWidth(0.5), .trimLoopWidth(1), .trimLoopWidth(2), .aiScript, .aiChapters, .aiTitles, .aiRewrite, .aiSettings,
              .restoreVersion, .exportStill, .exportSequence, .exportThumbnail, .exportThumbnailCandidates, .exportGIF, .exportAPNG, .queueExport, .showExportQueue, .audioLibrary,
-             .measureLoudness, .showScopes, .saveTemplate, .newFromTemplate, .makeProxies, .lutLoad, .colorTransferLoad, .autoWhiteBalance, .regenerateVoice,
+             .measureLoudness, .showScopes, .saveTemplate, .newFromTemplate, .saveItemTemplate, .makeProxies, .lutLoad, .colorTransferLoad, .autoWhiteBalance, .regenerateVoice,
              .makeVoices, .layerDelete, .copyChapters, .copyChaptersColor(.red), .jumpToTime, .renameMarker, .fpsCustom, .addQRCode, .aiImage, .generateSubtitles,
              .helpShortcuts, .helpVoicevox, .helpAquestalk, .helpLicense, .helpThirdParty, .previewBackground, .previewTier, .guide,
              .dockPanel, .dockLayout, .previewProxyToggle, .fullScreen, .exportScript, .exportStoryboard,
-             .compoundEnter, .compoundExit:   // 中に入る・出るは画面の切り替え(書類は変わらない・取り消しにも載らない。専用の試験は CompoundScopeAppTests)
+             .compoundEnter, .compoundExit, .importScriptCSV, .exportScriptCSV:   // 中に入る・出るは画面の切り替え(書類は変わらない・取り消しにも載らない。専用の試験は CompoundScopeAppTests)
             return true
         default:
             return false
