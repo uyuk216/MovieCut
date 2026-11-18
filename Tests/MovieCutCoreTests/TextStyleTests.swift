@@ -29,9 +29,9 @@ final class TextStyleTests: XCTestCase {
         return Pixels(w: img.width, h: img.height, d: d)
     }
 
-    func render(_ clip: Clip, t: Double = 0.5, w: Int = 600, h: Int = 300) throws -> Pixels {
+    func render(_ clip: Clip, t: Double = 0.5, w: Int = 600, h: Int = 300, bg: String = "#000000") throws -> Pixels {
         var p = Project()
-        p.width = w; p.height = h; p.bg = "#000000"; p.characters = []
+        p.width = w; p.height = h; p.bg = bg; p.characters = []
         var tr = Track(name: "L1"); tr.clips = [clip]
         p.tracks = [tr]
         return pixels(try XCTUnwrap(Renderer(project: p, assets: RenderAssets()).renderImage(t: t)))
@@ -130,6 +130,121 @@ final class TextStyleTests: XCTestCase {
         let ve = endColours(vi, horizontal: false)
         XCTAssertGreaterThan(ve.first.r, ve.first.b + 60, "角度 90: 上端は color1(赤)")
         XCTAssertGreaterThan(ve.last.b, ve.last.r + 60, "角度 90: 下端は color2(青)")
+    }
+
+    // MARK: 外縁(二重縁取り)
+
+    /// 行の画素を、色の名前の連なり(同じ色が続けば 1 つ)にする。どの色にも当たらない中間色は飛ばす。背景は緑にして、外側の黒を見えるようにする。
+    func colorRuns(_ px: Pixels, row y: Int, to x1: Int? = nil) -> [(name: String, length: Int)] {
+        func name(_ r: Int, _ g: Int, _ b: Int) -> String? {
+            if r + g + b < 60 { return "black" }
+            if r > 200, g > 200, b > 200 { return "white" }
+            if r > 200, g < 60, b < 60 { return "red" }
+            if r < 60, g < 60, b > 200 { return "blue" }
+            if r < 60, g > 200, b < 60 { return "green" }
+            return nil
+        }
+        var runs: [(name: String, length: Int)] = []
+        for x in 0..<(x1 ?? px.w) {
+            let c = px.rgb(x, y)
+            guard let n = name(c.r, c.g, c.b) else { continue }
+            if runs.last?.name == n { runs[runs.count - 1].length += 1 } else { runs.append((n, 1)) }
+        }
+        return runs
+    }
+
+    func isSubsequence(_ sub: [String], of seq: [String]) -> Bool {
+        var i = 0
+        for s in seq where i < sub.count && s == sub[i] { i += 1 }
+        return i == sub.count
+    }
+
+    /// 「I」の縦棒を、白い部分の重心の行で左から見る(縁取り色の赤と、外縁の黒の並び)。
+    func stemRow(_ px: Pixels) throws -> Int {
+        let c = try XCTUnwrap(px.centroid(where: isWhiteish))
+        return Int(c.y.rounded())
+    }
+
+    func testOuterBandSitsOutsideTheOutlineInOrder() throws {
+        var st = TextStyle(); st.outer = .init(color: "#000000", width: 0.04)
+        var c = textClip("I", size: 120, style: st); c.outline = "#ff0000"
+        let px = try render(c, bg: "#00ff00")
+        let runs = colorRuns(px, row: try stemRow(px), to: 300)
+        XCTAssertEqual(runs.map(\.name), ["green", "black", "red", "white"], "外側から 背景 → 黒の外縁 → 縁取り → 白の塗り")
+        // 帯の太さ = 大きさ × 0.04(120 × 0.04 ≒ 4.8px)。アンチエイリアスの端の分だけ幅を取る
+        let black = try XCTUnwrap(runs.first { $0.name == "black" })
+        XCTAssertTrue((2...8).contains(black.length), "黒帯 \(black.length)px")
+    }
+
+    func testNoOuterMeansNoBlackBand() throws {
+        var c = textClip("I", size: 120); c.outline = "#ff0000"
+        let px = try render(c, bg: "#00ff00")
+        let runs = colorRuns(px, row: try stemRow(px), to: 300)
+        XCTAssertEqual(runs.map(\.name), ["green", "red", "white"], "外縁なしは従来どおり、縁取りが背景に直接接する")
+        XCTAssertNil(runs.first { $0.name == "black" })
+    }
+
+    /// 描画の行ビットマップ(キャッシュの道)の端で切れていないこと。太い外縁(最大幅)で、帯が丸ごと出る。
+    func testCachedLineKeepsWholeOuterBand() throws {
+        var st = TextStyle(); st.outer = .init(color: "#000000", width: TextStyle.Outer.maxWidth)
+        var c = textClip("I", size: 120, style: st); c.outline = "#ff0000"
+        let px = try render(c, bg: "#00ff00")
+        let runs = colorRuns(px, row: try stemRow(px), to: 300)
+        let black = try XCTUnwrap(runs.first { $0.name == "black" })
+        // 帯は 120 × 0.08 ≒ 9.6px。余白が足りないと端で切れて 3px 程度になる
+        XCTAssertTrue((7...11).contains(black.length), "黒帯 \(black.length)px(切れていれば短い)")
+    }
+
+    func testOuterRoundTripAndOldFilesHaveNone() throws {
+        var st = TextStyle(); st.outer = .init(color: "#112233", width: 0.05)
+        let data = try project(textClip("a", style: st)).encoded()
+        let back = try Project.decode(from: data)
+        XCTAssertEqual(back.tracks[0].clips[0].textStyle?.outer, TextStyle.Outer(color: "#112233", width: 0.05))
+        XCTAssertEqual(try back.encoded(), data)
+        XCTAssertTrue(String(decoding: data, as: UTF8.self).contains("\"outer\""))
+        // キーの無い旧い JSON は outer = nil のまま読める
+        let old = try JSONDecoder().decode(TextStyle.self, from: Data(#"{"shadow":{"dx":2}}"#.utf8))
+        XCTAssertNil(old.outer)
+        // 外縁を使っていないスタイルには、外縁のキーを書かない
+        var plain = TextStyle(); plain.align = "left"
+        XCTAssertFalse(String(decoding: try project(textClip("a", style: plain)).encoded(), as: UTF8.self).contains("\"outer\""))
+    }
+
+    func testOuterOnlyStyleIsNotEmpty() {
+        var st = TextStyle(); st.outer = .init()
+        XCTAssertFalse(st.isEmpty, "外縁だけ設定したスタイルは空として落ちない")
+        var c = textClip("a")
+        XCTAssertTrue(TextStyleEditing.update(&c) { $0.outer = .init() })
+        XCTAssertEqual(c.textStyle?.outer, TextStyle.Outer())
+        XCTAssertTrue(TextStyleEditing.update(&c) { $0.outer = nil })
+        XCTAssertNil(c.textStyle, "外縁を外して何も無くなれば項目ごと消える")
+    }
+
+    func testOuterWidthAndColorAreClamped() throws {
+        let big = try JSONDecoder().decode(TextStyle.self, from: Data(#"{"outer":{"width":9,"color":"zzz"}}"#.utf8))
+        XCTAssertEqual(big.outer?.width, TextStyle.Outer.maxWidth)
+        XCTAssertEqual(big.outer?.color, "#000000")
+        let neg = try JSONDecoder().decode(TextStyle.self, from: Data(#"{"outer":{"width":-1}}"#.utf8))
+        XCTAssertEqual(neg.outer?.width, 0)
+    }
+
+    /// 字幕(ボイス)も、文字クリップと同じ道で外縁が出る。縁取りの色はキャラ色。
+    func testSubtitleGetsOuterBand() throws {
+        var ch = Character(); ch.id = "c1"; ch.color = "#ff0000"; ch.alwaysShow = false
+        var v = Clip(); v.type = .voice; v.start = 0; v.duration = 1; v.charId = "c1"; v.text = "あいう"; v.subtitle = true; v.fontSize = 60
+        var st = TextStyle(); st.outer = .init(color: "#0000ff", width: 0.04)
+        v.textStyle = st
+        var p = Project(); p.width = 600; p.height = 300; p.bg = "#00ff00"; p.characters = [ch]
+        var tr = Track(name: "L1"); tr.clips = [v]; p.tracks = [tr]
+        let px = pixels(try XCTUnwrap(Renderer(project: p, assets: RenderAssets()).renderImage(t: 0.5)))
+        let row = try stemRow(px)
+        let names = colorRuns(px, row: row).map(\.name)
+        XCTAssertTrue(isSubsequence(["blue", "red", "white"], of: names), "外縁(青)→ キャラ色の縁取り(赤)→ 白の塗り: \(names)")
+    }
+
+    func testHighlightPassDoesNotRepaintOuter() {
+        var st = TextStyle(); st.outer = .init()
+        XCTAssertNil(Renderer.highlightPassStyle(st)?.outer, "カラオケの重ね描きは外縁を描き直さない(最初の描きに任せる)")
     }
 
     // MARK: 字間・行間・揃え・太字・斜体

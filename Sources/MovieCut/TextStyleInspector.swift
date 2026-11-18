@@ -182,6 +182,16 @@ struct TextStyleInspector: View {
             }
             .padding(.leading, 10)
         }
+        // 外縁(縁取りのさらに外に、色の帯を 1 本。二重縁取り)
+        toggle("外側の縁（二重縁取り）", isOn: st.outer != nil, name: "外縁の変更") { $0.outer = $1 ? TextStyle.Outer() : nil }
+        if let o = st.outer {
+            VStack(alignment: .leading, spacing: 6) {
+                color("縁の色", hex: o.color, name: "外縁の色の変更") { $0.outer?.color = $1 }
+                slider("太さ（文字の大きさに対して）", value: o.widthOrDefault, range: 0...TextStyle.Outer.maxWidth, step: 0.01,
+                       format: { String(format: "%.2f", $0) }, name: "外縁の変更") { $0.outer?.width = $1 }
+            }
+            .padding(.leading, 10)
+        }
         // カラオケ字幕(文字クリップだけ。話している部分の色を、クリップの時間で増やす)
         if c.type == .text {
             toggle("カラオケ字幕（話した部分の色を変える）", isOn: st.highlight != nil, name: "カラオケ字幕の変更") { $0.highlight = $1 ? Highlight() : nil }

@@ -545,3 +545,30 @@ extension TimelineA6AppTests {
         XCTAssertEqual(AppMenuSpec.disabledReason(for: spec, state: s), "クリップを選んでください")
     }
 }
+
+// MARK: クリップ単位の消音
+extension TimelineA6AppTests {
+    func testClipMuteMenuToggleUndoAndDisabledForNonAudio() {
+        model.selectOnly("a")
+        var s = MenuState(model: model)
+        XCTAssertFalse(AppMenuSpec.clipMuteItem(s).enabled, "音の無い型は無効")
+        XCTAssertEqual(AppMenuSpec.disabledReason(for: AppMenuSpec.clipMuteItem(s), state: s), "音声・ボイス・動画・複合クリップを選んでください")
+        XCTAssertTrue(model.edit("音声にする") { p in
+            for ti in p.tracks.indices { for ci in p.tracks[ti].clips.indices where p.tracks[ti].clips[ci].id == "a" {
+                p.tracks[ti].clips[ci].type = .audio; p.tracks[ti].clips[ci].src = "/tmp/a.wav"
+            } }
+        })
+        let before = model.project
+        s = MenuState(model: model)
+        XCTAssertEqual(AppMenuSpec.clipMuteItem(s).title, "クリップを消音")
+        XCTAssertTrue(AppMenuSpec.clipMuteItem(s).enabled)
+        AppMenu.perform(.clipMute, model: model)
+        XCTAssertEqual(model.project.allClips.first { $0.id == "a" }?.muted, true)
+        XCTAssertEqual(um.undoActionName, "クリップの消音")
+        XCTAssertEqual(AppMenuSpec.clipMuteItem(MenuState(model: model)).title, "クリップの消音を解除")
+        AppMenu.perform(.clipMute, model: model)
+        XCTAssertNil(model.project.allClips.first { $0.id == "a" }?.muted)
+        XCTAssertEqual(um.undoActionName, "消音を解除")
+        XCTAssertEqual(model.project, before)
+    }
+}

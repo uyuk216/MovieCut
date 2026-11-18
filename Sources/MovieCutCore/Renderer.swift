@@ -477,10 +477,10 @@ public struct Renderer {
                  font: c.fontOrDefault, outline: "#000000", ctx: ctx, cacheable: false)
     }
 
-    /// カラオケの色つけの重ね描き用の装飾。字形と字間に関わる項目だけ残し、影・箱・グラデーションは最初の描きに任せる(二重に濃くしない)。
+    /// カラオケの色つけの重ね描き用の装飾。字形と字間に関わる項目だけ残し、影・箱・グラデーション・外縁は最初の描きに任せる(二重に濃くしない)。
     static func highlightPassStyle(_ s: TextStyle?) -> TextStyle? {
         guard var st = s else { return nil }
-        st.shadow = nil; st.box = nil; st.gradient = nil; st.highlight = nil
+        st.shadow = nil; st.box = nil; st.gradient = nil; st.outer = nil; st.highlight = nil
         return st
     }
 
@@ -845,7 +845,7 @@ public struct Renderer {
             }
             ctx.saveGState()
             ctx.translateBy(x: CGFloat(ox), y: CGFloat(baseline))
-            Renderer.paintLine(line, f, size: size, fill: fillC, outline: outC, ctx: ctx)
+            Renderer.paintLine(line, f, size: size, fill: fillC, outline: outC, ctx: ctx, style: style)
             ctx.restoreGState()
         }
         // ルビ: 行を全部描いたあとに、読みを親文字の上へ重ねる(見えている範囲の分だけ)
@@ -917,6 +917,11 @@ public struct Renderer {
         }
         // 疑似ボールドは輪郭を太らせる(各パスの線幅に extra を足す)
         let extra = f.syntheticBoldExtra
+        // 外縁(任意): 縁取りの外に色の帯を 1 本。線は中央に乗るので、縁取り(0.22)の外側に見える帯は size × width になる
+        if let o = style?.outer, o.widthOrDefault > 0, let oc = parseHexColor(o.color) {
+            ctx.addPath(line.path)
+            ctx.setLineWidth(CGFloat(size * (0.22 + 2 * o.widthOrDefault) + extra)); ctx.setStrokeColor(oc); ctx.strokePath()
+        }
         ctx.addPath(line.path)
         ctx.setLineWidth(CGFloat(size * 0.22 + extra)); ctx.setStrokeColor(outline); ctx.strokePath()
         ctx.addPath(line.path)
@@ -955,6 +960,8 @@ public struct Renderer {
         let bb = line.path.boundingBoxOfPath
         guard !bb.isNull, !bb.isInfinite else { return nil }
         var pad = (size * 0.22 + f.syntheticBoldExtra) / 2 + 3
+        // 外縁は最も太いストローク。ビットマップの端で切れないよう、その半分まで余白を広げる
+        if let o = style?.outer { pad = max(pad, (size * (0.22 + 2 * o.widthOrDefault) + f.syntheticBoldExtra) / 2 + 3) }
         if let sh = style?.shadow, sh.opacity > 0 { pad += max(abs(sh.dx), abs(sh.dy)) + sh.blur * 2 }
         // y 下向きの局所座標(原点 = 基準線の左端)
         let minX = floor(bb.minX - pad + fx), maxX = ceil(bb.maxX + pad + fx)

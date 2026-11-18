@@ -150,6 +150,7 @@ struct AppCommands: Commands {
                 Menu(L10n.t("音声")) { items(AppMenuSpec.audioItems(s), run) }
                 MenuItemView(spec: AppMenuSpec.sceneSplitItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.silenceCutItem(s), perform: run)
+                items(AppMenuSpec.rangeDeleteItems(s), run)
                 MenuItemView(spec: AppMenuSpec.audioAutoSyncItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.beatMarkersItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.scaleDuplicateItem(s), perform: run)

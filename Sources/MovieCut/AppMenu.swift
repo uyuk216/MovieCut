@@ -42,6 +42,8 @@ enum MenuCommand: Hashable {
     case aiScript, aiChapters, aiTitles, aiRewrite, aiSettings
     // 書き出し範囲(イン / アウト / 解除)と、静止画・連番画像の書き出し
     case rangeIn, rangeOut, rangeClear, exportStill, exportSequence
+    // 書き出し範囲の中身を全レイヤーから削除(リップルは後ろを詰める)
+    case rangeDelete, rangeRippleDelete
     // タイムラインの問い合わせ: 前後の空白(黒穴)へ・再生位置のクリップを選ぶ・短いクリップを選ぶ・選んだ範囲を書き出し範囲に
     case prevGap, nextGap, selectClipAtPlayhead, cycleOverlapping, selectShortClips, rangeFromSelection, speechShare
     // 選んだクリップの元素材の使用範囲(ソースの使用範囲)を表示し、その頭へ移す
@@ -67,6 +69,10 @@ enum MenuCommand: Hashable {
     // A6: クリップのコピー / 切り取り / 貼り付け / 全選択(ショートカットは持たない: ⌘C ⌘X ⌘V ⌘A は responder chain が受ける)と、レイヤー
     case copyClips, cutClips, pasteClips, selectAllClips, layerLock, layerSolo, layerTarget, layerDelete, layerHeight(LayerHeight)
     case clipLock
+    // クリップ ▸ クリップを消音 / 消音を解除(音のあるクリップと複合クリップ。ショートカットなし)
+    case clipMute
+    // クリップ ▸ 音声 ▸ 声として扱う / 声として扱うのをやめる(音声クリップ。BGM の自動ダッキングの引き金。ショートカットなし)
+    case treatAsVoice
     case split, delete, addText, addBlur, addAdjustment, addVisualizer, addQRCode, addCharacter, makeVoices
     // 図形(クリップ ▸ 図形を追加 ▸ 種類。ショートカットは持たない)
     case addShape(FigureKind)
@@ -268,6 +274,12 @@ struct MenuState: Equatable {
     var layerLocked = false
     /// 選んだクリップが全部ロック済み(メニューは「ロックを解除」になる)
     var clipsLocked = false
+    /// 選んだクリップに消音できるもの(音のある型・複合クリップ)があるか / それが全部消音済みか(メニューは「消音を解除」になる)
+    var canMuteClip = false
+    var clipsMuted = false
+    /// 選んだクリップに声として扱う指定ができるもの(音声クリップ)があるか / それが全部指定済みか(メニューは「声として扱うのをやめる」になる)
+    var canTreatAsVoice = false
+    var clipsTreatedAsVoice = false
     var layerSolo = false
     /// 対象のレイヤーがトラックターゲット(新しく足すクリップの行き先)
     var layerIsTarget = false
@@ -440,6 +452,10 @@ struct MenuState: Equatable {
             layerHeight = LayerHeight.of(m.project.tracks[li])
         }
         clipsLocked = LayerEditing.allClipsLocked(m.selectedClipIDs, in: m.project)
+        canMuteClip = ClipEditing.hasMutable(m.selectedClipIDs, in: m.project)
+        clipsMuted = ClipEditing.allMuted(m.selectedClipIDs, in: m.project)
+        canTreatAsVoice = ClipEditing.hasVoiceDesignatable(m.selectedClipIDs, in: m.project)
+        clipsTreatedAsVoice = ClipEditing.allTreatedAsVoice(m.selectedClipIDs, in: m.project)
         canSplit = m.canSplit
         canRoll = m.canRoll
         canSlip = m.canSlip
@@ -714,6 +730,12 @@ enum AppMenuSpec {
          MenuItemSpec(command: .rangeFromSelection, title: "選択クリップの範囲を書き出し範囲に", shortcut: nil, enabled: s.canEdit && s.canMarkRange && s.hasSelectionSpan, checked: nil, hint: "頭から終わりまで")]
     }
 
+    /// クリップ ▸ 範囲を削除 / 範囲をリップル削除(書き出し範囲のイン・アウトの間を全レイヤーから取り除く)。ショートカットは持たない。
+    static func rangeDeleteItems(_ s: MenuState) -> [MenuItemSpec] {
+        [MenuItemSpec(command: .rangeDelete, title: "範囲を削除", shortcut: nil, enabled: s.canEdit && s.canMarkRange && s.hasRange, checked: nil, hint: "イン点〜アウト点"),
+         MenuItemSpec(command: .rangeRippleDelete, title: "範囲をリップル削除", shortcut: nil, enabled: s.canEdit && s.canMarkRange && s.hasRange, checked: nil, hint: "後ろを詰める")]
+    }
+
     /// 出力 ▸ 現在のフレームを画像で書き出す… / 連番画像を書き出す…
     static func imageExportItems(_ s: MenuState) -> [MenuItemSpec] {
         [MenuItemSpec(command: .exportStill, title: "現在のフレームを画像で書き出す…", shortcut: nil, enabled: s.canEdit && s.canExport, checked: nil, hint: "PNG / JPEG"),
@@ -825,6 +847,7 @@ enum AppMenuSpec {
         [MenuItemSpec(command: .split, title: "クリップを分割", shortcut: nil, enabled: s.canEdit && s.canSplit, checked: nil, hint: "S"),
          MenuItemSpec(command: .duplicate, title: "クリップを複製", shortcut: cmd("d"), enabled: s.canEdit && s.hasSelection, checked: nil),
          clipLockItem(s),
+         clipMuteItem(s),
          fitTachie(s),
          MenuItemSpec(command: .delete, title: "クリップを削除", shortcut: nil, enabled: s.canEdit && s.hasSelection, checked: nil, hint: "⌫"),
          MenuItemSpec(command: .rippleDelete, title: "すき間を詰めて削除", shortcut: MenuShortcut(key: .delete, modifiers: [.option, .command]), enabled: s.canEdit && s.hasSelection, checked: nil),
@@ -845,6 +868,18 @@ enum AppMenuSpec {
     static func clipLockItem(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .clipLock, title: s.clipsLocked ? "クリップのロックを解除" : "クリップをロック", shortcut: nil,
                      enabled: s.canEdit && s.hasSelection, checked: nil, hint: "移動・トリム・分割・削除を防ぐ")
+    }
+
+    /// クリップ ▸ クリップを消音 / 消音を解除(選択の状態でラベルが変わる。ショートカットなし)。
+    static func clipMuteItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .clipMute, title: s.clipsMuted ? "クリップの消音を解除" : "クリップを消音", shortcut: nil,
+                     enabled: s.canEdit && s.canMuteClip, checked: nil, hint: "このクリップだけ鳴らさない")
+    }
+
+    /// クリップ ▸ 音声 ▸ 声として扱う / 声として扱うのをやめる(選択の状態でラベルが変わる。ショートカットなし)。
+    static func treatAsVoiceItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .treatAsVoice, title: s.clipsTreatedAsVoice ? "声として扱うのをやめる" : "声として扱う", shortcut: nil,
+                     enabled: s.canEdit && s.canTreatAsVoice, checked: nil, hint: "録音した話し声で BGM を下げる")
     }
 
     static func clipTrim(_ s: MenuState) -> [MenuItemSpec] {
@@ -1149,6 +1184,7 @@ enum AppMenuSpec {
                 MenuItemSpec(command: .audioVolumeUp, title: "音量を上げる（+3 dB）", shortcut: nil, enabled: on, checked: nil),
                 MenuItemSpec(command: .audioVolumeDown, title: "音量を下げる（−3 dB）", shortcut: nil, enabled: on, checked: nil),
                 MenuItemSpec(command: .audioDuckToggle, title: "自動ダッキングを切り替え（声があるとき BGM を下げる）", shortcut: nil, enabled: s.canEdit && s.canDuck, checked: s.canDuck ? s.isDucking : nil),
+                treatAsVoiceItem(s),
                 MenuItemSpec(command: .audioClear, title: "音声エフェクトをすべて外す", shortcut: nil, enabled: s.canEdit && s.hasAudioFx, checked: nil)]
     }
 
@@ -1298,7 +1334,7 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, checkForUpdates, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s), apngExport(s)] + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), clipListItem(s), noteListItem(s)] + scriptStoryboardItems(s) + [makeProxies(s)] + [] + clipMenu(s).flatMap { $0 } + multicamItems(s) + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textVerticalItem(s), textPerCharItem(s), textCounterItem(s), dictionaryItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [sceneSplitItem(s), silenceCutItem(s), audioAutoSyncItem(s), beatMarkersItem(s), scaleDuplicateItem(s), beatPlaceItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
+        [about, checkForUpdates, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s), apngExport(s)] + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), clipListItem(s), noteListItem(s)] + scriptStoryboardItems(s) + [makeProxies(s)] + [] + clipMenu(s).flatMap { $0 } + multicamItems(s) + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textVerticalItem(s), textPerCharItem(s), textCounterItem(s), dictionaryItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [sceneSplitItem(s), silenceCutItem(s)] + rangeDeleteItems(s) + [audioAutoSyncItem(s), beatMarkersItem(s), scaleDuplicateItem(s), beatPlaceItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerColorItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + guideItems(s) + [previewProxy(s), fullScreen(s)] + help.flatMap { $0 }
@@ -1389,6 +1425,8 @@ enum AppMenu {
             case .rangeIn: m.setRangeInAtCurrent()
             case .rangeOut: m.setRangeOutAtCurrent()
             case .rangeClear: m.clearExportRange()
+            case .rangeDelete: m.deleteRange(ripple: false)
+            case .rangeRippleDelete: m.deleteRange(ripple: true)
             case .rangeFromSelection: m.setRangeFromSelection()
             case .prevGap: m.seekGap(forward: false)
             case .nextGap: m.seekGap(forward: true)
@@ -1430,6 +1468,8 @@ enum AppMenu {
             case .pasteClips: m.pasteClips()
             case .selectAllClips: m.selectAllClips()
             case .clipLock: m.toggleClipLockSelected()
+            case .clipMute: m.toggleClipMuteSelected()
+            case .treatAsVoice: m.toggleTreatAsVoiceSelected()
             case .layerLock: if let i = m.targetLayerIndex { m.toggleLayerLock(i) }
             case .layerSolo: if let i = m.targetLayerIndex { m.toggleLayerSolo(i) }
             case .layerTarget: if let i = m.targetLayerIndex { m.toggleTrackTarget(i) }

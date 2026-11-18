@@ -122,6 +122,37 @@ final class SilenceDuckAppTests: XCTestCase {
         XCTAssertEqual(k0, AudioCacheKey.make(for: p, fileDate: date))
     }
 
+    func testTreatAsVoiceChangesPlaybackMixKey() {
+        var p = makeModel([clip("bgm", .audio, start: 0, dur: 5), clip("rec", .audio, start: 1, dur: 2)]).project
+        p.tracks[0].clips[0].duck = Duck()
+        let date: (String) -> Date? = { _ in Date(timeIntervalSinceReferenceDate: 1000) }
+        let k0 = AudioCacheKey.make(for: p, fileDate: date)
+        p.tracks[0].clips[1].treatAsVoice = true
+        let k1 = AudioCacheKey.make(for: p, fileDate: date)
+        XCTAssertNotEqual(k0, k1, "指定のオン/オフでダッキングが変わるので鍵も変わる")
+        p.tracks[0].clips[1].treatAsVoice = nil
+        XCTAssertEqual(k0, AudioCacheKey.make(for: p, fileDate: date))
+    }
+
+    func testTreatAsVoiceMenuToggleAndUndo() {
+        let m = makeModel([clip("bgm", .audio, start: 0, dur: 5), clip("v", .voice, start: 1, dur: 2)])
+        m.selectOnly("v")
+        XCTAssertFalse(AppMenuSpec.treatAsVoiceItem(MenuState(model: m)).enabled, "ボイスは対象外")
+        XCTAssertEqual(AppMenuSpec.disabledReason(for: AppMenuSpec.treatAsVoiceItem(MenuState(model: m)), state: MenuState(model: m)), "音声クリップを選んでください(ボイス・動画は対象外。ロックされたものは不可)")
+        m.selectOnly("bgm")
+        let before = undoSteps(m)
+        XCTAssertEqual(AppMenuSpec.treatAsVoiceItem(MenuState(model: m)).title, "声として扱う")
+        AppMenu.perform(.treatAsVoice, model: m)
+        XCTAssertEqual(m.clip("bgm")?.treatAsVoice, true)
+        XCTAssertEqual(undoSteps(m), before + 1)
+        XCTAssertEqual(AppMenuSpec.treatAsVoiceItem(MenuState(model: m)).title, "声として扱うのをやめる")
+        AppMenu.perform(.treatAsVoice, model: m)
+        XCTAssertNil(m.clip("bgm")?.treatAsVoice)
+        XCTAssertEqual(undoSteps(m), before + 2)
+        XCTAssertTrue(m.setTreatedAsVoice(ids: ["bgm"], true))
+        XCTAssertFalse(m.setTreatedAsVoice(ids: ["bgm"], true), "変わらないときは何もしない")
+    }
+
     // MARK: 無音カットの操作
 
     func writeWav(_ name: String, segments: [(Double, Float)]) throws -> String {

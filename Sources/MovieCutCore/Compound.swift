@@ -142,7 +142,7 @@ public enum CompoundEditing {
 
     /// 音声の混ぜ用: レイヤーの消音・ソロ(`Project.isAudible`)を見て、音の出るクリップを、複合クリップの中まで平らにした列にする。
     /// 返すクリップの `start` は、プロジェクトの頭からの絶対時刻(複合クリップの中のものは親の頭を足す)。
-    /// 中身の消音・ソロは、その複合クリップの中のレイヤーの間だけで決める。深すぎる・循環する複合クリップは混ぜない。
+    /// 消音したクリップ(`Clip.isMuted`)は除く。中身の消音・ソロは、その複合クリップの中のレイヤーの間だけで決める。深すぎる・循環する複合クリップは混ぜない。
     public static func audibleClips(in p: Project) -> [Clip] {
         var out: [Clip] = []
         for tr in p.tracks where p.isAudible(tr) {
@@ -153,6 +153,7 @@ public enum CompoundEditing {
 
     private static func flatten(_ clips: [Clip], base: Double?, stack: Set<String>, into out: inout [Clip]) {
         for c in clips {
+            if c.isMuted { continue }   // クリップ単位の消音は絶対(複合クリップ自身なら中身ごと。レイヤーのソロでも鳴らさない)
             if c.type == .compound {
                 guard stack.count < maxDepth, !stack.contains(c.id) else { continue }
                 let abs = base.map { grid($0 + c.start) } ?? c.start
