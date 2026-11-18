@@ -103,6 +103,22 @@ public struct VoicevoxClient {
         try FileManager.default.moveItem(at: tmp, to: out)
         return out
     }
+
+    /// 読み取り専用: 同じ設定で /audio_query を 1 回だけ叩き、モーラの発音タイミングを返す(合成・キャッシュには触らない)。
+    /// 設定の既定値は `synthesize` と同じ。
+    public func moraTimeline(text: String, speaker: Int, speed: Double? = nil, pitch: Double? = nil, intonation: Double? = nil, pre: Double? = nil, post: Double? = nil, pause: Double? = nil) async throws -> [TimedViseme] {
+        var qreq = URLRequest(url: try url("/audio_query?text=\(Self.encode(text))&speaker=\(speaker)"))
+        qreq.httpMethod = "POST"
+        let qdata = try await send(qreq, "audio_query")
+        guard var query = try JSONSerialization.jsonObject(with: qdata) as? [String: Any] else { throw VoiceError.badResponse("audio_query") }
+        query["speedScale"] = speed ?? 1
+        query["pitchScale"] = pitch ?? 0
+        query["intonationScale"] = intonation ?? 1
+        query["prePhonemeLength"] = pre ?? Self.defaultPrePhonemeLength
+        query["postPhonemeLength"] = post ?? Self.defaultPostPhonemeLength
+        query["pauseLengthScale"] = pause ?? Self.defaultPauseLengthScale
+        return VoicevoxMora.parse(query)
+    }
 }
 
 /// VOICEVOX.app 同梱のエンジンを画面なしで起動する(startVoicevox 相当)。自分で起動したものだけ shutdown で止める。

@@ -9,6 +9,8 @@ public final class RenderAssets {
     private let lock = NSLock()
     private var images: [String: CGImage] = [:]
     private var missingImages: Set<String> = []
+    /// パス → アニメーション画像のタイミング(nil = アニメーション無し。静止画・読めないファイルも覚えて毎回開かない)。
+    private var animationTimings: [String: AnimatedImageTiming?] = [:]
     private var envelopes: [String: [Float]] = [:]
     private var mouthStateCache: [String: [Bool]] = [:]
     private var visemeCache: [String: [Viseme]?] = [:]
@@ -129,6 +131,46 @@ public final class RenderAssets {
         return img
     }
 
+    /// アニメーション画像のタイミング。静止画(1 コマ)・読めないファイルは nil(結果もキャッシュして毎回開かない)。
+    public func animationTiming(at path: String) -> AnimatedImageTiming? {
+        lock.lock()
+        if let t = animationTimings[path] { lock.unlock(); return t }
+        lock.unlock()
+        let t = AnimatedImage.timing(atPath: path)
+        lock.lock(); animationTimings[path] = .some(t); lock.unlock()
+        return t
+    }
+
+    /// アニメーション画像の `frameIndex` コマ目。0 コマ目は `image(at:)` と同じ結果・同じキャッシュ(静止画の経路は変えない)。
+    /// 範囲外の番号は nil。コマごとに覚え、メモリ予算にも載せる。
+    public func image(at path: String, frameIndex: Int) -> CGImage? {
+        if frameIndex <= 0 { return image(at: path) }
+        let key = "\(path)\u{1e}frame\(frameIndex)"
+        lock.lock()
+        if let i = images[key] { budget?.touch(budgetKey("image", key)); lock.unlock(); return i }
+        if missingImages.contains(key) { lock.unlock(); return nil }
+        let url = URL(fileURLWithPath: path)
+        guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),
+              frameIndex < CGImageSourceGetCount(src),
+              let img = CGImageSourceCreateImageAtIndex(src, frameIndex, nil) else {
+            missingImages.insert(key)
+            lock.unlock()
+            return nil
+        }
+        images[key] = img
+        let mgr = budget
+        lock.unlock()
+        let cost = img.bytesPerRow > 0 ? img.bytesPerRow * img.height : img.width * img.height * 4
+        registerBudget(mgr, key: budgetKey("image", key), cost: cost) { $0.images[key] = nil }
+        return img
+    }
+
+    /// 立ち絵用: クリップ内時刻 `elapsed`(秒)にそのパスが出すコマの画像。静止画は `image(at:)` と同じ。
+    public func tachieImage(at path: String, elapsed: Double) -> CGImage? {
+        guard let timing = animationTiming(at: path) else { return image(at: path) }
+        return image(at: path, frameIndex: timing.frameIndex(at: elapsed))
+    }
+
     /// 口パク用のエンベロープ: チャンネル 0 の 1/60 秒ごとの RMS(renderer.js getBuffer と同じ)。
     public func mouthEnvelope(for path: String) -> [Float]? {
         lock.lock()
@@ -161,14 +203,26 @@ public final class RenderAssets {
 
     /// あいうえお口パク: コマ(1/60 秒)ごとの口の形。セリフの文字・音声・使う範囲が同じならキャッシュを返す。作れなければ nil。
     public func visemes(src: String, text: String, offset: Double, duration: Double) -> [Viseme]? {
-        let key = "\(src)|\(offset)|\(duration)|\(text)"
+        // サイドカー(VOICEVOX のモーラタイミング)があれば優先。更新時刻をキーに含め、有無・差し替えがキャッシュへ反映される
+        let sidecar = VoicevoxMora.sidecarURL(forWav: src)
+        let stamp = (try? FileManager.default.attributesOfItem(atPath: sidecar.path)[.modificationDate] as? Date)?.timeIntervalSince1970
+        let key = "\(src)|\(offset)|\(duration)|\(text)" + (stamp.map { "|vv\($0)" } ?? "")
         lock.lock()
         if let c = visemeCache[key] { budget?.touch(budgetKey("viseme", key)); lock.unlock(); return c }
         lock.unlock()
         var result: [Viseme]? = nil
         if let env = mouthEnvelope(for: src) {
             let lo = Int(floor(offset * LipSync.envelopeRate)), hi = Int(ceil((offset + duration) * LipSync.envelopeRate))
-            result = LipSync.frames(moras: LipSync.moras(of: text), envelope: env, range: lo..<max(lo, hi))
+            if stamp != nil, let data = try? Data(contentsOf: sidecar), let segs = VoicevoxMora.decodeSidecar(data) {
+                let clo = max(0, lo), chi = min(env.count, max(lo, hi))
+                if clo < chi {
+                    var frames = LipSync.timedFrames(segments: segs, frameCount: env.count)
+                    for k in 0..<env.count where k < clo || k >= chi { frames[k] = .closed }
+                    result = frames
+                }
+            } else {
+                result = LipSync.frames(moras: LipSync.moras(of: text), envelope: env, range: lo..<max(lo, hi))
+            }
         }
         lock.lock(); visemeCache[key] = .some(result); let mgr = budget; lock.unlock()
         registerBudget(mgr, key: budgetKey("viseme", key), cost: (result?.count ?? 0) * 64) { $0.visemeCache[key] = nil }

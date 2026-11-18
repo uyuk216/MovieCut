@@ -20,6 +20,8 @@ extension Renderer {
         let drive = c.mouthDriveOrDefault
         let v: Clip? = drive == .none ? nil : drive.driver(among: activeVoices(at: t))
         if v == nil && c.speakingOnly == true { return nil }
+        // 動く立ち絵: クリップ内時刻(負は 0)。選ばれたパスがアニメーション画像ならこの時刻のコマを出す
+        let elapsed = max(0, t - c.start)
         var seedBase = c.id
         if case .character(let id) = drive { seedBase = id }
 
@@ -51,10 +53,12 @@ extension Renderer {
             let tag = v.flatMap { ExpressionTag.split($0.text ?? "").tag }
             let active = rig.resolvedActive(expression: tag, mouth: mouth, blinking: isBlink)
             let paths = rig.paths(active: active)
-            guard let f = assets.rigCache.frame(paths: paths, height: max(16, Int(h.rounded())), offsets: rig.offsets(for: paths), alignment: rig.alignmentOrDefault) else { return nil }
+            // 動くパーツ(GIF など)は、全パーツ同じクリップ内時刻でコマを決める(静止画は常に 0 = 従来どおり)
+            let frames = paths.map { assets.animationTiming(at: $0)?.frameIndex(at: elapsed) ?? 0 }
+            guard let f = assets.rigCache.frame(paths: paths, height: max(16, Int(h.rounded())), offsets: rig.offsets(for: paths), alignment: rig.alignmentOrDefault, frames: frames) else { return nil }
             img = f
         } else {
-            guard let p = path, let i = assets.image(at: p), i.height > 0 else { return nil }
+            guard let p = path, let i = assets.tachieImage(at: p, elapsed: elapsed), i.height > 0 else { return nil }
             img = i
         }
         guard img.height > 0 else { return nil }

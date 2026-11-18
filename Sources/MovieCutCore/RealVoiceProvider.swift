@@ -41,6 +41,13 @@ public final class RealVoiceProvider: VoiceProvider {
             }
             url = try await voicevox.synthesize(text: text, speaker: character.speaker ?? 3, speed: character.speed, pitch: character.pitch, intonation: character.intonation, prePhonemeLength: character.prePhonemeLength, postPhonemeLength: character.postPhonemeLength, pauseLengthScale: character.pauseLengthScale)
             lock.withLock { _ = enginesUsed.insert("voicevox") }
+            // あいうえお口パク用のモーラタイミングをサイドカーへ(ベストエフォート。失敗しても合成には影響しない)
+            let sidecar = VoicevoxMora.sidecarURL(forWav: url.path)
+            if !FileManager.default.fileExists(atPath: sidecar.path),
+               let segs = try? await voicevox.moraTimeline(text: text, speaker: character.speaker ?? 3, speed: character.speed, pitch: character.pitch, intonation: character.intonation, pre: character.prePhonemeLength, post: character.postPhonemeLength, pause: character.pauseLengthScale),
+               !segs.isEmpty, let data = VoicevoxMora.encodeSidecar(segs) {
+                try? data.write(to: sidecar, options: .atomic)
+            }
         } else {
             url = try await aquestalk.synthesize(text: text, voice: character.voice, speed: character.speed)
             lock.withLock { _ = enginesUsed.insert(usingFallback ? "say" : "aquestalk") }

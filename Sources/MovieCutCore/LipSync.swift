@@ -46,7 +46,9 @@ public enum LipSync {
         moras(ofHiragana: hiragana(of: ExpressionTag.body(text)))
     }
 
-    public static func moras(ofHiragana s: String) -> [Viseme] {
+    /// カタカナの入力はひらがなへ正規化してから数える(拗音・小さい文字・ッ・ン・ー もひらがな版と同じ規則)。ひらがな入力の結果は変わらない。
+    public static func moras(ofHiragana input: String) -> [Viseme] {
+        let s = input.applyingTransform(.hiraganaToKatakana, reverse: true) ?? input
         var out: [Viseme] = []
         var prev: Swift.Character? = nil
         let pureVowels = Set("あいうえお")
