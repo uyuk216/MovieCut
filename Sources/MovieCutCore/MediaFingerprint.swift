@@ -87,9 +87,11 @@ public enum MediaFingerprintCollector {
     }
 
     /// プロジェクトにフィンガープリントを埋め込んだコピーを返す(元は変更しない)。
-    public static func attaching(to project: Project, projectDir: String? = nil) -> Project {
+    /// `compute` を差し替えると、キャッシュ経由などでハッシュの計算を省ける。
+    public static func attaching(to project: Project, projectDir: String? = nil,
+                                 compute: (String) -> MediaFingerprint? = { MediaFingerprint.compute(atPath: $0) }) -> Project {
         var p = project
-        p.mediaFingerprints = collect(from: project, projectDir: projectDir)
+        p.mediaFingerprints = collect(from: project, projectDir: projectDir, compute: compute)
         return p
     }
 }
