@@ -683,7 +683,7 @@ struct ClipInspector: View {
     /// 速度ランプ(時間で速さが変わる)の点の一覧。点ごとに時刻(クリップの頭から)と速度を直せる。どの操作も Undo は 1 回。
     @ViewBuilder private func rampSection(_ c: Clip) -> some View {
         if let pts = c.rampPoints {
-            Text("速度ランプ（点のあいだは速度を直線でつなぎます。音は音程が速度に従います）")
+            Text("速度ランプ（点のあいだは各点の進み方でつなぎます。音は音程が速度に従います）")
                 .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             ForEach(Array(pts.enumerated()), id: \.offset) { i, p in
                 HStack(spacing: 6) {
@@ -697,6 +697,13 @@ struct ClipInspector: View {
                              clamp: { ClipTiming.clampSpeed($0) },
                              onCommit: { v in model.setSpeedRampPoint(clipId: clipId, index: i, v: v) },
                              onStep: { v in model.setSpeedRampPoint(clipId: clipId, index: i, v: v) })
+                    if i < pts.count - 1 {
+                        Picker("", selection: Binding(get: { p.ease }, set: { model.setSpeedRampEase(clipId: clipId, index: i, ease: $0) })) {
+                            ForEach(Ease.presets, id: \.ease) { preset in Text(preset.label).tag(preset.ease) }
+                            if !Ease.presets.contains(where: { $0.ease == p.ease }) { Text("カスタム").tag(p.ease) }
+                        }
+                        .labelsHidden().fixedSize().help("この点から次の点までの進み方（イージング）")
+                    }
                     Button("削除") { model.removeSpeedRampPoint(clipId: clipId, index: i) }
                         .disabled(pts.count <= 2)
                 }

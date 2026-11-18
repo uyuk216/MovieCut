@@ -62,6 +62,16 @@ extension ProjectModel {
         }
     }
 
+    /// 点のイージング(その点から次の点までの進み方)を変える。最後の点は次の区間が無いので変えない。1 回の Undo。
+    @discardableResult
+    func setSpeedRampEase(clipId: String, index: Int, ease: Ease) -> Bool {
+        changeSpeedRamp(clipId: clipId, name: Self.rampUndoName) { c in
+            guard var pts = c.rampPoints, pts.indices.contains(index), index < pts.count - 1 else { return c.rampPoints }
+            pts[index].ease = ease
+            return pts
+        }
+    }
+
     /// フレームブレンドの on/off(動画だけ。1 回の Undo)。オンは「ブレンド」、オフは「なし」(オプティカルフローも外れる)。
     @discardableResult
     func setFrameBlend(_ on: Bool, clipId: String) -> Bool {

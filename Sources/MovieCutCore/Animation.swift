@@ -69,6 +69,71 @@ public enum Ease: Equatable, Hashable, Sendable, Codable {
         }
     }
 
+    /// 進み具合の積分 ∫₀ᵘ apply(w) dw(速度ランプの積分に使う)。linear は u²/2、hold は 0(区間の終わりまで 0 のまま)。
+    /// ベジェは `cubicBezierIntegral` で解析的に積分する。
+    public func integral(_ u: Double) -> Double {
+        if !(u > 0) { return 0 }
+        let x = min(u, 1)
+        switch self {
+        case .linear: return x * x / 2
+        case .hold: return 0
+        case .easeIn: return Self.cubicBezierIntegral(0.42, 0, 1, 1, upTo: x)
+        case .easeOut: return Self.cubicBezierIntegral(0, 0, 0.58, 1, upTo: x)
+        case .easeInOut: return Self.cubicBezierIntegral(0.42, 0, 0.58, 1, upTo: x)
+        case .bezier(let a, let b, let c, let d): return Self.cubicBezierIntegral(a, b, c, d, upTo: x)
+        }
+    }
+
+    /// x = u になる媒介変数 σ(0〜1)。`cubicBezier` と同じ解き方(ニュートン法、だめなら二分法)。
+    public static func cubicBezierParameter(_ x1: Double, _ x2: Double, _ x: Double) -> Double {
+        if !(x > 0) { return 0 }
+        if x >= 1 { return 1 }
+        func bez(_ p1: Double, _ p2: Double, _ s: Double) -> Double {
+            let m = 1 - s
+            return 3 * m * m * s * p1 + 3 * m * s * s * p2 + s * s * s
+        }
+        func slope(_ p1: Double, _ p2: Double, _ s: Double) -> Double {
+            let m = 1 - s
+            return 3 * m * m * p1 + 6 * m * s * (p2 - p1) + 3 * s * s * (1 - p2)
+        }
+        var s = x
+        for _ in 0..<8 {
+            let err = bez(x1, x2, s) - x
+            if abs(err) < 1e-9 { return s }
+            let d = slope(x1, x2, s)
+            if abs(d) < 1e-6 { break }
+            s -= err / d
+            if s < 0 || s > 1 { break }
+        }
+        var lo = 0.0, hi = 1.0
+        s = x
+        for _ in 0..<60 {
+            let v = bez(x1, x2, s)
+            if abs(v - x) < 1e-9 { break }
+            if v < x { lo = s } else { hi = s }
+            s = (lo + hi) / 2
+        }
+        return s
+    }
+
+    /// ∫₀^x y dx の閉じた形。x(σ)・y(σ) はどちらも B(σ) = 3p1 σ + (3p2 − 6p1) σ² + (3p1 − 3p2 + 1) σ³ という
+    /// 3 次多項式なので、∫ y(σ) x'(σ) dσ は 6 次までの多項式の積分になる(σ は `cubicBezierParameter` で求める)。
+    public static func cubicBezierIntegral(_ x1: Double, _ y1: Double, _ x2: Double, _ y2: Double, upTo x: Double) -> Double {
+        if !(x > 0) { return 0 }
+        let s = cubicBezierParameter(x1, x2, min(x, 1))
+        let ax = 3 * x1, bx = 3 * x2 - 6 * x1, cx = 3 * x1 - 3 * x2 + 1
+        let ay = 3 * y1, by = 3 * y2 - 6 * y1, cy = 3 * y1 - 3 * y2 + 1
+        // y(σ) x'(σ) の係数(σ¹〜σ⁵)。x'(σ) = ax + 2bx σ + 3cx σ²
+        let d0 = ax, d1 = 2 * bx, d2 = 3 * cx
+        let c1 = ay * d0
+        let c2 = ay * d1 + by * d0
+        let c3 = ay * d2 + by * d1 + cy * d0
+        let c4 = by * d2 + cy * d1
+        let c5 = cy * d2
+        let s2 = s * s, s3 = s2 * s, s4 = s3 * s, s5 = s4 * s, s6 = s5 * s
+        return c1 * s2 / 2 + c2 * s3 / 3 + c3 * s4 / 4 + c4 * s5 / 5 + c5 * s6 / 6
+    }
+
     /// CSS の cubic-bezier(x1, y1, x2, y2): x = u になる媒介変数を解いて、そのときの y を返す。
     /// ニュートン法(傾きが小さすぎるときは二分法)で 1e-7 以内まで解く。
     public static func cubicBezier(_ x1: Double, _ y1: Double, _ x2: Double, _ y2: Double, _ x: Double) -> Double {
