@@ -107,10 +107,12 @@ struct MovieCutApp: App {
     init() {
         AppWindowPolicy.disableTabbing()
         DebugHooks.suppressStateRestorationIfDebugging()
-        // 利用者が追加したフォントを登録し、テキストのフォント一覧に出す(Application Support/MovieCut/Fonts)
+        // 利用者が追加したフォントを登録し、Mac のフォントと合わせて一覧に出す
         let fontDir = FontLibrary.defaultDirectory()
         FontLibrary.registerAll(in: fontDir)
-        FontChoices.userFamilies = FontLibrary.families(in: fontDir)
+        FontChoices.userFamilies = Set(
+            FontLibrary.families(in: fontDir) + NSFontManager.shared.availableFontFamilies
+        ).filter { !$0.hasPrefix(".") }.sorted()
     }
 
     var body: some Scene {
