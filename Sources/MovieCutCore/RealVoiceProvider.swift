@@ -82,10 +82,29 @@ extension ScriptTimeline {
     public static func regenerateVoice(clip: inout Clip, project: Project, provider: VoiceProvider, directory: URL = FileManager.default.temporaryDirectory) async throws {
         guard let ch = project.characters.first(where: { $0.id == (clip.charId ?? "") }) else { return }
         let voice = DictionaryVoiceProvider(inner: provider, entries: project.readingDictionary)
-        let r = try await voice.synthesize(character: ch, text: ExpressionTag.body(clip.text ?? ""), in: directory)
+        let body = ExpressionTag.body(clip.text ?? "")
+        let r: VoiceResult
+        if let accent = clip.voicevoxAccent, !accent.isEmpty,
+           shouldUseAccent(bodyText: body, entries: project.readingDictionary),
+           provider is any VoicevoxAccentProviding {
+            r = try await voice.synthesizeWithAccent(character: ch, text: body, accentPhrases: accent, in: directory)
+        } else {
+            r = try await voice.synthesize(character: ch, text: body, in: directory)
+        }
         clip.src = r.url.path
         clip.duration = clipDuration(forAudio: r.duration)
         clip.offset = 0
+    }
+}
+
+extension ScriptTimeline {
+    /// 保存済みアクセントを再合成に使ってよいか(純粋関数)。
+    /// 辞書を適用した後のテキストが元のテキストと完全一致するときだけ true。
+    /// 辞書で読み上げ文が変わったら false を返し、呼び出し側はアクセントを使わず通常合成に落とす。
+    /// 落とす理由: アクセント句は元のテキストの解析結果で、VOICEVOX のモーラはカナ表記のため漢字まじりの
+    /// テキストと直接照合できない。緩い検証では句とのずれを検出できないので、変換が入ったら使わないと決めた。
+    public static func shouldUseAccent(bodyText: String, entries: [ReadingEntry]) -> Bool {
+        entries.isEmpty || ReadingDictionary.apply(to: bodyText, entries: entries) == bodyText
     }
 }
 
