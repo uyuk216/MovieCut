@@ -44,8 +44,9 @@ final class ProjectDocument: ReferenceFileDocument {
     }
 
     func snapshot(contentType: UTType) throws -> Data {
-        // 主スレッド以外から呼ばれる(保存中は主スレッドが待っている)ので、写しから作る
-        try model.mirror.get().encoded()
+        // 主スレッド以外から呼ばれる(保存中は主スレッドが待っている)ので、写しから作る。
+        // 素材のフィンガープリントもここで最新にする(キャッシュで変わったものだけハッシュし直す)
+        try ProjectModel.encodeForSave(model.mirror.get(), folder: model.mirror.projectFolder, cache: model.fingerprintCache)
     }
 
     func fileWrapper(snapshot: Data, configuration: WriteConfiguration) throws -> FileWrapper {

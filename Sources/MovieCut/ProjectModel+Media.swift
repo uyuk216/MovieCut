@@ -77,6 +77,12 @@ extension ProjectModel {
         return r.relinked
     }
 
+    /// 保存データを作る(主スレッドを待たない。保存も自動保存も、この形で符号化する)。
+    /// 素材のフィンガープリントを最新にしてから符号化する。編集中のプロジェクトは変えない。
+    nonisolated static func encodeForSave(_ p: Project, folder: String?, cache: MediaFingerprintCache) throws -> Data {
+        try MediaFingerprintCollector.attaching(to: p, projectDir: folder, compute: cache.fingerprint(atPath:)).encoded()
+    }
+
     /// ファイル ▸ パッケージとして保存…: 親フォルダを選び、その中に「<書類名> パッケージ」を作って
     /// プロジェクトと使っている素材(media/)を入れる。今の書類は変えない。
     func saveAsPackage() {

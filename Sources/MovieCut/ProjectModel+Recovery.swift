@@ -99,8 +99,9 @@ extension ProjectModel {
         let snapshot = savedProject
         let name = documentName, path = fileURL?.path, sessionID = recoverySessionID
         let epoch = recoveryEpoch
+        let folder = mirror.projectFolder, cache = fingerprintCache
         let work: @Sendable () -> Bool = {
-            guard let data = try? snapshot.encoded() else { return false }
+            guard let data = try? ProjectModel.encodeForSave(snapshot, folder: folder, cache: cache) else { return false }
             let entry = AutosaveRecovery.Entry(name: name, originalPath: path, savedAt: Date(), project: data)
             return AutosaveRecovery.write(entry, sessionID: sessionID, in: directory)
         }

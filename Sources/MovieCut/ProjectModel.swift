@@ -90,12 +90,16 @@ final class ProjectMirror: @unchecked Sendable {
     private let lock = NSLock()
     private var value: Project
     private var script: String
+    private var folder: String?
     init(_ p: Project) { value = p; script = p.scriptText }
     /// タイムラインの編集(台本の文字は変えない。台本は `setScript` が持つ)。
     func set(_ p: Project) { lock.withLock { value = p } }
     func setScript(_ s: String) { lock.withLock { script = s } }
     /// 保存する中身: 編集の最新 + 台本の最新。
     func get() -> Project { lock.withLock { var p = value; p.scriptText = script; return p } }
+    /// 保存先のフォルダ(相対パスの素材の基準)。未保存の書類は nil。
+    func setFolder(_ f: String?) { lock.withLock { folder = f } }
+    var projectFolder: String? { lock.withLock { folder } }
 }
 
 /// 1 つのドキュメントの状態。すべての編集は `edit(_:_:)` を通し、UndoManager に登録する(Project 全体のスナップショット式)。
@@ -118,6 +122,8 @@ final class ProjectModel: ObservableObject {
     /// 書類全体(中に入っていても根を返す。保存・Undo・書き出しの単位)。
     var rootProject: Project { compoundPath.isEmpty ? project : (scopeRoot ?? project) }
     nonisolated let mirror: ProjectMirror
+    /// 保存・自動保存のときの素材フィンガープリントの記録(ハッシュの読み直しを減らす)。保存の写しを作る側からも読める。
+    nonisolated let fingerprintCache = MediaFingerprintCache()
     private(set) var projectRevision = 0
     /// 自動保存(復元の写し)の持ち主の番号と、最後に写したときの版・タイマー。
     let recoverySessionID = UUID().uuidString
@@ -273,8 +279,10 @@ final class ProjectModel: ObservableObject {
     /// 増やすと、同じ時刻でもプレビューを描き直す(再生を止めたとき)。
     @Published var previewEpoch = 0
 
-    /// 保存先(ドキュメントから渡される。無題なら nil)。
-    var fileURL: URL?
+    /// 保存先(ドキュメントから渡される。無題なら nil)。フォルダは保存の写し(主スレッド以外から読む)にも渡す。
+    var fileURL: URL? {
+        didSet { mirror.setFolder(fileURL?.deletingLastPathComponent().path) }
+    }
     /// 開いたときの「欠けた素材」案内を出したか(書類ごとに 1 回だけ)。
     var offeredMissingMediaOnOpen = false
     /// 新しい版の形式のファイルを開いたときの、開いたままの中身(最初の保存の前に世代バックアップへ残す)。バックアップ済み・通常のファイルは nil。
