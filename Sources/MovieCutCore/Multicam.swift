@@ -49,7 +49,7 @@ public enum Multicam {
 
     /// 角度にできるクリップか(素材のある映像で、速度変更・逆再生・フリーズ・速度ランプがない)。
     public static func isAngleCandidate(_ c: Clip) -> Bool {
-        c.type == .video && SilenceDetector.supports(c) && !c.isFreeze && c.effectiveSpeed == 1
+        c.type == .video && SilenceDetector.supportsOneToOne(c) && !c.isFreeze && c.effectiveSpeed == 1
     }
 
     /// 選択から、基準を先頭にした角度の元クリップの並び(頭の早い順、同じなら下のレイヤー順)。作れなければ nil。

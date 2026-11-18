@@ -109,10 +109,11 @@ final class SilenceTests: XCTestCase {
 
     func testAnalyzeUnsupportedReturnsNil() throws {
         let path = try writeWav("x.wav", segments: [(1, 0.3)])
-        var fast = audioClip(path, duration: 1); fast.speed = 2
-        XCTAssertNil(SilenceDetector.analyze(clip: fast))
+        // 速度・逆再生は対応したので解析できる(速度 2 で素材 1 秒を使うには duration 0.5)
+        var fast = audioClip(path, duration: 0.5); fast.speed = 2; fast.srcDuration = 1
+        XCTAssertNotNil(SilenceDetector.analyze(clip: fast))
         var rev = audioClip(path, duration: 1); rev.reverse = true
-        XCTAssertNil(SilenceDetector.analyze(clip: rev))
+        XCTAssertNotNil(SilenceDetector.analyze(clip: rev))
         XCTAssertNil(SilenceDetector.analyze(clip: audioClip("/tmp/__no_such_file__.wav", duration: 1)))
         var img = Clip(); img.type = .image; img.src = path; img.duration = 1
         XCTAssertFalse(SilenceDetector.supports(img))
@@ -178,8 +179,6 @@ final class SilenceTests: XCTestCase {
         XCTAssertNil(ClipEditing.removeSilence(in: p, clipId: "main", cuts: [SilenceRange(start: 5, end: 6)], ripple: true), "クリップの外")
         XCTAssertNil(ClipEditing.removeSilence(in: p, clipId: "main", cuts: [SilenceRange(start: 0, end: 4)], ripple: true), "全部が無音なら切らない")
         XCTAssertNil(ClipEditing.removeSilence(in: p, clipId: "nope", cuts: [SilenceRange(start: 1, end: 2)], ripple: true))
-        var fast = c; fast.speed = 2
-        XCTAssertNil(ClipEditing.removeSilence(in: project([fast]), clipId: "main", cuts: [SilenceRange(start: 1, end: 2)], ripple: true))
     }
 
     func testVoiceClipKeepsKeyframesAcrossPieces() throws {
@@ -206,5 +205,101 @@ final class SilenceTests: XCTestCase {
         let out = tmp.appendingPathComponent("cut.caf")
         let dur = try AudioMixer.mixdown(project: r.project, assets: RenderAssets(), to: out)
         XCTAssertEqual(dur, 6 - 2.7, accuracy: 0.05)
+    }
+
+    // MARK: 速度・逆再生・速度ランプ(素材の時間 → クリップの時間)
+
+    /// 変換の純粋関数: 速度 2 では素材の窓が半分に詰まり、逆再生では前後が入れ替わる。
+    func testClipTimeProfileSpeedAndReverse() {
+        let source = LevelProfile(levels: [Float](repeating: -10, count: 50) + [Float](repeating: -120, count: 50), duration: 1)
+        var fast = audioClip("/x.wav", duration: 0.5); fast.speed = 2; fast.srcDuration = 1
+        let p = SilenceDetector.clipTimeProfile(from: source, clip: fast)
+        XCTAssertEqual(p.duration, 0.5)
+        XCTAssertEqual(p.levels.count, 50)
+        XCTAssertEqual(p.levels[24], -10)
+        XCTAssertEqual(p.levels[25], -120)
+        assertRanges(p.silentRanges(SilenceParams(thresholdDb: -40, minSilence: 0.2, pad: 0.1)), [(0.35, 0.5)])
+        var rev = audioClip("/x.wav", duration: 1); rev.reverse = true; rev.srcDuration = 1
+        let rp = SilenceDetector.clipTimeProfile(from: source, clip: rev)
+        XCTAssertEqual(rp.levels[0], -120)
+        XCTAssertEqual(rp.levels[49], -120)
+        XCTAssertEqual(rp.levels[50], -10)
+        assertRanges(rp.silentRanges(.default), [(0, 0.4)])
+    }
+
+    func testAnalyzeSpeed2() throws {
+        let path = try writeWav("speed2.wav", segments: [(1, 0.3), (1.5, 0), (1, 0.3)])
+        var c = audioClip(path, duration: 1.75); c.speed = 2; c.srcDuration = 3.5
+        let prof = try XCTUnwrap(SilenceDetector.analyze(clip: c))
+        XCTAssertEqual(prof.duration, 1.75, accuracy: 1e-9)
+        assertRanges(prof.silentRanges(.default), [(0.6, 1.15)], accuracy: 0.03)
+    }
+
+    func testAnalyzeSpeedHalf() throws {
+        let path = try writeWav("speedhalf.wav", segments: [(1, 0.3), (1, 0), (1, 0.3)])
+        var c = audioClip(path, duration: 6); c.speed = 0.5; c.srcDuration = 3
+        let prof = try XCTUnwrap(SilenceDetector.analyze(clip: c))
+        assertRanges(prof.silentRanges(.default), [(2.1, 3.9)], accuracy: 0.03)
+    }
+
+    func testAnalyzeReverse() throws {
+        let path = try writeWav("rev.wav", segments: [(1.5, 0), (1, 0.3), (1, 0.3)])
+        var c = audioClip(path, duration: 3.5); c.reverse = true; c.srcDuration = 3.5
+        let prof = try XCTUnwrap(SilenceDetector.analyze(clip: c))
+        // 素材の頭側の無音は、逆再生ではクリップの尻側に来る(尻はクリップの端なので余白なし)
+        assertRanges(prof.silentRanges(.default), [(2.1, 3.5)], accuracy: 0.03)
+    }
+
+    func testAnalyzeRamp() throws {
+        let path = try writeWav("ramp.wav", segments: [(1.5, 0.3), (1.5, 0), (1.5, 0.3)])
+        var c = audioClip(path, duration: 3); c.srcDuration = 4.5
+        c.speedRamp = [SpeedKey(t: 0, v: 1), SpeedKey(t: 3, v: 2)]
+        let prof = try XCTUnwrap(SilenceDetector.analyze(clip: c))
+        // 素材の無音 [1.5, 3] は、積分(素材位置 = t + t^2/6)から t = 1.243〜2.196 に対応する
+        assertRanges(prof.silentRanges(.default), [(1.34, 2.10)], accuracy: 0.04)
+    }
+
+    func testRemoveSilenceSpeed2() throws {
+        let path = try writeWav("cut2.wav", segments: [(1, 0.3), (1.5, 0), (1, 0.3)])
+        var c = audioClip(path, start: 10, duration: 1.75); c.id = "main"; c.speed = 2; c.srcDuration = 3.5
+        let cuts = try XCTUnwrap(SilenceDetector.analyze(clip: c)).silentRanges(.default)
+        let r = try XCTUnwrap(ClipEditing.removeSilence(in: project([c]), clipId: "main", cuts: cuts, ripple: true))
+        let pieces = r.project.tracks[0].clips
+        XCTAssertEqual(pieces.count, 2)
+        XCTAssertEqual(pieces[0].start, 10, accuracy: 0.005)
+        XCTAssertEqual(pieces[0].duration, 0.6, accuracy: 0.005)
+        XCTAssertEqual(pieces[0].offset, 0, accuracy: 0.005)
+        XCTAssertEqual(pieces[1].start, 10.6, accuracy: 0.005)
+        XCTAssertEqual(pieces[1].duration, 0.6, accuracy: 0.005)
+        // 2 つ目の断片は、クリップ時間 1.15 = 素材 2.3 秒から(余白ぶんの無音を含む)
+        XCTAssertEqual(pieces[1].offset, 2.3, accuracy: 0.005)
+        // 詰めない場合は位置がそのまま残る
+        let r2 = try XCTUnwrap(ClipEditing.removeSilence(in: project([c]), clipId: "main", cuts: cuts, ripple: false))
+        XCTAssertEqual(r2.project.tracks[0].clips[1].start, 11.15, accuracy: 0.005)
+    }
+
+    func testRemoveSilenceReverse() throws {
+        let path = try writeWav("cutrev.wav", segments: [(1.5, 0), (1, 0.3), (1, 0.3)])
+        var c = audioClip(path, duration: 3.5); c.id = "main"; c.reverse = true; c.srcDuration = 3.5
+        let cuts = try XCTUnwrap(SilenceDetector.analyze(clip: c)).silentRanges(.default)
+        let r = try XCTUnwrap(ClipEditing.removeSilence(in: project([c]), clipId: "main", cuts: cuts, ripple: false))
+        let pieces = r.project.tracks[0].clips
+        XCTAssertEqual(pieces.count, 1)
+        XCTAssertEqual(pieces[0].duration, 2.1, accuracy: 0.005)
+        // 逆再生の頭の断片は、素材の終わり側 [1.4, 3.5] を使う
+        XCTAssertEqual(pieces[0].offset, 1.4, accuracy: 0.005)
+    }
+
+    func testRemoveSilenceRamp() throws {
+        let path = try writeWav("cutramp.wav", segments: [(1.5, 0.3), (1.5, 0), (1.5, 0.3)])
+        var c = audioClip(path, duration: 3); c.id = "main"; c.srcDuration = 4.5
+        c.speedRamp = [SpeedKey(t: 0, v: 1), SpeedKey(t: 3, v: 2)]
+        let cuts = try XCTUnwrap(SilenceDetector.analyze(clip: c)).silentRanges(.default)
+        let r = try XCTUnwrap(ClipEditing.removeSilence(in: project([c]), clipId: "main", cuts: cuts, ripple: true))
+        let pieces = r.project.tracks[0].clips
+        XCTAssertEqual(pieces.count, 2)
+        XCTAssertEqual(pieces.reduce(0) { $0 + $1.duration }, 2.26, accuracy: 0.06)
+        // 2 つ目の断片の頭は、無音の終わり(クリップ時間 2.10 付近)を積分した素材位置(2.10 + 2.10^2/6)
+        XCTAssertEqual(pieces[1].offset, 2.83, accuracy: 0.07)
     }
 }

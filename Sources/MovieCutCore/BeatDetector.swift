@@ -114,9 +114,9 @@ public enum BeatDetector {
         return env
     }
 
-    /// 無音検出と同じ条件で、ビートを探せる素材か(音が出る・速度や逆再生が無い)。
+    /// ビートを探せる素材か(音が出て、速度や逆再生が無い = 素材の時間と 1 対 1)。
     public static func supports(_ c: Clip) -> Bool {
-        SilenceDetector.supports(c)
+        SilenceDetector.supportsOneToOne(c)
     }
 
     /// ビートの時刻(クリップの頭からの秒)を、プロジェクトの時刻に直す。クリップの長さの外は捨てる。

@@ -20,7 +20,7 @@ public enum AudioSyncEditing {
         guard picked.count == 2,
               let v = picked.first(where: { $0.type == .video }),
               let a = picked.first(where: { $0.type == .audio }),
-              SilenceDetector.supports(v), SilenceDetector.supports(a) else { return nil }
+              SilenceDetector.supportsOneToOne(v), SilenceDetector.supportsOneToOne(a) else { return nil }
         return (v, a)
     }
 

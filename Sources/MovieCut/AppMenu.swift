@@ -363,7 +363,7 @@ struct MenuState: Equatable {
     // 音声
     var canAudioFx = false           // 音声・ボイス・動画(フリーズ以外)のクリップを選んでいる
     var hasAudioFx = false           // 選択クリップに音声エフェクトかパンがある
-    var canSilenceCut = false        // 無音カットできるクリップ(音のある素材。速度・逆再生なし)を選んでいる
+    var canSilenceCut = false        // 無音カットできるクリップ(音のある素材。速度・逆再生・ランプも可)を選んでいる
     var canSceneSplit = false        // シーン分割できる動画クリップ(速度・逆再生・フリーズなし)を選んでいる
     var canAudioAutoSync = false     // 動画 1 つと音声 1 つを選んでいる(音で自動同期できる)
     var canPitchLayout = false       // 音程を変えて並べられるクリップ(音のある・ロックでない)を選んでいる

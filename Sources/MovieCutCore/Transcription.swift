@@ -67,7 +67,7 @@ public enum TranscriptionError: Error, LocalizedError, Equatable {
 /// 音声から字幕を作る対象か。音のある素材(音声・ボイス・動画)で、速度・逆再生・フリーズが無いもの
 /// (タイムラインの時間と素材の時間が 1 対 1 になるので、認識の時刻をそのまま配置できる)。
 public enum TranscriptionSupport {
-    public static func supports(_ c: Clip) -> Bool { SilenceDetector.supports(c) }
+    public static func supports(_ c: Clip) -> Bool { SilenceDetector.supportsOneToOne(c) }
 }
 
 // MARK: - 文の組み立て(単語の列 → 字幕の 1 件)
