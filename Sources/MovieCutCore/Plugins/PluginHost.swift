@@ -10,6 +10,14 @@ case notRegistered(pluginID: String)
 case noVoicePlugin(engineID: String)
 /// プラグインは見つかったが音声プロバイダを持っていない。
 case voiceProviderMissing(pluginID: String)
+/// 担当プラグインが見つからないエフェクト識別子。
+case noEffectPlugin(effectID: String)
+/// プラグインは見つかったがエフェクトプロバイダを持っていない。
+case effectProviderMissing(pluginID: String)
+/// 担当プラグインが見つからない書き出し形式識別子。
+case noExportPlugin(formatID: String)
+/// プラグインは見つかったが書き出しバックエンドを持っていない。
+case exportBackendMissing(pluginID: String)
 /// ライセンス検証で拒否された。
 case licenseDenied(pluginID: String, result: LicenseVerificationResult)
 /// アプリバージョンがプラグインの最小要件を満たさない。
@@ -18,18 +26,27 @@ case incompatibleAppVersion(pluginID: String, required: String, current: String)
 
 /// 実体化されたプラグイン。本体が提供するサービスをここに集約する。
 ///
-/// 今は音声(`VoiceProvider`)だけが接続点。importer / effect / exporter のフックは
-/// 将来ここに口を追加する想定で、マニフェスト側の種別だけ先に定義してある。
+/// 接続点は音声(`VoiceProvider`)・映像エフェクト(`VideoEffectProviding`)・
+/// 書き出し(`ExportBackendProviding`)の 3 種。importer フックは将来ここに口を追加する想定で、
+/// マニフェスト側の種別だけ先に定義してある。
 public struct LoadedPlugin {
 public var manifest: PluginManifest
 public var directory: URL
 /// 音声フックの実体。音声を提供しないプラグインでは nil。
 public var voiceProvider: (any VoiceProvider)?
+/// エフェクトフックの実体。エフェクトを提供しないプラグインでは nil。
+public var effectProvider: (any VideoEffectProviding)?
+/// 書き出しフックの実体。書き出しを提供しないプラグインでは nil。
+public var exportBackend: (any ExportBackendProviding)?
 
-public init(manifest: PluginManifest, directory: URL, voiceProvider: (any VoiceProvider)? = nil) {
+public init(manifest: PluginManifest, directory: URL, voiceProvider: (any VoiceProvider)? = nil,
+            effectProvider: (any VideoEffectProviding)? = nil,
+            exportBackend: (any ExportBackendProviding)? = nil) {
 self.manifest = manifest
 self.directory = directory
 self.voiceProvider = voiceProvider
+self.effectProvider = effectProvider
+self.exportBackend = exportBackend
 }
 }
 
@@ -210,5 +227,83 @@ return provider
 /// キャラから直接解決する(接続点: `Character.engine` が解決キー)。
 public func voiceProvider(for character: Character) throws -> any VoiceProvider {
 try voiceProvider(forEngine: character.engine)
+}
+
+// MARK: - エフェクトフック
+
+/// エフェクト識別子(`Effect.kind`)を担当するプラグインの `VideoEffectProviding` を解決する。
+/// 該当プラグインはこの呼び出しで初めて実体化される(遅延読み込み)。
+/// 担当プラグインが登録されていなければ nil(呼び出し側がコア既定の扱いに落とせるよう、ここでは投げない版)。
+public func effectProviderIfAvailable(forEffectID effectID: String) throws -> (any VideoEffectProviding)? {
+guard let manifest = registeredManifests.first(where: { $0.handlesEffect(effectID)}) else { return nil}
+let loaded = try loadIfNeeded(pluginID: manifest.id)
+return loaded.effectProvider
+}
+
+/// `effectProviderIfAvailable` の「無ければエラー」版。
+public func effectProvider(forEffectID effectID: String) throws -> any VideoEffectProviding {
+guard let manifest = registeredManifests.first(where: { $0.handlesEffect(effectID)}) else {
+throw PluginError.noEffectPlugin(effectID: effectID)
+}
+let loaded = try loadIfNeeded(pluginID: manifest.id)
+guard let provider = loaded.effectProvider else {
+throw PluginError.effectProviderMissing(pluginID: manifest.id)
+}
+return provider
+}
+
+/// 登録済みエフェクトプラグインすべてのプロバイダ(登録順・重複なし)。
+/// エフェクトフックを持つプラグインはこの呼び出しで実体化される(記述子が本体側にあるため)。
+/// 実体化に失敗したプラグインは飛ばす(1 個の故障で全体が止まらないように)。
+public func allEffectProviders() -> [any VideoEffectProviding] {
+var out: [any VideoEffectProviding] = []
+for manifest in registeredManifests where manifest.provides(.effect) {
+guard let loaded = try? loadIfNeeded(pluginID: manifest.id), let provider = loaded.effectProvider else { continue }
+out.append(provider)
+}
+return out
+}
+
+/// 登録済みエフェクトプラグインが提供するエフェクト記述子の一覧(登録順)。
+public func effectDescriptors() -> [PluginEffectDescriptor] {
+allEffectProviders().flatMap { $0.effectDescriptors }
+}
+
+// MARK: - 書き出しフック
+
+/// 書き出し形式識別子を担当するプラグインの `ExportBackendProviding` を解決する。
+/// 該当プラグインはこの呼び出しで初めて実体化される(遅延読み込み)。
+/// 担当プラグインが登録されていなければ nil(呼び出し側が内蔵書き出しに落とせるよう、ここでは投げない版)。
+public func exportBackendIfAvailable(forFormat formatID: String) throws -> (any ExportBackendProviding)? {
+guard let manifest = registeredManifests.first(where: { $0.handlesExportFormat(formatID)}) else { return nil}
+let loaded = try loadIfNeeded(pluginID: manifest.id)
+return loaded.exportBackend
+}
+
+/// `exportBackendIfAvailable` の「無ければエラー」版。
+public func exportBackend(forFormat formatID: String) throws -> any ExportBackendProviding {
+guard let manifest = registeredManifests.first(where: { $0.handlesExportFormat(formatID)}) else {
+throw PluginError.noExportPlugin(formatID: formatID)
+}
+let loaded = try loadIfNeeded(pluginID: manifest.id)
+guard let backend = loaded.exportBackend else {
+throw PluginError.exportBackendMissing(pluginID: manifest.id)
+}
+return backend
+}
+
+/// 登録済み書き出しプラグインすべてのバックエンド(登録順・重複なし)。実体化に失敗したものは飛ばす。
+public func allExportBackends() -> [any ExportBackendProviding] {
+var out: [any ExportBackendProviding] = []
+for manifest in registeredManifests where manifest.provides(.exporter) {
+guard let loaded = try? loadIfNeeded(pluginID: manifest.id), let backend = loaded.exportBackend else { continue }
+out.append(backend)
+}
+return out
+}
+
+/// 登録済み書き出しプラグインが提供する形式記述子の一覧(登録順)。
+public func exportFormatDescriptors() -> [ExportFormatDescriptor] {
+allExportBackends().flatMap { $0.formatDescriptors }
 }
 }

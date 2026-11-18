@@ -33,6 +33,13 @@ public struct PluginManifest: Codable, Equatable, Sendable {
     /// 音声フック(`hooks` に `.voice` を含むとき)が担当する、キャラの `engine` 識別子の一覧。
     /// 例: ["voicevox"] / ["aquestalk"] / ["sample-tone"]。`PluginHost.voiceProvider(forEngine:)` の解決キー。
     public var voiceEngineIDs: [String]
+    /// エフェクトフック(`hooks` に `.effect` を含むとき)が担当する、エフェクト識別子の一覧。
+    /// 識別子は `Effect.kind`(文字列)そのもので、内蔵の `EffectKind.rawValue` と衝突しないよう
+    /// 接頭辞付きにする(例: "plugin.invert")。`PluginHost.effectProvider(forEffectID:)` の解決キー。
+    public var effectIDs: [String]
+    /// 書き出しフック(`hooks` に `.exporter` を含むとき)が担当する、書き出し形式識別子の一覧。
+    /// 例: ["gif"] / ["project-json"]。`PluginHost.exportBackend(forFormat:)` の解決キー。
+    public var exportFormatIDs: [String]
     /// ライセンス検証が必要なプラグインかどうか。有料プラグインは true にする想定。
     public var requiresLicense: Bool
     /// 人間向けの短い説明(任意)。
@@ -45,6 +52,8 @@ public struct PluginManifest: Codable, Equatable, Sendable {
                 entryPoint: String,
                 minimumAppVersion: String? = nil,
                 voiceEngineIDs: [String] = [],
+                effectIDs: [String] = [],
+                exportFormatIDs: [String] = [],
                 requiresLicense: Bool = false,
                 description: String? = nil) {
         self.id = id
@@ -54,12 +63,14 @@ public struct PluginManifest: Codable, Equatable, Sendable {
         self.entryPoint = entryPoint
         self.minimumAppVersion = minimumAppVersion
         self.voiceEngineIDs = voiceEngineIDs
+        self.effectIDs = effectIDs
+        self.exportFormatIDs = exportFormatIDs
         self.requiresLicense = requiresLicense
         self.description = description
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, version, hooks, entryPoint, minimumAppVersion, voiceEngineIDs, requiresLicense, description
+        case id, name, version, hooks, entryPoint, minimumAppVersion, voiceEngineIDs, effectIDs, exportFormatIDs, requiresLicense, description
     }
 
     public init(from decoder: Decoder) throws {
@@ -71,6 +82,8 @@ public struct PluginManifest: Codable, Equatable, Sendable {
         entryPoint = try c.decode(String.self, forKey: .entryPoint)
         minimumAppVersion = try c.decodeIfPresent(String.self, forKey: .minimumAppVersion)
         voiceEngineIDs = try c.decodeIfPresent([String].self, forKey: .voiceEngineIDs) ?? []
+        effectIDs = try c.decodeIfPresent([String].self, forKey: .effectIDs) ?? []
+        exportFormatIDs = try c.decodeIfPresent([String].self, forKey: .exportFormatIDs) ?? []
         requiresLicense = try c.decodeIfPresent(Bool.self, forKey: .requiresLicense) ?? false
         description = try c.decodeIfPresent(String.self, forKey: .description)
     }
@@ -83,6 +96,20 @@ public struct PluginManifest: Codable, Equatable, Sendable {
         guard provides(.voice) else { return false }
         let needle = engineID.trimmingCharacters(in: .whitespaces).lowercased()
         return voiceEngineIDs.contains { $0.trimmingCharacters(in: .whitespaces).lowercased() == needle }
+    }
+
+    /// 指定のエフェクト識別子(`Effect.kind`)を担当するか(大文字小文字は区別しない)。
+    public func handlesEffect(_ effectID: String) -> Bool {
+        guard provides(.effect) else { return false }
+        let needle = effectID.trimmingCharacters(in: .whitespaces).lowercased()
+        return effectIDs.contains { $0.trimmingCharacters(in: .whitespaces).lowercased() == needle }
+    }
+
+    /// 指定の書き出し形式識別子を担当するか(大文字小文字は区別しない)。
+    public func handlesExportFormat(_ formatID: String) -> Bool {
+        guard provides(.exporter) else { return false }
+        let needle = formatID.trimmingCharacters(in: .whitespaces).lowercased()
+        return exportFormatIDs.contains { $0.trimmingCharacters(in: .whitespaces).lowercased() == needle }
     }
 
     /// アプリバージョンとの互換性。`minimumAppVersion` 未指定なら常に互換あり。
