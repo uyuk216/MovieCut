@@ -84,6 +84,40 @@ extension ProjectModel {
         edit("バウンスの切り替え") { $0 = TachieEditing.update($0, id: tachieId) { $0.bounce = on ? true : nil } }
     }
 
+    /// 単体立ち絵の画像スロット(口閉じ・口開き・まばたき)。
+    enum TachieImageSlot { case closed, open, blink
+        var label: String { switch self { case .closed: return "口閉じ"; case .open: return "口開き"; case .blink: return "まばたき" } }
+    }
+
+    /// 単体立ち絵の画像(口閉じ・口開き・まばたき)を設定する(url が nil なら外す)。GIF・APNG・アニメーション WebP も指定できる。
+    /// 同じ画像・無い画像の外しは履歴に載らない(`edit` が前後を比べる)。
+    func setTachieImage(tachieId: String, slot: TachieImageSlot, url: URL?) {
+        guard !isLocked else { return }
+        edit(url == nil ? "立ち絵(\(slot.label))を外す" : "立ち絵(\(slot.label))の変更") { p in
+            p = TachieEditing.update(p, id: tachieId) { t in
+                switch slot {
+                case .closed: t.imgClosed = url?.path
+                case .open: t.imgOpen = url?.path
+                case .blink: t.imgBlink = url?.path
+                }
+            }
+        }
+    }
+
+    /// 単体立ち絵のあいうえお口パクの画像を設定する(key は "a" "i" "u" "e" "o"。url が nil なら外す)。
+    /// 空になったら項目ごと消す(既定と同じ形)。同じ画像・無い画像の外しは履歴に載らない。
+    func setTachieVowelImage(tachieId: String, key: String, url: URL?) {
+        guard !isLocked, Viseme.allCases.contains(where: { $0.vowelKey == key }) else { return }
+        let label = Self.vowelLabel(key)
+        edit(url == nil ? "口「\(label)」の画像を外す" : "口「\(label)」の画像の変更") { p in
+            p = TachieEditing.update(p, id: tachieId) { t in
+                var d = t.imgVowels ?? [:]
+                if let u = url { d[key] = u.path } else { d.removeValue(forKey: key) }
+                t.imgVowels = d.isEmpty ? nil : d
+            }
+        }
+    }
+
     /// 立ち絵クリップを、連動する声の範囲に合わせる(Undo 1 回)。声が無い・他のクリップと重なる・もう合っているときは何もしない。
     func fitTachieClipToVoice(clipId: String? = nil) {
         guard !isLocked, let id = clipId ?? selectedClipId else { return }

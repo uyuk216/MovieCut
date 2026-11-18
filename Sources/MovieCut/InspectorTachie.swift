@@ -140,20 +140,39 @@ struct TachieAssetBody: View {
             RigInspectorSection(model: model, tachieId: tachie.id, rig: rig)
         } else {
             InspectorSection(title: "画像")
-            ForEach([("口閉じ", tachie.imgClosed), ("口開き", tachie.imgOpen), ("まばたき", tachie.imgBlink)], id: \.0) { label, path in
-                HStack(spacing: 8) {
-                    PortraitThumb(path: path)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(label).font(.system(size: 12)).foregroundStyle(.secondary)
-                        Text(fileName(path)).font(.system(size: 11)).lineLimit(1).truncationMode(.middle)
-                    }
-                    Spacer(minLength: 0)
-                }
+            Text("GIF・APNG 等のアニメーション画像も使えます（タイムライン時刻でループ再生）")
+                .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            ForEach([(ProjectModel.TachieImageSlot.closed, tachie.imgClosed), (.open, tachie.imgOpen), (.blink, tachie.imgBlink)], id: \.0.label) { slot, path in
+                imageRow(label: slot.label, path: path,
+                         choose: { model.chooseImage(title: "立ち絵(\(slot.label))を選ぶ") { model.setTachieImage(tachieId: tachie.id, slot: slot, url: $0) } },
+                         clear: { model.setTachieImage(tachieId: tachie.id, slot: slot, url: nil) })
             }
-            if !(tachie.imgVowels ?? [:]).isEmpty || !(tachie.expressions ?? [:]).isEmpty {
-                Text("あいうえお \((tachie.imgVowels ?? [:]).count) 枚・表情 \((tachie.expressions ?? [:]).count) 枚").font(.system(size: 11)).foregroundStyle(.secondary)
+            InspectorSection(title: "あいうえお（口の形）")
+            ForEach(["a", "i", "u", "e", "o"], id: \.self) { key in
+                imageRow(label: ProjectModel.vowelLabel(key), path: tachie.imgVowels?[key],
+                         choose: { model.chooseImage(title: "口「\(ProjectModel.vowelLabel(key))」の画像を選ぶ") { model.setTachieVowelImage(tachieId: tachie.id, key: key, url: $0) } },
+                         clear: { model.setTachieVowelImage(tachieId: tachie.id, key: key, url: nil) })
+            }
+            if !(tachie.expressions ?? [:]).isEmpty {
+                Text("表情 \((tachie.expressions ?? [:]).count) 枚").font(.system(size: 11)).foregroundStyle(.secondary)
             }
         }
+    }
+
+    /// 画像 1 つの行(見本・名前・ファイル名・選ぶ・外す)。
+    private func imageRow(label: String, path: String?, choose: @escaping () -> Void, clear: @escaping () -> Void) -> some View {
+        HStack(spacing: 8) {
+            PortraitThumb(path: path)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label).font(.system(size: 12)).foregroundStyle(.secondary)
+                Text(fileName(path)).font(.system(size: 11)).lineLimit(1).truncationMode(.middle)
+            }
+            Spacer(minLength: 0)
+            Button("選ぶ", action: choose)
+            Button("外す", action: clear).disabled(path == nil)
+        }
+        .controlSize(.small)
+        .disabled(model.isLocked)
     }
 }
 
