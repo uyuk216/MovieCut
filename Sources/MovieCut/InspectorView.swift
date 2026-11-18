@@ -335,6 +335,10 @@ struct MultiSelectionInspector: View {
                 Button("グループにする") { model.groupSelectedClips() }
                 Button("グループを解除") { model.ungroupSelectedClips() }.disabled(!model.selectionHasGroup)
             }
+            HStack(spacing: 8) {
+                Button(model.selectionGroupAllDisabled ? "グループを有効にする" : "グループを無効にする") { model.toggleGroupDisabledSelected() }
+                    .disabled(!model.selectionHasGroup)
+            }
         }
         .disabled(model.isLocked)
     }
@@ -516,6 +520,12 @@ struct ClipInspector: View {
             HStack(spacing: 8) {
                 Button("全員を選択") { model.selectGroupMembers(of: clipId) }
                 Button("このクリップを外す") { model.setClipProperty(\.group, to: nil, name: "グループから外す", clipId: clipId) }
+            }
+            HStack(spacing: 8) {
+                Button(model.groupAllDisabled(g) ? "グループを有効にする" : "グループを無効にする") {
+                    model.selectGroupMembers(of: clipId)
+                    model.toggleGroupDisabledSelected()
+                }
             }
             .controlSize(.small)
             .disabled(model.isLocked)

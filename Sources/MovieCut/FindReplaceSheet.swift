@@ -23,7 +23,7 @@ struct FindReplaceSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("検索と置換").font(.headline)
-            Text("テロップ(文字クリップ)とセリフ(ボイス)の文字を対象にします。")
+            Text("テロップとセリフの読み上げ文・字幕文、台本を対象にします(選んでいるクリップだけのときは台本を除きます)。")
                 .font(.callout).foregroundStyle(.secondary)
             Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
                 GridRow {
@@ -40,7 +40,7 @@ struct FindReplaceSheet: View {
             Text(countText)
                 .font(.callout)
                 .foregroundStyle(count == 0 ? .secondary : .primary)
-            Text("セリフの文字が変わると、音声を作り直します。すべて元に戻すのは 1 回です。")
+            Text("読み上げ文が変わったセリフは、音声を作り直します(字幕文と台本は作り直しません)。すべて元に戻すのは 1 回です。")
                 .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()

@@ -176,6 +176,8 @@ final class PlaybackController {
     weak var displayHost: NSView?
 
     private(set) var isPlaying = false { didSet { if oldValue != isPlaying { model?.isPlaying = isPlaying } } }
+    /// サウンドレベルメーター用: 再生用ミックスから先に測ったレベル(100 ms ごと)。再生経路には触らず、ミックスの用意ができたときに背景で測る。
+    private(set) var levelEnvelope: PlaybackLevelEnvelope?
     private(set) var isPreparing = false
     private(set) var tickCount = 0
     /// ミックスを作り直した回数(検証用)。
@@ -365,6 +367,7 @@ final class PlaybackController {
         backend.shutdown()
         if let u = cacheURL { try? FileManager.default.removeItem(at: u) }
         cacheURL = nil; cacheKey = nil
+        levelEnvelope = nil
         model?.assets.endExportMode()
     }
 
@@ -529,6 +532,9 @@ final class PlaybackController {
                 _ = try backend.load(url: url)
                 if let old = cacheURL { try? FileManager.default.removeItem(at: old) }
                 cacheURL = url; cacheKey = key; failedKey = nil; lastMixError = nil
+                // レベルメーター用に、ミックスを背景で測っておく(再生が始まってから測らないので、再生の負荷にならない)
+                let env = await Task.detached(priority: .utility) { PlaybackLevelEnvelope.compute(fromFileAt: url) }.value
+                if gen == generation { levelEnvelope = env }
             } catch {
                 try? FileManager.default.removeItem(at: url)
                 markFailed(key, error)
@@ -543,6 +549,7 @@ final class PlaybackController {
     private func markFailed(_ key: AudioCacheKey, _ error: Error) {
         failedKey = key
         cacheKey = nil
+        levelEnvelope = nil
         backend.unload()
         if let old = cacheURL { try? FileManager.default.removeItem(at: old); cacheURL = nil }
         lastMixError = error.localizedDescription

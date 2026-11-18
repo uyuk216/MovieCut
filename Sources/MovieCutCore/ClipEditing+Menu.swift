@@ -23,6 +23,7 @@ extension ClipEditing {
         var p = project
         let src = p.tracks[loc.track].clips[loc.index]
         var copy = CompoundEditing.freshIds(src)   // 複合の中の子にも新しい id
+        copy.group = nil   // 1 個だけの複製は元のグループに入れない(押したときに元グループ全員が選ばれてしまうため。グループごとの複製は複数複製・貼り付け側で新しいグループになる)
         copy.start = src.start + src.duration
         let end = copy.start + copy.duration
         if isFree(p.tracks[loc.track], start: copy.start, end: end) {

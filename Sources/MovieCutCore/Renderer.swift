@@ -151,7 +151,7 @@ public struct Renderer {
         var subtitles: [Clip] = []
 
         for tr in project.tracks where !tr.isHidden {
-            for c in tr.clips where t >= c.start && t < c.start + c.duration {
+            for c in tr.clips where t >= c.start && t < c.start + c.duration && !c.isDisabled {
                 switch c.type {
                 case .blur:
                     drawBlurRegion(c, t: t, ctx: ctx, W: W, H: H)

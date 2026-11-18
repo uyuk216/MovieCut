@@ -76,7 +76,12 @@ struct TimelineSection: View {
             .controlSize(.small)
             .padding(.horizontal, 10).padding(.vertical, 2)
             Divider()
-            TimelineRepresentable(model: model)
+            HStack(spacing: 0) {
+                SoundLevelMeterView(model: model)
+                    .frame(width: 48)
+                Divider()
+                TimelineRepresentable(model: model)
+            }
                 .overlay {
                     // 空の書類: 素材の入れ方を出す(ドロップは下のキャンバスが受ける。文字は操作を奪わない)
                     if model.project.allClips.isEmpty {
@@ -832,7 +837,7 @@ final class TimelineCanvas: NSView {
             fill = TimelinePalette.color(for: c.type)
         }
         if selected || secondary { fill = fill.blended(withFraction: 0.12, of: .white) ?? fill }   // filter: brightness(1.12) ぶん
-        let alpha: CGFloat = track.isHidden ? 0.4 : (track.isMuted && c.type != .blur && c.type != .image && c.type != .text ? 0.78 : 1)
+        let alpha: CGFloat = c.isDisabled ? 0.35 : (track.isHidden ? 0.4 : (track.isMuted && c.type != .blur && c.type != .image && c.type != .text ? 0.78 : 1))
         let path = NSBezierPath(roundedRect: r, xRadius: 4, yRadius: 4)
 
         ctx.saveGState()
@@ -870,6 +875,12 @@ final class TimelineCanvas: NSView {
         }
         // ロックの印(右上の小さな錠前)。ロックされたクリップだけ。狭いクリップには出さない
         if c.isClipLocked && r.width >= 24 { drawLockGlyph(in: NSRect(x: r.maxX - 15, y: r.minY + 3, width: 11, height: 11), ctx: ctx) }
+        // 無効の印(右上、消音の左の小さな「無」)。無効化されたクリップだけ。狭いクリップには出さない
+        if c.isDisabled && r.width >= 40 {
+            let x = r.maxX - 15 - (c.isClipLocked ? 17 : 0) - (c.isMuted ? 17 : 0)
+            ("無" as NSString).draw(at: NSPoint(x: x, y: r.minY + 3),
+                                  withAttributes: [.font: NSFont.systemFont(ofSize: 9, weight: .bold), .foregroundColor: NSColor.white.withAlphaComponent(0.85)])
+        }
         // 消音の印(右上、錠前の左の小さな「消」)。消音されたクリップだけ。狭いクリップには出さない
         if c.isMuted && r.width >= 24 {
             let x = r.maxX - 15 - (c.isClipLocked && r.width >= 24 ? 17 : 0)
@@ -2048,6 +2059,7 @@ final class TimelineCanvas: NSView {
         menu.addItem(.separator())
         add("再生位置で分割", enabled: m.canSplit) { m.splitSelected() }
         add("グループにする", enabled: m.selectedClipIDs.count >= 2) { m.groupSelectedClips() }
+        add(m.selectionGroupAllDisabled ? "グループを有効にする" : "グループを無効にする", enabled: m.selectionHasGroup) { m.toggleGroupDisabledSelected() }
         add("グループを解除", enabled: m.selectionHasGroup) { m.ungroupSelectedClips() }
         add("複製", enabled: !m.selectedClipIDs.isEmpty) { m.duplicateSelected() }
         add("削除", enabled: !m.selectedClipIDs.isEmpty) { m.deleteSelected() }
