@@ -5,7 +5,7 @@ public struct VoicePreset: Equatable, Identifiable {
     public var id: String
     public var name: String
     public var note: String?
-    public var engine: String          // "voicevox" | "aquestalk"
+    public var engine: String          // "voicevox" | "aquestalk" | "coeiroink" | "sharevox"
     public var voice: String?
     public var speaker: Int?
     public var speed: Double?
@@ -65,7 +65,7 @@ public struct VoicePresetCatalog: Equatable {
         let name = String((string(d, "name") ?? "").trimmingCharacters(in: .whitespacesAndNewlines).prefix(maxNameLength))
         guard !name.isEmpty else { return nil }
         let engine = string(d, "engine") ?? "voicevox"
-        guard engine == "voicevox" || engine == "aquestalk" else { return nil }
+        guard engine == "voicevox" || engine == "aquestalk" || VoicevoxFamily.isAdditionalEngine(engine) else { return nil }
         let idRaw = (string(d, "id") ?? name).trimmingCharacters(in: .whitespacesAndNewlines)
         let note = string(d, "note").map { String($0.trimmingCharacters(in: .whitespacesAndNewlines).prefix(maxNoteLength)) }.flatMap { $0.isEmpty ? nil : $0 }
         var speaker: Int?

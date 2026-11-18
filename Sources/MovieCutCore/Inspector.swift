@@ -176,7 +176,7 @@ public enum CharacterEditing {
     /// 範囲外の値だけ標準に直し、足りない項目を埋める(renderer.js renderCharProps の engine 切り替えと同じ)。
     public static func switchEngine(_ c: inout Character, to engine: String) {
         c.engine = engine
-        if engine == "voicevox" {
+        if VoicevoxFamily.isVoicevoxStyleEngine(engine) {
             if !((c.speed ?? .infinity) <= 5) { c.speed = 1 }
             if c.pitch == nil { c.pitch = 0 }
             if c.intonation == nil { c.intonation = 1 }

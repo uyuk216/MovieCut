@@ -109,21 +109,32 @@ struct VoicevoxAccentSheet: View {
             errorText = "このセリフのキャラが見つかりません。"
             return
         }
-        guard ch.engine == "voicevox" else {
-            errorText = "アクセント編集は VOICEVOX のキャラだけ使えます。"
+        guard VoicevoxFamily.isVoicevoxStyleEngine(ch.engine) else {
+            errorText = "アクセント編集は VOICEVOX / COEIROINK / SHAREVOX のキャラだけ使えます。"
             return
         }
         loading = true
         errorText = nil
         defer { loading = false }
-        let real = RealVoiceProvider(project: model.project, engine: AppServices.engine)
         do {
-            _ = try real.voicevox.validatedBaseURL()
-            guard await AppServices.engine.ensureRunning(baseURL: model.project.voicevoxUrl) else {
-                errorText = "VOICEVOX に接続できません。VOICEVOX を起動してから「再取得」を押してください。"
-                return
+            if ch.engine == "voicevox" {
+                let real = RealVoiceProvider(project: model.project, engine: AppServices.engine)
+                _ = try real.voicevox.validatedBaseURL()
+                guard await AppServices.engine.ensureRunning(baseURL: model.project.voicevoxUrl) else {
+                    errorText = "VOICEVOX に接続できません。VOICEVOX を起動してから「再取得」を押してください。"
+                    return
+                }
+                phrases = try await real.voicevox.accentPhrases(text: bodyText, speaker: ch.speaker ?? 3)
+            } else if let spec = VoicevoxFamily.spec(forEngine: ch.engine) {
+                // COEIROINK / SHAREVOX: 自動起動はせず、生きていれば /audio_query から取得する
+                let client = VoicevoxFamilyPluginClient(spec: spec)
+                _ = try client.validatedBaseURL()
+                guard await VoicevoxFamilyAvailability.isAlive(baseURL: spec.defaultBaseURL) else {
+                    errorText = "\(spec.displayName) に接続できません。\(spec.displayName) を起動してから「再取得」を押してください。"
+                    return
+                }
+                phrases = try await client.accentPhrases(text: bodyText, speaker: ch.speaker ?? 3)
             }
-            phrases = try await real.voicevox.accentPhrases(text: bodyText, speaker: ch.speaker ?? 3)
         } catch {
             errorText = "アクセントを取得できませんでした: \(error.localizedDescription)"
         }
