@@ -487,11 +487,13 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var speakingOnly: Bool? = nil
     /// 立ち絵クリップ: true のとき、終わりをプロジェクトの終わり(ほかのクリップの終わりの最大)に合わせ続ける(後から足した声にも届く)。true のときだけ書く。
     public var followsProjectEnd: Bool? = nil
+    /// アニメーション画像素材(連番画像を取り込んだ APNG など): true のとき、素材のアニメーションを再生する。true のときだけ書く。
+    public var playsAnimation: Bool? = nil
     /// VOICEVOX のアクセント編集(ボイスクリップ)。アクセント句の列。無い・空のときはファイルに書かない(従来どおりの合成)。
     public var voicevoxAccent: [VoicevoxAccentPhrase]? = nil
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["id", "type", "voicevoxAccent", "subtitleText", "tachieId", "mouthDrive", "speakingOnly", "followsProjectEnd", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "bokehShape", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "frameFlow", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "valueRef", "duck", "visualizer", "stabilize", "stabilizeRoll", "tracks", "mask", "blendMode", "group", "ruby", "figure", "note", "locked", "muted", "treatAsVoice"]
+    static let knownKeys: Set<String> = ["id", "type", "voicevoxAccent", "subtitleText", "tachieId", "mouthDrive", "speakingOnly", "followsProjectEnd", "playsAnimation", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "bokehShape", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "frameFlow", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "valueRef", "duck", "visualizer", "stabilize", "stabilizeRoll", "tracks", "mask", "blendMode", "group", "ruby", "figure", "note", "locked", "muted", "treatAsVoice"]
 
     public init() {}
 
@@ -677,6 +679,9 @@ public struct Clip: Codable, Equatable, Identifiable {
         if let raw: JSONValue = l.value("followsProjectEnd") {
             if l.bool("followsProjectEnd") == true { followsProjectEnd = true } else { extra["followsProjectEnd"] = raw }
         }
+        if let raw: JSONValue = l.value("playsAnimation") {
+            if l.bool("playsAnimation") == true { playsAnimation = true } else { extra["playsAnimation"] = raw }
+        }
         for (key, ok) in [("subtitleText", subtitleText != nil), ("tachieId", tachieId != nil)] where !ok {
             if let raw: JSONValue = l.value(key) { extra[key] = raw }
         }
@@ -783,6 +788,7 @@ public struct Clip: Codable, Equatable, Identifiable {
         if let d = mouthDrive, d != .all { try c.encode(d.raw, forKey: AnyKey("mouthDrive")) }
         if speakingOnly == true { try c.encode(true, forKey: AnyKey("speakingOnly")) }
         if followsProjectEnd == true { try c.encode(true, forKey: AnyKey("followsProjectEnd")) }
+        if playsAnimation == true { try c.encode(true, forKey: AnyKey("playsAnimation")) }
         if let t = tracks { try c.encode(t, forKey: AnyKey("tracks")) }
         try c.encodeIfPresent(mask, forKey: AnyKey("mask"))
         if let m = blendMode { try c.encode(m.rawValue, forKey: AnyKey("blendMode")) }

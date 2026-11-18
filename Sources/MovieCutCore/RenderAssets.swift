@@ -165,6 +165,12 @@ public final class RenderAssets {
         return img
     }
 
+    /// アニメーション画像用(連番画像を取り込んだ APNG など): クリップ内時刻 `elapsed`(秒)にそのパスが出すコマの画像。
+    /// 中身は `tachieImage(at:elapsed:)` と同じ(立ち絵と汎用の両方から使う)。
+    public func animatedImage(at path: String, elapsed: Double) -> CGImage? {
+        tachieImage(at: path, elapsed: elapsed)
+    }
+
     /// 立ち絵用: クリップ内時刻 `elapsed`(秒)にそのパスが出すコマの画像。静止画は `image(at:)` と同じ。
     public func tachieImage(at path: String, elapsed: Double) -> CGImage? {
         guard let timing = animationTiming(at: path) else { return image(at: path) }

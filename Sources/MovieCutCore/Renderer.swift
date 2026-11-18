@@ -459,7 +459,7 @@ public struct Renderer {
             if c.type == .compound {
                 img = compoundFrame(c, t: t)
             } else if let src = c.src {
-                img = c.type == .image ? assets.image(at: src) : videoFrame(c, src: src, at: t)
+                img = c.type == .image ? (c.playsAnimation == true ? assets.animatedImage(at: src, elapsed: max(0, t - c.start) * c.effectiveSpeed + c.offset) : assets.image(at: src)) : videoFrame(c, src: src, at: t)
             }
             // 手ぶれ補正(映像のみ): 解析は素材ごとに 1 回だけ(キャッシュ)。切り抜き・拡大より前に、コマそのものを補正する
             if c.type == .video, c.stabilizeStrength > 0, let src = c.src, let raw = img {
