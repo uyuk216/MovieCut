@@ -341,6 +341,7 @@ struct MultiSelectionInspector: View {
 struct ClipInspector: View {
     @ObservedObject var model: ProjectModel
     let clipId: String
+    @State private var showAccentSheet = false
 
     private var clip: Clip? { model.clip(clipId) }
 
@@ -532,6 +533,13 @@ struct ClipInspector: View {
         MultilineField(label: "読み上げ文", value: c.text ?? "", focusRequest: model.textFocusRequest, onLive: { _ in }, onCommit: { t in Task { await model.setVoiceText(t, clipId: clipId) } })
         Text("入力欄を離れるか Cmd+Return で、音声を作り直します。口パクは読み上げ文の音に合わせます。")
             .font(.system(size: 11)).foregroundStyle(.secondary)
+        // アクセントは VOICEVOX のキャラだけ(AquesTalk では出さない)
+        if model.project.characters.first(where: { $0.id == c.charId })?.engine == "voicevox" {
+            Button(c.voicevoxAccent == nil ? "アクセント編集…" : "アクセント編集…（保存済み）") { showAccentSheet = true }
+                .controlSize(.small)
+                .disabled(model.isLocked)
+                .sheet(isPresented: $showAccentSheet) { VoicevoxAccentSheet(model: model, clipId: clipId) }
+        }
         let noSubtitle = c.subtitleText == ""
         Toggle("字幕なし", isOn: Binding(get: { noSubtitle }, set: { v in model.setVoiceSubtitleText(clipId: clipId, text: v ? "" : nil) }))
             .toggleStyle(.checkbox)
