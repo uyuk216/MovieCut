@@ -233,7 +233,7 @@ struct TextStyleInspector: View {
             }
             .padding(.leading, 10)
         }
-        // 字間・行間・揃え・太字・斜体
+        // 字間・行間・揃え・太さ・太字・斜体
         slider("字間（px）", value: st.letterSpacingOrDefault, range: -20...60, step: 1, format: Self.px, name: "字間の変更") { $0.letterSpacing = $1 == 0 ? nil : $1 }
         slider("行間（倍）", value: st.lineHeightOrDefault, range: 0.8...2.5, step: 0.05, format: { String(format: "%.2f", $0) }, name: "行間の変更") {
             $0.lineHeight = abs($1 - TextStyle.defaultLineHeight) < 0.001 ? nil : $1
@@ -245,8 +245,19 @@ struct TextStyleInspector: View {
             .pickerStyle(.segmented).labelsHidden()
         }
         toggle("縦書き（右の列から左へ）", isOn: st.verticalOrDefault, name: "縦書きの変更") { $0.vertical = $1 ? true : nil }
+        InspectorField(label: "太さ") {
+            Picker("", selection: Binding<String>(get: { st.weightValue?.rawValue ?? "" }, set: { v in
+                edit("太さの変更") { $0.weight = v.isEmpty ? nil : v }
+            })) {
+                Text("自動").tag("")
+                ForEach(TextStyle.FontWeight.allCases, id: \.rawValue) { Text($0.label).tag($0.rawValue) }
+            }
+            .labelsHidden().disabled(model.isLocked)
+        }
         HStack(spacing: 14) {
+            // 太さを選んでいる間は、その太さが優先される(太字は効かない)
             toggle("太字", isOn: st.boldOrDefault, name: "太字の変更") { $0.bold = $1 ? nil : false }
+                .disabled(st.weightValue != nil)
             toggle("斜体", isOn: st.italicOrDefault, name: "斜体の変更") { $0.italic = $1 ? true : nil }
             Spacer()
         }

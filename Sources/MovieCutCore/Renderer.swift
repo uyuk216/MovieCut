@@ -511,7 +511,7 @@ public struct Renderer {
             return VerticalText.blockSize(text, size: size, spacing: style?.letterSpacingOrDefault ?? 0, lineHeight: style?.lineHeightOrDefault ?? TextStyle.defaultLineHeight)
         }
         let lines = text.components(separatedBy: "\n")
-        let f = TextCache.font(name: font, size: size, bold: style?.boldOrDefault ?? true)
+        let f = TextCache.font(name: font, size: size, bold: style?.boldOrDefault ?? true, weight: style?.weightValue)
         let sp = style?.letterSpacingOrDefault ?? 0, it = style?.italicOrDefault ?? false
         let w = lines.map { TextCache.layout(f, font: font, line: $0, spacing: sp, italic: it).width }.max() ?? 0
         let pitch = size * (style?.lineHeightOrDefault ?? TextStyle.defaultLineHeight) + (RubyText.resolve(ruby, in: text).isEmpty ? 0 : size * RubyText.pitchReserveRatio)
@@ -790,7 +790,7 @@ public struct Renderer {
         let lines = text.components(separatedBy: "\n")
         let fillC = parseHexColor(color) ?? parseHexColor("#ffffff")!
         let outC = parseHexColor(outline) ?? parseHexColor("#000000")!
-        let f = TextCache.font(name: font, size: size, bold: style?.boldOrDefault ?? true)
+        let f = TextCache.font(name: font, size: size, bold: style?.boldOrDefault ?? true, weight: style?.weightValue)
         let spacing = style?.letterSpacingOrDefault ?? 0, italic = style?.italicOrDefault ?? false
         // ルビがあるときは、読みを置く余白ぶん行間を広げる(縦書き・文字ごとの動きの経路ではルビを出さない)
         let resolvedRuby = RubyText.resolve(ruby, in: text)
@@ -1001,17 +1001,18 @@ enum TextCache {
         return b
     }
 
-    static func font(name: String, size: Double, bold: Bool = true) -> TextFont {
-        let key = bold ? "\(name)|\(size)" : "\(name)|\(size)|regular"
+    static func font(name: String, size: Double, bold: Bool = true, weight: TextStyle.FontWeight? = nil) -> TextFont {
+        var key = bold ? "\(name)|\(size)" : "\(name)|\(size)|regular"
+        if let w = weight { key = "\(name)|\(size)|w\(w.rawValue)" }  // ウェイト指定時は bold を見ない
         lock.lock(); defer { lock.unlock() }
         if let f = fonts[key] { return f }
-        let f = TextFont(name: name, size: size, bold: bold)
+        let f = TextFont(name: name, size: size, bold: bold, weight: weight)
         fonts[key] = f
         return f
     }
 
     static func layout(_ f: TextFont, font: String, line: String, spacing: Double = 0, italic: Bool = false) -> (path: CGPath, width: Double) {
-        let key = "\(font)|\(f.size)|\(f.regular ? "r" : "b")|\(spacing)|\(italic)|\(line)"
+        let key = "\(font)|\(f.size)|\(f.regular ? "r" : "b")|\(f.faceKey)|\(spacing)|\(italic)|\(line)"
         lock.lock()
         if let l = layouts[key] { lock.unlock(); return l }
         lock.unlock()
@@ -1036,8 +1037,20 @@ struct TextFont {
     var ascent: Double { CTFontGetAscent(ct) }
     var descent: Double { CTFontGetDescent(ct) }
 
-    init(name: String, size: Double, bold wantBold: Bool = true) {
+    /// ウェイト指定で解決した書体の PostScript 名(キャッシュ鍵用)。指定なしは空。
+    let faceKey: String
+
+    init(name: String, size: Double, bold wantBold: Bool = true, weight: TextStyle.FontWeight? = nil) {
         self.size = size
+        // ウェイト指定: そのファミリーで最も近い太さの書体を使う。bold は無視し、疑似ボールドは使わない。
+        if let w = weight,
+           let resolved = TextFont.resolve(family: name, size: size, weight: w) {
+            ct = resolved; synthetic = false
+            regular = w.value <= TextStyle.FontWeight.regular.value
+            faceKey = (CTFontCopyPostScriptName(resolved) as String?) ?? w.rawValue
+            return
+        }
+        faceKey = ""
         regular = !wantBold
         let base = CTFontCreateWithName(name as CFString, CGFloat(size), nil)
         if !wantBold {
@@ -1048,6 +1061,16 @@ struct TextFont {
         } else {
             ct = base; synthetic = true
         }
+    }
+
+    /// ファミリー名 + ウェイトから書体を引く。ファミリーが一致しなければ nil(呼び出し側が従来の解決に落とす)。
+    static func resolve(family: String, size: Double, weight: TextStyle.FontWeight) -> CTFont? {
+        let traits: [CFString: Any] = [kCTFontWeightTrait: weight.value]
+        let attrs: [CFString: Any] = [kCTFontFamilyNameAttribute: family, kCTFontTraitsAttribute: traits]
+        let desc = CTFontDescriptorCreateWithAttributes(attrs as CFDictionary)
+        let f = CTFontCreateWithFontDescriptor(desc, CGFloat(size), nil)
+        guard let fam = CTFontCopyFamilyName(f) as String?, fam.caseInsensitiveCompare(family) == .orderedSame else { return nil }
+        return f
     }
 
     /// Skia の疑似ボールドと同じ: サイズ 9 以下で 1/24、36 以上で 1/32、間は線形補間。
