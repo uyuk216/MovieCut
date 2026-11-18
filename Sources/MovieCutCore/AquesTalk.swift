@@ -24,6 +24,8 @@ public enum AquesTalkPresets {
 }
 
 /// ゆっくり音声(AquesTalkPlayer の外部コマンド)。AquesTalkPlayer が無ければ `say -v Kyoko` で代用する。
+/// 速さ(`Character.speed`、%)はプレイヤーの引数に無いため、100・未指定以外では生成後の WAV に
+/// 音程保持の時間伸縮(`VoiceTimeStretch`)をかけて反映する(100・未指定は無変換で従来とバイト一致)。
 ///
 /// 安全のため、実行するファイルは `AquesTalkLocator` が決まった場所から探し、`ExecutableTrust` で検証したものだけ。
 /// プロジェクトファイルに書かれた「実行コマンド」(`aquestalkCommand`)は読み込むだけで、実行には使わない。
@@ -63,8 +65,19 @@ public struct AquesTalkSynthesizer {
         let key = VoiceCache.key([.string("aq"), .string(executable?.path ?? "say"), .string(text), .opt(AquesTalkPresets.playerName(voice)), .opt(speed)])
         if let hit = cache.hit(forKey: key) { return hit }
         let out = try cache.url(forKey: key)
-        let inv = invocation(text: text, voice: voice, out: out)
-        try await Self.run(executable: inv.executable, arguments: inv.arguments, expecting: out)
+        // 速さ 100・未指定では従来どおり無変換で作る(参照 WAV とのバイト一致を保つ互換条件)。
+        guard VoiceTimeStretch.needsStretch(speed: speed), let speed else {
+            let inv = invocation(text: text, voice: voice, out: out)
+            try await Self.run(executable: inv.executable, arguments: inv.arguments, expecting: out)
+            return out
+        }
+        // 速さは AquesTalkPlayer の引数に無いので、一度テンポラリへ生成してから音程保持の
+        // 時間伸縮(`VoiceTimeStretch`)をかけてキャッシュの場所へ置く。say 代用のときも同じ。
+        let raw = FileManager.default.temporaryDirectory.appendingPathComponent("moviecut-aq-\(UUID().uuidString).wav")
+        defer { try? FileManager.default.removeItem(at: raw) }
+        let inv = invocation(text: text, voice: voice, out: raw)
+        try await Self.run(executable: inv.executable, arguments: inv.arguments, expecting: raw)
+        try VoiceTimeStretch.apply(input: raw, speedPercent: speed, output: out)
         return out
     }
 
