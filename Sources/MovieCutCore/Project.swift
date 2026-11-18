@@ -47,6 +47,10 @@ public struct Project: Codable, Equatable {
     public var tachies: [Tachie] = []
     /// 読み辞書(表記 → 読み)。台本から声を作るとき、読み上げ文に適用する。使ったときだけ書く。
     public var readingDictionary: [ReadingEntry] = []
+    /// シーン(W3-01): 名前付きの独立タイムライン(レイヤーとクリップの集合)。タイムライン上のシーケンスクリップ
+    /// (`ClipType.scene` + `Clip.sceneId`)から参照され、複数箇所で再利用できる。空のときはファイルに書かない
+    /// (シーンを使わない既存プロジェクトは従来と完全一致)。定義は `SceneDefinition` / 編集計算は `SceneEditing`(SceneNesting.swift)。
+    public var scenes: [SceneDefinition] = []
     /// ボイス字幕の表示位置(画面の高さに対する割合)。未設定 = 従来の 0.88。設定したときだけ書く。
     public var subtitleY: Double? = nil
     /// 字幕位置の既定値(従来ハードコードされていた値)。
@@ -64,7 +68,7 @@ public struct Project: Codable, Equatable {
     /// 知らないキー(保持して書き戻す)
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["formatVersion", "scriptText", "width", "height", "fps", "bg", "codec", "voicevoxUrl", "aquestalkCommand", "characters", "tracks", "markers", "rangeIn", "rangeOut", "mediaHints", "mediaFingerprints", "mediaPool", "targetTrackId", "multicams", "tachies", "readingDictionary", "subtitleY"]
+    static let knownKeys: Set<String> = ["formatVersion", "scriptText", "width", "height", "fps", "bg", "codec", "voicevoxUrl", "aquestalkCommand", "characters", "tracks", "markers", "rangeIn", "rangeOut", "mediaHints", "mediaFingerprints", "mediaPool", "targetTrackId", "multicams", "tachies", "readingDictionary", "subtitleY", "scenes"]
 
     public init() {}
 
@@ -92,6 +96,7 @@ public struct Project: Codable, Equatable {
         multicams = l.value("multicams") ?? []
         tachies = l.value("tachies") ?? []
         readingDictionary = l.value("readingDictionary") ?? []
+        scenes = l.value("scenes") ?? []
         subtitleY = l.double("subtitleY")
         scriptText = l.string("scriptText") ?? ""
         sourceFormat = SourceFormatVersion(max(0, l.int("formatVersion") ?? 0))
@@ -101,6 +106,7 @@ public struct Project: Codable, Equatable {
         if multicams.isEmpty, let raw: JSONValue = l.value("multicams"), raw != .array([]) { extra["multicams"] = raw }
         if tachies.isEmpty, let raw: JSONValue = l.value("tachies"), raw != .array([]) { extra["tachies"] = raw }
         if readingDictionary.isEmpty, let raw: JSONValue = l.value("readingDictionary"), raw != .array([]) { extra["readingDictionary"] = raw }
+        if scenes.isEmpty, let raw: JSONValue = l.value("scenes"), raw != .array([]) { extra["scenes"] = raw }
         if scriptText.isEmpty, let raw: JSONValue = l.value("scriptText"), raw != .string("") { extra["scriptText"] = raw }
     }
 
@@ -129,6 +135,7 @@ public struct Project: Codable, Equatable {
         if !multicams.isEmpty { try c.encode(multicams, forKey: AnyKey("multicams")) }
         if !tachies.isEmpty { try c.encode(tachies, forKey: AnyKey("tachies")) }
         if !readingDictionary.isEmpty { try c.encode(readingDictionary, forKey: AnyKey("readingDictionary")) }
+        if !scenes.isEmpty { try c.encode(scenes, forKey: AnyKey("scenes")) }
         try c.encodeIfPresent(subtitleY, forKey: AnyKey("subtitleY"))
         if !scriptText.isEmpty { try c.encode(scriptText, forKey: AnyKey("scriptText")) }
     }
@@ -352,11 +359,13 @@ public struct ClipType: RawRepresentable, Codable, Hashable, Sendable {
     public static let visualizer = ClipType(rawValue: "visualizer")
     /// 複合クリップ: 素材を持たず、中のレイヤー(`Clip.tracks`)を 1 つの映像・音声として扱う(`CompoundEditing`)。
     public static let compound = ClipType(rawValue: "compound")
+    /// シーンクリップ: 素材を持たず、プロジェクトのシーン(`Clip.sceneId` → `Project.scenes`)を参照して、その中身を 1 つの映像・音声として扱う(`SceneEditing`)。
+    public static let scene = ClipType(rawValue: "scene")
     /// 図形: 素材を持たず、四角・楕円・線・矢印・星を描く(`Figure`)。位置・大きさは x・y・w・h でキーフレームにできる。
     public static let shape = ClipType(rawValue: "shape")
     /// 立ち絵クリップ: 立ち絵素材(`Clip.tachieId`)を、口・まばたき・表情・バウンスを声に連動させて描く。位置・大きさ・キーフレーム・トランジション・エフェクトは普通のクリップと同じ。
     public static let tachie = ClipType(rawValue: "tachie")
-    public static let known: [ClipType] = [.image, .video, .audio, .text, .voice, .blur, .adjustment, .visualizer, .compound, .shape, .tachie]
+    public static let known: [ClipType] = [.image, .video, .audio, .text, .voice, .blur, .adjustment, .visualizer, .compound, .scene, .shape, .tachie]
     public var isKnown: Bool { Self.known.contains(self) }
 
     public init(from decoder: Decoder) throws {
@@ -459,6 +468,9 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var stabilizeRoll: Bool? = nil
     /// 複合クリップの中のレイヤー(type が compound のときだけ。無いときは書かない)。子の `start` は複合クリップの頭からの秒。
     public var tracks: [Track]? = nil
+    /// シーンクリップの参照先(type が scene のときだけ。`Project.scenes` の `SceneDefinition.id`)。無いときは書かない。
+    /// `offset` はシーン内時刻の窓の頭(複合クリップと同じ扱い)。参照先が無い・循環する場合は描画も音声も出ない。
+    public var sceneId: String? = nil
     /// 形のマスク(キャンバスの矩形・楕円。省いたときは何もしない)。
     public var mask: ClipMask? = nil
     /// ブレンドモード(下のレイヤーとの合成方法)。無いときは通常。設定したときだけ書く。
@@ -496,7 +508,7 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var voicevoxAccent: [VoicevoxAccentPhrase]? = nil
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["id", "type", "voicevoxAccent", "subtitleText", "tachieId", "mouthDrive", "speakingOnly", "followsProjectEnd", "playsAnimation", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "bokehShape", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "frameFlow", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "valueRef", "duck", "visualizer", "stabilize", "stabilizeRoll", "tracks", "mask", "blendMode", "group", "ruby", "figure", "note", "locked", "muted", "disabled", "treatAsVoice"]
+    static let knownKeys: Set<String> = ["id", "type", "voicevoxAccent", "subtitleText", "tachieId", "mouthDrive", "speakingOnly", "followsProjectEnd", "playsAnimation", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "bokehShape", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "frameFlow", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "valueRef", "duck", "visualizer", "stabilize", "stabilizeRoll", "tracks", "sceneId", "mask", "blendMode", "group", "ruby", "figure", "note", "locked", "muted", "disabled", "treatAsVoice"]
 
     public init() {}
 
@@ -654,6 +666,9 @@ public struct Clip: Codable, Equatable, Identifiable {
         if let raw: JSONValue = l.value("tracks") {
             if let v: [Track] = l.value("tracks") { tracks = v } else { extra["tracks"] = raw }
         }
+        // シーンクリップの参照先: 型が違って読めなければ捨てずに書き戻す
+        sceneId = l.string("sceneId")
+        if sceneId == nil, let raw: JSONValue = l.value("sceneId") { extra["sceneId"] = raw }
         note = l.string("note").flatMap { Clip.cleanNote($0) }
         if let raw: JSONValue = l.value("locked") {
             if l.bool("locked") == true { locked = true } else { extra["locked"] = raw }   // true 以外は捨てずに書き戻す
@@ -799,6 +814,7 @@ public struct Clip: Codable, Equatable, Identifiable {
         if followsProjectEnd == true { try c.encode(true, forKey: AnyKey("followsProjectEnd")) }
         if playsAnimation == true { try c.encode(true, forKey: AnyKey("playsAnimation")) }
         if let t = tracks { try c.encode(t, forKey: AnyKey("tracks")) }
+        try c.encodeIfPresent(sceneId, forKey: AnyKey("sceneId"))
         try c.encodeIfPresent(mask, forKey: AnyKey("mask"))
         if let m = blendMode { try c.encode(m.rawValue, forKey: AnyKey("blendMode")) }
         try c.encodeIfPresent(group, forKey: AnyKey("group"))

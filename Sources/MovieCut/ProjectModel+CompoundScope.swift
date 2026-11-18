@@ -13,7 +13,7 @@ extension ProjectModel {
     /// 選んでいる複合クリップの中に入る(`clipId` を渡せばそのクリップ)。複合クリップでない・中身が無い・書き出し中などは false。
     @discardableResult
     func enterCompound(_ clipId: String? = nil) -> Bool {
-        guard !isLocked, let id = clipId ?? selectedClipId, let c = clip(id), CompoundEditing.supports(c) else { return false }
+        guard editingSceneId == nil, !isLocked, let id = clipId ?? selectedClipId, let c = clip(id), CompoundEditing.supports(c) else { return false }
         guard c.tracks != nil else { statusText = "この複合クリップには中身がありません"; return false }
         flushCoalesced()
         playback.pause()
