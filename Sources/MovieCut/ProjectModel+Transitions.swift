@@ -40,6 +40,24 @@ extension ProjectModel {
         setClipProperty({ _ = TransitionEditing.setEase(&$0, edge: edge, e) }, name: "\(edge.label)トランジションの進み方の変更", clipId: clipId)
     }
 
+    /// ルールワイプの「やわらかさ」。
+    func setTransitionRuleSoftness(_ v: Double, edge: TransitionEdge, clipId: String? = nil) {
+        guard !isLocked else { return }
+        setClipProperty({ _ = TransitionEditing.setRuleSoftness(&$0, edge: edge, v) }, name: "\(edge.label)トランジションのやわらかさの変更", clipId: clipId)
+    }
+
+    /// ルールワイプの「やわらかさ」(ステッパーなどの連続編集)。
+    func coalescedTransitionRuleSoftness(_ v: Double, edge: TransitionEdge, clipId: String? = nil) {
+        guard !isLocked else { return }
+        coalescedClipProperty({ _ = TransitionEditing.setRuleSoftness(&$0, edge: edge, v) }, name: "\(edge.label)トランジションのやわらかさの変更", clipId: clipId)
+    }
+
+    /// カスタムルール画像の素材の場所。
+    func setTransitionRuleSource(_ src: String?, edge: TransitionEdge, clipId: String? = nil) {
+        guard !isLocked else { return }
+        setClipProperty({ _ = TransitionEditing.setRuleSource(&$0, edge: edge, src) }, name: "\(edge.label)トランジションのルール画像の変更", clipId: clipId)
+    }
+
     // MARK: 音声フェード
 
     func setAudioFade(_ seconds: Double, edge: TransitionEdge, clipId: String? = nil) {

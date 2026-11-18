@@ -64,6 +64,40 @@ public enum TransitionEditing {
         return true
     }
 
+    // MARK: ルールワイプの引数(params)
+
+    /// params の object に 1 項目だけ書く(他の項目はそのまま保つ)。値が nil ならその項目を消す。
+    static func setParam(_ tr: inout Transition, key: String, _ v: JSONValue?) {
+        var obj: [String: JSONValue] = [:]
+        if case .object(let o) = tr.params { obj = o }
+        if let v { obj[key] = v } else { obj[key] = nil }
+        tr.params = obj.isEmpty ? nil : .object(obj)
+    }
+
+    /// ルールワイプの「やわらかさ」(0〜0.4)。既定値と同じなら params から消す。
+    @discardableResult
+    public static func setRuleSoftness(_ c: inout Clip, edge: TransitionEdge, _ v: Double) -> Bool {
+        guard var tr = transition(c, edge), tr.known?.isRuleWipe == true else { return false }
+        let before = tr
+        let nv = RuleWipeMath.clampedSoftness(v)
+        setParam(&tr, key: "softness", nv == RuleWipeMath.defaultSoftness ? nil : .number((nv * 1000).rounded() / 1000))
+        guard tr != before else { return false }
+        store(&c, edge, tr)
+        return true
+    }
+
+    /// カスタムルール画像の素材の場所(nil・空で外す)。種類が ruleCustom のときだけ。
+    @discardableResult
+    public static func setRuleSource(_ c: inout Clip, edge: TransitionEdge, _ src: String?) -> Bool {
+        guard var tr = transition(c, edge), tr.known == .ruleCustom else { return false }
+        let before = tr
+        let s = (src ?? "").trimmingCharacters(in: .whitespaces)
+        setParam(&tr, key: "ruleSrc", s.isEmpty ? nil : .string(s))
+        guard tr != before else { return false }
+        store(&c, edge, tr)
+        return true
+    }
+
     /// インスペクタの進み方の選択肢。
     public static let easeChoices: [(label: String, ease: Ease)] = [
         ("なめらか", .easeInOut), ("一定", .linear), ("ゆっくり開始", .easeIn), ("ゆっくり終了", .easeOut),

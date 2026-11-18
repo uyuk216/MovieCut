@@ -855,13 +855,18 @@ struct ClipInspector: View {
     // MARK: トランジションと音声フェード
 
     /// 種類の Picker の選択肢の値: "" = なし、それ以外は kind の文字列(知らない種類もそのまま選択中として出す)。
+    /// 種類が多いので、グループ(フェード・移動/ワイプ/ルールワイプ/演出)ごとに見出しを付けて並べる。
     private func kindPicker(_ c: Clip, _ edge: TransitionEdge) -> some View {
         let cur = TransitionEditing.transition(c, edge)
         return Picker("", selection: Binding(
             get: { cur?.kind ?? "" },
             set: { v in model.setTransitionKind(v.isEmpty ? nil : TransitionKind(rawValue: v), edge: edge, clipId: clipId) })) {
             Text("なし").tag("")
-            ForEach(TransitionKind.allCases, id: \.rawValue) { Text($0.label).tag($0.rawValue) }
+            ForEach(TransitionCategory.allCases, id: \.rawValue) { cat in
+                Section(cat.label) {
+                    ForEach(TransitionKind.allCases.filter { $0.category == cat }, id: \.rawValue) { Text($0.label).tag($0.rawValue) }
+                }
+            }
             if let cur, cur.known == nil { Text("（未対応: \(cur.kind)）").tag(cur.kind) }
         }
         .labelsHidden()
@@ -890,6 +895,24 @@ struct ClipInspector: View {
                              onStep: { model.coalescedTransitionDuration($0, edge: edge, clipId: clipId) })
                 }
                 InspectorField(label: "進み方") { easePicker(tr, edge) }
+            }
+            if tr.known?.isRuleWipe == true {
+                HStack(alignment: .top, spacing: 10) {
+                    InspectorField(label: "やわらかさ") {
+                        NumField(value: tr.ruleSoftness, step: 0.01, decimals: 2,
+                                 clamp: { min(max($0, 0), MovieCutCore.RuleWipeMath.maxSoftness) },
+                                 onCommit: { model.setTransitionRuleSoftness($0, edge: edge, clipId: clipId) },
+                                 onStep: { model.coalescedTransitionRuleSoftness($0, edge: edge, clipId: clipId) })
+                    }
+                    if tr.known == .ruleCustom {
+                        InspectorField(label: "ルール画像") {
+                            TextField("素材の場所", text: Binding(
+                                get: { tr.ruleSource ?? "" },
+                                set: { model.setTransitionRuleSource($0.isEmpty ? nil : $0, edge: edge, clipId: clipId) }))
+                                .textFieldStyle(.roundedBorder)
+                        }
+                    }
+                }
             }
         }
     }

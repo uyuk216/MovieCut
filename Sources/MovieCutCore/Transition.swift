@@ -3,6 +3,20 @@ import CoreGraphics
 
 // MARK: - トランジションの種類
 
+/// トランジションの種類のグループ(選択 UI の見出し)。
+public enum TransitionCategory: String, CaseIterable, Sendable {
+    case basic, wipe, ruleWipe, effect
+
+    public var label: String {
+        switch self {
+        case .basic: return "フェード・移動"
+        case .wipe: return "ワイプ"
+        case .ruleWipe: return "ルールワイプ"
+        case .effect: return "演出"
+        }
+    }
+}
+
 /// クリップの頭(in)・終わり(out)につける映像の効果の種類。ファイルには文字列(rawValue)で書く。
 /// 知らない文字列も `Transition.kind` にそのまま残し、描くときは何もしない(無効)。
 public enum TransitionKind: String, CaseIterable, Sendable {
@@ -11,6 +25,13 @@ public enum TransitionKind: String, CaseIterable, Sendable {
     case wipeLeft, wipeRight, wipeUp, wipeDown
     case wipeCircle, wipeClock
     case blur, spin
+    // ルール画像ワイプ(#60)。ruleCustom は params の "ruleSrc"(素材の場所)の輝度を使う
+    case ruleHorizontal, ruleVertical, ruleDiagonal, ruleCircle, ruleSquare, ruleDiamond
+    case ruleClock, ruleChecker, ruleStripesH, ruleStripesV, ruleSpiral, ruleCustom
+    // 登場/退場の演出(#61)
+    case fadeZoom, pop, blurRelease, mosaicRelease, edgeBlurRelease, skewIn, shatter, bounceIn, riseIn
+    case regionLeft, regionRight, regionUp, regionDown
+    case driftLeft, driftRight, driftUp, driftDown
 
     /// 画面に出す名前。
     public var label: String {
@@ -29,10 +50,71 @@ public enum TransitionKind: String, CaseIterable, Sendable {
         case .wipeClock: return "時計回りワイプ"
         case .blur: return "ぼかし"
         case .spin: return "回転"
+        case .ruleCustom: return "ルールワイプ（カスタム画像）"
+        case .fadeZoom: return "フェードズーム"
+        case .pop: return "ポップ拡大"
+        case .blurRelease: return "ぼかし解除"
+        case .mosaicRelease: return "モザイク解除"
+        case .edgeBlurRelease: return "境界ぼかし解除"
+        case .skewIn: return "傾斜変形"
+        case .shatter: return "砕け散り"
+        case .bounceIn: return "バウンス"
+        case .riseIn: return "起き上がり"
+        case .regionLeft: return "領域外（左）"
+        case .regionRight: return "領域外（右）"
+        case .regionUp: return "領域外（上）"
+        case .regionDown: return "領域外（下）"
+        case .driftLeft: return "移動フェード（左）"
+        case .driftRight: return "移動フェード（右）"
+        case .driftUp: return "移動フェード（上）"
+        case .driftDown: return "移動フェード（下）"
+        default: return ruleKind?.label ?? rawValue
         }
     }
 
+    /// 選択 UI のグループ。
+    public var category: TransitionCategory {
+        switch self {
+        case .fade, .fadeZoom, .zoom, .pop, .slideLeft, .slideRight, .slideUp, .slideDown,
+             .regionLeft, .regionRight, .regionUp, .regionDown, .driftLeft, .driftRight, .driftUp, .driftDown:
+            return .basic
+        case .wipeLeft, .wipeRight, .wipeUp, .wipeDown, .wipeCircle, .wipeClock:
+            return .wipe
+        case .ruleHorizontal, .ruleVertical, .ruleDiagonal, .ruleCircle, .ruleSquare, .ruleDiamond,
+             .ruleClock, .ruleChecker, .ruleStripesH, .ruleStripesV, .ruleSpiral, .ruleCustom:
+            return .ruleWipe
+        case .blur, .spin, .blurRelease, .mosaicRelease, .edgeBlurRelease, .skewIn, .shatter, .bounceIn, .riseIn:
+            return .effect
+        }
+    }
+
+    /// 内蔵ルール画像の種類(ルールワイプのとき)。カスタム画像は nil。
+    public var ruleKind: RuleWipeKind? {
+        switch self {
+        case .ruleHorizontal: return .horizontal
+        case .ruleVertical: return .vertical
+        case .ruleDiagonal: return .diagonal
+        case .ruleCircle: return .circle
+        case .ruleSquare: return .square
+        case .ruleDiamond: return .diamond
+        case .ruleClock: return .clock
+        case .ruleChecker: return .checker
+        case .ruleStripesH: return .stripesHorizontal
+        case .ruleStripesV: return .stripesVertical
+        case .ruleSpiral: return .spiral
+        default: return nil
+        }
+    }
+
+    /// ルール画像ワイプか(やわらかさ等の設定が効く)。
+    public var isRuleWipe: Bool { ruleKind != nil || self == .ruleCustom }
+
     var isSlide: Bool { [.slideLeft, .slideRight, .slideUp, .slideDown].contains(self) }
+
+    /// 移動量の計算にクリップの枠の大きさが要る種類(描画側が大きさを測る)。
+    public var needsSize: Bool {
+        isSlide || [.regionLeft, .regionRight, .regionUp, .regionDown].contains(self)
+    }
 }
 
 /// 頭(in)と終わり(out)。
@@ -106,6 +188,20 @@ public struct Transition: Equatable, Codable, Sendable {
     public func effectiveDuration(clipDuration: Double) -> Double {
         Self.clampedDuration(duration, clipDuration: clipDuration)
     }
+
+    // MARK: ルールワイプの引数(params)
+
+    /// ルールワイプの「やわらかさ」(params の "softness")。無ければ既定。
+    public var ruleSoftness: Double {
+        if case .object(let o) = params, case .number(let v) = o["softness"] { return RuleWipeMath.clampedSoftness(v) }
+        return RuleWipeMath.defaultSoftness
+    }
+
+    /// カスタムルール画像の素材の場所(params の "ruleSrc")。無ければ nil(横ルールに倒す)。
+    public var ruleSource: String? {
+        if case .object(let o) = params, case .string(let s) = o["ruleSrc"], !s.isEmpty { return s }
+        return nil
+    }
 }
 
 // MARK: - 計算の結果
@@ -118,6 +214,9 @@ public enum TransitionMask: Equatable, Sendable {
     case circle(Double)
     /// 12 時から時計回りに見せる割合(0〜1)
     case clock(Double)
+    /// ルール画像ワイプ: (ルールの名前(RuleWipeKind の rawValue か "custom")、見えている度合い 0〜1、
+    /// やわらかさ、カスタム画像の素材の場所)
+    case ruleImage(String, Double, Double, String?)
 
     /// 何も見えない形か。
     public var isEmpty: Bool {
@@ -125,6 +224,7 @@ public enum TransitionMask: Equatable, Sendable {
         case .rect(_, _, let w, let h): return w <= 0 || h <= 0
         case .circle(let r): return r <= 0
         case .clock(let f): return f <= 0
+        case .ruleImage(_, let p, _, _): return p <= 0
         }
     }
 }
@@ -140,6 +240,12 @@ public struct TransitionState: Equatable, Sendable {
     public var rotationAdd = 0.0
     /// 1920×1080 のときの px。足す(解像度が違えば描画側で比例させる)
     public var blurAdd = 0.0
+    /// モザイクのブロックの大きさ(1920×1080 のときの px)。大きい方を取る
+    public var pixelateAdd = 0.0
+    /// 傾斜変形(横方向のずらし、度)。足す
+    public var skewXAdd = 0.0
+    /// 境界ぼかしの帯の幅(短い辺に対する割合 0〜0.5)。大きい方を取る
+    public var feather = 0.0
     public var mask: TransitionMask?
 
     public init() {}
@@ -147,7 +253,7 @@ public struct TransitionState: Equatable, Sendable {
     public var isIdentity: Bool { self == TransitionState() }
 
     /// 位置・大きさ・回転を動かすか(文字のビットマップキャッシュを使えない)。
-    public var movesGeometry: Bool { offsetX != 0 || offsetY != 0 || scaleMul != 1 || rotationAdd != 0 }
+    public var movesGeometry: Bool { offsetX != 0 || offsetY != 0 || scaleMul != 1 || rotationAdd != 0 || skewXAdd != 0 }
 
     /// 頭と終わりの両方が効く(とても短いクリップ)ときの重ね合わせ。
     func combined(with o: TransitionState) -> TransitionState {
@@ -155,6 +261,9 @@ public struct TransitionState: Equatable, Sendable {
         s.opacityMul *= o.opacityMul; s.scaleMul *= o.scaleMul
         s.offsetX += o.offsetX; s.offsetY += o.offsetY
         s.rotationAdd += o.rotationAdd; s.blurAdd += o.blurAdd
+        s.pixelateAdd = max(s.pixelateAdd, o.pixelateAdd)
+        s.skewXAdd += o.skewXAdd
+        s.feather = max(s.feather, o.feather)
         s.mask = o.mask ?? mask
         return s
     }
@@ -167,7 +276,8 @@ public enum TransitionMath {
     /// 「見えている度合い」u(0 = 出る前/消えた後、1 = 完全に見える)から効果を作る。
     /// center = クリップの中心(キャンバスの割合)、size = クリップの枠の大きさ(同じく割合)。スライドの移動量に使う。
     public static func state(kind: TransitionKind, edge: TransitionEdge, u rawU: Double,
-                             center: (x: Double, y: Double) = (0.5, 0.5), size: (w: Double, h: Double) = (0, 0)) -> TransitionState {
+                             center: (x: Double, y: Double) = (0.5, 0.5), size: (w: Double, h: Double) = (0, 0),
+                             softness: Double = RuleWipeMath.defaultSoftness, ruleSource: String? = nil) -> TransitionState {
         let u = min(max(rawU, 0), 1)
         var s = TransitionState()
         if u >= 1 { return s }
@@ -212,8 +322,81 @@ public enum TransitionMath {
         case .spin:
             s.opacityMul = u
             s.rotationAdd = (edge == .in ? -90 : 90) * r
+        // MARK: ルール画像ワイプ(#60): 見えている度合い u をそのままルールの進行度にする
+        // (退場は u が 1→0 に戻るので、現れた順と逆に消える)
+        case .ruleHorizontal, .ruleVertical, .ruleDiagonal, .ruleCircle, .ruleSquare, .ruleDiamond,
+             .ruleClock, .ruleChecker, .ruleStripesH, .ruleStripesV, .ruleSpiral:
+            s.mask = .ruleImage(kind.ruleKind?.rawValue ?? RuleWipeKind.horizontal.rawValue, u, RuleWipeMath.clampedSoftness(softness), nil)
+        case .ruleCustom:
+            s.mask = .ruleImage("custom", u, RuleWipeMath.clampedSoftness(softness), ruleSource)
+        // MARK: 登場/退場の演出(#61)
+        case .fadeZoom:
+            s.opacityMul = u
+            s.scaleMul = 0.9 + 0.1 * u
+        case .pop:
+            s.scaleMul = max(easeOutBack(u), 1e-4)
+            s.opacityMul = min(1, u * 2)
+        case .blurRelease:
+            s.blurAdd = 60 * r
+        case .mosaicRelease:
+            s.pixelateAdd = 64 * r
+        case .edgeBlurRelease:
+            s.blurAdd = 40 * r
+            s.feather = 0.35 * r
+        case .skewIn:
+            s.skewXAdd = (edge == .in ? -35 : 35) * r
+            s.opacityMul = u
+        case .shatter:
+            // ブロック単位に散らばった順で出る/消える + わずかな回転と縮小
+            s.mask = .ruleImage(RuleWipeKind.scatter.rawValue, u, 0, nil)
+            s.rotationAdd = (edge == .in ? -6 : 6) * r
+            s.scaleMul = 0.92 + 0.08 * u
+        case .bounceIn:
+            s.offsetY = (1 - easeOutBounce(u)) * 0.45
+        case .riseIn:
+            s.rotationAdd = (edge == .in ? -75 : 75) * r
+            s.offsetY = 0.18 * r
+            s.opacityMul = u
+        case .regionLeft:
+            s.offsetX = -r * (size.w + 0.02)
+        case .regionRight:
+            s.offsetX = r * (size.w + 0.02)
+        case .regionUp:
+            s.offsetY = -r * (size.h + 0.02)
+        case .regionDown:
+            s.offsetY = r * (size.h + 0.02)
+        case .driftLeft:
+            s.offsetX = -0.25 * r
+            s.opacityMul = u
+        case .driftRight:
+            s.offsetX = 0.25 * r
+            s.opacityMul = u
+        case .driftUp:
+            s.offsetY = -0.25 * r
+            s.opacityMul = u
+        case .driftDown:
+            s.offsetY = 0.25 * r
+            s.opacityMul = u
         }
         return s
+    }
+
+    /// 跳ねる進み方(easeOutBounce)。u=0 で 0、u=1 で 1、途中で数回跳ねる。
+    public static func easeOutBounce(_ rawU: Double) -> Double {
+        let u = min(max(rawU, 0), 1)
+        let n1 = 7.5625, d1 = 2.75
+        if u < 1 / d1 { return n1 * u * u }
+        if u < 2 / d1 { let v = u - 1.5 / d1; return n1 * v * v + 0.75 }
+        if u < 2.5 / d1 { let v = u - 2.25 / d1; return n1 * v * v + 0.9375 }
+        let v = u - 2.625 / d1
+        return n1 * v * v + 0.984375
+    }
+
+    /// 行き過ぎて戻る進み方(easeOutBack)。u=0 で 0、途中で 1 を少し超えて u=1 で 1。
+    public static func easeOutBack(_ rawU: Double) -> Double {
+        let u = min(max(rawU, 0), 1)
+        let c1 = 1.70158, c3 = c1 + 1
+        return 1 + c3 * pow(u - 1, 3) + c1 * pow(u - 1, 2)
     }
 
     /// 頭の u: 0 から clipの頭からの秒 rel が長さ d に達するまで ease で 0→1。範囲外は nil(効かない)。
@@ -237,10 +420,10 @@ public enum TransitionMath {
         let rel = t - clip.start
         let c = center ?? (clip.xOrDefault, clip.yOrDefault)
         if let tr = clip.transitionIn, let k = tr.known, let u = inProgress(tr, rel: rel, clipDuration: clip.duration) {
-            out = out.combined(with: state(kind: k, edge: .in, u: u, center: c, size: size))
+            out = out.combined(with: state(kind: k, edge: .in, u: u, center: c, size: size, softness: tr.ruleSoftness, ruleSource: tr.ruleSource))
         }
         if let tr = clip.transitionOut, let k = tr.known, let u = outProgress(tr, rel: rel, clipDuration: clip.duration) {
-            out = out.combined(with: state(kind: k, edge: .out, u: u, center: c, size: size))
+            out = out.combined(with: state(kind: k, edge: .out, u: u, center: c, size: size, softness: tr.ruleSoftness, ruleSource: tr.ruleSource))
         }
         return out
     }
