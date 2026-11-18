@@ -233,7 +233,8 @@ struct LeftPanel: View {
             ScrollView {
                 VStack(spacing: 6) {
                     ForEach(model.project.characters) { ch in
-                        CharacterRow(ch: ch, speakerName: ch.speaker.flatMap { speakers.label(for: $0) }, selected: ch.id == model.effectiveSelectedCharId) { model.selectCharacter(ch.id) }
+                        CharacterRow(ch: ch, speakerName: ch.speaker.flatMap { speakers.label(for: $0) }, selected: ch.id == model.effectiveSelectedCharId, canDelete: model.project.characters.count > 1,
+                                     onDelete: { model.requestDeleteCharacter(ch.id) }) { model.selectCharacter(ch.id) }
                             .contextMenu {
                                 Button(L10n.t("このキャラを消す"), role: .destructive) { model.requestDeleteCharacter(ch.id) }
                                     .disabled(model.project.characters.count <= 1)
@@ -298,11 +299,30 @@ struct CharacterRow: View {
     /// VOICEVOX の話者一覧が読めていれば「キャラ2（ノーマル）」
     var speakerName: String?
     let selected: Bool
+    /// 選択中の行だけに出す削除ボタン(右クリックのメニューと同じ操作)。キャラが 1 件のときは押せない。
+    var canDelete = true
+    var onDelete: (() -> Void)? = nil
     let action: () -> Void
 
     private var engineLabel: String { L10n.t(CharacterRowSubtitle.text(for: ch, speakerName: speakerName)) }
 
     var body: some View {
+        ZStack(alignment: .trailing) {
+            rowButton
+            if selected, let onDelete {
+                Button(action: onDelete) {
+                    Image(systemName: "xmark").font(.system(size: 10, weight: .semibold))
+                }
+                .buttonStyle(.borderless)
+                .disabled(!canDelete)
+                .help(L10n.t(canDelete ? "このキャラを消す" : "キャラクターが 1 件のときは消せません"))
+                .accessibilityLabel(L10n.t("このキャラを消す"))
+                .padding(.trailing, 8)
+            }
+        }
+    }
+
+    private var rowButton: some View {
         Button(action: action) {
             HStack(spacing: 8) {
                 Circle().fill(Color(hex: ch.color)).frame(width: 11, height: 11)
