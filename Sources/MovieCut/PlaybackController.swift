@@ -435,7 +435,15 @@ final class PlaybackController {
             stopInternal()
             return
         }
-        model.currentTime = t
+        model.currentTime = displayedTime(t, model: model)
+    }
+
+    /// 画面に出す時刻。実効階級が minimal のときだけ、プロジェクト fps の半分の格子に量子化する(映像の更新間隔が 2 倍。音声はそのまま)。
+    /// 格子に落としても、いま表示している時刻より後退はさせない(階級が変わった直後も同じ)。
+    private func displayedTime(_ t: Double, model: ProjectModel) -> Double {
+        guard model.currentPreviewTier() == .minimal, model.project.fps > 0 else { return t }
+        let step = 2 / model.project.fps
+        return max(floor(t / step) * step, model.currentTime)
     }
 
     /// シャトル中: 時計の経過 × 速さだけ進める。端に着いたら止まる。

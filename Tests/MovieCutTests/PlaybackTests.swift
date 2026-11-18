@@ -169,6 +169,35 @@ final class PlaybackTests: XCTestCase {
         XCTAssertEqual(m.currentTime, 1.0, accuracy: 1e-9)
     }
 
+    /// 低メモリ(minimal)だけ、画面の時刻を fps の半分の格子に量子化する。音声(backend)は止めず、後退もさせない。
+    func testMinimalTierQuantizesOnlyTheDisplayedTime() async {
+        let saved = UserDefaults.standard.string(forKey: PreviewTierStore.defaultsKey)
+        addTeardownBlock {
+            if let saved { UserDefaults.standard.set(saved, forKey: PreviewTierStore.defaultsKey) } else { UserDefaults.standard.removeObject(forKey: PreviewTierStore.defaultsKey) }
+        }
+        PreviewTierStore.set(.full)
+        let (m, c, b, _) = make(end: 5)     // fps 60 → 格子は 2/60 秒(1/30 秒)
+        await startPlaying(c)
+        b.time = 0.11; c.tick()
+        XCTAssertEqual(m.currentTime, 0.11, accuracy: 1e-9, "フルは量子化しない")
+
+        PreviewTierStore.set(.minimal)
+        b.time = 0.14; c.tick()             // 4.2 格子 → 4/30 へ
+        XCTAssertEqual(m.currentTime, 4.0 / 30, accuracy: 1e-9)
+        b.time = 0.15; c.tick()             // 4.5 格子 → まだ 4/30(次の格子まで動かない)
+        XCTAssertEqual(m.currentTime, 4.0 / 30, accuracy: 1e-9)
+        XCTAssertTrue(c.isPlaying)
+        XCTAssertEqual(b.starts.count, 1, "音声は途切れず再開しない")
+
+        // 階級を戻すと、格子に落とした時刻が表示より前になる場合でも後退しない
+        PreviewTierStore.set(.full)
+        b.time = 0.19; c.tick()
+        XCTAssertEqual(m.currentTime, 0.19, accuracy: 1e-9)
+        PreviewTierStore.set(.minimal)
+        b.time = 0.195; c.tick()            // 格子に落とすと 5/30 ≈ 0.1667 だが、表示は 0.19 のまま
+        XCTAssertEqual(m.currentTime, 0.19, accuracy: 1e-9)
+    }
+
     func testStopsAtEndAndRestartsFromZero() async {
         let (m, c, b, _) = make(end: 5)
         m.currentTime = 4.9
