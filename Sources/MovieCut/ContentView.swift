@@ -245,26 +245,28 @@ struct LeftPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text(L10n.t("キャラクター")).font(.headline)
-                Spacer()
-                Button(L10n.t("＋")) { model.addCharacter() }
-                    .help(L10n.t("キャラクターを追加"))
-            }
-            .padding(.bottom, 8)
-            ScrollView {
-                VStack(spacing: 6) {
-                    ForEach(model.project.characters) { ch in
-                        CharacterRow(ch: ch, speakerName: ch.speaker.flatMap { speakers.label(for: $0) }, selected: ch.id == model.effectiveSelectedCharId) { model.selectCharacter(ch.id) }
-                            .contextMenu {
-                                Button(L10n.t("このキャラを消す"), role: .destructive) { model.requestDeleteCharacter(ch.id) }
-                                    .disabled(model.project.characters.count <= 1)
-                            }
+            MCDisclosure("left.characters", defaultOpen: true) {
+                HStack {
+                    Text(L10n.t("キャラクター")).font(.headline)
+                    Spacer()
+                    Button(L10n.t("＋")) { model.addCharacter() }
+                        .help(L10n.t("キャラクターを追加"))
+                }
+            } content: {
+                ScrollView {
+                    VStack(spacing: 6) {
+                        ForEach(model.project.characters) { ch in
+                            CharacterRow(ch: ch, speakerName: ch.speaker.flatMap { speakers.label(for: $0) }, selected: ch.id == model.effectiveSelectedCharId) { model.selectCharacter(ch.id) }
+                                .contextMenu {
+                                    Button(L10n.t("このキャラを消す"), role: .destructive) { model.requestDeleteCharacter(ch.id) }
+                                        .disabled(model.project.characters.count <= 1)
+                                }
+                        }
                     }
                 }
+                .frame(maxHeight: 176)
+                .fixedSize(horizontal: false, vertical: model.project.characters.count <= 3)
             }
-            .frame(maxHeight: 176)
-            .fixedSize(horizontal: false, vertical: model.project.characters.count <= 3)
             TachieListSection(model: model).padding(.top, 10)
             Text(L10n.t("台本")).font(.headline).padding(.top, 14).padding(.bottom, 4)
             Text(ScriptHelp.caption)
