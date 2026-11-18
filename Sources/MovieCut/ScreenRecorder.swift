@@ -59,11 +59,17 @@ final class ScreenRecordingController: ObservableObject {
     @Published var outputDirectory: URL = ScreenRecordingController.defaultOutputDirectory()
 
     private let engine: any ScreenRecordingEngine
+    private let permissionCheck: () -> Bool
+    private let permissionRequest: () -> Bool
     private var startedAt: Date?
     private var timerTask: Task<Void, Never>?
 
-    init(engine: any ScreenRecordingEngine = ScreenCaptureKitEngine()) {
+    init(engine: any ScreenRecordingEngine = ScreenCaptureKitEngine(),
+         permissionCheck: @escaping () -> Bool = { ScreenCapturePermission.isGranted() },
+         permissionRequest: @escaping () -> Bool = { ScreenCapturePermission.request() }) {
         self.engine = engine
+        self.permissionCheck = permissionCheck
+        self.permissionRequest = permissionRequest
     }
 
     static func defaultOutputDirectory() -> URL {
@@ -76,11 +82,11 @@ final class ScreenRecordingController: ObservableObject {
     // MARK: 許可
 
     func refreshPermission() {
-        permissionGranted = ScreenCapturePermission.isGranted()
+        permissionGranted = permissionCheck()
     }
 
     func requestPermission() {
-        ScreenCapturePermission.request()
+        _ = permissionRequest()
         refreshPermission()
         if permissionGranted { Task { await refreshTargets() } }
     }
