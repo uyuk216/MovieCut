@@ -15,6 +15,8 @@ public final class RenderAssets {
     private var missingEnvelopes: Set<String> = []
     private var generators: [String: AVAssetImageGenerator] = [:]
     private var missingVideos: Set<String> = []
+    /// パス → 最初のコマが出る時刻(映像が遅れて始まるファイルの先頭クランプ用)。
+    private var firstFrameTimes: [String: Double] = [:]
     private var exportMode = false
     private var sequentials: [String: SequentialVideoFrames] = [:]
     private var reversers: [String: ReverseVideoFrames] = [:]
@@ -352,10 +354,28 @@ public final class RenderAssets {
         // 越えた時刻を失敗扱いにすると、その素材が「見つからない」として記録され、以後のコマが全部黒になる。
         let total = g.asset.duration.seconds
         let wanted = max(0, time + (exact ? 0.001 : 0))
-        let clamped = total.isFinite && total > 0 ? min(wanted, max(0, total - 0.002)) : wanted
+        var clamped = total.isFinite && total > 0 ? min(wanted, max(0, total - 0.002)) : wanted
+        // 逆に、最初のコマより前の時刻は、そのコマに寄せる。映像トラックが遅れて始まるファイル
+        // (例: 最初のコマが約 0.023 秒の位置にある mp4)では、0 秒の要求が許容幅の外になって失敗し、
+        // 終わり側と同じく「見つからない」に記録されて以後のコマが全部黒になるため。
+        let first = firstFrameTime(path: path, asset: g.asset)
+        if first > 0 { clamped = max(clamped, first + 0.001) }
         let t = CMTime(seconds: clamped, preferredTimescale: 600)
         if let img = try? g.copyCGImage(at: t, actualTime: nil) { return img }
         lock.lock(); missingVideos.insert(path); lock.unlock()
         return nil
+    }
+
+    /// 最初のコマが出る時刻(素材の時間軸)。映像トラックの先頭に空の区間があるファイルでは 0 より
+    /// 大きくなる(空でない最初の区間の開始)。トラックや区間が読めなければ 0(= 先頭から映像がある)。
+    private func firstFrameTime(path: String, asset: AVAsset) -> Double {
+        lock.lock()
+        if let v = firstFrameTimes[path] { lock.unlock(); return v }
+        lock.unlock()
+        let start = asset.tracks(withMediaType: .video).first
+            .flatMap { tr in tr.segments.first(where: { !$0.isEmpty })?.timeMapping.target.start.seconds } ?? 0
+        let v = start.isFinite && start > 0 ? start : 0
+        lock.lock(); firstFrameTimes[path] = v; lock.unlock()
+        return v
     }
 }
