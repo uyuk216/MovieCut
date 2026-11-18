@@ -134,6 +134,17 @@ final class AquesTalkPluginTests: XCTestCase {
         XCTAssertTrue(plugin.usingFallback)
     }
 
+    // 5b: 実プレイヤーでの等価性(入っていなければ skip。内蔵の参照テスト testAquesTalkReimuMatchesElectronReference と同じ流儀)
+    func testRealPlayerMatchesElectronReference() async throws {
+        try XCTSkipUnless(FileManager.default.fileExists(atPath: AquesTalkSynthesizer.playerPath), "AquesTalkPlayer 未インストール")
+        let ref = try XCTUnwrap(Bundle.module.url(forResource: "aq_reimu", withExtension: "wav", subdirectory: "Fixtures"))
+        let synth = AquesTalkPluginSynthesizer(cache: freshCache("real"))
+        let out = try await synth.synthesize(text: "ゆっくりしていってね", voice: "女声1", speed: 100)
+        let a = try Data(contentsOf: out), b = try Data(contentsOf: ref)
+        XCTAssertEqual(a.count, b.count, "サイズ")
+        XCTAssertTrue(a == b, "Electron 版の WAV とバイト単位で同一(プラグイン経由)")
+    }
+
     // 6a
     func testRoutingNoPluginUsesFallback() async throws {
         let fb = RecordingVoiceProvider()
