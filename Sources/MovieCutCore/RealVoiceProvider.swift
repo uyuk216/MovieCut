@@ -61,9 +61,19 @@ extension ScriptTimeline {
     public static func clipDuration(forAudio seconds: Double) -> Double { seconds + 0.15 }
 
     /// 音声を作り直す(セリフやキャラを変えたとき)。新しい src、長さ = 音声 + 0.15、offset は 0 に戻す。
+    ///
+    /// 読み辞書(`project.readingDictionary`)は合成の直前に適用する(`DictionaryVoiceProvider`)。
+    /// 優先順位(仕様):
+    ///  1. 土台は `clip.text`(セリフごとの読み指定。ユーザーが手で書いた読みがそのまま土台)。
+    ///  2. 辞書は合成直前にその上へ当てる最終変換。かなで書いた明示の読みは、辞書の表記キーと一致しない限り
+    ///     書き換わらないので、実質セリフごとの読みが優先され、辞書は残った表記を補う。
+    ///  3. 台本由来のクリップは `ScriptTimeline.add` が生成時に辞書を焼き込み済み。通常の辞書(漢字表記→かな)なら
+    ///     読み文字列はキーに一致しないため、再合成で再適用しても結果は変わらない。
+    /// `clip.text` と字幕は書き換えない(合成に渡す文だけ変換する)。辞書が空なら従来と完全に同一。
     public static func regenerateVoice(clip: inout Clip, project: Project, provider: VoiceProvider, directory: URL = FileManager.default.temporaryDirectory) async throws {
         guard let ch = project.characters.first(where: { $0.id == (clip.charId ?? "") }) else { return }
-        let r = try await provider.synthesize(character: ch, text: ExpressionTag.body(clip.text ?? ""), in: directory)
+        let voice = DictionaryVoiceProvider(inner: provider, entries: project.readingDictionary)
+        let r = try await voice.synthesize(character: ch, text: ExpressionTag.body(clip.text ?? ""), in: directory)
         clip.src = r.url.path
         clip.duration = clipDuration(forAudio: r.duration)
         clip.offset = 0
