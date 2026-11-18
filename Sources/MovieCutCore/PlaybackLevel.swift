@@ -103,15 +103,15 @@ public struct PlaybackLevelEnvelope: Equatable, Sendable {
         var calc = PlaybackLevelCalculator(sampleRate: fmt.sampleRate)
         let capacity = AVAudioFrameCount(fmt.sampleRate)   // 1 秒分
         guard let buf = AVAudioPCMBuffer(pcmFormat: fmt, frameCapacity: capacity) else { return nil }
-        while true {
-            do { try file.read(into: buf, frameCount: capacity) } catch { return nil }
+        while file.framePosition < file.length {
+            let want = AVAudioFrameCount(min(Int64(capacity), file.length - file.framePosition))
+            do { try file.read(into: buf, frameCount: want) } catch { return nil }
             let n = Int(buf.frameLength)
             if n == 0 { break }
             guard let data = buf.floatChannelData else { return nil }
             let l = Array(UnsafeBufferPointer(start: data[0], count: n))
             let r = ch >= 2 ? Array(UnsafeBufferPointer(start: data[1], count: n)) : l
             calc.add(left: l, right: r)
-            if n < Int(capacity) { break }
         }
         let env = calc.finish()
         return env.peaks.isEmpty ? nil : env
