@@ -691,7 +691,7 @@ struct ClipInspector: View {
     /// 速度ランプ(時間で速さが変わる)の点の一覧。点ごとに時刻(クリップの頭から)と速度を直せる。どの操作も Undo は 1 回。
     @ViewBuilder private func rampSection(_ c: Clip) -> some View {
         if let pts = c.rampPoints {
-            Text("速度ランプ（点のあいだは速度を直線でつなぎます。音は音程が速度に従います）")
+            Text("速度ランプ（点のあいだは各点の進み方でつなぎます。音は音程が速度に従います）")
                 .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             ForEach(Array(pts.enumerated()), id: \.offset) { i, p in
                 HStack(spacing: 6) {
@@ -705,6 +705,13 @@ struct ClipInspector: View {
                              clamp: { ClipTiming.clampSpeed($0) },
                              onCommit: { v in model.setSpeedRampPoint(clipId: clipId, index: i, v: v) },
                              onStep: { v in model.setSpeedRampPoint(clipId: clipId, index: i, v: v) })
+                    if i < pts.count - 1 {
+                        Picker("", selection: Binding(get: { p.ease }, set: { model.setSpeedRampEase(clipId: clipId, index: i, ease: $0) })) {
+                            ForEach(Ease.presets, id: \.ease) { preset in Text(preset.label).tag(preset.ease) }
+                            if !Ease.presets.contains(where: { $0.ease == p.ease }) { Text("カスタム").tag(p.ease) }
+                        }
+                        .labelsHidden().fixedSize().help("この点から次の点までの進み方（イージング）")
+                    }
                     Button("削除") { model.removeSpeedRampPoint(clipId: clipId, index: i) }
                         .disabled(pts.count <= 2)
                 }
@@ -769,6 +776,24 @@ struct ClipInspector: View {
         if status == .invalid { Text(".cube として読めません（何もかかりません）").font(.system(size: 10)).foregroundStyle(.red) }
     }
 
+    /// 色調転写の参照画像の名前と状態(見つからない・読めないときは赤字)。
+    @ViewBuilder private func colorTransferFileRow(_ e: Effect) -> some View {
+        let path = e.path ?? ""
+        let status: ReferenceColorCache.Status? = path.isEmpty ? nil : ReferenceColorCache.shared.status(atPath: path)
+        HStack(spacing: 6) {
+            Text(path.isEmpty ? "参照画像未選択" : (path as NSString).lastPathComponent)
+                .font(MCDesign.Font.subheadline).lineLimit(1).truncationMode(.middle)
+                .foregroundStyle(status == .ok ? Color.secondary : Color.red)
+                .help(path)
+            Spacer(minLength: 4)
+            Button("選ぶ…") { model.chooseColorTransferReference(clipId: clipId) }
+                .controlSize(.small).disabled(model.isLocked)
+                .help("色調の手本にする画像を選ぶ")
+        }
+        if status == .missing { Text("ファイルが見つかりません（何もかかりません）").font(.system(size: 10)).foregroundStyle(.red) }
+        if status == .invalid { Text("画像として読めません（何もかかりません）").font(.system(size: 10)).foregroundStyle(.red) }
+    }
+
     @ViewBuilder private func effectCard(_ c: Clip, _ i: Int) -> some View {
         let e = c.effects[i]
         let kind = e.known
@@ -794,6 +819,7 @@ struct ClipInspector: View {
                         ColorField(label: kind == .chromaKey ? "抜く色" : "色", hex: e.colorOrDefault) { model.coalescedEffectColor($0, at: i, clipId: clipId) }
                     }
                     if kind == .lut { lutFileRow(e) }
+                    if kind == .colorTransfer { colorTransferFileRow(e) }
                 }
                 .opacity(e.enabled ? 1 : 0.45)
             }

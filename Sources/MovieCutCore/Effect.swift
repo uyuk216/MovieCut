@@ -25,6 +25,8 @@ public enum EffectKind: String, CaseIterable, Sendable {
     case brightness, contrast, saturation, hue, exposure, sharpen, mono, sepia
     case vignette, pixelate, gaussianBlur, zoomBlur, motionBlur, glow, dropShadow, outline
     case chromaKey, lut, faceBlur
+    /// 色調転写: 参照画像の色調(平均と標準偏差)へ寄せる。参照画像の場所は `Effect.path`。
+    case colorTransfer
     /// 色温度・ティント(ホワイトバランス)と、持ち上げ・ガンマ・ゲインのカラーホイール。
     case whiteBalance, colorWheels
     /// 光学ミスト: 明るい所だけをぼかして重ね、ふんわり光らせる(ハイライトのにじみ)。
@@ -60,6 +62,7 @@ public enum EffectKind: String, CaseIterable, Sendable {
         case .chromaKey: return "クロマキー"
         case .lut: return "LUT"
         case .faceBlur: return "顔ぼかし"
+        case .colorTransfer: return "色調転写"
         case .whiteBalance: return "ホワイトバランス"
         case .colorWheels: return "カラーホイール"
         case .opticalMist: return "光学ミスト"
@@ -112,6 +115,7 @@ public enum EffectKind: String, CaseIterable, Sendable {
         case .chromaKey: return [Self.p("similarity", "色の許容", 0, 1, 0.4, 0.01, .percent), Self.p("smoothness", "なめらかさ", 0, 1, 0.1, 0.01, .percent),
                                  Self.p("spill", "色かぶりの除去", 0, 1, 0.5, 0.01, .percent)]
         case .lut: return [Self.p("intensity", "強さ", 0, 1, 1, 0.01, .percent)]
+        case .colorTransfer: return [Self.p("intensity", "強さ", 0, 1, 1, 0.01, .percent)]
         case .faceBlur: return [Self.p("strength", "強さ", 0, 1, 0.6, 0.01, .percent), Self.p("mode", "方式", 0, 1, 0, 1, .mode),
                                 Self.p("size", "モザイクの大きさ（px）", 2, 100, 38, 1, .px), Self.p("track", "顔に追従", 0, 1, 0, 1, .toggle)]
         case .whiteBalance: return [Self.p("temperature", "色温度（青↔橙）", -1, 1, 0, 0.01), Self.p("tint", "ティント（緑↔紫）", -1, 1, 0, 0.01)]
@@ -168,7 +172,7 @@ public struct Effect: Equatable, Codable, Sendable {
     public var enabled: Bool = true
     public var params: [String: Double] = [:]
     public var color: String?
-    /// LUT のファイルの場所(.cube)。LUT 以外では使わない。
+    /// ファイルを使うエフェクトの場所(LUT は .cube、色調転写は参照画像)。それ以外では使わない。
     public var path: String?
     /// 知らないキー(保持して書き戻す)
     public var extra: [String: JSONValue] = [:]

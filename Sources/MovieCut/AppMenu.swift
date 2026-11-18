@@ -46,6 +46,8 @@ enum MenuCommand: Hashable {
     case rangeIn, rangeOut, rangeClear, exportStill, exportSequence
     // 書き出し範囲の中身を全レイヤーから削除(リップルは後ろを詰める)
     case rangeDelete, rangeRippleDelete
+    // 範囲選択(ルーラーの ⌥ ドラッグ)内のクリップを選ぶ / 選択を解除する
+    case selectClipsInRange, clearRangeSelection
     // タイムラインの問い合わせ: 前後の空白(黒穴)へ・再生位置のクリップを選ぶ・短いクリップを選ぶ・選んだ範囲を書き出し範囲に
     case prevGap, nextGap, selectClipAtPlayhead, cycleOverlapping, selectShortClips, rangeFromSelection, speechShare
     // 選んだクリップの元素材の使用範囲(ソースの使用範囲)を表示し、その頭へ移す
@@ -103,9 +105,9 @@ enum MenuCommand: Hashable {
     // キーフレーム / アニメーション
     case toggleKeyframe, prevKeyframe, nextKeyframe, clearKeyframes, animationPreset(AnimationPreset)
     // トランジション(kind が nil = なし)
-    case transitionIn(TransitionKind?), transitionOut(TransitionKind?), fadeBoth, clearTransitions, crossfade, fadeInOut
+    case transitionIn(TransitionKind?), transitionOut(TransitionKind?), fadeBoth, clearTransitions, crossfade, overlapCrossfade, fadeInOut
     // エフェクト
-    case effectAdd(EffectKind), effectPreset(EffectPreset), effectClear, effectCopy, effectPaste, lutLoad, autoWhiteBalance
+    case effectAdd(EffectKind), effectPreset(EffectPreset), effectClear, effectCopy, effectPaste, lutLoad, colorTransferLoad, autoWhiteBalance
     // 文字(スタイルを適用 = id、文字アニメーション)
     case textStyleApply(String), textStyleApplyAll(String), textAnim(TextAnimKind), toggleCounter, toggleVertical, togglePerChar
     // 配置(ピクチャー・イン・ピクチャーの角)
@@ -219,6 +221,8 @@ struct MenuState: Equatable {
     /// 書き出し範囲を指定できる / ルーラーに印がある
     var canMarkRange = false
     var hasRange = false
+    /// 範囲選択(ルーラーの ⌥ ドラッグ)がある
+    var hasRangeSelection = false
     var rangeLoop = false
     /// 反復再生中(トリム点 / 選択クリップ)と、設定の半幅(秒)
     var trimLoopActive = false
@@ -418,6 +422,7 @@ struct MenuState: Equatable {
         canExport = m.canExport
         canMarkRange = m.canMarkRange
         hasRange = m.hasRangeMarks
+        hasRangeSelection = m.rangeSelection != nil
         rangeLoop = m.rangeLoop
         trimLoopActive = m.trimLoop != nil
         trimLoopHalfWidth = TrimLoopSettings.halfWidth
@@ -744,8 +749,10 @@ enum AppMenuSpec {
 
     /// クリップ ▸ 範囲を削除 / 範囲をリップル削除(書き出し範囲のイン・アウトの間を全レイヤーから取り除く)。ショートカットは持たない。
     static func rangeDeleteItems(_ s: MenuState) -> [MenuItemSpec] {
-        [MenuItemSpec(command: .rangeDelete, title: "範囲を削除", shortcut: nil, enabled: s.canEdit && s.canMarkRange && s.hasRange, checked: nil, hint: "イン点〜アウト点"),
-         MenuItemSpec(command: .rangeRippleDelete, title: "範囲をリップル削除", shortcut: nil, enabled: s.canEdit && s.canMarkRange && s.hasRange, checked: nil, hint: "後ろを詰める")]
+        [MenuItemSpec(command: .rangeDelete, title: "範囲を削除", shortcut: nil, enabled: s.canEdit && s.canMarkRange && (s.hasRange || s.hasRangeSelection), checked: nil, hint: s.hasRangeSelection ? "範囲選択" : "イン点〜アウト点"),
+         MenuItemSpec(command: .rangeRippleDelete, title: "範囲をリップル削除", shortcut: nil, enabled: s.canEdit && s.canMarkRange && (s.hasRange || s.hasRangeSelection), checked: nil, hint: "後ろを詰める"),
+         MenuItemSpec(command: .selectClipsInRange, title: "範囲内のクリップを選択", shortcut: nil, enabled: s.canEdit && s.hasRangeSelection, checked: nil, hint: "範囲選択"),
+         MenuItemSpec(command: .clearRangeSelection, title: "範囲選択を解除", shortcut: nil, enabled: s.hasRangeSelection, checked: nil)]
     }
 
     /// 出力 ▸ 現在のフレームを画像で書き出す… / 連番画像を書き出す…
@@ -1119,6 +1126,7 @@ enum AppMenuSpec {
     /// クリップメニュー直下の 2 項目。
     static func transitionQuick(_ s: MenuState) -> [MenuItemSpec] {
         [MenuItemSpec(command: .crossfade, title: "クロスフェードにする", shortcut: nil, enabled: s.canEdit && s.canTransition, checked: nil),
+         MenuItemSpec(command: .overlapCrossfade, title: "重ねてクロスフェード", shortcut: nil, enabled: s.canEdit && s.canTransition, checked: nil),
          MenuItemSpec(command: .fadeInOut, title: "フェードイン・アウトを付ける", shortcut: nil, enabled: s.canEdit && s.canFadeInOut, checked: nil)]
     }
 
@@ -1208,6 +1216,11 @@ enum AppMenuSpec {
 
     static func lutLoadItem(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .lutLoad, title: "LUT を読み込む…", shortcut: nil, enabled: s.canEdit && s.canEffect, checked: nil)
+    }
+
+    /// クリップ ▸ 色調転写の参照画像…(参照画像を選ぶ)。
+    static func colorTransferItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .colorTransferLoad, title: "色調転写の参照画像…", shortcut: nil, enabled: s.canEdit && s.canEffect, checked: nil)
     }
 
     /// クリップ ▸ フィラー語をカット…(音声認識を使うのでメニューの音声の項目と同じ条件。ショートカットは付けない)。
@@ -1351,7 +1364,7 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, checkForUpdates, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s), apngExport(s)] + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), clipListItem(s), noteListItem(s)] + scriptStoryboardItems(s) + [makeProxies(s)] + [] + clipMenu(s).flatMap { $0 } + multicamItems(s) + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textVerticalItem(s), textPerCharItem(s), textCounterItem(s), dictionaryItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [sceneSplitItem(s), silenceCutItem(s)] + rangeDeleteItems(s) + [audioAutoSyncItem(s), beatMarkersItem(s), scaleDuplicateItem(s), beatPlaceItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
+        [about, checkForUpdates, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s), apngExport(s)] + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), clipListItem(s), noteListItem(s)] + scriptStoryboardItems(s) + [makeProxies(s)] + [] + clipMenu(s).flatMap { $0 } + multicamItems(s) + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + effectPresetItems(s) + effectActions(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textVerticalItem(s), textPerCharItem(s), textCounterItem(s), dictionaryItem(s)] + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [sceneSplitItem(s), silenceCutItem(s)] + rangeDeleteItems(s) + [audioAutoSyncItem(s), beatMarkersItem(s), scaleDuplicateItem(s), beatPlaceItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s), colorTransferItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerColorItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + previewTierItems(s) + guideItems(s) + [previewProxy(s), fullScreen(s)] + help.flatMap { $0 }
@@ -1448,6 +1461,8 @@ enum AppMenu {
             case .rangeClear: m.clearExportRange()
             case .rangeDelete: m.deleteRange(ripple: false)
             case .rangeRippleDelete: m.deleteRange(ripple: true)
+            case .selectClipsInRange: m.selectClipsInRangeSelection()
+            case .clearRangeSelection: m.clearRangeSelection()
             case .rangeFromSelection: m.setRangeFromSelection()
             case .prevGap: m.seekGap(forward: false)
             case .nextGap: m.seekGap(forward: true)
@@ -1529,6 +1544,7 @@ enum AppMenu {
             case .fadeBoth: m.fadeBothSelected()
             case .clearTransitions: m.clearTransitionsSelected()
             case .crossfade: m.crossfadeSelected()
+            case .overlapCrossfade: m.overlapCrossfadeSelected()
             case .fadeInOut: m.fadeInOutSelected()
             case .effectAdd(let k): m.addEffectSelected(k)
             case .effectPreset(let p): m.applyEffectPreset(p)
@@ -1536,6 +1552,7 @@ enum AppMenu {
             case .effectCopy: m.copyEffectsSelected()
             case .effectPaste: m.pasteEffectsSelected()
             case .lutLoad: m.chooseAndLoadLUT()
+            case .colorTransferLoad: m.chooseColorTransferReference()
             case .autoWhiteBalance: m.autoWhiteBalanceSelected()
             case .textStyleApply(let id): m.applyTextStyleSelected(id)
             case .textStyleApplyAll(let id): m.applyTextStyleToAll(id: id)

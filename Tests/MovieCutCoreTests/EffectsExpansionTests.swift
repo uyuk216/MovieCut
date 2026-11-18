@@ -76,7 +76,7 @@ final class EffectsExpansionTests: XCTestCase {
             let e = Effect(k)
             XCTAssertEqual(e.known, k)
         }
-        XCTAssertEqual(EffectKind.allCases.count, 25 + Self.newKinds.count, "既存 25 種 + 新規 16 種")
+        XCTAssertEqual(EffectKind.allCases.count, 26 + Self.newKinds.count, "既存 26 種(色調転写を含む) + 新規 16 種")
     }
 
     func testIdentityValuesAreDroppedByResolve() {

@@ -112,6 +112,29 @@ extension ProjectModel {
         return false
     }
 
+    /// 「重ねてクロスフェード」: 選んだクリップを前へずらして前のクリップと重ね、その重なりでクロスフェードにする。1 回の Undo。
+    @discardableResult
+    func overlapCrossfadeSelected() -> Bool {
+        guard !isLocked, let c = selectedClip else { return false }
+        switch TransitionEditing.overlapCrossfade(in: project, clipId: c.id) {
+        case .applied(let p, let secs, let shifted):
+            edit("重ねてクロスフェード") { $0 = p }
+            statusText = shifted > 0
+                ? "クリップを \(String(format: "%.2f", shifted)) 秒前へずらして重ね、クロスフェードにしました（\(String(format: "%.2f", secs)) 秒）"
+                : "クロスフェードにしました（\(String(format: "%.2f", secs)) 秒）"
+            return true
+        case .notSupported:
+            statusText = "重ねてクロスフェードにできるのは、画像・動画・テキストのクリップです"
+        case .noPreviousClip:
+            statusText = "前にクリップがありません（同じレイヤーで前にクリップがあるときに使えます）"
+        case .locked:
+            statusText = "ロックされたクリップ・レイヤーには使えません"
+        case .noRoom:
+            statusText = "前へずらす余地がありません（前のクリップとの間隔が足りません）"
+        }
+        return false
+    }
+
     /// タイムラインの三角のドラッグ: `base` から、頭(終わり)の長さを `seconds` にした Project(`updateGesture` 用)。
     /// 音声フェードだけのクリップ(`audio`)は音声のフェード秒、映像のクリップはトランジションの長さ(連動中なら音声も)。
     func projectSettingFadeLength(base: Project, clipId: String, edge: TransitionEdge, seconds: Double, audio: Bool) -> Project? {

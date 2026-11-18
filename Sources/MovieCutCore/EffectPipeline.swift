@@ -14,7 +14,8 @@ public struct ResolvedEffect: Equatable, Sendable {
 
 /// エフェクトを CIFilter の連なりにして画像にかける(UI にも Undo にも依存しない純粋な処理)。
 ///
-/// - 入力はクリップ 1 枚ぶんの画素(透明な背景に、回転・拡大・切り抜きまで済んだクリップを描いたもの)。出力も同じ範囲(はみ出しは切る)。
+/// - 入力はクリップ 1 枚ぶんの画素(透明な背景に、回転・拡大・切り抜きまで済んだクリップを描いたもの)。出力も同じ範囲。
+///   作業範囲にはキャンバスの外の発生源も含まれるので、影・縁・にじみはキャンバスの外から中へ届く(Renderer.effectWorkRect)。
 ///   不透明度・トランジションのマスクはこの後にかかるので、エフェクトはクリップ自身の画素だけに効く。
 /// - ぼかし・シャープ・ズーム/モーションは `clampedToExtent` してから処理し、範囲の縁が暗くならないようにする。
 /// - px の引数は 1920×1080 での大きさ。`scale`(= √(幅×高さ / (1920×1080)))で解像度に合わせる。
@@ -41,6 +42,7 @@ public enum EffectPipeline {
         case .outline: return false
         case .chromaKey: return false
         case .lut: return v("intensity") < eps
+        case .colorTransfer: return v("intensity") < eps
         case .faceBlur: return v("strength") < eps
         case .whiteBalance: return abs(v("temperature")) < eps && abs(v("tint")) < eps
         case .colorWheels: return v("liftAmount") < eps && v("gammaAmount") < eps && v("gainAmount") < eps
@@ -76,7 +78,7 @@ public enum EffectPipeline {
                 vals[s.key] = v
             }
             if isIdentity(kind, { vals[$0] ?? 0 }) { continue }
-            if kind == .lut, (e.path ?? "").isEmpty { continue }
+            if kind == .lut || kind == .colorTransfer, (e.path ?? "").isEmpty { continue }
             out.append(ResolvedEffect(kind: kind, values: vals, color: e.colorOrDefault, path: e.path))
         }
         return out
@@ -269,6 +271,9 @@ public enum EffectPipeline {
         case .lut:
             guard let p = e.path, let c = LUTCache.shared.cube(atPath: p) else { return img }
             return LUTApply.apply(img, lut: c.lut, dimension: c.dimension, data: c.data, intensity: e.v("intensity"))
+        case .colorTransfer:
+            guard let p = e.path, let ref = ReferenceColorCache.shared.stats(atPath: p) else { return img }
+            return ColorTransfer.apply(img, ref: ref, strength: e.v("intensity"), extent: rect)
         }
     }
 

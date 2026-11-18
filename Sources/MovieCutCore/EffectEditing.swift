@@ -97,6 +97,21 @@ public enum EffectEditing {
         return true
     }
 
+    /// 色調転写の参照画像を決める。転写が無ければ足し、あれば最初の転写の参照を差し替える(同じなら何もしない)。
+    @discardableResult
+    public static func setColorTransferPath(_ c: inout Clip, _ path: String) -> Bool {
+        guard supports(c.type), !path.isEmpty else { return false }
+        if let i = c.effects.firstIndex(where: { $0.kind == EffectKind.colorTransfer.rawValue }) {
+            guard c.effects[i].path != path else { return false }
+            c.effects[i].path = path
+        } else {
+            var e = Effect(.colorTransfer)
+            e.path = path
+            c.effects.append(e)
+        }
+        return true
+    }
+
     /// 初期値に戻す(引数・色。有効/無効と並びはそのまま。その引数のキーは消す)。
     @discardableResult
     public static func reset(_ c: inout Clip, at index: Int) -> Bool {
