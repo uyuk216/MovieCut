@@ -273,6 +273,11 @@ struct LeftPanel: View {
                     .padding(.top, 6)
                     .help(L10n.t("表情の画像を差し替えるか、表情を消してください(キャラのパネルの「表情」)"))
             }
+            if model.project.characters.isEmpty {
+                Text(L10n.t("先にキャラクターを追加してください"))
+                    .font(.caption).foregroundStyle(.secondary)
+                    .padding(.top, 6)
+            }
             Button {
                 Task { await model.generateVoicesFromScript() }
             } label: {
