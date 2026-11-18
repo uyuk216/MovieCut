@@ -141,6 +141,19 @@ public struct Renderer {
             ctx.setFillColor(parseHexColor(project.bg) ?? CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 1))
             ctx.fill(CGRect(x: 0, y: 0, width: W, height: H))
         }
+        // カメラ(W3-02): 既定でないときだけ、最終合成にカメラ変換を 1 回かける。
+        // 背景の塗りは変換の外なので、画面の端が常に見える場合も背景色で埋まる。
+        // プレビュー(renderImage)も書き出し(render)もこの関数を通るため結果は一致する。
+        if let cam = project.camera {
+            let st = cam.state(at: t)
+            if !st.isIdentity {
+                ctx.saveGState()
+                ctx.concatenate(CameraMath.transform(state: st, width: W, height: H))
+                drawFrame(t: t, into: ctx)
+                ctx.restoreGState()
+                return
+            }
+        }
         drawFrame(t: t, into: ctx)
     }
 

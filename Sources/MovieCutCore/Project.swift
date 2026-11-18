@@ -56,6 +56,8 @@ public struct Project: Codable, Equatable {
         guard let v = subtitleY, v.isFinite else { return Self.defaultSubtitleY }
         return min(max(v, 0), 1)
     }
+    /// カメラ(W3-02 / 監査 #54)。未設定・既定値のときはファイルに書かず、描画も従来と完全一致する。
+    public var camera: CameraSettings? = nil
     /// 左の台本欄の文字。空のときはファイルに書かない(古い版は知らないキーとして保持して書き戻す)。
     public var scriptText: String = ""
     /// ファイルから読んだ形式の版(`formatVersion`。無ければ 0)。書くときは `ProjectFormat.current` 以上を書く。`==` には入らない。
@@ -64,7 +66,7 @@ public struct Project: Codable, Equatable {
     /// 知らないキー(保持して書き戻す)
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["formatVersion", "scriptText", "width", "height", "fps", "bg", "codec", "voicevoxUrl", "aquestalkCommand", "characters", "tracks", "markers", "rangeIn", "rangeOut", "mediaHints", "mediaFingerprints", "mediaPool", "targetTrackId", "multicams", "tachies", "readingDictionary", "subtitleY"]
+    static let knownKeys: Set<String> = ["formatVersion", "scriptText", "width", "height", "fps", "bg", "codec", "voicevoxUrl", "aquestalkCommand", "characters", "tracks", "markers", "rangeIn", "rangeOut", "mediaHints", "mediaFingerprints", "mediaPool", "targetTrackId", "multicams", "tachies", "readingDictionary", "subtitleY", "camera"]
 
     public init() {}
 
@@ -93,6 +95,7 @@ public struct Project: Codable, Equatable {
         tachies = l.value("tachies") ?? []
         readingDictionary = l.value("readingDictionary") ?? []
         subtitleY = l.double("subtitleY")
+        camera = l.value("camera")
         scriptText = l.string("scriptText") ?? ""
         sourceFormat = SourceFormatVersion(max(0, l.int("formatVersion") ?? 0))
         extra = l.extra()
@@ -100,6 +103,7 @@ public struct Project: Codable, Equatable {
         if targetTrackId == nil, let raw: JSONValue = l.value("targetTrackId") { extra["targetTrackId"] = raw }
         if multicams.isEmpty, let raw: JSONValue = l.value("multicams"), raw != .array([]) { extra["multicams"] = raw }
         if tachies.isEmpty, let raw: JSONValue = l.value("tachies"), raw != .array([]) { extra["tachies"] = raw }
+        if camera == nil, let raw: JSONValue = l.value("camera") { extra["camera"] = raw }
         if readingDictionary.isEmpty, let raw: JSONValue = l.value("readingDictionary"), raw != .array([]) { extra["readingDictionary"] = raw }
         if scriptText.isEmpty, let raw: JSONValue = l.value("scriptText"), raw != .string("") { extra["scriptText"] = raw }
     }
@@ -130,6 +134,7 @@ public struct Project: Codable, Equatable {
         if !tachies.isEmpty { try c.encode(tachies, forKey: AnyKey("tachies")) }
         if !readingDictionary.isEmpty { try c.encode(readingDictionary, forKey: AnyKey("readingDictionary")) }
         try c.encodeIfPresent(subtitleY, forKey: AnyKey("subtitleY"))
+        if let cam = camera, !cam.isDefault { try c.encode(cam, forKey: AnyKey("camera")) }
         if !scriptText.isEmpty { try c.encode(scriptText, forKey: AnyKey("scriptText")) }
     }
 
@@ -494,9 +499,11 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var playsAnimation: Bool? = nil
     /// VOICEVOX のアクセント編集(ボイスクリップ)。アクセント句の列。無い・空のときはファイルに書かない(従来どおりの合成)。
     public var voicevoxAccent: [VoicevoxAccentPhrase]? = nil
+    /// オブジェクトトラッキングの結果(W3-03 / 監査 #53)。無いときはファイルに書かない。追従は `keyframes` にも焼き込まれている(再適用・解除の基準として保持する)。
+    public var tracking: ObjectTrack? = nil
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["id", "type", "voicevoxAccent", "subtitleText", "tachieId", "mouthDrive", "speakingOnly", "followsProjectEnd", "playsAnimation", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "bokehShape", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "frameFlow", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "valueRef", "duck", "visualizer", "stabilize", "stabilizeRoll", "tracks", "mask", "blendMode", "group", "ruby", "figure", "note", "locked", "muted", "disabled", "treatAsVoice"]
+    static let knownKeys: Set<String> = ["id", "type", "voicevoxAccent", "subtitleText", "tachieId", "mouthDrive", "speakingOnly", "followsProjectEnd", "playsAnimation", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "bokehShape", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "frameFlow", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "valueRef", "duck", "visualizer", "stabilize", "stabilizeRoll", "tracks", "mask", "blendMode", "group", "ruby", "figure", "note", "locked", "muted", "disabled", "treatAsVoice", "tracking"]
 
     public init() {}
 
@@ -671,6 +678,10 @@ public struct Clip: Codable, Equatable, Identifiable {
         if let raw: JSONValue = l.value("voicevoxAccent") {
             if let v: [VoicevoxAccentPhrase] = l.value("voicevoxAccent") { voicevoxAccent = v.isEmpty ? nil : v } else { extra["voicevoxAccent"] = raw }
         }
+        // トラッキング結果: 読めない型は捨てずに書き戻す。空(有効サンプルなし)は未設定と同じ
+        if let raw: JSONValue = l.value("tracking") {
+            if let v: ObjectTrack = l.value("tracking") { tracking = v.hasValidSamples ? v.normalized : nil } else { extra["tracking"] = raw }
+        }
         if let raw: JSONValue = l.value("figure") {
             if let v: Figure = l.value("figure") { figure = v } else { extra["figure"] = raw }
         }
@@ -792,6 +803,7 @@ public struct Clip: Codable, Equatable, Identifiable {
         if disabled == true { try c.encode(true, forKey: AnyKey("disabled")) }
         if treatAsVoice == true { try c.encode(true, forKey: AnyKey("treatAsVoice")) }
         if let a = voicevoxAccent, !a.isEmpty { try c.encode(a, forKey: AnyKey("voicevoxAccent")) }
+        if let tr = tracking, tr.hasValidSamples { try c.encode(tr, forKey: AnyKey("tracking")) }
         try c.encodeIfPresent(subtitleText, forKey: AnyKey("subtitleText"))
         try c.encodeIfPresent(tachieId, forKey: AnyKey("tachieId"))
         if let d = mouthDrive, d != .all { try c.encode(d.raw, forKey: AnyKey("mouthDrive")) }
