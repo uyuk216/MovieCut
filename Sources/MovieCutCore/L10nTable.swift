@@ -593,6 +593,12 @@ enum L10nTable {
         "オフ": "Off",
         "外をグレーで表示": "Show the Outside in Gray",
         "中を色付きで表示": "Show the Inside in Color",
-        "プレビューは書き出しにも効きます。確認が終わったらオフに戻してください。": "The preview also applies to exports. Turn it off when you finish checking."
+        "プレビューは書き出しにも効きます。確認が終わったらオフに戻してください。": "The preview also applies to exports. Turn it off when you finish checking.",
+        "ベクトルスコープ(中心: 無彩色 / 向き: 色相 / 距離: 彩度)": "Vectorscope (center: neutral / direction: hue / distance: saturation)",
+        "RGBパレード(横: 画面の左→右 / 縦: 暗い→明るい)": "RGB Parade (horizontal: screen left to right / vertical: dark to bright)",
+        "スキントーンライン": "Skin Tone Line",
+        "肌色はこの線の付近に集まります。": "Skin tones gather near this line.",
+        "外周の印は純色(R・M・B・C・G・Y)の位置です。": "The outer marks show the positions of the pure colors (R, M, B, C, G, Y).",
+        "ベクトルスコープとパレードは表示用に間引いて計算します。": "The vectorscope and parade are computed from sampled pixels for display."
     ]
 }
