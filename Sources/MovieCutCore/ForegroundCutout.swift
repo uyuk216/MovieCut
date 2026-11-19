@@ -71,3 +71,43 @@ public enum ForegroundCutout {
         return img
     }
 }
+
+// MARK: - オブジェクトマスク用の前景インスタンス検出
+
+/// 前景の 1 インスタンス(人物・物体 1 つ分)。マスクは画像全体の大きさで、白 = その対象。
+public struct ForegroundInstance {
+    /// 対象の外接矩形(画像に対する割合・左上原点)。マスクの白い画素から測る。
+    public var rect: TrackRect
+    /// 画像全体の大きさのグレースケールマスク(白 = 対象)。
+    public var mask: CGImage
+
+    public init(rect: TrackRect, mask: CGImage) { self.rect = rect; self.mask = mask }
+}
+
+/// 前景インスタンスの一覧を返す検出器。テストでは固定のインスタンスを渡す偽物に差し替える。
+public protocol ForegroundInstanceDetecting {
+    func instances(for image: CGImage) throws -> [ForegroundInstance]
+}
+
+/// Vision の前景インスタンスマスクによる検出器(オブジェクトマスクの種取り)。
+/// インスタンスごとにマスクを作り直し、白い画素の外接矩形を対象の矩形とする。
+public struct VisionForegroundInstanceDetector: ForegroundInstanceDetecting {
+    public init() {}
+
+    public func instances(for image: CGImage) throws -> [ForegroundInstance] {
+        let request = VNGenerateForegroundInstanceMaskRequest()
+        let handler = VNImageRequestHandler(cgImage: image, options: [:])
+        try handler.perform([request])
+        guard let result = request.results?.first, !result.allInstances.isEmpty else { return [] }
+        let ctx = CIContext(options: [.useSoftwareRenderer: false])
+        var out: [ForegroundInstance] = []
+        for index in result.allInstances {
+            let buffer = try result.generateScaledMaskForImage(forInstances: [index], from: handler)
+            let ci = CIImage(cvPixelBuffer: buffer)
+            guard let cg = ctx.createCGImage(ci, from: ci.extent),
+                  let rect = ObjectMaskImage.boundingRect(ofMask: cg) else { continue }
+            out.append(ForegroundInstance(rect: rect, mask: cg))
+        }
+        return out
+    }
+}

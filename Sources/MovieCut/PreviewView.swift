@@ -378,6 +378,18 @@ final class PreviewCanvasView: NSView {
         // 入力欄にフォーカスが残っていると、Delete・Space がクリップに届かない。プレビューを押したら入力を終える
         if KeyRouter.isTextInput(window?.firstResponder) { window?.makeFirstResponder(nil) }
         let v = convert(event.locationInWindow, from: nil)
+        // オブジェクトマスクのクリック指定待ち: 押した場所の対象を種にする(他の操作より優先)
+        if let m = model, let pickId = m.objectMaskPickingClipId {
+            m.cancelObjectMaskPicking()
+            if frameLayer.frame.contains(v) {
+                let canvas = CGSize(width: m.project.width, height: m.project.height)
+                if canvas.width > 0, canvas.height > 0 {
+                    let p = canvasPoint(v, canvas: canvas)
+                    m.seedObjectMask(clipId: pickId, atNormalizedPoint: CGPoint(x: p.x / canvas.width, y: p.y / canvas.height))
+                }
+            }
+            return
+        }
         // ダブルクリック: 選択中のクリップの中なら、その場所にパペットのピンを打つ(Shift で固定ピン)
         if event.clickCount == 2, addPuppetPinAt(atViewPoint: v, fixed: event.modifierFlags.contains(.shift)) { return }
         // ⌥ クリック: その場所に重なったクリップを手前から奥へ巡回して選ぶ(ドラッグは始めない)

@@ -385,6 +385,7 @@ public enum YmmpExporter {
             if clip.crop != nil { drop("切り抜き(クロップ)", "YMM4 への変換が未対応のため") }
             if clip.flipH == true || clip.flipV == true { drop("反転", "YMM4 への変換が未対応のため") }
             if clip.mask != nil { drop("マスク", "YMM4 への変換が未対応のため") }
+            if clip.objectMask != nil { drop("オブジェクトマスク", "YMM4 への変換が未対応のため") }
             if clip.blendMode != nil { drop("ブレンドモード", "YMM4 への変換が未対応のため") }
             if clip.muted == true { drop("クリップ消音", "YMM4 のアイテムに相当が無いため") }
             if clip.blur != nil, (clip.blur ?? 0) > 0 { drop("ぼかし", "YMM4 のエフェクトとして表現できないため") }

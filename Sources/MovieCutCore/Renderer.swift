@@ -296,7 +296,7 @@ public struct Renderer {
     func drawClipStack(_ c: Clip, pose: ClipPose, mask: TransitionMask?, t: Double, ctx: CGContext, W: Double, H: Double, layerSourceOver: Bool) {
         // 複合クリップで、キャンバスいっぱいに・効果なし・不透明度 100% なら、中身を親の画面に直接描く(中間の画像を作らない)。
         // 直接描くので、まとめる前のクリップを描いたときと画素が完全に一致する
-        if (c.type == .compound || c.type == .scene), mask == nil, c.mask == nil, c.blendMode == nil, pose.isFullCanvasCompound, !c.hasActiveEffects, !c.hasActiveWarp(at: t - c.start), !c.hasActivePluginEffect(effectIDs: pluginEffectIDs), pose.pixelate < 2, pose.feather <= 0.01, let child = nestedRenderer(c) {
+        if (c.type == .compound || c.type == .scene), mask == nil, c.mask == nil, c.objectMask == nil, c.blendMode == nil, pose.isFullCanvasCompound, !c.hasActiveEffects, !c.hasActiveWarp(at: t - c.start), !c.hasActivePluginEffect(effectIDs: pluginEffectIDs), pose.pixelate < 2, pose.feather <= 0.01, let child = nestedRenderer(c) {
             ctx.saveGState()
             child.drawFrame(t: t - c.start + c.offset, into: ctx)
             ctx.restoreGState()
@@ -323,7 +323,7 @@ public struct Renderer {
             }
             drawPose.blur = 0
         }
-        if !fx.isEmpty || c.mask != nil || c.hasActiveWarp(at: t - c.start) {
+        if !fx.isEmpty || c.mask != nil || c.objectMask != nil || c.hasActiveWarp(at: t - c.start) {
             drawEffectedClip(c, pose: drawPose, effects: fx, t: t, ctx: ctx, W: W, H: H)
         } else if drawPose.blur > 0 {
             drawBlurredClip(c, pose: drawPose, t: t, ctx: ctx, W: W, H: H)
@@ -859,6 +859,7 @@ public struct Renderer {
         var ci = EffectPipeline.apply(CIImage(cgImage: snapImg), effects: fx, bounds: localBounds, scale: resScale, faces: faces, pluginProviders: pluginEffectProviders)
         if blurSigma > 0 { ci = ci.applyingGaussianBlur(sigma: blurSigma) }
         if let m = c.mask { ci = ShapeMask.apply(ci, mask: m, canvasWidth: W, canvasHeight: H, originX: work.minX, originY: work.minY) }
+        if let om = c.objectMask { ci = ObjectMaskRenderer.apply(ci, objectMask: om, at: t - c.start, canvasWidth: W, canvasHeight: H, originX: work.minX, originY: work.minY) }
         guard let out = EffectPipeline.makeImage(ci, from: rect, context: ciCtx) else { return }
         ctx.saveGState()
         ctx.setAlpha(CGFloat(pose.opacity))
