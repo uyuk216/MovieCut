@@ -89,6 +89,33 @@ extension ProjectModel {
         if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
     }
 
+    // MARK: Premiere Pro プロジェクト(.prproj)読み込み
+
+    /// 開くパネルで .prproj を選び、内容を確認してから今のプロジェクトを置き換える(1 回の Undo で戻せる)。
+    func chooseAndImportPrproj() {
+        guard !isLocked else { return }
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [UTType(filenameExtension: "prproj") ?? .data]
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = false
+        panel.title = "Premiere Pro プロジェクト(.prproj)を読み込む"
+        panel.message = "Premiere Pro プロジェクト(.prproj)を読み込み、今のプロジェクトをその内容に置き換えます(取り消しで戻せます)。対応できない要素は、読み込み後に一覧でお知らせします。"
+
+        let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
+            guard resp == .OK, let url = panel.url, let self else { return }
+            do {
+                let out = try PrprojImporter.read(from: url)
+                self.applyRoot(out.project, name: "Premiere Pro プロジェクト(.prproj)を読み込む")
+                self.showInterchangeReport(title: "Premiere Pro プロジェクトを読み込みました", lines: out.report.summaryLines, hasLoss: out.report.hasLoss)
+            } catch {
+                let alert = NSAlert(error: error)
+                if let w = self.window { alert.beginSheetModal(for: w) } else { alert.runModal() }
+            }
+        }
+        if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
+    }
+
     // MARK: レポート表示(共通)
 
     private func showInterchangeReport(title: String, lines: [String], hasLoss: Bool) {
