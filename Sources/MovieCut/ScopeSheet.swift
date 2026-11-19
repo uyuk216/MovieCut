@@ -8,6 +8,12 @@ struct ScopeSheet: View {
     @State private var vectorResult: VectorScope.Result?
     @State private var paradeResult: RGBParade.Result?
     @State private var loading = true
+    @State private var specResult: SpectrogramResult?
+    @State private var specBands: SpectrogramDisplayBands?
+    @State private var specState: SpecState = .idle
+    @State private var specNoClipText = "音のあるクリップ(音声・ボイス・動画)を選んでから開くと、スペクトログラムが出ます。"
+
+    enum SpecState { case idle, noClip, computing, done, failed }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -47,17 +53,97 @@ struct ScopeSheet: View {
                 Text("このコマを読めませんでした。").foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 120)
             }
+            Divider()
+            spectrogramSection
             HStack {
                 Text("表示用の値(sRGB)で、書き出しには影響しません。").font(.caption).foregroundStyle(.secondary)
                 Spacer()
-                Button("更新") { Task { await refresh() } }
+                Button("更新") { Task { await refresh(); await refreshSpectrogram() } }
                 Button("閉じる") { model.showScopeSheet = false }.keyboardShortcut(.cancelAction)
             }
             Text(L10n.t("ベクトルスコープとパレードは表示用に間引いて計算します。")).font(.caption).foregroundStyle(.secondary)
         }
         .padding(20)
         .frame(width: 560)
-        .task { await refresh() }
+        .task { await refresh(); await refreshSpectrogram() }
+    }
+
+    // MARK: スペクトログラム(選択中の音声クリップ)
+
+    @ViewBuilder
+    private var spectrogramSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(L10n.t("スペクトログラム(横: 時間 / 縦: 周波数・対数 / 色: 強さ)")).font(.caption).foregroundStyle(.secondary)
+            switch specState {
+            case .idle, .computing:
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text(L10n.t("スペクトログラムを計算しています…")).font(.caption).foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, minHeight: 80, alignment: .center)
+            case .noClip:
+                Text(L10n.t(specNoClipText))
+                    .font(.caption).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 60, alignment: .center)
+            case .failed:
+                Text(L10n.t("スペクトログラムを計算できませんでした。")).font(.caption).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 60, alignment: .center)
+            case .done:
+                if let bands = specBands {
+                    HStack(alignment: .top, spacing: 6) {
+                        VStack {
+                            Text("24 kHz").font(.caption2).foregroundStyle(.secondary)
+                            Spacer()
+                            Text("20 Hz").font(.caption2).foregroundStyle(.secondary)
+                        }
+                        .frame(height: 170)
+                        SpectrogramView(bands: bands).frame(height: 170)
+                    }
+                }
+                if let r = specResult {
+                    HStack(spacing: 14) {
+                        if let dom = r.dominantFrequency() {
+                            HStack(spacing: 4) {
+                                Text(L10n.t("いちばん強い周波数")).font(.caption).foregroundStyle(.secondary)
+                                Text(String(format: "%.0f Hz", dom)).font(.caption).monospacedDigit()
+                            }
+                        }
+                        HStack(spacing: 4) {
+                            Text(L10n.t("解析した長さ")).font(.caption).foregroundStyle(.secondary)
+                            Text(String(format: "%.2f 秒", r.duration)).font(.caption).monospacedDigit()
+                        }
+                    }
+                    if r.truncated {
+                        Text(L10n.t("長いクリップのため、先頭だけを解析しました。")).font(.caption).foregroundStyle(.orange)
+                    }
+                }
+            }
+        }
+    }
+
+    private func refreshSpectrogram() async {
+        guard let clip = model.selectedClip, Spectrogram.supports(clip) else {
+            specNoClipText = model.selectedClip == nil
+                ? "音のあるクリップ(音声・ボイス・動画)を選んでから開くと、スペクトログラムが出ます。"
+                : "選択中のクリップに音声が無いため、スペクトログラムは出せません。"
+            specState = .noClip
+            specResult = nil
+            specBands = nil
+            return
+        }
+        specState = .computing
+        let result = await Task.detached(priority: .userInitiated) {
+            SpectrogramCache.shared.spectrogram(clip: clip)
+        }.value
+        if let result {
+            specResult = result
+            specBands = result.displayBands(count: 96)
+            specState = .done
+        } else {
+            specResult = nil
+            specBands = nil
+            specState = .failed
+        }
     }
 
     private func refresh() async {
@@ -207,5 +293,32 @@ private struct ParadeView: View {
             .background(Color.black.opacity(0.9))
             .clipShape(RoundedRectangle(cornerRadius: 6))
         }
+    }
+}
+
+/// スペクトログラム: 横が時間、縦が周波数(対数、下が低域)。色は Core の色階調(`SpectrogramResult.color`)。
+private struct SpectrogramView: View {
+    let bands: SpectrogramDisplayBands
+
+    var body: some View {
+        Canvas { ctx, size in
+            guard bands.frameCount > 0, bands.bandCount > 0 else { return }
+            let cw = size.width / CGFloat(bands.frameCount)
+            let ch = size.height / CGFloat(bands.bandCount)
+            for f in 0..<bands.frameCount {
+                for b in 0..<bands.bandCount {
+                    let v = bands.value(frame: f, band: b)
+                    guard v > 0.01 else { continue }
+                    let c = SpectrogramResult.color(forIntensity: v)
+                    let rect = CGRect(x: CGFloat(f) * cw,
+                                      y: size.height - CGFloat(b + 1) * ch,
+                                      width: max(1, cw), height: max(1, ch))
+                    ctx.fill(Path(rect), with: .color(Color(red: c.red, green: c.green, blue: c.blue)))
+                }
+            }
+        }
+        .background(Color.black)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .accessibilityIdentifier("spectrogram-view")
     }
 }
