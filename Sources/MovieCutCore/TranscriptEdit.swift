@@ -27,50 +27,46 @@ public enum TranscriptTextEdit {
     /// 単語の列を文にして、クリップの長さの内側に収める。本文が空・長さが 0 のものは捨てる。開始順。
     /// 文の切り方は字幕と同じ(`TranscriptGrouping.phrases`)。
     ///
-    /// 単語の時刻の扱い(割り切り): 入力の各要素が `words`(単語ごとの時刻)を持つときだけ、
-    /// その単語を本物の単語として文へ引き継ぐ。`words` を持たない要素は文そのものの単位と
-    /// みなし、その要素からできた文には単語の時刻を付けない(要素 1 件を「1 単語」と
-    /// 言い換えるような推定はしない)。そのため、単語の時刻が取れない経路
-    /// (Whisper のトークンが文字化けして文単位に落とした場合など)では、文の `words` は
-    /// 空になり、単語単位の編集はできないことが文ごとに分かる。
+    /// 単語の時刻の扱い(割り切り): 文の切り方は従来どおり入力の要素単位で決める
+    /// (要素を単語へ展開してから組み直すことはしない。文の本文・開始・終了は、単語の
+    /// 時刻が無い入力に対する従来の結果と完全一致する)。そのうえで、文を作った要素が
+    /// すべて `words`(単語ごとの時刻)を持つときだけ、その単語の列を文へ引き継ぐ。
+    /// `words` を持たない要素が 1 件でも混ざる文には単語の時刻を付けない(要素 1 件を
+    /// 「1 単語」と言い換えるような推定も、文の一部だけに時刻を付けることもしない)。
+    /// そのため、単語の時刻が取れない経路(Whisper のトークンが文字化けして文単位に
+    /// 落とした場合など)では、文の `words` は空になり、単語単位の編集はできないことが
+    /// 文ごとに分かる。
     public static func sentences(from segments: [TranscriptSegment], clip: Clip) -> [TranscriptSentence] {
         let dur = clip.duration
         guard dur > 0 else { return [] }
-        // 葉へ展開する: words を持つ要素はその単語が葉(本物の単語)、持たない要素は要素自身が葉(単語ではない)。
-        struct Leaf { var seg: TranscriptSegment; var isWord: Bool }
-        var leaves: [Leaf] = []
-        for s in segments {
-            if s.words.isEmpty {
-                leaves.append(Leaf(seg: s, isWord: false))
-            } else {
-                leaves.append(contentsOf: s.words.map { Leaf(seg: $0, isWord: true) })
-            }
-        }
-        // TranscriptGrouping.phrases と同じ条件で葉を整える(本文の前後の空白を取り、空・不正な時刻は捨てる)。
-        // phrases は整えた葉を順に全部使うので、文の words の件数で葉の消費を数えられる。
-        let usable: [Leaf] = leaves.compactMap { leaf in
-            let t = leaf.seg.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !t.isEmpty, leaf.seg.start.isFinite, leaf.seg.end.isFinite else { return nil }
-            return Leaf(seg: TranscriptSegment(text: t, start: leaf.seg.start, end: max(leaf.seg.start, leaf.seg.end)),
-                        isWord: leaf.isWord)
+        // 要素 1 件 = 組み立ての単位 1 件。要素が持つ単語の列は、引き継ぎ用に別に持っておく
+        // (`seg` 自体は phrases が作る「1 件分の単語」と同じ形に整えたもの)。
+        struct Leaf { var seg: TranscriptSegment; var sourceWords: [TranscriptSegment] }
+        // TranscriptGrouping.phrases と同じ条件で要素を整える(本文の前後の空白を取り、空・不正な時刻は捨てる)。
+        // phrases は整えた要素を順に全部使うので、文の words の件数で要素の消費を数えられる。
+        let usable: [Leaf] = segments.compactMap { s in
+            let t = s.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !t.isEmpty, s.start.isFinite, s.end.isFinite else { return nil }
+            return Leaf(seg: TranscriptSegment(text: t, start: s.start, end: max(s.start, s.end)),
+                        sourceWords: s.words)
         }
         let phrases = TranscriptGrouping.phrases(from: usable.map(\.seg))
         var out: [TranscriptSentence] = []
         var cursor = 0   // usable の消費位置
         for p in phrases {
             let k = p.words.count
-            let flags = usable[cursor..<min(cursor + k, usable.count)].map(\.isWord)
+            let parts = usable[cursor..<min(cursor + k, usable.count)]
             cursor += k
-            // 文を作った葉がすべて本物の単語のときだけ、単語の時刻を引き継ぐ。
-            let allWords = k > 0 && flags.count == k && flags.allSatisfy { $0 }
+            // 文を作った要素がすべて単語の時刻を持つときだけ、その単語の列を引き継ぐ。
+            let allTimed = k > 0 && parts.count == k && parts.allSatisfy { !$0.sourceWords.isEmpty }
             let text = p.text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty, p.start.isFinite, p.end.isFinite else { continue }
             let a = min(max(0, p.start), dur)
             let b = min(max(a, p.end), dur)
             guard b - a > 1e-3 else { continue }
             var words: [TranscriptSegment] = []
-            if allWords {
-                for w in p.words {
+            if allTimed {
+                for w in parts.flatMap(\.sourceWords) {
                     let wt = w.text.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !wt.isEmpty, w.start.isFinite, w.end.isFinite else { continue }
                     let wa = min(max(0, w.start), dur)

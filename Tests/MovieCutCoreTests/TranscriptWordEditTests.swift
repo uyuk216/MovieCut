@@ -164,6 +164,56 @@ final class TranscriptWordEditTests: XCTestCase {
         XCTAssertEqual(pieces[0].offset, 3.5, accuracy: 1e-9, "残るのは単語に属さない間だけ")
     }
 
+    // MARK: 文の切り方の互換性(単語の時刻が付いても、文の本文・開始・終了は従来と完全一致)
+
+    func testSentenceSegmentationIsUnchangedByWordTiming() {
+        // 要素(文)単位で組み立てる従来の切り方を守る: 25 文字の文 + 10 文字の文は、
+        // 合計 35 文字で上限(30)を超えるので 2 文のまま。単語へ展開して組み直すと
+        // 境目が文の途中へずれるが、それはしない。
+        let clip = audioClip(id: "a", start: 0, duration: 4)
+        let a25 = String(repeating: "あ", count: 25)
+        let i10 = String(repeating: "い", count: 10)
+        let timed = [
+            seg(a25, 0, 2.5, words: (0..<5).map { word(String(repeating: "あ", count: 5), Double($0) * 0.5, Double($0) * 0.5 + 0.5) }),
+            seg(i10, 2.6, 3.6, words: [word(String(repeating: "い", count: 5), 2.6, 3.1), word(String(repeating: "い", count: 5), 3.1, 3.6)]),
+        ]
+        let s = TranscriptTextEdit.sentences(from: timed, clip: clip)
+        XCTAssertEqual(s.map(\.text), [a25, i10], "文の境目は要素単位のまま(単語単位に組み直さない)")
+        XCTAssertEqual(s.map(\.words.count), [5, 2])
+        // 単語の時刻を落とした入力と、本文・開始・終了が完全一致する
+        let stripped = timed.map { seg($0.text, $0.start, $0.end) }
+        let bare = TranscriptTextEdit.sentences(from: stripped, clip: clip)
+        XCTAssertEqual(s.map(\.text), bare.map(\.text))
+        XCTAssertEqual(s.map(\.start), bare.map(\.start))
+        XCTAssertEqual(s.map(\.end), bare.map(\.end))
+    }
+
+    func testMergedTimedPhrasesCombineTheirWords() {
+        // 2 つの要素が 1 文にまとまるときは、両方の単語を引き継ぐ
+        let clip = audioClip(id: "a", start: 0, duration: 3)
+        let phrases = [
+            seg("今日は", 0, 1, words: [word("今日は", 0, 1)]),
+            seg("晴れです", 1.1, 2, words: [word("晴れ", 1.1, 1.5), word("です", 1.5, 2)]),
+        ]
+        let s = TranscriptTextEdit.sentences(from: phrases, clip: clip)
+        XCTAssertEqual(s.map(\.text), ["今日は晴れです"])
+        XCTAssertTrue(s[0].hasWordTiming)
+        XCTAssertEqual(s[0].words.map(\.text), ["今日は", "晴れ", "です"])
+    }
+
+    func testMergedPhraseWithWordlessPartHasNoWordTiming() {
+        // 1 文にまとまった要素のうち 1 件でも単語の時刻が無ければ、文全体を単語単位では
+        // 編集できない扱いにする(一部だけ時刻を付ける推定はしない)
+        let clip = audioClip(id: "a", start: 0, duration: 3)
+        let phrases = [
+            seg("今日は", 0, 1, words: [word("今日は", 0, 1)]),
+            seg("晴れ", 1.1, 1.6),
+        ]
+        let s = TranscriptTextEdit.sentences(from: phrases, clip: clip)
+        XCTAssertEqual(s.map(\.text), ["今日は晴れ"])
+        XCTAssertFalse(s[0].hasWordTiming)
+    }
+
     func testRemovingAllCoveringWordsIsRefused() {
         // 単語がクリップ全体を覆う場合は、文の全削除と同じく拒否する
         var p = Project.new()

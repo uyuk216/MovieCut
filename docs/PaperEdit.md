@@ -9,8 +9,8 @@ MovieCut 等価機能。文字起こしの文一覧から行を選び、選ん�
 - 画面: `Sources/MovieCut/TranscriptEditSheet.swift`(「文字起こしで編集」シートの拡張)
 - テスト: `Tests/MovieCutCoreTests/PaperEditTests.swift`、`Tests/MovieCutTests/PaperEditAppTests.swift`
 - 並べ替えのテスト: `Tests/MovieCutCoreTests/PaperEditOrderTests.swift`
-- 単語単位の編集(Core): `Sources/MovieCutCore/TranscriptWordEdit.swift`(`TranscriptWordEdit`)、アプリ側は `ProjectModel+TranscriptEdit.swift` の `cutTranscriptWords`
-- 単語単位のテスト: `Tests/MovieCutCoreTests/TranscriptWordEditTests.swift`、`Tests/MovieCutTests/TranscriptWordEditAppTests.swift`
+- 単語単位の編集(Core): `Sources/MovieCutCore/TranscriptWordEdit.swift`(`TranscriptWordEdit`)、アプリ側は `ProjectModel+TranscriptEdit.swift` の `cutTranscriptWords`(取り除き)と `ProjectModel+PaperEdit.swift` の `assemblePaperEditWords`(組み立て)
+- 単語単位のテスト: `Tests/MovieCutCoreTests/TranscriptWordEditTests.swift`、`Tests/MovieCutCoreTests/TranscriptWordAssemblyTests.swift`、`Tests/MovieCutTests/TranscriptWordEditAppTests.swift`
 
 ## 使い方
 
@@ -76,6 +76,11 @@ MovieCut 等価機能。文字起こしの文一覧から行を選び、選ん�
     トークン単体では文字化け(U+FFFD)することがあり、その区間は文単位に落とされる(words は付かない)。
 - 従来は文の一覧(`TranscriptSentence`)へ変換する時点で単語の時刻が落ちていた。今回から
   文が単語の時刻を引き継ぐ(`TranscriptSentence.words` / `hasWordTiming`)。
+- 文の切り方そのものは従来と完全一致させる: 変換は入力の要素単位で組み立て、
+  要素を単語へ展開して組み直すことはしない(展開すると文字数上限の境目が文の途中へ
+  ずれて、従来の文分割が変わってしまう)。文を作った要素がすべて単語の時刻を持つ
+  ときだけ、その単語の列を文へ引き継ぐ。要素の一部だけが時刻を持つ文は、文全体が
+  「単語単位では編集できない」扱いになる。
 
 ### 割り切り(明示)
 
@@ -90,9 +95,31 @@ MovieCut 等価機能。文字起こしの文一覧から行を選び、選ん�
   文の全削除と同じく全体を拒否する。
 - 音声認識そのものには手を入れていない(Whisper / Speech の結果の使い方だけ)。
 
+## 単語単位の組み立て(単語の並べ替え)
+
+シートの切り替えに「単語で組み立てる」が増えた。Paper Edit の単語版で、単語の時刻が
+ある文では単語 1 件ずつを押した順に組み立て列へ入れ、その並びのまま単語の区間だけを
+並べたクリップ列を配置する。配置先・元クリップ不変・全体で 1 回の Undo(Undo 名も
+「ペーパーエディット」で文の組み立てと同じ)は文の組み立てと共通。
+
+- 並びの解決は Core の `TranscriptWordEdit.resolvedWords`: 単語 1 件を「文 1 件分の
+  区間」に直し、配置・重なり検査・失敗の扱いは `PaperEdit.assemble` にそのまま任せる。
+- 組み立て列の並べ替え(ドラッグ/先頭へ/上へ/下へ/末尾へ)の計算は、文の組み立て列と
+  同じ `PaperEdit` の並べ替えを番号の列経由で使う(`TranscriptWordEdit.movingWords` /
+  `reorderedWords` / `movingWordEntry` / `movingWordEntryToEdge`)。
+- 取り除きの `cuts` と違い、並びは利用者が作った順序そのものなので、解決できない
+  指定(範囲外・単語の時刻が無い文・短すぎる区間)が 1 件でもあれば、黙って捨てず
+  全体を失敗にする。同じ単語の繰り返しは文の組み立てと同じく使える。
+- 単語の時刻が無い文は、単語を取り除くモードと同じく文ごとに
+  「単語単位の時刻がありません」と出し、素材全体に無い場合は冒頭で明示する。
+
 ## 未検証事項(単語単位・並べ替えの追加分)
 
 - 画面(シート)の実機確認は未実施(コンパイルと単体テストまで)。特に単語モードの
   チェック一覧と、組み立て列のドラッグ(`List` の `onMove`)の操作感はアプリ起動での確認がまだ。
   ドラッグが効かない環境でもボタン(先頭へ/上へ/下へ/末尾へ)で同じ並べ替えができる。
-- 実素材(実音声)での単語削除の聞こえ方は未確認。合成データの単体テストのみ。
+- シート上部の切り替えが 4 項目になった(文を取り除く/単語を取り除く/選んだ文で
+  組み立てる/単語で組み立てる)。幅 520 のシートでラベルが詰まって見えないかは実機確認がまだ。
+- 実素材(実音声)での単語削除・単語組み立ての聞こえ方は未確認。合成データの単体テストのみ。
+- 単語組み立てで作ったクリップ列の表示名は通常の分割と同じ扱い(単語の本文をクリップ名には
+  しない)。名前付けが必要かどうかは利用者の判断待ち(保留事項)。

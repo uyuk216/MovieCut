@@ -242,6 +242,8 @@ enum L10nTable {
         "先頭へ移動": "Move to Top",
         "末尾へ移動": "Move to Bottom",
         "ドラッグでも並べ替えられます": "You can also drag to reorder",
+        "単語で組み立てる": "Assemble Words",
+        "単語を押すと組み立てに追加されます。同じ単語をもう一度押すと繰り返し追加されます。": "Tap a word to add it to the assembly. Tap the same word again to add it again.",
         "配置先": "Destination",
         "タイムラインに追加": "Add to Timeline",
         "新しいシーンとして作成": "Create as New Scene",
