@@ -212,6 +212,7 @@ enum L10nTable {
         "複合クリップにまとめる": "Group into Compound Clip",
         "複合クリップの中を編集": "Edit Inside Compound Clip",
         "複合クリップを解除": "Ungroup Compound Clip",
+        "選択からシーンを作成": "Create Scene from Selection",
         "シーン一覧…": "Scenes…",
         "シーンを開く": "Open Scene",
         "シーンから出る": "Exit Scene",
