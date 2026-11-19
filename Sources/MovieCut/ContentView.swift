@@ -91,6 +91,7 @@ struct ContentView: View {
         .sheet(isPresented: $model.showScaleSheet) { ScaleDuplicateSheet(model: model) }
         .sheet(isPresented: $model.showBeatPlaceSheet) { BeatPlaceSheet(model: model) }
         .sheet(isPresented: $model.showFillerSheet) { FillerCutSheet(model: model) }
+        .sheet(isPresented: $model.showRemixSheet) { RemixSheet(model: model) }
         .sheet(isPresented: $model.showTranscriptEditSheet) { TranscriptEditSheet(model: model) }
         .sheet(isPresented: $model.showFindSheet) { FindReplaceSheet(model: model) }
         .sheet(isPresented: $model.showMediaSearchSheet) { MediaSearchSheet(model: model) }

@@ -613,6 +613,15 @@ enum L10nTable {
         "タイムラインに無い素材か、使う範囲の外の文です": "This media is not on the timeline, or the sentence is outside the used range",
         "その位置へ移動": "Go to This Position",
         "文字起こし済みの素材がありません": "No Transcribed Media",
-        "音のあるクリップを選んで「音声から字幕を作る」などで文字起こしすると、その素材が検索できるようになります。": "Transcribe an audio clip (for example with Create Subtitles from Audio) and that media becomes searchable."
+        "音のあるクリップを選んで「音声から字幕を作る」などで文字起こしすると、その素材が検索できるようになります。": "Transcribe an audio clip (for example with Create Subtitles from Audio) and that media becomes searchable.",
+        "Remixツール…": "Remix Tool…",
+        "Remixツール": "Remix Tool",
+        "目標の尺に音楽を合わせる": "Fit the music to a target duration",
+        "元のクリップは変更せず、同じレイヤーの末尾に新しいクリップ列を作ります。": "Creates a new sequence of clips at the end of the same layer, without changing the original clip.",
+        "目標の尺(秒)": "Target Duration (seconds)",
+        "クロスフェード(秒)": "Crossfade (seconds)",
+        "音声を解析しています…": "Analyzing audio…",
+        "歌詞のある素材では、歌詞の連続性は保証されません。": "For material with lyrics, continuity of the lyrics is not guaranteed.",
+        "Remixを作成": "Create Remix"
     ]
 }

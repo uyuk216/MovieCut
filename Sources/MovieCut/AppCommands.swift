@@ -156,6 +156,7 @@ struct AppCommands: Commands {
                 MenuItemView(spec: AppMenuSpec.beatMarkersItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.scaleDuplicateItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.beatPlaceItem(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.remixItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.fillerCutItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.transcriptEditItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.speakerDiarizationItem(s), perform: run)
