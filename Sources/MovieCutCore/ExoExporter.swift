@@ -336,6 +336,7 @@ public enum ExoExporter {
             if clip.flipH == true || clip.flipV == true { drop("反転", "exo への変換が未対応のため") }
             if clip.mask != nil { drop("マスク", "exo への変換が未対応のため") }
             if clip.objectMask != nil { drop("オブジェクトマスク", "exo への変換が未対応のため") }
+            if clip.hslMask != nil { drop("HSLマスク", "exo への変換が未対応のため") }
             if clip.blendMode != nil { drop("ブレンドモード", "exo への変換が未対応のため(通常合成として書き出し)") }
             if clip.muted == true { drop("クリップ消音", "exo のオブジェクトに相当が無いため") }
             if clip.fadeIn != nil || clip.fadeOut != nil { drop("音声フェード", "exo への変換が未対応のため") }

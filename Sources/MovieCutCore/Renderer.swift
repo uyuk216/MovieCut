@@ -296,7 +296,7 @@ public struct Renderer {
     func drawClipStack(_ c: Clip, pose: ClipPose, mask: TransitionMask?, t: Double, ctx: CGContext, W: Double, H: Double, layerSourceOver: Bool) {
         // 複合クリップで、キャンバスいっぱいに・効果なし・不透明度 100% なら、中身を親の画面に直接描く(中間の画像を作らない)。
         // 直接描くので、まとめる前のクリップを描いたときと画素が完全に一致する
-        if (c.type == .compound || c.type == .scene), mask == nil, c.mask == nil, c.objectMask == nil, c.blendMode == nil, pose.isFullCanvasCompound, !c.hasActiveEffects, !c.hasActiveWarp(at: t - c.start), !c.hasActivePluginEffect(effectIDs: pluginEffectIDs), pose.pixelate < 2, pose.feather <= 0.01, let child = nestedRenderer(c) {
+        if (c.type == .compound || c.type == .scene), mask == nil, c.mask == nil, c.objectMask == nil, c.hslMask == nil, c.blendMode == nil, pose.isFullCanvasCompound, !c.hasActiveEffects, !c.hasActiveWarp(at: t - c.start), !c.hasActivePluginEffect(effectIDs: pluginEffectIDs), pose.pixelate < 2, pose.feather <= 0.01, let child = nestedRenderer(c) {
             ctx.saveGState()
             child.drawFrame(t: t - c.start + c.offset, into: ctx)
             ctx.restoreGState()
@@ -323,7 +323,7 @@ public struct Renderer {
             }
             drawPose.blur = 0
         }
-        if !fx.isEmpty || c.mask != nil || c.objectMask != nil || c.hasActiveWarp(at: t - c.start) {
+        if !fx.isEmpty || c.mask != nil || c.objectMask != nil || c.hslMask != nil || c.hasActiveWarp(at: t - c.start) {
             drawEffectedClip(c, pose: drawPose, effects: fx, t: t, ctx: ctx, W: W, H: H)
         } else if drawPose.blur > 0 {
             drawBlurredClip(c, pose: drawPose, t: t, ctx: ctx, W: W, H: H)
@@ -894,6 +894,15 @@ public struct Renderer {
         if blurSigma > 0 { ci = ci.applyingGaussianBlur(sigma: blurSigma) }
         if let m = c.mask { ci = ShapeMask.apply(ci, mask: m, canvasWidth: W, canvasHeight: H, originX: work.minX, originY: work.minY) }
         if let om = c.objectMask { ci = ObjectMaskRenderer.apply(ci, objectMask: om, at: t - c.start, canvasWidth: W, canvasHeight: H, originX: work.minX, originY: work.minY) }
+        // HSL マスク: 形・オブジェクトに続けてかける(全部あれば全部かかる)。重みはエフェクト前の画素(`snapImg`)の色から作る。
+        // プレビュー表示のときは切り抜かず、選択範囲の確認表示に差し替える。
+        if let hm = c.hslMask {
+            if hm.preview != .off {
+                ci = HSLMaskRenderer.previewImage(ci, source: CIImage(cgImage: snapImg), mask: hm)
+            } else {
+                ci = HSLMaskRenderer.apply(ci, source: CIImage(cgImage: snapImg), mask: hm)
+            }
+        }
         guard let out = EffectPipeline.makeImage(ci, from: rect, context: ciCtx) else { return }
         ctx.saveGState()
         ctx.setAlpha(CGFloat(pose.opacity))

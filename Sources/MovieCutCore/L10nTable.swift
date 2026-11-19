@@ -584,6 +584,15 @@ enum L10nTable {
         "トーンカーブ(マスター)": "Tone Curve (Master)",
         "トーンカーブ(赤)": "Tone Curve (Red)",
         "トーンカーブ(緑)": "Tone Curve (Green)",
-        "トーンカーブ(青)": "Tone Curve (Blue)"
+        "トーンカーブ(青)": "Tone Curve (Blue)",
+        "HSLマスク": "HSL Mask",
+        "HSLマスクの変更": "Change HSL Mask",
+        "色の範囲で切り抜く（外は透明）": "Cut Out by Color Range (Outside Becomes Transparent)",
+        "色相・彩度・輝度で選んだ範囲だけが残ります。形のマスク・オブジェクトマスクと併用でき、両方あるときは両方かかります。": "Only the range selected by hue, saturation, and lightness remains. It can be combined with the shape mask and the object mask; when more than one is set, all of them apply.",
+        "マスクプレビュー": "Mask Preview",
+        "オフ": "Off",
+        "外をグレーで表示": "Show the Outside in Gray",
+        "中を色付きで表示": "Show the Inside in Color",
+        "プレビューは書き出しにも効きます。確認が終わったらオフに戻してください。": "The preview also applies to exports. Turn it off when you finish checking."
     ]
 }
