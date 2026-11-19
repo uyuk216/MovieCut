@@ -280,6 +280,8 @@ final class ProjectModel: ObservableObject {
     @Published var showDictionarySheet = false
     /// 「無音をカット…」のシートと、その対象のクリップ。
     @Published var showSilenceSheet = false
+    /// ファイル ▸ 画面を収録… のシート(フェーズ D-2)。
+    @Published var showScreenRecordingSheet = false
     var silenceClipId: String?
     /// 「シーンで分割…」のシートと、その対象のクリップ。
     @Published var showSceneSheet = false

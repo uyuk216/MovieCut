@@ -104,6 +104,9 @@ cp "$REPO_ROOT/docs/第三者の規約.md" "$APP/Contents/Resources/第三者の
 # アプリアイコン(Scripts/make-icon.sh で生成。無ければ汎用アイコンのまま)
 if [ -f "$REPO_ROOT/Resources/AppIcon.icns" ]; then cp "$REPO_ROOT/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"; fi
 
+# AppleScript 定義(フェーズ D-3)。Info.plist の OSAScriptingDefinition と対で同梱する
+if [ -f "$REPO_ROOT/Resources/MovieCut.sdef" ]; then cp "$REPO_ROOT/Resources/MovieCut.sdef" "$APP/Contents/Resources/MovieCut.sdef"; fi
+
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -125,6 +128,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>NSHighResolutionCapable</key><true/>
   <key>NSSpeechRecognitionUsageDescription</key><string>動画や音声の話し声を、このMacの中で文字にして字幕を作るために使います。音声は外部に送りません。</string>
   <key>NSPrincipalClass</key><string>NSApplication</string>
+  <key>NSAppleScriptEnabled</key><true/>
+  <key>OSAScriptingDefinition</key><string>MovieCut.sdef</string>
 ${SPARKLE_PLIST}
   <key>NSHumanReadableCopyright</key><string>Copyright © 2026 Movie Cut. All rights reserved.</string>
   <key>CFBundleDocumentTypes</key>

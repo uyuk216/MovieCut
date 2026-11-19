@@ -5,7 +5,7 @@ import MovieCutCore
 enum MenuCommand: Hashable {
     case about, settings, videoSettings
     case checkForUpdates
-    case addMedia, importPSD, importSVG, importMIDI, importImageSequence, importRigFolder, importRigPSD, export, exportPreset(ExportPreset), exportCustomPreset(String), saveCustomPreset
+    case addMedia, screenRecord, importPSD, importSVG, importMIDI, importImageSequence, importRigFolder, importRigPSD, export, exportPreset(ExportPreset), exportCustomPreset(String), saveCustomPreset
     // 字幕(B3)とチャプター
     case importSubtitles, exportSubtitles, generateSubtitles, copyChapters, copyChaptersColor(MarkerColor)
     // 字幕を AI で翻訳して SRT に書き出す(ショートカットは持たない)
@@ -649,6 +649,7 @@ enum AppMenuSpec {
 
     static func file(_ s: MenuState) -> [MenuItemSpec] {
         [MenuItemSpec(command: .addMedia, title: "素材を追加…", shortcut: cmd("i"), enabled: s.canEdit, checked: nil),
+         MenuItemSpec(command: .screenRecord, title: "画面を収録…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "画面・ウィンドウ・範囲を動画に"),
          MenuItemSpec(command: .importPSD, title: "PSDを読み込む…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "レイヤーごとに画像クリップへ"),
          MenuItemSpec(command: .importSVG, title: "SVGを読み込む…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "指定解像度で画像化して配置"),
          MenuItemSpec(command: .importMIDI, title: "MIDIを読み込む…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "音声化して配置、ノートはマーカーに"),
@@ -1525,6 +1526,7 @@ enum AppMenu {
             switch c {
             case .settings, .videoSettings: m.openSettings()
             case .addMedia: m.chooseAndAddMedia()
+            case .screenRecord: m.showScreenRecordingSheet = true
             case .importPSD: m.chooseAndImportPSD()
             case .importSVG: m.chooseAndImportSVG()
             case .importMIDI: m.chooseAndImportMIDI()

@@ -80,6 +80,7 @@ struct ContentView: View {
         .sheet(isPresented: $model.showSlipSheet) { RollSlipSheet(model: model, slip: true) }
         .modifier(MulticamSheets(model: model))
         .sheet(isPresented: $model.showSilenceSheet) { SilenceCutSheet(model: model) }
+        .sheet(isPresented: $model.showScreenRecordingSheet) { ScreenRecordingSheet(model: model) }
         .sheet(isPresented: $model.showSceneSheet) { SceneSplitSheet(model: model) }
         .sheet(isPresented: $model.showDictionarySheet) { ReadingDictionarySheet(model: model) }
         .sheet(isPresented: $model.showScaleSheet) { ScaleDuplicateSheet(model: model) }
