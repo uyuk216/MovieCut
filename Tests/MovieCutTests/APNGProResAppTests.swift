@@ -41,8 +41,8 @@ final class APNGProResAppTests: XCTestCase {
     func testCodecAndBackgroundMenuListProResAndTransparent() {
         let s = state { $0.codec = OutputPlan.proRes4444; $0.bg = Project.transparentBackground }
         let codecs = AppMenuSpec.codecItems(s)
-        XCTAssertEqual(codecs.map(\.command), [.codec("h264"), .codec("hevc"), .codec("prores422"), .codec("prores4444")])
-        XCTAssertEqual(codecs.map(\.checked), [false, false, false, true])
+        XCTAssertEqual(codecs.map(\.command), [.codec("h264"), .codec("hevc"), .codec("prores422"), .codec("prores422hq"), .codec("prores422lt"), .codec("prores422proxy"), .codec("prores4444")])
+        XCTAssertEqual(codecs.map(\.checked), [false, false, false, false, false, false, true])
         let bgs = AppMenuSpec.backgroundItems(s)
         XCTAssertEqual(bgs.last?.command, .background("transparent"))
         XCTAssertEqual(bgs.last?.checked, true)
@@ -65,6 +65,19 @@ final class APNGProResAppTests: XCTestCase {
         XCTAssertEqual(m.project.codec, "prores4444", "4K にしても ProRes は HEVC に替わらない")
         m.setCodec("bogus")
         XCTAssertEqual(m.project.codec, "prores4444", "知らない形式は受け付けない")
+    }
+
+    func testSetCodecAcceptsNewProResVariants() {
+        let m = makeModel()
+        for codec in [OutputPlan.proRes422HQ, OutputPlan.proRes422LT, OutputPlan.proRes422Proxy] {
+            m.setCodec(codec)
+            XCTAssertEqual(m.project.codec, codec, "\(codec) を選べる")
+            m.applyVideoSize(3840, 2160)
+            XCTAssertEqual(m.project.codec, codec, "4K にしても \(codec) は HEVC に替わらない")
+            XCTAssertEqual(m.exportSuggestedName(preset: nil), "\(m.documentName).mov")
+        }
+        let panel = ExportPanelOptions(documentName: "d", initial: .current, custom: [], projectCodec: OutputPlan.proRes422Proxy)
+        XCTAssertEqual(panel.contentType(for: .current), .quickTimeMovie, "Proxy でも保存先は QuickTime(.mov)")
     }
 
     func testExportPanelTypeFollowsProResCode() {

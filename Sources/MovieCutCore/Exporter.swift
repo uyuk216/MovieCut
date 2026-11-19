@@ -83,6 +83,18 @@ public final class Exporter {
         self.pluginEffectProviders = pluginEffectProviders
     }
 
+    /// ProRes のコーデック文字列 → AVAssetWriter の映像コーデック。HQ / LT / Proxy も AVAssetWriter で直接書ける(実機確認済み 2026-11-19)。
+    /// 4444 以外の ProRes は従来どおり 422 として書く(未知の文字列が来ても従来の挙動を変えないための保険)。
+    public static func proResCodecType(for codec: String) -> AVVideoCodecType {
+        switch codec.lowercased() {
+        case OutputPlan.proRes4444: return .proRes4444
+        case OutputPlan.proRes422HQ: return .proRes422HQ
+        case OutputPlan.proRes422LT: return .proRes422LT
+        case OutputPlan.proRes422Proxy: return .proRes422Proxy
+        default: return .proRes422
+        }
+    }
+
     /// 正確な分数のフレームレート(29.97 → 30000/1001 など)。
     public var frameRate: FrameRate { project.frameRate }
 
@@ -175,7 +187,7 @@ public final class Exporter {
         ]
         if !isHEVC { props[AVVideoProfileLevelKey] = AVVideoProfileLevelH264HighAutoLevel }
         // ProRes はビットレート・キーフレームの指定が無い(フレームごとに独立した圧縮)。4444 は背景が透明なら透明も残る
-        let codecType: AVVideoCodecType = isProRes ? (plan.codec == OutputPlan.proRes4444 ? .proRes4444 : .proRes422) : (isHEVC ? .hevc : .h264)
+        let codecType: AVVideoCodecType = isProRes ? Self.proResCodecType(for: plan.codec) : (isHEVC ? .hevc : .h264)
         var vSettings: [String: Any] = [
             AVVideoCodecKey: codecType,
             AVVideoWidthKey: ew,

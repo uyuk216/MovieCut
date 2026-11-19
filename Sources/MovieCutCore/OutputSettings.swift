@@ -54,10 +54,16 @@ public struct OutputPlan: Equatable, Sendable {
         return w <= maxSide && h <= maxSide && w * h <= hevcMaxArea
     }
 
-    /// ProRes の書き出し形式(.mov)。"prores422" / "prores4444"。
+    /// ProRes の書き出し形式(.mov)。"prores422" / "prores4444" / "prores422hq" / "prores422lt" / "prores422proxy"。
+    /// HQ / LT / Proxy は AVAssetWriter(AVVideoCodecType.proRes422HQ 等)で直接書けることを実機で確認済み(2026-11-19、docs/ProRes書き出しバリエーション.md)。
     public static let proRes422 = "prores422"
     public static let proRes4444 = "prores4444"
-    public static func isProRes(_ codec: String) -> Bool { [proRes422, proRes4444].contains(codec.lowercased()) }
+    public static let proRes422HQ = "prores422hq"
+    public static let proRes422LT = "prores422lt"
+    public static let proRes422Proxy = "prores422proxy"
+    /// 対応する ProRes のコーデック文字列すべて(表示順: 422 系を画質の高い順に並べ、最後に透明を残せる 4444)。
+    public static let proResCodecs: [String] = [proRes422, proRes422HQ, proRes422LT, proRes422Proxy, proRes4444]
+    public static func isProRes(_ codec: String) -> Bool { proResCodecs.contains(codec.lowercased()) }
     /// この計画のコーデックが ProRes か。
     public var isProRes: Bool { Self.isProRes(codec) }
     /// 書き出すファイルの拡張子(ProRes は .mov、他は .mp4)。
@@ -69,6 +75,9 @@ public struct OutputPlan: Equatable, Sendable {
         case "hevc": return "HEVC"
         case proRes422: return "ProRes 422"
         case proRes4444: return "ProRes 4444"
+        case proRes422HQ: return "ProRes 422 HQ"
+        case proRes422LT: return "ProRes 422 LT"
+        case proRes422Proxy: return "ProRes 422 Proxy"
         default: return "H.264"
         }
     }
