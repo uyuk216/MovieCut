@@ -73,6 +73,7 @@ struct ContentView: View {
         .sheet(isPresented: $model.showResolutionSheet) { ResolutionSheet(model: model) }
         .sheet(isPresented: $model.showFpsSheet) { FrameRateSheet(model: model) }
         .sheet(isPresented: $model.showLoudnessSheet) { LoudnessSheet(model: model) }
+        .sheet(isPresented: $model.showTrackMixerSheet) { TrackMixerSheet(model: model) }
         .sheet(isPresented: $model.showScopeSheet) { ScopeSheet(model: model) }
         .sheet(isPresented: $model.showJumpSheet) { JumpToTimeSheet(model: model) }
         .sheet(isPresented: $model.showSubtitleSheet) { SubtitleQuickSheet(model: model) }

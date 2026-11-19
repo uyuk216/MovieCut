@@ -75,7 +75,7 @@ final class MenuUndoSweepTests: XCTestCase {
              .importSubtitles, .exportSubtitles, .translateSubtitles,
              .transcribeSubtitles, .transcribeWhisper, .relinkMedia, .packageSave, .addFont, .addSubtitle, .addTachie, .rollEdit, .slipEdit, .multicamCreate, .multicamSwitch, .removeBackground, .toggleRangeLoop, .toggleTrimLoop, .toggleClipLoop, .toggleAudition, .cycleAudition, .toggleVoiceRipple, .transferClips, .subclipBatch, .trimLoopWidth(0.5), .trimLoopWidth(1), .trimLoopWidth(2), .aiScript, .aiChapters, .aiTitles, .aiRewrite, .aiSettings, .textGenerationSettings,
              .restoreVersion, .exportStill, .exportSequence, .exportThumbnail, .exportThumbnailCandidates, .exportGIF, .exportAPNG, .queueExport, .showExportQueue, .audioLibrary,
-             .measureLoudness, .showScopes, .saveTemplate, .newFromTemplate, .saveItemTemplate, .makeProxies, .lutLoad, .colorTransferLoad, .autoWhiteBalance, .regenerateVoice,
+             .measureLoudness, .trackMixer, .showScopes, .saveTemplate, .newFromTemplate, .saveItemTemplate, .makeProxies, .lutLoad, .colorTransferLoad, .autoWhiteBalance, .regenerateVoice,
              .makeVoices, .layerDelete, .copyChapters, .copyChaptersColor(.red), .jumpToTime, .renameMarker, .fpsCustom, .addQRCode, .aiImage, .generateSubtitles,
              .helpShortcuts, .helpVoicevox, .helpAquestalk, .helpLicense, .helpThirdParty, .previewBackground, .previewTier, .guide,
              .dockPanel, .dockLayout, .previewProxyToggle, .fullScreen, .exportScript, .exportStoryboard,

@@ -67,6 +67,51 @@ public enum LayerEditing {
         return p
     }
 
+    /// 消音の切り替え。消音は true のときだけ保存する。
+    public static func setMuted(in project: Project, index: Int, _ on: Bool) -> Project? {
+        guard project.tracks.indices.contains(index), project.tracks[index].isMuted != on else { return nil }
+        var p = project
+        p.tracks[index].muted = on ? true : nil
+        p.tracks[index].extra["muted"] = nil
+        return p
+    }
+
+    /// レイヤーの音量(線形)を 0〜2 に丸めて設定する。1.0 は標準なので nil に戻す(ファイルに書かない)。変わらなければ nil。
+    public static func setTrackVolume(in project: Project, index: Int, _ volume: Double) -> Project? {
+        guard project.tracks.indices.contains(index), volume.isFinite else { return nil }
+        let v = min(max(volume, 0), 2)
+        let stored: Double? = v == 1 ? nil : v
+        guard project.tracks[index].volume != stored || project.tracks[index].extra["volume"] != nil else { return nil }
+        var p = project
+        p.tracks[index].volume = stored
+        p.tracks[index].extra["volume"] = nil
+        return p
+    }
+
+    /// レイヤーのパンを -1〜1 に丸めて設定する。0(中央)は標準なので nil に戻す。変わらなければ nil。
+    public static func setTrackPan(in project: Project, index: Int, _ pan: Double) -> Project? {
+        guard project.tracks.indices.contains(index), pan.isFinite else { return nil }
+        let v = min(max(pan, -1), 1)
+        let stored: Double? = v == 0 ? nil : v
+        guard project.tracks[index].pan != stored || project.tracks[index].extra["pan"] != nil else { return nil }
+        var p = project
+        p.tracks[index].pan = stored
+        p.tracks[index].extra["pan"] = nil
+        return p
+    }
+
+    /// このレイヤーの音量・パン・消音・ソロをすべて標準に戻す。変わらなければ nil。
+    public static func resetTrackMix(in project: Project, index: Int) -> Project? {
+        guard project.tracks.indices.contains(index) else { return nil }
+        var p = project
+        p.tracks[index].volume = nil
+        p.tracks[index].pan = nil
+        p.tracks[index].muted = nil
+        p.tracks[index].solo = nil
+        for k in ["volume", "pan", "muted", "solo"] { p.tracks[index].extra[k] = nil }
+        return p.tracks[index] == project.tracks[index] ? nil : p
+    }
+
     public static func setHeight(in project: Project, index: Int, _ h: LayerHeight) -> Project? {
         guard project.tracks.indices.contains(index), LayerHeight.of(project.tracks[index]) != h else { return nil }
         var p = project

@@ -222,6 +222,9 @@ public enum AudioMixer {
         var pan: (l: Float, r: Float)?
         /// 自動ダッキング(声があるときに下げる。BGM の audio クリップで、声の区間があるときだけ)
         var duck: Duck?
+        /// トラックミキサーの左右ゲイン(レイヤーの音量・パン。入れ子は乗算済み。標準は 1 = 何もしない)。最終段で左右別にかける
+        var trackL: Float = 1
+        var trackR: Float = 1
         /// 速い道(エフェクト・音量キー・パン・ダッキングが無い)で足りるか
         var plain: Bool { volumeEnv == nil && fx == nil && pan == nil && duck == nil }
     }
@@ -237,7 +240,7 @@ public enum AudioMixer {
         // ダッキング: 声(ボイスクリップ)の区間。BGM が複数あっても 1 回だけ数える
         let voiceSpans = project.allClips.contains(where: { $0.hasDuck }) ? Ducking.voiceSpans(in: project) : []
         // 複合クリップの中の音は、親と同じ列に平らにして混ぜる(レイヤーの消音・ソロは各階層で決まる)
-        for c in CompoundEditing.audibleClips(in: project) where c.type == .audio || c.type == .voice || c.type == .video {
+        for (c, tmix) in CompoundEditing.audibleClipsWithTrackMix(in: project) where c.type == .audio || c.type == .voice || c.type == .video {
                 guard let s = c.src, !s.isEmpty, c.duration > 0, !c.isFreeze else { continue }   // フリーズフレームは無音
                 var sf = Int((c.start * sr).rounded()) - shift
                 let fullStart = sf, fullLength = Int((c.duration * sr).rounded())
@@ -251,6 +254,7 @@ public enum AudioMixer {
                 guard ef > sf else { continue }
                 var item = Item(clip: c, startFrame: sf, endFrame: ef, offset: off, remapped: remap, gain: Float(c.volume ?? 1))
                 item.fullStart = fullStart
+                item.trackL = tmix.l; item.trackR = tmix.r
                 if c.hasAudioFade {
                     item.fadeStart = fullStart; item.length = fullLength
                     item.fadeInFrames = min(fullLength, Int((c.fadeInOrDefault * sr).rounded()))
@@ -324,20 +328,24 @@ public enum AudioMixer {
                         var fg = it.volumeEnv.map { $0.gain(at: pos) * ng } ?? g
                         if let dg { fg *= dg[k] }
                         if it.hasFade { fg *= AudioFade.gain(pos: pos, length: it.length, fadeIn: it.fadeInFrames, fadeOut: it.fadeOutFrames, equalPower: it.equalPower) }
-                        mL[base + k] += tL[k] * fg * pl
-                        mR[base + k] += tR[k] * fg * pr
+                        // 最終段: トラックゲイン(標準は 1.0 ちょうどなので、掛けても従来とビット同一)
+                        mL[base + k] += tL[k] * fg * pl * it.trackL
+                        mR[base + k] += tR[k] * fg * pr * it.trackR
                     }
                 } else if it.hasFade {
                     // フェード: サンプルごとに倍率をかける(クリップ本来の頭からの位置で決まるので、10 秒の塊の境目でも途切れない)
                     for k in 0..<got {
                         let fg = g * AudioFade.gain(pos: a + k - it.fadeStart, length: it.length, fadeIn: it.fadeInFrames, fadeOut: it.fadeOutFrames, equalPower: it.equalPower)
-                        mL[base + k] += tL[k] * fg
-                        mR[base + k] += tR[k] * fg
+                        // 最終段: トラックゲイン(標準は 1.0 ちょうどなので、掛けても従来とビット同一)
+                        mL[base + k] += tL[k] * fg * it.trackL
+                        mR[base + k] += tR[k] * fg * it.trackR
                     }
                 } else {
+                    // 最終段: トラックゲインを g に畳む(標準は g * 1.0 = g で従来とビット同一)
+                    let gl = g * it.trackL, gr = g * it.trackR
                     for k in 0..<got {
-                        mL[base + k] += tL[k] * g
-                        mR[base + k] += tR[k] * g
+                        mL[base + k] += tL[k] * gl
+                        mR[base + k] += tR[k] * gr
                     }
                 }
                 if it.endFrame <= ce { sources[idx] = nil }

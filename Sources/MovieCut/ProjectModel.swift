@@ -259,6 +259,7 @@ final class ProjectModel: ObservableObject {
     @Published var showFpsSheet = false
     /// 出力 ▸ ラウドネスを測る…(プロジェクトの音の全体を測って見せる)
     @Published var showLoudnessSheet = false
+    @Published var showTrackMixerSheet = false
     /// 表示 ▸ スコープ…(今のプレビューのコマの波形・ヒストグラム)
     @Published var showScopeSheet = false
     /// 出力 ▸ 書き出しキューを表示… / 素材ブラウザ(ファイル ▸ 素材ブラウザを開く…)のシート。
