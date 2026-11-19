@@ -1,6 +1,6 @@
 # カラーカーブとHSLセカンダリ
 
-ブランチ `feat/color-curves-hsl`。仕様は `SPEC-color-curves.md` に従う。
+ブランチ `feat/color-curves-hsl`（起点は `feat/muse-access` 84f9001）。
 Premiere Pro の Lumetri「カーブ」「HSL セカンダリ」に相当する色補正を、既存の CIColorCube 基盤の上に追加で実装する。既存エフェクトの挙動は変えない（追加のみ）。
 
 ## 概要
