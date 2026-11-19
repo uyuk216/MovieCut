@@ -9,8 +9,8 @@ import MovieCutCore
 extension ProjectModel {
     /// 作成者名の前回値(端末内にだけ残す。プロジェクトには書かない)。
     var reviewCommentAuthor: String {
-        get { UserDefaults.standard.string(forKey: "reviewCommentAuthor") ?? "" }
-        set { UserDefaults.standard.set(newValue, forKey: "reviewCommentAuthor") }
+        get { DataLocations.current.defaults.string(forKey: "reviewCommentAuthor") ?? "" }
+        set { DataLocations.current.defaults.set(newValue, forKey: "reviewCommentAuthor") }
     }
 
     static func isoNow() -> String {
