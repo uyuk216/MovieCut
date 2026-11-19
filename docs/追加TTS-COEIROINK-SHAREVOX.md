@@ -181,6 +181,11 @@ R3-1 で追加: `Tests/MovieCutCoreTests/CoeiroinkV2SynthesisTests.swift`(13 件
 スタイル ID 不在/曖昧時の停止、エンジン情報と生存確認、HTTP エラー、プロバイダ経路
 (実プローブ込み)・未起動時の案内・既定スタイル ID、v1 とのキャッシュ分離、
 自動判定プロバイダの v2 経路 / v1 委譲。
+全テスト結果(R3-1 時点): Core 2,568 件(新規 13 件を含む)・スキップ 8・失敗 0。
+アプリ 860 件は、土台コミット(865b04b)でも同一に失敗する既存の 5 件
+(L10nAppTests のシーン作成メニュー英訳、MenuM7Tests のクリップメニュー構成、
+MenuTests のプレビュー背景既定値。いずれも R2-3 統合由来)があり、R3-1 の変更による
+新規失敗は無い。
 
 
 `Tests/MovieCutCoreTests/CoeiroinkSharevoxPluginTests.swift`(18 件)と
