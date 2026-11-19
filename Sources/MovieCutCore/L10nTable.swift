@@ -200,6 +200,7 @@ enum L10nTable {
         "範囲を解除": "Clear Range",
         "素材の場所を再指定…": "Relink Media…",
         "素材を追加…": "Add Media…",
+        "画面を収録…": "Record Screen…",
         "素材ブラウザを開く…": "Open Media Browser…",
         "絵コンテを書き出す…": "Export Storyboard…",
         "縦動画に自動リフレーム": "Auto Reframe to Vertical",
