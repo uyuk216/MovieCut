@@ -693,5 +693,13 @@ enum L10nTable {
         "中心Y": "Center Y",
         "量": "Amount",
         "方式": "Mode",
+        "スペクトログラム(横: 時間 / 縦: 周波数・対数 / 色: 強さ)": "Spectrogram (horizontal: time / vertical: frequency, log scale / color: strength)",
+        "音のあるクリップ(音声・ボイス・動画)を選んでから開くと、スペクトログラムが出ます。": "Select a clip with audio (audio, voice, or video) before opening to see its spectrogram.",
+        "スペクトログラムを計算しています…": "Computing spectrogram…",
+        "スペクトログラムを計算できませんでした。": "Could not compute the spectrogram.",
+        "いちばん強い周波数": "Strongest Frequency",
+        "解析した長さ": "Analyzed Duration",
+        "長いクリップのため、先頭だけを解析しました。": "Only the beginning was analyzed because the clip is long.",
+        "選択中のクリップに音声が無いため、スペクトログラムは出せません。": "The selected clip has no audio, so no spectrogram can be shown."
     ]
 }
