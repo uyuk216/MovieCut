@@ -85,28 +85,33 @@ extension ProjectModel {
         panel.canChooseDirectories = false
         panel.allowedContentTypes = ["mid", "midi"].compactMap { UTType(filenameExtension: $0) }
         panel.title = "MIDIを読み込む"
+        // SoundFont(.sf2)の任意指定(R2-4)。未選択なら従来の簡易シンセで音声化する。
+        let soundFontAccessory = SoundFontAccessoryView()
+        panel.accessoryView = soundFontAccessory.view
         let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
             guard resp == .OK else { return }
             let urls = panel.urls
-            Task { @MainActor in _ = await self?.importMIDIFiles(urls: urls) }
+            let soundFontPath = soundFontAccessory.soundFontPath
+            Task { @MainActor in _ = await self?.importMIDIFiles(urls: urls, soundFontPath: soundFontPath) }
         }
         if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
     }
 
     @discardableResult
-    func importMIDIFiles(urls: [URL], at time: Double? = nil) async -> [String] {
+    func importMIDIFiles(urls: [URL], at time: Double? = nil, soundFontPath: String? = nil) async -> [String] {
         var all: [String] = []
         for u in urls where MidiImporter.isMIDI(path: u.path) {
             guard !isLocked else { break }
-            all += await importMIDI(url: u, at: time)
+            all += await importMIDI(url: u, at: time, soundFontPath: soundFontPath)
         }
         return all
     }
 
     /// シートなしで取り込む(テスト・自動化用)。ノートを音声化した WAV の音声クリップと、
     /// ノート開始のマーカーを、合わせて 1 回の Undo で置く。
+    /// `soundFontPath` を渡すと SoundFont の音色で音声化する(未指定は簡易シンセ、従来どおり)。
     @discardableResult
-    func importMIDI(url: URL, at time: Double? = nil, cacheRoot: URL? = nil) async -> [String] {
+    func importMIDI(url: URL, at time: Double? = nil, cacheRoot: URL? = nil, soundFontPath: String? = nil) async -> [String] {
         guard !isLocked else { return [] }
         guard let root = cacheRoot ?? Self.inputCacheRoot else { statusText = "MIDIの音声を置く場所を作れませんでした"; return [] }
         let attrs = try? FileManager.default.attributesOfItem(atPath: url.path)
@@ -115,10 +120,10 @@ extension ProjectModel {
         let dir = root.appendingPathComponent("midi-\(key)", isDirectory: true)
         let prepared: (wavPath: String, file: MidiFileData)
         do {
-            prepared = try await Task.detached { try MidiImporter.prepare(atPath: url.path, cacheDir: dir) }.value
+            prepared = try await Task.detached { try MidiImporter.prepare(atPath: url.path, cacheDir: dir, soundFontPath: soundFontPath) }.value
         } catch {
             errorTitle = "MIDIを読み込めませんでした"
-            errorMessage = "\(url.lastPathComponent): \((error as? MidiError)?.description ?? error.localizedDescription)"
+            errorMessage = "\(url.lastPathComponent): \((error as? MidiError)?.description ?? (error as? SoundFontError)?.description ?? error.localizedDescription)"
             return []
         }
         let t = max(0, time ?? currentTime)
@@ -129,7 +134,8 @@ extension ProjectModel {
         }
         guard !ids.isEmpty else { return [] }
         selectedClipId = ids.last
-        statusText = "MIDIを読み込みました(ノート \(prepared.file.notes.count) 個を音声化、マーカー \(MidiImporter.noteMarkers(for: prepared.file, at: 0).count) 件)"
+        let engine = soundFontPath.map { "、SoundFont \((($0 as NSString).lastPathComponent))" } ?? ""
+        statusText = "MIDIを読み込みました(ノート \(prepared.file.notes.count) 個を音声化\(engine)、マーカー \(MidiImporter.noteMarkers(for: prepared.file, at: 0).count) 件)"
         return ids
     }
 
@@ -239,5 +245,37 @@ extension ProjectModel {
             }
         }
         return all
+    }
+}
+
+/// MIDI 取り込みパネルのアクセサリ: SoundFont(.sf2)の任意指定(R2-4)。
+/// ボタンで .sf2 を 1 つ選び、ラベルに表示する。未選択なら soundFontPath は nil
+/// (= 従来の簡易シンセ)。選択はこのパネルを開いている間だけ有効(設定として保存しない)。
+final class SoundFontAccessoryView: NSObject {
+    private(set) var soundFontPath: String?
+    let view: NSView
+    private let label: NSTextField
+
+    override init() {
+        label = NSTextField(labelWithString: "SoundFont: 未選択(簡易シンセ)")
+        view = NSView(frame: NSRect(x: 0, y: 0, width: 420, height: 30))
+        super.init()
+        let button = NSButton(title: "SoundFont (.sf2) を選ぶ…", target: self, action: #selector(choose))
+        button.frame = NSRect(x: 8, y: 4, width: 190, height: 22)
+        label.frame = NSRect(x: 206, y: 7, width: 206, height: 17)
+        label.lineBreakMode = .byTruncatingMiddle
+        view.addSubview(button)
+        view.addSubview(label)
+    }
+
+    @objc private func choose() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        if let t = UTType(filenameExtension: "sf2") { panel.allowedContentTypes = [t] }
+        panel.title = "SoundFontを選ぶ"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        soundFontPath = url.path
+        label.stringValue = "SoundFont: \(url.lastPathComponent)"
     }
 }

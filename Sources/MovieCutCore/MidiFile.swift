@@ -4,6 +4,8 @@ import Foundation
 //
 // 外部依存なしの自前パース。ヘッダ(MThd)・トラック(MTrk)・可変長数・ランニングステータス・
 // メタイベント(テンポ・トラック名・拍子)を読み、ノートオン/オフを対にして秒単位のノート列にする。
+// プログラムチェンジとバンクセレクト(CC#0/#32)も拾い、ノートごとに有効だった
+// プログラム/バンクを記録する(SoundFont のプリセット選択用。R2-4)。
 // テンポマップ(PPQ)と SMPTE 分解能の両方に対応する。壊れたファイルは例外で知らせる(黙って空にしない)。
 
 /// MIDI のノート 1 つ(秒単位に直したもの)。
@@ -20,10 +22,17 @@ public struct MidiNote: Equatable, Sendable {
     public var start: Double
     /// 長さ(秒)。
     public var duration: Double
+    /// ノートオン時点で有効だったプログラム番号(0〜127。プログラムチェンジが無ければ 0)。
+    /// SoundFont レンダリング(R2-4)でプリセットを選ぶために使う。簡易シンセは使わない。
+    public var program: Int
+    /// ノートオン時点で有効だったバンク番号(CC#0/#32 の合成値。指定が無く
+    /// チャンネル 10(インデックス 9)のときはドラム用の 128)。
+    public var bank: Int
 
-    public init(track: Int, channel: Int, pitch: Int, velocity: Int, startTick: Int, endTick: Int, start: Double, duration: Double) {
+    public init(track: Int, channel: Int, pitch: Int, velocity: Int, startTick: Int, endTick: Int, start: Double, duration: Double, program: Int = 0, bank: Int = 0) {
         self.track = track; self.channel = channel; self.pitch = pitch; self.velocity = velocity
         self.startTick = startTick; self.endTick = endTick; self.start = start; self.duration = duration
+        self.program = program; self.bank = bank
     }
 
     /// 音名("C4" など。60 = C4)。
@@ -50,6 +59,19 @@ public struct MidiTempo: Equatable, Sendable {
     public var bpm: Double { 60_000_000 / Double(max(1, microsecondsPerQuarter)) }
 }
 
+/// プログラムチェンジ 1 件(バンクセレクト CC#0/#32 を合成済み)。
+public struct MidiProgramChange: Equatable, Sendable {
+    public var tick: Int
+    /// 時刻(秒、テンポマップ適用後)。
+    public var time: Double
+    public var channel: Int
+    public var bank: Int
+    public var program: Int
+    public init(tick: Int, time: Double, channel: Int, bank: Int, program: Int) {
+        self.tick = tick; self.time = time; self.channel = channel; self.bank = bank; self.program = program
+    }
+}
+
 /// パースした MIDI ファイル。
 public struct MidiFileData: Equatable, Sendable {
     /// SMF フォーマット(0 / 1 / 2)。
@@ -69,6 +91,8 @@ public struct MidiFileData: Equatable, Sendable {
     public var notes: [MidiNote]
     /// 全体の長さ(秒。最後のノートの終わり。ノートが無ければ最後のイベント)。
     public var duration: Double
+    /// プログラムチェンジの列(出現順)。SoundFont のプリセット選択の記録用。
+    public var programChanges: [MidiProgramChange] = []
 
     public var isSMPTE: Bool { ticksPerQuarter == nil }
 
@@ -123,11 +147,23 @@ public enum MidiParser {
             smpteTPF = division & 0xff
         }
 
-        struct RawNote { var track, channel, pitch, velocity, startTick, endTick: Int }
+        struct RawNote { var track, channel, pitch, velocity, startTick, endTick, program, bank: Int }
+        struct RawProgramChange { var tick, channel, bank, program: Int }
         var rawNotes: [RawNote] = []
+        var rawProgramChanges: [RawProgramChange] = []
         var tempos: [MidiTempo] = []
         var trackNames: [Int: String] = [:]
         var lastTick = 0
+        // チャンネルごとのプログラム/バンクの現在値。SMF では本来チャンネル状態は
+        // トラックをまたいで共有されるが、このパーサはトラック順に読むため、
+        // 辞書をトラック間で共有して近似する(通常のファイルは同じトラック内で完結する)。
+        var channelProgram: [Int: Int] = [:]
+        var channelBankMSB: [Int: Int] = [:]
+        var channelBankLSB: [Int: Int] = [:]
+        func effectiveBank(_ ch: Int) -> Int {
+            if channelBankMSB[ch] == nil, channelBankLSB[ch] == nil { return ch == 9 ? 128 : 0 }
+            return ((channelBankMSB[ch] ?? 0) << 7) | (channelBankLSB[ch] ?? 0)
+        }
 
         for trackIndex in 0..<ntrks {
             guard r.take(4) == Array("MTrk".utf8), let trackLength = r.u32() else { throw MidiError.truncated }
@@ -135,7 +171,7 @@ public enum MidiParser {
             var tick = 0
             var runningStatus: UInt8? = nil
             // 鳴っているノート: (チャンネル, 音の高さ) → 開始の列(同じ音の重なりは先入れ先出し)
-            var active: [Int: [(tick: Int, velocity: Int)]] = [:]
+            var active: [Int: [(tick: Int, velocity: Int, program: Int, bank: Int)]] = [:]
             func key(_ ch: Int, _ pitch: Int) -> Int { ch * 128 + pitch }
 
             while r.pos < trackEnd {
@@ -158,16 +194,30 @@ public enum MidiParser {
                     r.pos += 2
                     let ch = Int(status & 0x0f)
                     if status >= 0x90, velocity > 0 {
-                        active[key(ch, pitch), default: []].append((tick, velocity))
+                        active[key(ch, pitch), default: []].append((tick, velocity, channelProgram[ch] ?? 0, effectiveBank(ch)))
                     } else if var queue = active[key(ch, pitch)], !queue.isEmpty {
                         let head = queue.removeFirst()
                         active[key(ch, pitch)] = queue
-                        rawNotes.append(RawNote(track: trackIndex, channel: ch, pitch: pitch, velocity: head.velocity, startTick: head.tick, endTick: tick))
+                        rawNotes.append(RawNote(track: trackIndex, channel: ch, pitch: pitch, velocity: head.velocity, startTick: head.tick, endTick: tick, program: head.program, bank: head.bank))
                     }
-                case 0xa0...0xbf, 0xe0...0xef:   // ポリフォニックキー圧 / コントロールチェンジ / ピッチベンド(2 バイト)
+                case 0xb0...0xbf:                // コントロールチェンジ(2 バイト)。バンクセレクト(CC#0/#32)だけ拾う
+                    guard r.pos + 2 <= trackEnd else { throw MidiError.truncated }
+                    let controller = Int(data[r.pos]) & 0x7f, value = Int(data[r.pos + 1]) & 0x7f
+                    r.pos += 2
+                    let ch = Int(status & 0x0f)
+                    if controller == 0 { channelBankMSB[ch] = value }
+                    if controller == 32 { channelBankLSB[ch] = value }
+                case 0xa0...0xaf, 0xe0...0xef:   // ポリフォニックキー圧 / ピッチベンド(2 バイト)
                     guard r.pos + 2 <= trackEnd else { throw MidiError.truncated }
                     r.pos += 2
-                case 0xc0...0xdf:                // プログラムチェンジ / チャンネル圧(1 バイト)
+                case 0xc0...0xcf:                // プログラムチェンジ(1 バイト)
+                    guard r.pos + 1 <= trackEnd else { throw MidiError.truncated }
+                    let program = Int(data[r.pos]) & 0x7f
+                    r.pos += 1
+                    let ch = Int(status & 0x0f)
+                    channelProgram[ch] = program
+                    rawProgramChanges.append(RawProgramChange(tick: tick, channel: ch, bank: effectiveBank(ch), program: program))
+                case 0xd0...0xdf:                // チャンネル圧(1 バイト)
                     guard r.pos + 1 <= trackEnd else { throw MidiError.truncated }
                     r.pos += 1
                 case 0xff:                       // メタイベント
@@ -196,7 +246,7 @@ public enum MidiParser {
             // トラックの終わりまで鳴りっぱなしのノートは、最後のティックで切る
             for (k, queue) in active {
                 for head in queue {
-                    rawNotes.append(RawNote(track: trackIndex, channel: k / 128, pitch: k % 128, velocity: head.velocity, startTick: head.tick, endTick: tick))
+                    rawNotes.append(RawNote(track: trackIndex, channel: k / 128, pitch: k % 128, velocity: head.velocity, startTick: head.tick, endTick: tick, program: head.program, bank: head.bank))
                 }
             }
             r.pos = trackEnd
@@ -229,13 +279,19 @@ public enum MidiParser {
             let s = seconds(atTick: n.startTick)
             let e = seconds(atTick: n.endTick)
             return MidiNote(track: n.track, channel: n.channel, pitch: n.pitch, velocity: n.velocity,
-                            startTick: n.startTick, endTick: n.endTick, start: s, duration: max(0, e - s))
+                            startTick: n.startTick, endTick: n.endTick, start: s, duration: max(0, e - s),
+                            program: n.program, bank: n.bank)
         }.sorted { ($0.start, $0.track, $0.pitch) < ($1.start, $1.track, $1.pitch) }
+
+        let programChanges = rawProgramChanges.map {
+            MidiProgramChange(tick: $0.tick, time: seconds(atTick: $0.tick), channel: $0.channel, bank: $0.bank, program: $0.program)
+        }
 
         let duration = max(notes.map { $0.start + $0.duration }.max() ?? 0, seconds(atTick: lastTick))
         return MidiFileData(format: format, trackCount: ntrks, ticksPerQuarter: ticksPerQuarter,
                             smpteFramesPerSecond: smpteFPS, smpteTicksPerFrame: smpteTPF,
-                            tempos: tempos, trackNames: trackNames, notes: notes, duration: duration)
+                            tempos: tempos, trackNames: trackNames, notes: notes, duration: duration,
+                            programChanges: programChanges)
     }
 
     /// ファイルから読む(開けなければ IO 例外)。

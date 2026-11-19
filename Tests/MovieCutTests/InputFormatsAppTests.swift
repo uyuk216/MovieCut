@@ -137,6 +137,51 @@ final class InputFormatsAppTests: XCTestCase {
         XCTAssertEqual(m.errorTitle, "MIDIを読み込めませんでした")
     }
 
+    /// プリセット 1 件だけの最小 .sf2(正弦波サンプル、ループ再生)。R2-4 のアプリ側検証用。
+    private func writeSF2() throws -> URL {
+        func le16(_ v: Int) -> [UInt8] { [UInt8(v & 0xff), UInt8((v >> 8) & 0xff)] }
+        func le32(_ v: Int) -> [UInt8] { (0..<4).map { UInt8((v >> (8 * $0)) & 0xff) } }
+        func fixed(_ s: String, _ len: Int) -> [UInt8] { var b = Array(s.utf8.prefix(len)); b += [UInt8](repeating: 0, count: len - b.count); return b }
+        func chunk(_ id: String, _ payload: [UInt8]) -> [UInt8] { var o = Array(id.utf8) + le32(payload.count) + payload; if payload.count % 2 == 1 { o.append(0) }; return o }
+        func list(_ t: String, _ payload: [UInt8]) -> [UInt8] { chunk("LIST", Array(t.utf8) + payload) }
+        var smpl: [UInt8] = []
+        for i in 0..<4410 { let u = UInt16(bitPattern: Int16(0.7 * 32767 * sin(2 * Double.pi * 441 * Double(i) / 44100))); smpl += [UInt8(u & 0xff), UInt8(u >> 8)] }
+        var shdr = fixed("sine", 20) + le32(0) + le32(4410) + le32(0) + le32(4410) + le32(44100) + [69, 0] + le16(0) + le16(1)
+        shdr += fixed("EOS", 20) + le32(0) + le32(0) + le32(0) + le32(0) + le32(0) + [0, 0] + le16(0) + le16(0)
+        let phdr = fixed("Sine", 20) + le16(0) + le16(0) + le16(0) + le32(0) + le32(0) + le32(0)
+                 + fixed("EOP", 20) + le16(0) + le16(0) + le16(1) + le32(0) + le32(0) + le32(0)
+        let pbag = le16(0) + le16(0) + le16(1) + le16(0)
+        let pgen = le16(41) + le16(0)
+        let inst = fixed("inst", 20) + le16(0) + fixed("EOI", 20) + le16(1)
+        let ibag = le16(0) + le16(0) + le16(2) + le16(0)
+        let igen = le16(53) + le16(0) + le16(54) + le16(1)
+        var pdtaBody: [UInt8] = []
+        pdtaBody += chunk("phdr", phdr) + chunk("pbag", pbag) + chunk("pmod", [UInt8](repeating: 0, count: 10))
+        pdtaBody += chunk("pgen", pgen) + chunk("inst", inst) + chunk("ibag", ibag)
+        pdtaBody += chunk("imod", [UInt8](repeating: 0, count: 10)) + chunk("igen", igen) + chunk("shdr", shdr)
+        let body = Array("sfbk".utf8) + list("INFO", chunk("INAM", fixed("AppTest", 8))) + list("sdta", chunk("smpl", smpl)) + list("pdta", pdtaBody)
+        let url = dir.appendingPathComponent("font.sf2")
+        try Data(Array("RIFF".utf8) + le32(body.count) + body).write(to: url)
+        return url
+    }
+
+    func testImportMIDIWithSoundFontUsesSoundFontCacheAndStatus() async throws {
+        let url = try writeMIDI()
+        let sf = try writeSF2()
+        let m = ProjectModel(project: Project.new())
+        let ids = await m.importMIDI(url: url, cacheRoot: dir.appendingPathComponent("cache"), soundFontPath: sf.path)
+        XCTAssertEqual(ids.count, 1)
+        let clip = try XCTUnwrap(m.project.allClips.first { $0.id == ids[0] })
+        let src = try XCTUnwrap(clip.src)
+        XCTAssertTrue(((src as NSString).lastPathComponent).hasPrefix("rendered-sf-"))
+        XCTAssertTrue(m.statusText.contains("SoundFont"))
+        // SoundFont 未指定の従来経路は rendered.wav のまま(従来互換)
+        let m2 = ProjectModel(project: Project.new())
+        let ids2 = await m2.importMIDI(url: url, cacheRoot: dir.appendingPathComponent("cache2"))
+        let src2 = try XCTUnwrap(m2.project.allClips.first { $0.id == ids2[0] }?.src)
+        XCTAssertTrue(src2.hasSuffix("rendered.wav"))
+    }
+
     // MARK: - 連番画像
 
     func testImportImageSequencePlacesAnimatedClip() async throws {

@@ -189,6 +189,32 @@ case "midi-info" where args.count >= 2:
         }
         if f.notes.count > 200 { print("  … ほか \(f.notes.count - 200) 個") }
     } catch { fail("読めませんでした: \(error)") }
+case "sf2-info" where args.count >= 2:
+    // sf2-info <file.sf2>: SoundFont の名前・プリセット・サンプル数の一覧(読み取り専用)
+    do {
+        let sf = try SoundFontParser.parseFile(atPath: args[1])
+        print("sf2  name=\(sf.name.isEmpty ? "(無名)" : sf.name) presets=\(sf.presets.count) samples=\(sf.sampleCount)")
+        for p in sf.presets { print("  preset bank=\(p.bank) program=\(p.program) \(p.name)") }
+    } catch { fail("読めませんでした: \(error)") }
+case "midi-render" where args.count >= 2:
+    // midi-render <file.mid> --out <file.wav> [--sf2 <file.sf2>]: MIDI を WAV に描く。
+    // --sf2 を付けると SoundFont の音色、無ければ従来の簡易シンセ(アプリの取り込みと同じ経路)。
+    guard let outPath = optValue("--out") else { fail("midi-render: --out <file.wav> が必要です") }
+    do {
+        let f = try MidiParser.parseFile(atPath: args[1])
+        try MidiImporter.validate(f)
+        let wav: Data
+        var engine = "簡易シンセ"
+        if let sf2Path = optValue("--sf2") {
+            let sf = try SoundFontParser.parseFile(atPath: sf2Path)
+            wav = SoundFontRenderer.renderWAV(f, soundFont: sf)
+            engine = "SoundFont \((sf2Path as NSString).lastPathComponent)"
+        } else {
+            wav = MidiImporter.renderWAV(f)
+        }
+        try wav.write(to: URL(fileURLWithPath: outPath), options: .atomic)
+        print("midi-render  notes=\(f.notes.count) duration=\(String(format: "%.3f", f.duration))s engine=\(engine) wrote \(outPath)")
+    } catch { fail("描けませんでした: \(error)") }
 case "seq-info" where args.count >= 2:
     // seq-info <フォルダ>: 連番画像の検出結果(読み取り専用)
     let found = ImageSequenceDetector.detectInFolder(URL(fileURLWithPath: args[1]))
