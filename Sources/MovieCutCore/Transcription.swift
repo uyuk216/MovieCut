@@ -202,9 +202,11 @@ public enum SubtitleTranscription {
     /// 認識結果が無ければ nil(何も変えない)。キャンセルは `CancellationError`。一時ファイルは終わったら消す。
     public static func run(clip: Clip, project: Project, transcriber: Transcriber, style: TextLook?,
                            tempDirectory: URL = FileManager.default.temporaryDirectory,
-                           onProgress: @escaping @Sendable (Double) -> Void = { _ in }) async throws -> SubtitleGeneration.Result? {
+                           onProgress: @escaping @Sendable (Double) -> Void = { _ in },
+                           onSegments: @escaping @Sendable ([TranscriptSegment]) -> Void = { _ in }) async throws -> SubtitleGeneration.Result? {
         guard TranscriptionSupport.supports(clip) else { return nil }
         let segments = try await segments(clip: clip, transcriber: transcriber, tempDirectory: tempDirectory, onProgress: onProgress)
+        onSegments(segments)
         let cues = TranscriptSubtitles.cues(from: segments, clip: clip)
         // 単語の時刻があるときだけ、カラオケ字幕の単位ごとの開始秒を入れる(スタイルにカラオケが無ければ何もしない)
         let words = segments.flatMap(\.words)

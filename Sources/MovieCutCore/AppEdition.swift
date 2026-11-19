@@ -73,10 +73,12 @@ public struct DataLocations: Sendable {
     public var versions: URL { root.appendingPathComponent("Versions", isDirectory: true) }
     /// 同梱素材ライブラリ(アプリが合成・描画した効果音・背景・図形のキャッシュ)。
     public var builtinMedia: URL { root.appendingPathComponent("Bundled", isDirectory: true) }
+    /// メディアインテリジェンス検索(第 1 段)の元になる文字起こしのキャッシュ(再構築可能)。
+    public var transcriptCache: URL { root.appendingPathComponent("MediaTranscripts.json") }
 
     /// 版が持つフォルダ・ファイルの全部(重なり検査・説明用)。
     public var allPaths: [URL] {
-        [fonts, proxies, voices, templates, exportPresets, recovery, qrCodes, aiImages, psdCache, cutouts, versions, builtinMedia, inputCache]
+        [fonts, proxies, voices, templates, exportPresets, recovery, qrCodes, aiImages, psdCache, cutouts, versions, builtinMedia, inputCache, transcriptCache]
     }
 
     /// 設定(UserDefaults)の置き場。personal は従来の `.standard`。

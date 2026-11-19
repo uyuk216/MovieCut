@@ -93,6 +93,7 @@ struct ContentView: View {
         .sheet(isPresented: $model.showFillerSheet) { FillerCutSheet(model: model) }
         .sheet(isPresented: $model.showTranscriptEditSheet) { TranscriptEditSheet(model: model) }
         .sheet(isPresented: $model.showFindSheet) { FindReplaceSheet(model: model) }
+        .sheet(isPresented: $model.showMediaSearchSheet) { MediaSearchSheet(model: model) }
         .sheet(isPresented: $model.showClipListSheet) { ClipListSheet(model: model) }
         .sheet(isPresented: $model.showSceneListSheet) { SceneListSheet(model: model) }
         .sheet(isPresented: $model.showScriptTableSheet) { ScriptTableSheet(model: model) }

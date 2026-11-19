@@ -602,6 +602,17 @@ enum L10nTable {
         "ベクトルスコープとパレードは表示用に間引いて計算します。": "The vectorscope and parade are computed from sampled pixels for display.",
         "差し替え可能項目を付ける(文字・色・画像)": "Add replaceable fields (text, color, image)",
         "差し替える値を入力": "Enter Values to Replace",
-        "空欄の項目は、テンプレートに保存した値のままになります。色は #RRGGBB の形で入力します。": "Fields left blank keep the value saved in the template. Enter colors as #RRGGBB."
+        "空欄の項目は、テンプレートに保存した値のままになります。色は #RRGGBB の形で入力します。": "Fields left blank keep the value saved in the template. Enter colors as #RRGGBB.",
+        "素材の内容を検索…": "Search Media Content…",
+        "文字起こしから検索": "Search by Transcript",
+        "素材の内容を検索": "Search Media Content",
+        "文字起こし済みの素材を、話している内容の文で検索します。結果を選ぶと、その文の位置へ移動します。": "Search media that has been transcribed by what is being said. Select a result to jump to that sentence.",
+        "話している内容で検索": "Search by spoken content",
+        "一致する文はありません": "No matching sentences",
+        "検索の対象外(文字起こしがありません)": "Not searchable (no transcript)",
+        "タイムラインに無い素材か、使う範囲の外の文です": "This media is not on the timeline, or the sentence is outside the used range",
+        "その位置へ移動": "Go to This Position",
+        "文字起こし済みの素材がありません": "No Transcribed Media",
+        "音のあるクリップを選んで「音声から字幕を作る」などで文字起こしすると、その素材が検索できるようになります。": "Transcribe an audio clip (for example with Create Subtitles from Audio) and that media becomes searchable."
     ]
 }

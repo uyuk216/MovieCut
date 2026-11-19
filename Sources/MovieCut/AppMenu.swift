@@ -24,6 +24,8 @@ enum MenuCommand: Hashable {
     case transcribeWhisper
     // 文字起こしを書き出す(txt / srt。Apple・Whisper の 2 種。字幕レイヤーへ入れるかは確認で聞く。ショートカットなし)
     case transcribeExport, transcribeExportWhisper
+    // 素材の内容を検索(メディアインテリジェンス検索 第 1 段。文字起こし文で素材を横断検索。ショートカットなし)
+    case mediaSearch
     // 素材(欠落の再指定)
     case relinkMedia
     // ファイル ▸ 未使用の素材…(ショートカットは持たない)
@@ -717,6 +719,11 @@ enum AppMenuSpec {
     /// 出力 ▸ 文字起こしを書き出す（Whisper）…(同じ。外部の whisper.cpp で認識する。ショートカットなし)。
     static func transcribeExportWhisper(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .transcribeExportWhisper, title: "文字起こしを書き出す（Whisper）…", shortcut: nil, enabled: s.canEdit && s.canTranscribe, checked: nil, hint: "Whisper・高精度")
+    }
+
+    /// 出力 ▸ 素材の内容を検索…(メディアインテリジェンス検索 第 1 段。文字起こし済みの素材を話している内容で検索する。ショートカットなし)。
+    static func mediaSearchItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .mediaSearch, title: "素材の内容を検索…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "文字起こしから検索")
     }
 
     /// ファイル ▸ 素材の場所を再指定…(欠けている素材があるときだけ。フォルダを選んで探し直す)。
@@ -1542,7 +1549,7 @@ enum AppMenuSpec {
 
     /// 字幕と素材の項目(ファイル ▸ 字幕・素材のまとまり。式が長すぎて型検査が遅くなるので分けてある)。
     static func mediaSubtitleItems(_ s: MenuState) -> [MenuItemSpec] {
-        [subtitleImport(s), mediaRelink(s), unusedMediaItem(s), restoreVersionItem(s), packageSave(s), addSubtitle(s), subtitleExport(s), subtitleTranslate(s), subtitleGenerate(s), transcribeSubtitles(s), transcribeWhisperSubtitles(s), transcribeExport(s), transcribeExportWhisper(s), chapterCopy(s)]
+        [subtitleImport(s), mediaRelink(s), unusedMediaItem(s), restoreVersionItem(s), packageSave(s), addSubtitle(s), subtitleExport(s), subtitleTranslate(s), subtitleGenerate(s), transcribeSubtitles(s), transcribeWhisperSubtitles(s), transcribeExport(s), transcribeExportWhisper(s), mediaSearchItem(s), chapterCopy(s)]
             + cutoutItems(s)
     }
 
@@ -1617,6 +1624,7 @@ enum AppMenu {
             case .transcribeWhisper: Task { await m.transcribeSelectedToSubtitlesWithWhisper() }
             case .transcribeExport: m.chooseAndExportTranscript()
             case .transcribeExportWhisper: m.chooseAndExportTranscriptWithWhisper()
+            case .mediaSearch: m.openMediaSearch()
             case .relinkMedia: m.chooseAndRelinkMedia()
             case .unusedMedia: m.showUnusedMediaSheet = true
             case .manageProxies: m.showProxySheet = true

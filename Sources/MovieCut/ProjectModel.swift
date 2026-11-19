@@ -187,6 +187,8 @@ final class ProjectModel: ObservableObject {
     nonisolated let mirror: ProjectMirror
     /// 保存・自動保存のときの素材フィンガープリントの記録(ハッシュの読み直しを減らす)。保存の写しを作る側からも読める。
     nonisolated let fingerprintCache = MediaFingerprintCache()
+    /// メディアインテリジェンス検索(第 1 段)の元になる文字起こしの保存庫(再構築可能なキャッシュ)。
+    nonisolated let mediaTranscriptStore = MediaTranscriptStore.standard
     private(set) var projectRevision = 0
     /// 自動保存(復元の写し)の持ち主の番号と、最後に写したときの版・タイマー。
     let recoverySessionID = UUID().uuidString
@@ -308,6 +310,8 @@ final class ProjectModel: ObservableObject {
     var transcriptEditClipId: String?
     /// 「検索と置換…」のシート(テロップとセリフの一括置換)。
     @Published var showFindSheet = false
+    /// 出力 ▸ 素材の内容を検索…(メディアインテリジェンス検索 第 1 段)のシート。
+    @Published var showMediaSearchSheet = false
     /// 出力 ▸ 使用クリップ一覧…(表・TSV コピー・CSV 書き出し)のシート。
     @Published var showClipListSheet = false
     /// クリップ ▸ シーン一覧…(W3-01: シーンの作成・名前変更・複製・削除・配置・開く)のシート。
