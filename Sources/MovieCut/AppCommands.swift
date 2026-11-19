@@ -292,6 +292,8 @@ struct AppCommands: Commands {
                 MenuItemView(spec: AppMenuSpec.subtitleGenerate(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.transcribeSubtitles(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.transcribeWhisperSubtitles(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.transcribeExport(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.transcribeExportWhisper(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.chapterCopy(s), perform: run)
                 Menu(L10n.t("チャプターを色でコピー")) { items(AppMenuSpec.chapterColorItems(s), run) }
                 MenuItemView(spec: AppMenuSpec.aiChapters(s), perform: run)

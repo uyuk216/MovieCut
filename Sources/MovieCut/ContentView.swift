@@ -783,10 +783,20 @@ struct SettingsSheet: View {
                 VStack(alignment: .leading, spacing: MCDesign.Spacing.xs) {
                     let exe = WhisperLocator.resolve()
                     let mdl = WhisperLocator.resolveModel()
+                    let vad = WhisperLocator.resolveVADModel()
+                    let recommended = WhisperModelCatalog.recommended
                     Text(exe.map { "\(L10n.t("使う実行ファイル")): \($0.path)" } ?? L10n.t("実行ファイル(whisper-cli)が見つかりません。"))
                         .font(MCDesign.Font.caption).textSelection(.enabled)
                     Text(mdl.map { "\(L10n.t("使うモデル")): \($0.path)" } ?? L10n.t("モデルが未配置です。"))
                         .font(MCDesign.Font.caption).textSelection(.enabled)
+                    if mdl?.lastPathComponent != recommended.fileName {
+                        Text(L10n.t("精度を上げるには large-v3（約3.1GB）がおすすめです"))
+                            .font(MCDesign.Font.caption).foregroundStyle(MCDesign.Color.textSecondary)
+                        Button(L10n.t("large-v3 をダウンロード…")) { NSWorkspace.shared.open(recommended.downloadURL) }
+                    }
+                    Text(vad.map { "\(L10n.t("VAD(無音の区間を先に除く)")): \($0.lastPathComponent)" }
+                         ?? L10n.t("VAD モデルは未配置です(ggml-silero-v5.1.2.bin を置くと自動で使います)。"))
+                        .font(MCDesign.Font.caption).foregroundStyle(MCDesign.Color.textSecondary).textSelection(.enabled)
                     HStack {
                         Button(L10n.t("実行ファイルを選ぶ…")) { chooseWhisperExecutable() }
                         if !whisperPath.isEmpty {
