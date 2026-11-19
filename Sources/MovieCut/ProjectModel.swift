@@ -418,6 +418,9 @@ final class ProjectModel: ObservableObject {
     /// AIテキスト生成(W3-08)の画面部品(テストで差し替える)と、生成中のキャンセル。
     var textGenUI = TextGenUI()
     var textGenCancel: (() -> Void)?
+    /// 生成メディア(API)の画面部品(テストで差し替える)と、生成中のキャンセル。
+    var genMediaUI = GenMediaUI()
+    var genMediaCancel: (() -> Void)?
     /// 話者分離(W3-27)の対象クリップ。
     var diarizationClipId: String?
     /// プロキシの作成(出力 ▸ プロキシを作成)と AI 画像生成(クリップ ▸ AIで画像を作る)の取り消し。

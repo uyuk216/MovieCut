@@ -50,6 +50,8 @@ enum MenuCommand: Hashable {
     case aiScript, aiChapters, aiTitles, aiRewrite, aiSettings
     // AIテキスト生成(W3-08)と話者分離(W3-27。ショートカットは持たない)
     case dialogueSuggestions, textGenerationSettings, speakerDiarization
+    // 生成メディア(API): 画像生成の直接連携とその設定(ショートカットは持たない)
+    case generateImageAPI, imageGenerationSettings
     // 書き出し範囲(イン / アウト / 解除)と、静止画・連番画像の書き出し
     case rangeIn, rangeOut, rangeClear, exportStill, exportSequence
     // 書き出し範囲の中身を全レイヤーから削除(リップルは後ろを詰める)
@@ -253,6 +255,8 @@ struct MenuItemSpec: Equatable {
 struct MenuState: Equatable {
     var hasDocument = false
     var isLocked = false
+    /// 生成メディア(API)の画像生成が設定済みか(未設定なら生成の項目は無効表示)。
+    var imageGenerationConfigured = false
     var canExport = false
     /// 書き出し範囲を指定できる / ルーラーに印がある
     var canMarkRange = false
@@ -467,6 +471,7 @@ struct MenuState: Equatable {
         let rc = RecentProjectsController.shared
         recentItems = rc.recents.entries.map { RecentMenuItem(path: $0.path, name: $0.name, missing: rc.isMissing($0)) }
         welcomeAtLaunch = WelcomeSettings.showAtLaunch()
+        imageGenerationConfigured = ImageGenerationSettings.load().isConfigured
         previewProxyEnabled = ProxySettings.enabled()
         proxyAutoCreateEnabled = ProxySettings.autoCreateEnabled()
         dockVisible = Set(DockPanel.allCases.filter { AppServices.panelDock.layout.isVisible($0) })
@@ -968,6 +973,7 @@ enum AppMenuSpec {
          MenuItemSpec(command: .addVisualizer, title: "音声ビジュアライザを追加", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "合成音声の大きさで動く"),
          addQRCode(s),
          aiImage(s),
+         generatedImageItem(s),
          addTachie(s)]
     }
 
@@ -988,6 +994,18 @@ enum AppMenuSpec {
     /// クリップ ▸ AIで画像を作る…(ローカルのコマンドが画像を書く。送る前に内容を確認。ショートカットは持たない)
     static func aiImage(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .aiImage, title: "AIで画像を作る…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "ローカルのコマンド")
+    }
+
+    /// クリップ ▸ AIで画像を生成(API)…(ユーザーの API アカウントで生成。未設定のあいだは無効表示。ショートカットは持たない)
+    static func generatedImageItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .generateImageAPI, title: "AIで画像を生成(API)…", shortcut: nil,
+                     enabled: s.canEdit && s.imageGenerationConfigured, checked: nil,
+                     hint: s.imageGenerationConfigured ? "クラウドの画像生成API" : "未設定のため使えません")
+    }
+
+    /// ファイル ▸ 生成メディア(API)の設定…(エンドポイント・モデル・APIキー。ショートカットは持たない)
+    static func imageGenerationSettingsItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .imageGenerationSettings, title: "生成メディア(API)の設定…", shortcut: nil, enabled: s.canEdit, checked: nil)
     }
 
     /// 分割・複製・削除(S / Delete は KeyRouter が受けるので、メニューにはキーを付けずヒントだけ添える)。
@@ -1575,7 +1593,7 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, checkForUpdates, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), textGenerationSettingsItem(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s), apngExport(s), ymmpExport(s), webVideoExport(s), pngWavExport(s), exoExport(s), fcpXmlExport(s), edlExport(s)] + pluginExportItems(s) + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), trackMixerItem(s), clipListItem(s), noteListItem(s)] + scriptStoryboardItems(s) + scriptCSVItems(s) + [makeProxies(s), manageProxiesItem(s)] + [] + clipMenu(s).flatMap { $0 } + multicamItems(s) + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + pluginEffectItems(s) + effectPresetItems(s) + effectActions(s) + faceBlurItems(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textVerticalItem(s), textPerCharItem(s), textCounterItem(s), dictionaryItem(s), scriptTableItem(s), dialogueSuggestionsItem(s), saveItemTemplateItem(s)] + itemTemplateApplyItems(s) + itemTemplateCreateItems(s) + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [sceneSplitItem(s), silenceCutItem(s)] + rangeDeleteItems(s) + [audioAutoSyncItem(s), beatMarkersItem(s), remixItem(s), scaleDuplicateItem(s), beatPlaceItem(s), fillerCutItem(s), transcriptEditItem(s), speakerDiarizationItem(s), lutLoadItem(s), colorTransferItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
+        [about, checkForUpdates, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), textGenerationSettingsItem(s), imageGenerationSettingsItem(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s), apngExport(s), ymmpExport(s), webVideoExport(s), pngWavExport(s), exoExport(s), fcpXmlExport(s), edlExport(s)] + pluginExportItems(s) + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), trackMixerItem(s), clipListItem(s), noteListItem(s)] + scriptStoryboardItems(s) + scriptCSVItems(s) + [makeProxies(s), manageProxiesItem(s)] + [] + clipMenu(s).flatMap { $0 } + multicamItems(s) + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + pluginEffectItems(s) + effectPresetItems(s) + effectActions(s) + faceBlurItems(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textVerticalItem(s), textPerCharItem(s), textCounterItem(s), dictionaryItem(s), scriptTableItem(s), dialogueSuggestionsItem(s), saveItemTemplateItem(s)] + itemTemplateApplyItems(s) + itemTemplateCreateItems(s) + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [sceneSplitItem(s), silenceCutItem(s)] + rangeDeleteItems(s) + [audioAutoSyncItem(s), beatMarkersItem(s), remixItem(s), scaleDuplicateItem(s), beatPlaceItem(s), fillerCutItem(s), transcriptEditItem(s), speakerDiarizationItem(s), lutLoadItem(s), colorTransferItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerColorItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + previewTierItems(s) + guideItems(s) + [previewProxy(s), proxyAutoCreateItem(s), fullScreen(s)] + help.flatMap { $0 }
@@ -1682,6 +1700,7 @@ enum AppMenu {
             case .aiRewrite: m.openAIRewrite()
             case .aiSettings: AIDialogs.editSettings()
             case .textGenerationSettings: TextGenerationDialogs.editSettings()
+            case .imageGenerationSettings: GenerativeMediaDialogs.editImageGenerationSettings()
             case .dialogueSuggestions: m.openDialogueSuggestionSheet()
             case .rangeIn: m.setRangeInAtCurrent()
             case .rangeOut: m.setRangeOutAtCurrent()
@@ -1724,6 +1743,7 @@ enum AppMenu {
             case .trackMixer: m.showTrackMixerSheet = true
             case .showScopes: m.showScopeSheet = true
             case .aiImage: m.openAIImage()
+            case .generateImageAPI: m.openGenerateImageAPI()
             case .audioLibrary: m.showAudioLibrary = true
             case .saveTemplate: m.saveAsTemplate()
             case .split: m.splitSelected()

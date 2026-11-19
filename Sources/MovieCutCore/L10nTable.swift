@@ -665,6 +665,10 @@ enum L10nTable {
         "声があるときに自動で下がるダッキングを設定し、ピークを整えます。": "Sets up ducking so it automatically lowers while speech plays, and evens out the peaks.",
         "ピークとリミッターで音割れを防ぎます。ダッキングは設定しません。": "Prevents clipping with peak normalization and a limiter. Ducking is not applied.",
         "控えめな音量にそろえ、緩やかなダッキングで会話の下に敷きます。": "Sets a quiet level and beds it under dialogue with gentle ducking.",
-        "種類を選ぶと、その種類向けの整音をまとめて適用できます。適用後も各エフェクトは個別に調整できます。": "Choose a type to apply that type's audio preset all at once. Each effect can still be adjusted individually afterwards."
+        "種類を選ぶと、その種類向けの整音をまとめて適用できます。適用後も各エフェクトは個別に調整できます。": "Choose a type to apply that type's audio preset all at once. Each effect can still be adjusted individually afterwards.",
+        "AIで画像を生成(API)…": "Generate Image via API…",
+        "生成メディア(API)の設定…": "Generative Media (API) Settings…",
+        "クラウドの画像生成API": "Cloud Image Generation API",
+        "未設定のため使えません": "Not configured yet"
     ]
 }
