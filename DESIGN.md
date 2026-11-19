@@ -238,7 +238,7 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
 - **実行**: 引数は `-m <model> -f <wav> -l <言語> -ojf -of <一時prefix> -t 4 -pp`(`-pp` は stderr に進みを出させるため。`progress = NN%` を `onProgress` へ)。タイムアウトは `max(600, duration*20)` 秒、上限 3600 秒。キャンセル時はプロセスを terminate して `CancellationError`。JSON は純粋関数 `WhisperJSONParser` で解析する(トークンから `TranscriptGrouping.phrases` で文にまとめ、特殊トークン `[_` 始まりを除く。トークンが無ければセグメントをそのまま使う。壊れた JSON は `.failed`)。
 - **未配置時の案内**: `TranscriptionError.whisperNotInstalled`(実行ファイルが無い。設定で選べること・配置先・手順書)と `whisperModelMissing`(モデルが無い。配置先・設定での選択・推奨は日本語なら base 以上)。いずれも日本語の `errorDescription`。
 - **配置**: モデルは同梱しない。`Application Support/MovieCut/Whisper/` に置くか、設定の「Whisper(文字起こし)」で実行ファイル・モデルを選ぶ(`SecuritySettings.whisperPath` / `whisperModelPath`、プロジェクトには保存しない)。入手手順は `docs/Whisper文字起こし.md`。
-- **メニュー / CLI**: 出力 ▸ **音声から字幕を作る(Whisper)…**(`AppMenuSpec.transcribeWhisperSubtitles`、`canTranscribe`)。CLI は `moviecut-cli transcribe --engine apple|whisper`(既定 apple)。
+- **メニュー / CLI**: 出力 ▸ **音声から字幕を作る（Whisper）…**(`AppMenuSpec.transcribeWhisperSubtitles`、`canTranscribe`)。CLI は `moviecut-cli transcribe --engine apple|whisper`(既定 apple)。
 - **テスト**: `Tests/MovieCutCoreTests/WhisperTranscriptionTests.swift` 26 件(JSON パース・16kHz 変換・Locator の優先順・偽の実行ファイルでの transcribe と引数の確認・未配置 2 種・失敗・キャンセル・設定の往復・エラー文)。App 側は `TranscribeAppTests` の Whisper メニュー spec のみ。画面のテストはない。
 - **実エンジン検証(統括、2026-11-19)**: Homebrew の whisper.cpp 1.9.5 + ggml-base.bin を `Application Support/MovieCut/Whisper/` に配置し、`moviecut-cli transcribe --engine whisper`(48kHz の日本語テスト音声 5.7 秒)で字幕(SRT)生成まで確認した(進み表示も stderr の progress から流れた。認識文は base モデルの精度相応で、固有名詞に誤りあり)。モデルを外した状態では `whisperModelMissing` の日本語案内が出て落ちないことも確認した。**未確認**: アプリ画面(メニュー・設定シート)からの実行と見た目、長い素材での速度・精度、base 以外のモデル。
 
