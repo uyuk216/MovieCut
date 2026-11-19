@@ -13,6 +13,11 @@ import CoreGraphics
 // 追跡の実行(`collect`)は進捗コールバックとキャンセル判定を受け取る同期ループで、
 // 非同期実行・進捗表示・キャンセルは呼び出し側(アプリ層)が Task で包む。
 // Vision の実走は `MotionTrack` の `VisionRectTracker` をそのまま使う。
+//
+// 失敗時の扱い(R4-5): Vision が見失っても静止矩形を返し続けることがあるため(R4-4 の実測)、
+// 観測の信頼度を `TrackingLossGate` で判定し、低信頼の観測は採用しない。失敗が続いて
+// 見失いが確定したら、その先頭の時刻で追跡を打ち切り、結果(`ObjectTrack.lostAt`)に残す。
+// 見失い以降のサンプル・キーフレームは作らない。
 
 /// 正規化座標(0〜1・左上原点)の矩形。ファイルには x・y・w・h で書く。
 public struct TrackRect: Codable, Equatable, Sendable {
@@ -54,25 +59,39 @@ public struct ObjectTrack: Codable, Equatable, Sendable {
     public var startRect: TrackRect
     /// サンプル列(時刻順)。
     public var samples: [TrackSample] = []
+    /// 見失いで打ち切った時刻(追従クリップの頭からの秒)。最後まで追えたら nil。
+    /// 見失い以降のサンプル・キーフレームは作らない。ファイルに書くのは値があるときだけ
+    /// (任意項目なので、古いファイルに無くても読み込みは従来どおり)。
+    public var lostAt: Double? = nil
 
-    public init(sourceClipId: String, startRect: TrackRect, samples: [TrackSample] = []) {
-        self.sourceClipId = sourceClipId; self.startRect = startRect; self.samples = samples
+    public init(sourceClipId: String, startRect: TrackRect, samples: [TrackSample] = [], lostAt: Double? = nil) {
+        self.sourceClipId = sourceClipId; self.startRect = startRect; self.samples = samples; self.lostAt = lostAt
     }
 
     public var hasValidSamples: Bool { samples.contains { $0.rect?.isValid == true } }
+
+    /// 見失いで打ち切られた結果か。
+    public var isLost: Bool { lostAt != nil }
 
     /// 最初の有効な矩形(基準。無ければ開始矩形)。
     public var referenceRect: TrackRect {
         samples.first { $0.rect?.isValid == true }?.rect ?? startRect
     }
 
-    /// 時刻・値の整え(読み込み時)。
+    /// 時刻・値の整え(読み込み時)。見失い時刻がある結果は、その時刻以降のサンプルを持たない形に揃える。
     public var normalized: ObjectTrack {
         var o = self
         o.startRect = startRect.normalized
         o.samples = samples.filter { $0.t.isFinite && $0.t >= 0 }
             .map { TrackSample(t: $0.t, rect: $0.rect?.normalized) }
             .sorted { $0.t < $1.t }
+        if let l = o.lostAt {
+            if l.isFinite && l >= 0 {
+                o.samples = o.samples.filter { $0.t < l }
+            } else {
+                o.lostAt = nil
+            }
+        }
         return o
     }
 
@@ -146,24 +165,49 @@ public enum ObjectTracking {
                                frame: (Double) -> CGImage?,
                                progress: ((Double) -> Void)? = nil,
                                shouldCancel: (() -> Bool)? = nil) -> [CGRect?]? {
+        collectRun(duration: duration, startRect: startRect, tracker: tracker, frame: frame,
+                   progress: progress, shouldCancel: shouldCancel)?.rects
+    }
+
+    /// `collect` の見失い情報つき版。信頼できない観測(低信頼・無効な矩形・コマの欠落)は採用せず、
+    /// `TrackingLossGate` で見失いが確定したら連続失敗の先頭で打ち切って、結果はそこまでの
+    /// サンプルだけになる(見失い以降の観測は結果に残らない)。見失った時刻は `lostAt` に入る。
+    /// キャンセル時は nil(部分結果は返さない)。
+    public static func collectRun(duration: Double, startRect: CGRect, tracker: RectTracking,
+                                  frame: (Double) -> CGImage?,
+                                  progress: ((Double) -> Void)? = nil,
+                                  shouldCancel: (() -> Bool)? = nil) -> TrackingRun? {
         let n = max(1, Int((max(duration, 0) * sampleRate).rounded(.up)) + 1)
         var out: [CGRect?] = []
         out.reserveCapacity(n)
         var started = false
+        var gate = TrackingLossGate()
         for k in 0..<n {
             if shouldCancel?() == true { return nil }
             let t = Double(k) / sampleRate
-            guard let img = frame(t) else { out.append(nil); progress?(Double(k + 1) / Double(n)); continue }
+            guard let img = frame(t) else {
+                if started { _ = gate.evaluate(index: k, rect: nil, confidence: 0) }
+                out.append(nil); progress?(Double(k + 1) / Double(n))
+                if gate.isLost { break }
+                continue
+            }
             if !started {
                 tracker.start(rect: startRect, image: img)
                 started = true
                 out.append(startRect)
             } else {
-                out.append(tracker.next(image: img))
+                let o = tracker.nextObservation(image: img)
+                out.append(gate.evaluate(index: k, rect: o.rect, confidence: o.confidence) ? o.rect : nil)
             }
             progress?(Double(k + 1) / Double(n))
+            if gate.isLost { break }
         }
-        return out
+        var lostAt: Double? = nil
+        if let li = gate.lostIndex {
+            lostAt = Double(li) / sampleRate
+            out = Array(out.prefix(li))
+        }
+        return TrackingRun(rects: out, lostAt: lostAt)
     }
 
     /// 追跡の生結果 → 保存用のサンプル列。
@@ -174,9 +218,11 @@ public enum ObjectTracking {
     }
 
     /// 追跡結果を作る。有効なサンプルが 1 つも無ければ nil。
-    public static func makeTrack(sourceClipId: String, startRect: CGRect, rects: [CGRect?]) -> ObjectTrack? {
-        let s = samples(from: rects)
-        let track = ObjectTrack(sourceClipId: sourceClipId, startRect: TrackRect(startRect), samples: s)
+    /// `lostAt` を渡すと見失い時刻を結果に保持し、その時刻以降のサンプルは持たない。
+    public static func makeTrack(sourceClipId: String, startRect: CGRect, rects: [CGRect?], lostAt: Double? = nil) -> ObjectTrack? {
+        var s = samples(from: rects)
+        if let l = lostAt { s = s.filter { $0.t < l } }
+        let track = ObjectTrack(sourceClipId: sourceClipId, startRect: TrackRect(startRect), samples: s, lostAt: lostAt)
         return track.hasValidSamples ? track : nil
     }
 
@@ -192,20 +238,31 @@ public enum ObjectTracking {
     /// 「開始時点の大きさに対する比率」を保つ(位置は中心の差、拡大は面積比の平方根)。
     /// ぼかし範囲は矩形そのもの(中心と大きさ)に合わせる。平滑化は `AutoReframe.smooth`。
     public static func keyframes(track: ObjectTrack, follower: Clip) -> [String: [Keyframe]]? {
-        let valid = track.samples.filter { $0.rect?.isValid == true }
+        // 見失い以降はキーにしない。見失い時刻が記録されていればその手前まで、
+        // 無くても末尾の連続した見失いが確定量(`TrackingLossGate.consecutiveFailureLimit`)以上
+        // 続く列は、その先頭の手前までで切る(直前の位置を保った静止キーを最後まで焼かない)。
+        // 途中の短い見失いは従来どおり直前の位置・大きさを保持してつなぐ。
+        var usable = track.samples
+        if let l = track.lostAt {
+            usable = usable.filter { $0.t < l }
+        } else {
+            let rects: [CGRect?] = usable.map { smp in smp.rect.flatMap { $0.isValid ? $0.cgRect : nil } }
+            usable = Array(usable.prefix(TrackingLossGate.effectiveCount(samples: rects)))
+        }
+        let valid = usable.filter { $0.rect?.isValid == true }
         guard !valid.isEmpty else { return nil }
-        let dt = track.samples.count > 1
-            ? max(1 / sampleRate, (track.samples.last!.t - track.samples.first!.t) / Double(track.samples.count - 1))
+        let dt = usable.count > 1
+            ? max(1 / sampleRate, (usable.last!.t - usable.first!.t) / Double(usable.count - 1))
             : 1 / sampleRate
         let ref = track.referenceRect
         // 見失いは直前の有効値を保持する列(中心 x・y、幅・高さ)
         var cx: [Double] = [], cy: [Double] = [], ws: [Double] = [], hs: [Double] = []
         var last = ref
-        for s in track.samples {
+        for s in usable {
             if let r = s.rect, r.isValid { last = r }
             cx.append(last.centerX); cy.append(last.centerY); ws.append(last.w); hs.append(last.h)
         }
-        let times = track.samples.map { $0.t }
+        let times = usable.map { $0.t }
         func keys(_ values: [Double]) -> [Keyframe] {
             zip(times, values).map { Keyframe(t: $0.0, v: $0.1) }
         }

@@ -23,12 +23,13 @@ extension ProjectModel {
         let start = c.start, duration = c.duration
         Task { @MainActor [weak self] in
             // 追跡は重いので裏で行う(コマは 1 枚ずつ取り、Vision に渡す)
-            let samples = await Task.detached(priority: .userInitiated) { () -> [CGRect?] in
+            let run = await Task.detached(priority: .userInitiated) { () -> TrackingRun in
                 let renderer = Renderer(project: project, assets: assets)
-                return MotionTrack.track(duration: duration, tracker: VisionRectTracker()) { t in
+                return MotionTrack.trackRun(duration: duration, tracker: VisionRectTracker()) { t in
                     renderer.trackingFrame(of: source, at: start + t)
                 }
             }.value
+            let samples = run.rects
             guard let self, !self.isLocked, self.clip(id) != nil else { return }
             guard samples.contains(where: { $0 != nil }) else {
                 self.errorTitle = "動きを追えませんでした"
@@ -38,6 +39,9 @@ extension ProjectModel {
             _ = self.edit(Self.motionUndoName) { p in
                 guard let loc = ClipEditing.locate(id, in: p) else { return }
                 _ = MotionTrack.apply(samples: samples, to: &p.tracks[loc.track].clips[loc.index])
+            }
+            if let lostAt = run.lostAt {
+                self.statusText = String(format: "動きへの追従を付けました（%.1f 秒で対象を見失ったため、そこまでで打ち切りました）", lostAt)
             }
         }
     }

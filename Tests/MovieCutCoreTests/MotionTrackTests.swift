@@ -57,7 +57,9 @@ final class MotionTrackTests: XCTestCase {
     }
 
     func testLostFramesHoldThePreviousPosition() {
-        let tracker = FakeTracker(path: { t in (x: 0.5 + 0.2 * t, y: 0.5) }, lostFrames: [5, 6, 7])
+        // 短い見失い(2 コマまで)は打ち切らず、従来どおり直前の位置を保持してつなぐ。
+        // 3 コマ続く見失いは R4-5 で打ち切りに変わった(testTrackRunTruncatesOnLostStreak)。
+        let tracker = FakeTracker(path: { t in (x: 0.5 + 0.2 * t, y: 0.5) }, lostFrames: [5, 6])
         let img = dummyImage()
         let s = MotionTrack.track(duration: 1, tracker: tracker) { _ in img }
         XCTAssertNil(s[5] ?? nil, "見失ったコマは nil")
@@ -106,5 +108,47 @@ final class MotionTrackTests: XCTestCase {
         // 映像は追従の対象にならない
         XCTAssertFalse(MotionTrack.canTrack(low))
         XCTAssertTrue(MotionTrack.canTrack(text))
+    }
+
+    // MARK: 見失いの打ち切り(R4-5)
+
+    func testTrackRunTruncatesOnLostStreak() {
+        // 見失いが 3 コマ続いたら、その先頭で打ち切る(以後のコマは結果に残らない)
+        let tracker = FakeTracker(path: { t in (x: 0.5 + 0.2 * t, y: 0.5) }, lostFrames: [5, 6, 7])
+        let img = dummyImage()
+        let run = MotionTrack.trackRun(duration: 1, tracker: tracker) { _ in img }
+        XCTAssertEqual(run.lostAt, 0.5)
+        XCTAssertEqual(run.rects.count, 5)
+        // 従来の track() も同じ打ち切り結果を返す
+        let tracker2 = FakeTracker(path: { t in (x: 0.5 + 0.2 * t, y: 0.5) }, lostFrames: [5, 6, 7])
+        XCTAssertEqual(MotionTrack.track(duration: 1, tracker: tracker2) { _ in img }.count, 5)
+        // キーフレームも見失い以降は増えない
+        let k = MotionTrack.keyframes(samples: run.rects, baseX: 0.5, baseY: 0.5)!
+        XCTAssertEqual(k.x.last?.t, 0.4)
+        XCTAssertEqual(k.x.count, 5)
+    }
+
+    func testTrackRunShortLossDoesNotTruncate() {
+        // 2 コマだけの見失いは打ち切らず、従来どおり nil のまま続く
+        let tracker = FakeTracker(path: { t in (x: 0.5 + 0.2 * t, y: 0.5) }, lostFrames: [5, 6])
+        let img = dummyImage()
+        let run = MotionTrack.trackRun(duration: 1, tracker: tracker) { _ in img }
+        XCTAssertNil(run.lostAt)
+        XCTAssertEqual(run.rects.count, 11)
+        XCTAssertNil(run.rects[5] ?? nil)
+        XCTAssertNotNil(run.rects[7] ?? nil)
+    }
+
+    func testKeyframesTrimTrailingLossStreak() {
+        var samples: [CGRect?] = (0...4).map { k in CGRect(x: 0.4 + 0.01 * Double(k), y: 0.4, width: 0.2, height: 0.2) }
+        samples += [CGRect?](repeating: nil, count: 6)
+        let k = MotionTrack.keyframes(samples: samples, baseX: 0.5, baseY: 0.5)!
+        XCTAssertEqual(k.x.count, 5, "末尾の見失い区間はキーにしない")
+        XCTAssertEqual(k.x.last?.t, 0.4)
+        // 末尾の欠落が 2 つだけなら、従来どおり直前の位置を保持して最後まで作る
+        var samples2: [CGRect?] = (0...8).map { k in CGRect(x: 0.4 + 0.01 * Double(k), y: 0.4, width: 0.2, height: 0.2) }
+        samples2 += [nil, nil]
+        let k2 = MotionTrack.keyframes(samples: samples2, baseX: 0.5, baseY: 0.5)!
+        XCTAssertEqual(k2.x.last?.t, 1.0)
     }
 }
