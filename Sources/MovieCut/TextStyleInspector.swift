@@ -34,7 +34,7 @@ struct TextStyleInspector: View {
         Toggle("吹き出しを付ける", isOn: Binding(get: { c.bubble != nil }, set: { on in
             model.setBubble(on ? Bubble() : nil, name: on ? "吹き出しを付ける" : "吹き出しを外す", clipId: clipId)
         }))
-        .toggleStyle(.checkbox).font(.system(size: 12)).disabled(model.isLocked)
+        .toggleStyle(.checkbox).font(MCDesign.Font.callout).disabled(model.isLocked)
         if let b = c.bubble {
             VStack(alignment: .leading, spacing: 6) {
                 InspectorField(label: "形") {
@@ -51,7 +51,7 @@ struct TextStyleInspector: View {
                            change: { v in model.liveClipProperty({ if $0.bubble != nil { $0.bubble?.strokeWidth = v } }, name: "吹き出しの縁の変更", clipId: clipId) },
                            end: { model.commitGesture("吹き出しの縁の変更") })
                 Toggle("尾を付ける", isOn: Binding(get: { b.tail }, set: { on in model.editBubble({ $0.tail = on }, name: "尾の切り替え", clipId: clipId) }))
-                    .toggleStyle(.checkbox).font(.system(size: 12))
+                    .toggleStyle(.checkbox).font(MCDesign.Font.callout)
                 if b.tail { bubbleTailControls(b) }
             }
             .padding(.leading, 10)
@@ -164,7 +164,7 @@ struct TextStyleInspector: View {
 
     private func toggle(_ label: String, isOn: Bool, name: String, _ f: @escaping (inout TextStyle, Bool) -> Void) -> some View {
         Toggle(label, isOn: Binding(get: { isOn }, set: { on in edit(name) { f(&$0, on) } }))
-            .toggleStyle(.checkbox).font(.system(size: 12)).disabled(model.isLocked)
+            .toggleStyle(.checkbox).font(MCDesign.Font.callout).disabled(model.isLocked)
     }
 
     @ViewBuilder private func decorationSections(_ c: Clip) -> some View {
@@ -273,7 +273,7 @@ struct TextStyleInspector: View {
         Toggle("カウントダウンを付ける", isOn: Binding(get: { c.counter != nil }, set: { on in
             model.setCounter(on ? TextCounter() : nil, name: on ? "カウントダウンにする" : "カウントダウンを外す", clipId: clipId)
         }))
-        .toggleStyle(.checkbox).font(.system(size: 12)).disabled(model.isLocked)
+        .toggleStyle(.checkbox).font(MCDesign.Font.callout).disabled(model.isLocked)
         if let k = c.counter {
             VStack(alignment: .leading, spacing: 6) {
                 InspectorField(label: "開始（秒）") {
@@ -295,7 +295,7 @@ struct TextStyleInspector: View {
             }
             .padding(.leading, 10)
             .disabled(model.isLocked)
-            Text("クリップの頭から終わりまで、開始から終わりへ直線に変わります。文字は「テキスト」の後ろに続きます。").font(.system(size: 11)).foregroundStyle(.secondary)
+            Text("クリップの頭から終わりまで、開始から終わりへ直線に変わります。文字は「テキスト」の後ろに続きます。").font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
         }
     }
 
@@ -308,7 +308,7 @@ struct TextStyleInspector: View {
             guard let first = cands.first else { return }
             model.setValueRef(on ? ValueRef(clipId: first.id) : nil, name: on ? "他のクリップの値を表示" : "値の表示を外す", clipId: clipId)
         }))
-        .toggleStyle(.checkbox).font(.system(size: 12)).disabled(model.isLocked || (c.valueRef == nil && cands.isEmpty))
+        .toggleStyle(.checkbox).font(MCDesign.Font.callout).disabled(model.isLocked || (c.valueRef == nil && cands.isEmpty))
         if let r = c.valueRef {
             VStack(alignment: .leading, spacing: 6) {
                 InspectorField(label: "クリップ") {
@@ -338,7 +338,7 @@ struct TextStyleInspector: View {
             }
             .padding(.leading, 10)
             .disabled(model.isLocked)
-            Text("再生位置での値(キーフレーム反映)が「テキスト」の後ろに続きます。参照先が無いときは「—」。カウントダウンがあるときはそちらが先です。").font(.system(size: 11)).foregroundStyle(.secondary)
+            Text("再生位置での値(キーフレーム反映)が「テキスト」の後ろに続きます。参照先が無いときは「—」。カウントダウンがあるときはそちらが先です。").font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
         }
     }
 
@@ -370,7 +370,7 @@ struct TextStyleInspector: View {
                          onCommit: { model.setTextAnim(kind, speed: $0, clipId: clipId) },
                          onStep: { model.coalescedTextAnimSpeed($0, clipId: clipId) })
             }
-            Text("画面の高さ（上へ）・幅（左へ）に対する割合。クリップの終わりまで流れます。位置は基準の位置から、下端（右端）の外へ入ります。").font(.system(size: 11)).foregroundStyle(.secondary)
+            Text("画面の高さ（上へ）・幅（左へ）に対する割合。クリップの終わりまで流れます。位置は基準の位置から、下端（右端）の外へ入ります。").font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
         } else if kind != .none {
             InspectorField(label: "長さ（秒）") {
                 NumField(value: c.textAnim?.durationOrDefault ?? 1, step: 0.1, decimals: 2, clamp: { TextAnim.clampDuration($0) },
@@ -379,7 +379,7 @@ struct TextStyleInspector: View {
             }
             Toggle("1文字ずつ動かす", isOn: Binding(get: { c.textAnim?.perCharOrNil != nil },
                                                    set: { on in model.setTextAnimPerChar(on ? TextAnim.defaultPerChar : nil, clipId: clipId) }))
-                .toggleStyle(.checkbox).font(.system(size: 12)).disabled(model.isLocked)
+                .toggleStyle(.checkbox).font(MCDesign.Font.callout).disabled(model.isLocked)
             if let g = c.textAnim?.perCharOrNil {
                 InspectorField(label: "文字の間隔（秒）") {
                     NumField(value: g, step: 0.01, decimals: 2, clamp: { TextAnim.clampPerChar($0) },
@@ -387,9 +387,9 @@ struct TextStyleInspector: View {
                              onStep: { model.coalescedTextAnimPerChar($0, clipId: clipId) })
                 }
                 .padding(.leading, 10)
-                Text("1 文字ごとに、この間隔だけ遅れて同じ動きを始めます（縦書きでは上の文字から）。").font(.system(size: 11)).foregroundStyle(.secondary)
+                Text("1 文字ごとに、この間隔だけ遅れて同じ動きを始めます（縦書きでは上の文字から）。").font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
             } else {
-                Text("クリップの頭からこの長さだけ動きます。").font(.system(size: 11)).foregroundStyle(.secondary)
+                Text("クリップの頭からこの長さだけ動きます。").font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
             }
         }
     }

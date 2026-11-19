@@ -24,7 +24,7 @@ struct DiarizationSheet: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("話者分離").font(.headline)
             Text(SpeakerDiarizationInfo.limitationNotice)
-                .font(.system(size: 11)).foregroundStyle(.secondary)
+                .font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 12) {
                 Picker("認識", selection: $useWhisper) {
@@ -34,7 +34,7 @@ struct DiarizationSheet: View {
                 .pickerStyle(.segmented)
                 .frame(width: 200)
                 Stepper(value: $maxSpeakers, in: 1...8) { Text("話者は最大 \(maxSpeakers) 人") }
-                    .font(.system(size: 11))
+                    .font(MCDesign.Font.subheadline)
                 Button("分け直す") { recluster() }
                     .disabled(run == nil)
                 Spacer()
@@ -42,16 +42,16 @@ struct DiarizationSheet: View {
             Group {
                 if let r = run {
                     if r.segments.isEmpty {
-                        Text("文は見つかりませんでした。")
+                        InspectorGuideCard(symbol: "text.magnifyingglass", heading: "文は見つかりませんでした", message: "音声に話し声が含まれているか、クリップを確かめてください。")
                     } else {
                         Text("\(r.segments.count) 区間、\(SpeakerLabels.speakerCount(diarized)) 人の話者に分けました。ラベルは行ごとに直せます。")
-                            .font(.system(size: 11)).foregroundStyle(.secondary)
+                            .font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary)
                         List {
                             ForEach(Array(diarized.enumerated()), id: \.offset) { i, d in
                                 HStack(spacing: 8) {
                                     Text(Self.time(clipStart + d.segment.start))
-                                        .font(.system(size: 11, design: .monospaced))
-                                        .foregroundStyle(.secondary).frame(width: 44, alignment: .trailing)
+                                        .font(MCDesign.Font.monospaced(11))
+                                        .foregroundStyle(MCDesign.Color.textSecondary).frame(width: 44, alignment: .trailing)
                                     Picker("", selection: Binding(get: { d.speaker }, set: { v in relabel(i, to: v) })) {
                                         ForEach(speakerChoices, id: \.self) { s in
                                             Text(speakerChoices.last == s && !diarized.contains(where: { $0.speaker == s })
@@ -74,7 +74,7 @@ struct DiarizationSheet: View {
             }
             .font(.callout)
             if let note {
-                Text(note).font(.system(size: 11)).foregroundStyle(.secondary)
+                Text(note).font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary)
             }
             HStack {
                 Spacer()

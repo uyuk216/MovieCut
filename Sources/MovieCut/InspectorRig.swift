@@ -11,18 +11,18 @@ struct RigPartThumb: View {
     @State private var image: NSImage?
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 5).fill(Color(nsColor: .textBackgroundColor))
+            RoundedRectangle(cornerRadius: 5).fill(MCDesign.Color.fieldBackground)
             if let image {
                 Image(nsImage: image).resizable().scaledToFit().padding(2)
             } else {
-                Text(path == nil ? "なし" : "…").font(.system(size: 10)).foregroundStyle(.tertiary)
+                Text(path == nil ? "なし" : "…").font(MCDesign.Font.footnote).foregroundStyle(.tertiary)
             }
             if !label.isEmpty {
                 VStack { Spacer(); Text(label).font(MCDesign.Font.badge).padding(.horizontal, 3).background(.black.opacity(0.55)).foregroundStyle(.white).cornerRadius(3) }.padding(2)
             }
         }
         .frame(width: 56, height: 56)
-        .overlay(RoundedRectangle(cornerRadius: 5).stroke(selected ? Color.accentColor : Color(nsColor: .separatorColor), lineWidth: selected ? 2.5 : 1))
+        .overlay(RoundedRectangle(cornerRadius: 5).stroke(selected ? Color.accentColor : MCDesign.Color.divider, lineWidth: selected ? 2.5 : 1))
         .task(id: path) {
             guard let path else { image = nil; return }
             image = await Task.detached(priority: .utility) { RigThumbCache.thumbnail(path) }.value
@@ -88,7 +88,7 @@ struct RigInspectorSection: View {
     var body: some View {
         InspectorSection(title: "立ち絵パーツ")
         Text("見本を押すと、そのパーツに切り替わります。目と口は、まばたき・口パク・表情で自動で切り替わります")
-            .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         alignmentRow()
         ForEach(rig.slots, id: \.name) { slot in slotView(slot) }
         expressionsView()
@@ -97,7 +97,7 @@ struct RigInspectorSection: View {
     /// 大きさが違うパーツ(体より縦に長い髪など)を、縦のどこに揃えるか。
     private func alignmentRow() -> some View {
         HStack(spacing: 6) {
-            Text("大きさが違うパーツの揃え").font(.system(size: 11)).foregroundStyle(.secondary)
+            Text("大きさが違うパーツの揃え").font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
             Picker("", selection: Binding(get: { rig.alignmentOrDefault }, set: { model.rigSetAlignment(tachieId: tachieId, $0) })) {
                 ForEach(PartAlignment.allCases, id: \.self) { Text($0.label).tag($0) }
             }
@@ -111,9 +111,9 @@ struct RigInspectorSection: View {
     @ViewBuilder private func slotView(_ slot: RigSlot) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text("\(slot.name)（\(slot.parts.count)）").font(.system(size: 12, weight: .semibold))
+                Text("\(slot.name)（\(slot.parts.count)）").font(MCDesign.Font.calloutSemibold)
                 Spacer()
-                Text(slot.active >= 0 ? "\(slot.active + 1) 番" : "出さない").font(.system(size: 11)).foregroundStyle(.secondary)
+                Text(slot.active >= 0 ? "\(slot.active + 1) 番" : "出さない").font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
             }
             ScrollView(.horizontal, showsIndicators: true) {
                 LazyHStack(spacing: 4) {
@@ -131,7 +131,7 @@ struct RigInspectorSection: View {
             .frame(height: 66)
             offsetRow(slot)
             Toggle("体の後ろに置く", isOn: Binding(get: { slot.isBehind }, set: { model.rigSetSlotBehind(tachieId: tachieId, slot: slot.name, behind: $0) }))
-                .controlSize(.small).font(.system(size: 11))
+                .controlSize(.small).font(MCDesign.Font.subheadline)
                 .help("後ろ髪など、体より奥に見せたいスロットをいちばん下に重ねます(オフ: 体の前。従来の順)")
             if slot.name == CharacterRig.eyeSlot { blinkRow() }
             if slot.name == CharacterRig.mouthSlot { mouthRows() }
@@ -145,7 +145,7 @@ struct RigInspectorSection: View {
             let path = slot.parts[slot.active]
             let off = rig.partOffsets?[path] ?? PartOffset()
             HStack(spacing: 6) {
-                Text("位置の補正").font(.system(size: 11)).foregroundStyle(.secondary)
+                Text("位置の補正").font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
                 offsetField("x", value: off.dx) { model.setTachiePartOffset(tachieId: tachieId, path: path, offset: PartOffset(dx: $0, dy: off.dy)) }
                 offsetField("y", value: off.dy) { model.setTachiePartOffset(tachieId: tachieId, path: path, offset: PartOffset(dx: off.dx, dy: $0)) }
                 Button { model.setTachiePartOffset(tachieId: tachieId, path: path, offset: PartOffset()) } label: { Image(systemName: "arrow.counterclockwise") }
@@ -157,7 +157,7 @@ struct RigInspectorSection: View {
 
     private func offsetField(_ label: String, value: Double, set: @escaping (Double) -> Void) -> some View {
         HStack(spacing: 2) {
-            Text(label).font(.system(size: 11)).foregroundStyle(.secondary)
+            Text(label).font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
             NumField(value: value, step: 1, decimals: 0, clamp: { max(-4000, min(4000, $0.rounded())) }, onCommit: set, onStep: set)
         }
     }
@@ -181,7 +181,7 @@ struct RigInspectorSection: View {
                 .disabled(rig.slot(CharacterRig.eyeSlot)?.active ?? -1 < 0)
             Button { model.rigClearBlink(tachieId: tachieId) } label: { Image(systemName: "xmark") }
                 .disabled(rig.blink == nil).help("まばたきを外す")
-            Text(rig.blink.map { "まばたき: \($0 + 1) 番" } ?? "まばたきなし").font(.system(size: 11)).foregroundStyle(.secondary)
+            Text(rig.blink.map { "まばたき: \($0 + 1) 番" } ?? "まばたきなし").font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
         }
         .controlSize(.small)
     }
@@ -193,7 +193,7 @@ struct RigInspectorSection: View {
         }
         let cur = rig.slot(CharacterRig.mouthSlot)?.active ?? -1
         return VStack(alignment: .leading, spacing: 4) {
-            Text("今の口を割り当てる（話していない間は「閉じ」、話している間は「開き」か あいうえお）").font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Text("今の口を割り当てる（話していない間は「閉じ」、話している間は「開き」か あいうえお）").font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 4) {
                 ForEach(roles, id: \.0) { r, label in
                     Button(label) { model.rigAssignMouth(tachieId: tachieId, role: r) }
@@ -213,7 +213,7 @@ struct RigInspectorSection: View {
         let items = (rig.expressions ?? [:]).sorted { $0.key < $1.key }
         InspectorSection(title: "表情（パーツの組み合わせ）")
         Text("セリフの先頭に [名前] と書くと、その行の間この組み合わせになります（口は話し方に合わせて動きます）")
-            .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         ForEach(items, id: \.key) { key, picks in
             HStack(spacing: 6) {
                 NameField(value: key) { model.rigRenameExpression(tachieId: tachieId, from: key, to: $0) }

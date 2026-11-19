@@ -78,9 +78,9 @@ struct TachieClipSection: View {
                 .disabled(model.isLocked || TachieEditing.voiceSpan(model.project, clip: clip) == nil)
                 .help("連動する声の最初の頭から最後の終わりまでに、クリップを合わせます")
             if let s = TachieEditing.voiceSpan(model.project, clip: clip) {
-                Text("声 \(timecode(s.start))–\(timecode(s.end))").font(.system(size: 11)).foregroundStyle(.secondary)
+                Text("声 \(timecode(s.start))–\(timecode(s.end))").font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
             } else {
-                Text("連動する声がありません").font(.system(size: 11)).foregroundStyle(.secondary)
+                Text("連動する声がありません").font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
             }
         }
         .controlSize(.small)
@@ -105,7 +105,7 @@ struct TachieExpressionRow: View {
         InspectorSection(title: "表情の切り替え（再生位置）")
         Text(voice == nil ? "再生位置に連動する声がありません"
              : "再生位置の声の表情: \(current ?? "通常")（切り替わるのは声の頭。声のセリフの先頭に [表情名] が付きます）")
-            .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         HStack(spacing: 6) {
             Picker("", selection: $pick) {
                 Text("表情を選ぶ").tag("")
@@ -141,7 +141,7 @@ struct TachieAssetBody: View {
         } else {
             InspectorSection(title: "画像")
             Text("GIF・APNG 等のアニメーション画像も使えます（タイムライン時刻でループ再生）")
-                .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             ForEach([(ProjectModel.TachieImageSlot.closed, tachie.imgClosed), (.open, tachie.imgOpen), (.blink, tachie.imgBlink)], id: \.0.label) { slot, path in
                 imageRow(label: slot.label, path: path,
                          choose: { model.chooseImage(title: "立ち絵(\(slot.label))を選ぶ") { model.setTachieImage(tachieId: tachie.id, slot: slot, url: $0) } },
@@ -154,7 +154,7 @@ struct TachieAssetBody: View {
                          clear: { model.setTachieVowelImage(tachieId: tachie.id, key: key, url: nil) })
             }
             if !(tachie.expressions ?? [:]).isEmpty {
-                Text("表情 \((tachie.expressions ?? [:]).count) 枚").font(.system(size: 11)).foregroundStyle(.secondary)
+                Text("表情 \((tachie.expressions ?? [:]).count) 枚").font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
             }
         }
     }
@@ -164,8 +164,8 @@ struct TachieAssetBody: View {
         HStack(spacing: 8) {
             PortraitThumb(path: path)
             VStack(alignment: .leading, spacing: 2) {
-                Text(label).font(.system(size: 12)).foregroundStyle(.secondary)
-                Text(fileName(path)).font(.system(size: 11)).lineLimit(1).truncationMode(.middle)
+                Text(label).font(MCDesign.Font.callout).foregroundStyle(.secondary)
+                Text(fileName(path)).font(MCDesign.Font.subheadline).lineLimit(1).truncationMode(.middle)
             }
             Spacer(minLength: 0)
             Button("選ぶ", action: choose)

@@ -23,7 +23,7 @@ struct LoudnessSheet: View {
                 HStack(spacing: 8) { ProgressView().controlSize(.small); Text("測っています…") }
                     .frame(maxWidth: .infinity, minHeight: 160, alignment: .center)
             case .noAudio:
-                Text("音声がありません。").foregroundStyle(.secondary)
+                InspectorGuideCard(symbol: "waveform.slash", heading: "音声がありません", message: "音のあるクリップを置くと測れます。")
                     .frame(maxWidth: .infinity, minHeight: 160, alignment: .center)
             case .failed(let message):
                 Text("測れませんでした: \(message)").foregroundStyle(.red)

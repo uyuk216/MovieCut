@@ -92,7 +92,7 @@ struct AudioLibrarySheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(L10n.t("素材ブラウザ")).font(.title3.bold())
+            Text(L10n.t("素材ブラウザ")).font(MCDesign.Font.title3.bold())
             HStack(spacing: 8) {
                 Text(BuiltInLibrary.isBuiltIn(folder) ? "\(BuiltInLibrary.title)(\(BuiltInLibrary.licenseNote))" : (currentFolder?.path ?? "フォルダが選ばれていません"))
                     .foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
@@ -130,14 +130,14 @@ struct AudioLibrarySheet: View {
             }
             if folder == nil {
                 VStack(spacing: 10) {
-                    Text(L10n.t("動画・音声・画像を入れたフォルダを選ぶと、中の素材がここに並びます。"))
-                        .foregroundStyle(.secondary)
+                    InspectorGuideCard(symbol: "folder.badge.plus", heading: "フォルダが選ばれていません", message: "動画・音声・画像を入れたフォルダを選ぶと、中の素材がここに並びます。")
+                        .frame(maxWidth: 420)
                     Button(L10n.t("フォルダを選ぶ…")) { chooseFolder() }
                 }
                 .frame(maxWidth: .infinity, minHeight: 240, alignment: .center)
             } else if items.isEmpty && subfolders.isEmpty && subpath.isEmpty {
-                Text(L10n.t("このフォルダに対象の素材(動画・音声・画像)はありません。"))
-                    .foregroundStyle(.secondary)
+                InspectorGuideCard(symbol: "tray", heading: "素材がありません", message: "このフォルダに対象の素材(動画・音声・画像)はありません。")
+                    .frame(maxWidth: 420)
                     .frame(maxWidth: .infinity, minHeight: 240, alignment: .center)
             } else {
                 HStack(alignment: .top, spacing: 14) {
@@ -149,7 +149,7 @@ struct AudioLibrarySheet: View {
             }
             HStack {
                 Text("ダブルクリック・Return・ドラッグで追加。再生ヘッド(\(String(format: "%.2f", model.currentTime)) 秒)の位置か、ドロップした位置とレイヤーに置き、1 回の取り消しで戻せます。")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.caption).foregroundStyle(MCDesign.Color.textSecondary)
                 Spacer(minLength: 8)
                 Button(L10n.t("閉じる")) { preview.stop(); model.showAudioLibrary = false }
                     .keyboardShortcut(.cancelAction)
@@ -166,7 +166,8 @@ struct AudioLibrarySheet: View {
         if gridMode {
             ScrollView {
                 if shown.isEmpty && subfolders.isEmpty && subpath.isEmpty {
-                    Text(L10n.t("一致する素材はありません。")).foregroundStyle(.secondary)
+                    InspectorGuideCard(symbol: "magnifyingglass", heading: "一致する素材はありません", message: "検索語や種類の絞り込みを変えてみてください。")
+                        .frame(maxWidth: 320)
                         .frame(maxWidth: .infinity, minHeight: 200, alignment: .center)
                 } else {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 8)], spacing: 8) {
@@ -190,7 +191,7 @@ struct AudioLibrarySheet: View {
                 }
                 Section {
                     if shown.isEmpty {
-                        Text(L10n.t("一致する素材はありません。")).foregroundStyle(.secondary)
+                        InspectorGuideCard(symbol: "magnifyingglass", heading: "一致する素材はありません", message: "検索語や種類の絞り込みを変えてみてください。")
                     } else {
                         ForEach(shown) { item in listRow(item).tag(item.id) }
                     }
@@ -250,7 +251,7 @@ struct AudioLibrarySheet: View {
         VStack(spacing: 4) {
             ZStack {
                 RoundedRectangle(cornerRadius: 4).fill(Color.secondary.opacity(0.15))
-                Image(systemName: "folder.fill").font(.system(size: 26)).foregroundStyle(.secondary)
+                Image(systemName: "folder.fill").font(MCDesign.Font.largeTitle).foregroundStyle(.secondary)
             }
             .frame(width: 88, height: 60)
             Text(f.name).font(.caption).lineLimit(1).truncationMode(.middle)
@@ -266,7 +267,7 @@ struct AudioLibrarySheet: View {
         VStack(spacing: 4) {
             ZStack {
                 RoundedRectangle(cornerRadius: 4).fill(Color.secondary.opacity(0.15))
-                Image(systemName: "arrow.up").font(.system(size: 22)).foregroundStyle(.secondary)
+                Image(systemName: "arrow.up").font(MCDesign.Font.title).foregroundStyle(.secondary)
             }
             .frame(width: 88, height: 60)
             Text(L10n.t("一つ上へ")).font(.caption).lineLimit(1)

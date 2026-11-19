@@ -67,7 +67,7 @@ struct DependencyBannerBar: View {
             HStack(alignment: .center, spacing: 10) {
                 Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)
                 VStack(alignment: .leading, spacing: 2) {
-                    ForEach(c.messages, id: \.self) { Text($0).font(.system(size: 12)) }
+                    ForEach(c.messages, id: \.self) { Text($0).font(MCDesign.Font.callout) }
                 }
                 Spacer(minLength: 12)
                 ForEach(c.links, id: \.url) { l in

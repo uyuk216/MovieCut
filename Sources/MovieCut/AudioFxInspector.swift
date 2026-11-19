@@ -113,7 +113,7 @@ struct AudioFxPanel: View {
             }
             .padding(.top, 4)
         } label: {
-            Text("イコライザー").font(.system(size: 12, weight: .semibold)).foregroundStyle(eq.isActive ? Color.primary : Color.secondary)
+            Text("イコライザー").font(MCDesign.Font.calloutSemibold).foregroundStyle(eq.isActive ? Color.primary : Color.secondary)
         }
     }
 
@@ -140,7 +140,7 @@ struct AudioFxPanel: View {
             }
             .padding(.top, 4)
         } label: {
-            Text("コンプレッサー").font(.system(size: 12, weight: .semibold)).foregroundStyle(on ? Color.primary : Color.secondary)
+            Text("コンプレッサー").font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
         }
     }
 
@@ -174,7 +174,7 @@ struct AudioFxPanel: View {
             }
             .padding(.top, 4)
         } label: {
-            Text("リバーブ").font(.system(size: 12, weight: .semibold)).foregroundStyle(on ? Color.primary : Color.secondary)
+            Text("リバーブ").font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
         }
     }
 
@@ -197,13 +197,13 @@ struct AudioFxPanel: View {
                                  undo: p.undoName) { _ = AudioFxEditing.setDelay(&$0, p, $1) }
                     }
                     Text("遅れた音を重ねます(エコー)。繰り返しを大きくすると尾が長くなります。")
-                        .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
                 .opacity(dl?.enabled ?? false ? 1 : 0.45)
             }
             .padding(.top, 4)
         } label: {
-            Text("ディレイ").font(.system(size: 12, weight: .semibold)).foregroundStyle(on ? Color.primary : Color.secondary)
+            Text("ディレイ").font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
         }
     }
 
@@ -233,13 +233,13 @@ struct AudioFxPanel: View {
                     fxSlider(mode == .peak ? "目標ピーク（dBFS）" : "目標ラウドネス（LUFS）", value: k.targetDb, range: AudioFx.Normalize.range(for: mode), step: 0.5,
                              format: { String(format: "%.1f", $0) }, undo: ProjectModel.normalizeUndoName) { _ = AudioFxEditing.setNormalizeTarget(&$0, $1) }
                     Text("クリップ全体を一度測って、音量を合わせます。EQ・コンプレッサー・リバーブの後に測ります。")
-                        .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
                 .opacity(on ? 1 : 0.45)
             }
             .padding(.top, 4)
         } label: {
-            Text("ノーマライズ").font(.system(size: 12, weight: .semibold)).foregroundStyle(on ? Color.primary : Color.secondary)
+            Text("ノーマライズ").font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
         }
     }
 }
@@ -262,13 +262,13 @@ extension AudioFxPanel {
                         duckSlider("下がる速さ（アタック）", value: d.attackSeconds, range: Duck.attackRange, step: 0.01, format: { String(format: "%.2f 秒", $0) }) { _ = DuckEditing.setAttack(&$0, $1) }
                         duckSlider("戻る速さ（リリース）", value: d.releaseSeconds, range: Duck.releaseRange, step: 0.05, format: { String(format: "%.2f 秒", $0) }) { _ = DuckEditing.setRelease(&$0, $1) }
                         Text("ボイスのクリップがある間、この音を下げます。声の少し前から下げ始め、終わると元に戻ります。プレビューも書き出しも同じです。")
-                            .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                            .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     }
                     .opacity(on ? 1 : 0.45)
                 }
                 .padding(.top, 4)
             } label: {
-                Text("自動ダッキング").font(.system(size: 12, weight: .semibold)).foregroundStyle(on ? Color.primary : Color.secondary)
+                Text("自動ダッキング").font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
             }
         }
     }
@@ -282,7 +282,7 @@ extension AudioFxPanel {
                 }))
                 .toggleStyle(.checkbox)
                 Text("オンにすると、このクリップがある間、自動ダッキングをオンにした BGM を下げます。音や映像は変わりません。")
-                    .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             .padding(.top, 4)
         }

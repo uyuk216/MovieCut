@@ -665,16 +665,16 @@ struct SettingsSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(L10n.t("設定")).font(.title3.bold())
+        VStack(alignment: .leading, spacing: MCDesign.Spacing.m) {
+            Text(L10n.t("設定")).font(MCDesign.Font.headline)
             Text(L10n.t("この設定はプロジェクトごとに保存されます（音声サーバーの許可など一部はこのMac全体の設定です）"))
-                .font(.caption).foregroundStyle(.secondary)
+                .font(MCDesign.Font.caption).foregroundStyle(MCDesign.Color.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             GroupBox(L10n.t("動画")) {
-                Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 10) {
+                Grid(alignment: .leading, horizontalSpacing: MCDesign.Spacing.m, verticalSpacing: MCDesign.Spacing.s) {
                     GridRow(alignment: .top) {
                         Text(L10n.t("サイズ"))
-                        VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: MCDesign.Spacing.s) {
                             Picker("", selection: Binding(get: { sizeKey }, set: { k in
                                 if let sz = ResolutionInput.parseSize(k) { res.set(width: sz.width, height: sz.height) }
                             })) {
@@ -686,7 +686,7 @@ struct SettingsSheet: View {
                     }
                     GridRow(alignment: .top) {
                         Text(L10n.t("FPS"))
-                        VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: MCDesign.Spacing.s) {
                             Picker("", selection: Binding(get: { fpsChoice }, set: { k in
                                 fpsChoice = k
                                 if k != Self.customFpsTag { fpsText = k }
@@ -715,7 +715,7 @@ struct SettingsSheet: View {
                     }
                     GridRow {
                         Text(L10n.t("書き出し形式"))
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: MCDesign.Spacing.xs) {
                             Picker("", selection: $draft.codec) {
                                 Text(L10n.t("H.264（どこでも再生できる）")).tag("h264")
                                 Text(L10n.t("HEVC（同じ画質で小さい・4K向け）")).tag("hevc")
@@ -723,30 +723,30 @@ struct SettingsSheet: View {
                                 Text(L10n.t("ProRes 4444（透明を残せる・.mov）")).tag(OutputPlan.proRes4444)
                             }.labelsHidden().frame(width: 260)
                             if draft.codec == "h264", let w = res.width, let h = res.height, !OutputPlan.h264Supports(width: w, height: h) {
-                                Text(L10n.t("注意: このサイズは H.264 で書き出せないので、書き出しは HEVC になります")).font(.caption).foregroundStyle(.orange)
+                                Text(L10n.t("注意: このサイズは H.264 で書き出せないので、書き出しは HEVC になります")).font(MCDesign.Font.caption).foregroundStyle(.orange)
                             }
                         }
                     }
                 }
-                .padding(8)
+                .padding(MCDesign.Spacing.s)
             }
             GroupBox(L10n.t("言語")) {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: MCDesign.Spacing.xs) {
                     Picker("", selection: Binding(get: { language }, set: { v in language = v; L10n.setOverride(v) })) {
                         ForEach(AppLanguage.allCases, id: \.self) { Text($0.label).tag($0) }
                     }
                     .labelsHidden().frame(width: 320)
                     .accessibilityIdentifier("settings-language")
-                    Text(L10n.t("言語の切り替えは、メニューなどを開き直すと反映されます。")).font(.caption).foregroundStyle(.secondary)
-                }.padding(8)
+                    Text(L10n.t("言語の切り替えは、メニューなどを開き直すと反映されます。")).font(MCDesign.Font.caption).foregroundStyle(MCDesign.Color.textSecondary)
+                }.padding(MCDesign.Spacing.s)
             }
             GroupBox(L10n.t("VOICEVOX（互換エンジンも可）")) {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: MCDesign.Spacing.xs) {
                     TextField("エンジンのURL", text: $draft.voicevoxUrl)
                     Text(L10n.t("VOICEVOX は 50021、COEIROINK は 50031、SHAREVOX は 50025 が初期値です。"))
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(MCDesign.Font.caption).foregroundStyle(MCDesign.Color.textSecondary)
                     if let reason = voiceEndpointProblem {
-                        Text(reason).font(.caption).foregroundStyle(.red)
+                        Text(reason).font(MCDesign.Font.caption).foregroundStyle(.red)
                     }
                     Divider()
                     Toggle(L10n.t("リモートの音声サーバーを許可"), isOn: Binding(get: { allowRemoteVoice }, set: { on in
@@ -754,39 +754,39 @@ struct SettingsSheet: View {
                         SecuritySettings.setAllowRemoteVoice(on)
                     }))
                     Text(L10n.t("警告: オンにすると、セリフの文章がこの Mac の外のサーバーへ送られます。信頼できるサーバーだけを下に書いてください。プロジェクトファイルに書かれた送信先は、ここで許可したホスト以外には送りません(この設定はプロジェクトには保存されません)。"))
-                        .font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+                        .font(MCDesign.Font.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
                     if allowRemoteVoice {
                         TextField("許可するホスト名(カンマ区切り。例: voice.example.com)", text: Binding(get: { remoteHosts }, set: { t in
                             remoteHosts = t
                             SecuritySettings.setRemoteVoiceHosts(t)
                         }))
                     }
-                }.padding(8)
+                }.padding(MCDesign.Spacing.s)
             }
             GroupBox(L10n.t("ゆっくり（AquesTalk 系）")) {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: MCDesign.Spacing.xs) {
                     let found = AquesTalkLocator.resolve()
                     Text(found.map { "使う実行ファイル: \($0.path)" } ?? "AquesTalkPlayer が見つかりません(macOS の「Kyoko」で代用します)。")
-                        .font(.caption).textSelection(.enabled)
+                        .font(MCDesign.Font.caption).textSelection(.enabled)
                     HStack {
                         Button(L10n.t("実行ファイルを選ぶ…")) { chooseAquesTalk() }
                         if !aquesPath.isEmpty {
                             Button(L10n.t("選択を解除")) { aquesPath = ""; aquesMessage = ""; SecuritySettings.setAquestalkPath(nil) }
                         }
                     }
-                    if !aquesMessage.isEmpty { Text(aquesMessage).font(.caption).foregroundStyle(.red) }
+                    if !aquesMessage.isEmpty { Text(aquesMessage).font(MCDesign.Font.caption).foregroundStyle(.red) }
                     Text(L10n.t("安全のため、実行するのは /Applications・アプリ内・Application Support の AquesTalk フォルダ・ここで選んだファイルだけです。プロジェクトファイルに書かれたコマンドは実行しません。"))
-                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                }.padding(8)
+                        .font(MCDesign.Font.caption).foregroundStyle(MCDesign.Color.textSecondary).fixedSize(horizontal: false, vertical: true)
+                }.padding(MCDesign.Spacing.s)
             }
             GroupBox(L10n.t("Whisper（文字起こし）")) {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: MCDesign.Spacing.xs) {
                     let exe = WhisperLocator.resolve()
                     let mdl = WhisperLocator.resolveModel()
                     Text(exe.map { "\(L10n.t("使う実行ファイル")): \($0.path)" } ?? L10n.t("実行ファイル(whisper-cli)が見つかりません。"))
-                        .font(.caption).textSelection(.enabled)
+                        .font(MCDesign.Font.caption).textSelection(.enabled)
                     Text(mdl.map { "\(L10n.t("使うモデル")): \($0.path)" } ?? L10n.t("モデルが未配置です。"))
-                        .font(.caption).textSelection(.enabled)
+                        .font(MCDesign.Font.caption).textSelection(.enabled)
                     HStack {
                         Button(L10n.t("実行ファイルを選ぶ…")) { chooseWhisperExecutable() }
                         if !whisperPath.isEmpty {
@@ -799,14 +799,14 @@ struct SettingsSheet: View {
                             Button(L10n.t("モデルの選択を解除")) { whisperModelPath = ""; whisperMessage = ""; SecuritySettings.setWhisperModelPath(nil) }
                         }
                     }
-                    if !whisperMessage.isEmpty { Text(whisperMessage).font(.caption).foregroundStyle(.red) }
+                    if !whisperMessage.isEmpty { Text(whisperMessage).font(MCDesign.Font.caption).foregroundStyle(.red) }
                     Text(L10n.t("置き場所(Application Support 内)に whisper-cli と ggml-*.bin を置くか、上のボタンで選びます。Homebrew の whisper-cpp も自動で探します。"))
-                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        .font(MCDesign.Font.caption).foregroundStyle(MCDesign.Color.textSecondary).fixedSize(horizontal: false, vertical: true)
                     Text("\(DataLocations.current.supportFolderName)/Whisper/")
-                        .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                        .font(MCDesign.Font.caption).foregroundStyle(MCDesign.Color.textSecondary).textSelection(.enabled)
                     Text(L10n.t("モデルはアプリに入っていません。初回に自分で ggml-base.bin などをダウンロードしてください(日本語は base 以上がおすすめ)。認識は端末内で行い、音声は外に送りません。"))
-                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                }.padding(8)
+                        .font(MCDesign.Font.caption).foregroundStyle(MCDesign.Color.textSecondary).fixedSize(horizontal: false, vertical: true)
+                }.padding(MCDesign.Spacing.s)
             }
             HStack {
                 Spacer()
@@ -820,7 +820,7 @@ struct SettingsSheet: View {
                     .disabled(!res.isValid || !fpsValid)
             }
         }
-        .padding(16)
+        .padding(MCDesign.Spacing.l)
         .frame(width: 560)
         .onChange(of: draft.codec) { _, c in res.codec = c }
         .onChange(of: fpsText) { _, t in if case .success(let v) = FrameRateInput.parse(t) { res.fps = v } }

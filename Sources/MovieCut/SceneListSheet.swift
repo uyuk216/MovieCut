@@ -20,8 +20,7 @@ struct SceneListSheet: View {
                 Text("\(scenes.count) 件").foregroundStyle(.secondary).monospacedDigit()
             }
             if scenes.isEmpty {
-                Text("シーンがありません。下の欄から作成できます。シーンは名前付きの独立タイムラインで、タイムラインへ何箇所でも配置して再利用できます。")
-                    .foregroundStyle(.secondary)
+                InspectorGuideCard(symbol: "film.stack", heading: "シーンがありません", message: "下の欄から作成できます。シーンは名前付きの独立タイムラインで、タイムラインへ何箇所でも配置して再利用できます。")
                     .frame(maxWidth: .infinity, minHeight: 120)
             } else {
                 List {

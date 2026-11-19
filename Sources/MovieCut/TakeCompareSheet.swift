@@ -17,7 +17,7 @@ struct TakeCompareSheet: View {
                 Text("\(groups.count) 組").foregroundStyle(.secondary).monospacedDigit()
             }
             if groups.isEmpty {
-                Text("同じセリフのボイスクリップがありません").foregroundStyle(.secondary)
+                InspectorGuideCard(symbol: "waveform.badge.magnifyingglass", heading: "同じセリフのボイスクリップがありません", message: "同じセリフのテイクが複数あると、ここで聞き比べられます。")
                     .frame(maxWidth: .infinity, minHeight: 160)
             } else {
                 ScrollView {

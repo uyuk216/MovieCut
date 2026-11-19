@@ -28,7 +28,7 @@ struct SoundLevelMeterView: View {
                 modeRaw = (mode == .peak ? PlaybackLevelMode.loudness : .peak).rawValue
             } label: {
                 Text(mode == .peak ? "ピーク" : "ラウドネス")
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(MCDesign.Font.badge)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
             }
@@ -46,11 +46,11 @@ struct SoundLevelMeterView: View {
             }
             .frame(width: 14)
             Text(db.map { String(format: "%.0f", $0) } ?? "--")
-                .font(.system(size: 9, weight: .medium).monospacedDigit())
+                .font(MCDesign.Font.footnote.monospacedDigit())
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
             Text(mode == .peak ? "dB" : "LUFS")
-                .font(.system(size: 8))
+                .font(MCDesign.Font.caption)
                 .foregroundStyle(.tertiary)
                 .lineLimit(1)
         }
