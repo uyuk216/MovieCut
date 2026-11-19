@@ -9,8 +9,15 @@ import Foundation
 ///   ここでは **ffmpeg が見つかったときだけ使える任意バックエンド**とし、無ければ理由つきのエラーを返す
 ///   (本体の起動・MP4 等の既存書き出しには一切影響しない)。
 /// - 対象 Mac の Homebrew ffmpeg は libvpx-vp9 / libsvtav1(AV1)/ libopus を持ち、WebM(VP9)・WebM(AV1)・
-///   MP4(AV1)の実エンコードを確認済み。一方 libwebp 系エンコーダは入っていないため、アニメーション WebP は
-///   この Mac では書けない(エンコーダが見つかれば自動で有効になる)。
+///   MP4(AV1)の実エンコードを確認済み。一方 libwebp 系エンコーダは入っていない(ffmpeg 9.0.2 で再確認)。
+/// - アニメーション WebP の予備道(2026-11-19 追加): Homebrew の `webp` パッケージには、静止画を束ねて
+///   アニメーション WebP に合成する `img2webp` があり、対象 Mac でも実エンコードを確認済み(10 コマ・
+///   各 100ms・ループ 0 で書き、webpinfo の ANIM/ANMF チャンクと ffprobe の webp_anim で成立を確認)。
+///   そのため WebP は「ffmpeg に libwebp 系がある」か「img2webp が見つかる(中間 MP4 から ffmpeg で
+///   PNG 連番を取り出し、img2webp で合成する)」のどちらかで書ける。どちらも無ければ従来どおり理由つきで不可。
+///   cwebp は静止画専用なので予備道には使わない。中間 MP4 経由のため、透明(アルファ)は保持されない
+///   (従来の ffmpeg 経路と同じ)。img2webp は同一コマを 1 コマに畳む(表示時間は合算される)ため、
+///   タイムライン全体が静止している場合は静止画 WebP になる。
 /// - 描画は既存の `Exporter`(MP4・高画質の中間ファイル)に任せ、ffmpeg はコーデック変換だけを行う。
 ///   ラウドネス正規化など既存の書き出し経路はそのまま中間ファイルに反映される。
 public enum FFmpegExportError: LocalizedError {
@@ -18,6 +25,7 @@ public enum FFmpegExportError: LocalizedError {
     case encoderMissing(format: String, encoder: String)
     case unavailable(format: String, reason: String)
     case ffmpegFailed(String)
+    case img2webpFailed(String)
     case emptyProject
 
     public var errorDescription: String? {
@@ -30,6 +38,8 @@ public enum FFmpegExportError: LocalizedError {
             return "\(format) に必要なエンコーダ(\(encoder))が、お使いの ffmpeg に入っていません"
         case .ffmpegFailed(let tail):
             return "ffmpeg での変換に失敗しました: \(tail)"
+        case .img2webpFailed(let tail):
+            return "img2webp でのアニメーション WebP 合成に失敗しました: \(tail)"
         case .emptyProject:
             return "タイムラインが空です"
         }
@@ -89,6 +99,14 @@ public enum WebVideoFormat: String, CaseIterable, Sendable {
             return "ffmpeg に \(audio) エンコーダが無いため"
         }
         return nil
+    }
+
+    /// `img2webp` の有無も含めた可否判定。アニメーション WebP だけは、ffmpeg に libwebp 系が無くても
+    /// img2webp があれば予備道で書ける(予備道でも PNG 連番の取り出しに ffmpeg 自体は要る)。
+    /// 他の形式は従来の判定と完全に同じ。
+    public func unavailableReason(encoders: Set<String>?, ffmpegFound: Bool, img2webpFound: Bool) -> String? {
+        if self == .animatedWebP, ffmpegFound, img2webpFound { return nil }
+        return unavailableReason(encoders: encoders, ffmpegFound: ffmpegFound)
     }
 
     /// ffmpeg の muxer 名(`-f`)。出力先が一時名でも形式を明示できるようにする。
@@ -158,6 +176,56 @@ public enum FFmpegLocator {
     }
 }
 
+/// `img2webp`(Homebrew `webp` パッケージ、同梱の合成ツール)の場所探し。ffmpeg の流儀に揃えた任意バックエンド。
+public enum Img2WebPLocator {
+    /// 探す場所(環境変数 `MOVIECUT_IMG2WEBP` が最優先)。
+    public static func find() -> URL? {
+        let fm = FileManager.default
+        var candidates: [String] = []
+        if let custom = ProcessInfo.processInfo.environment["MOVIECUT_IMG2WEBP"], !custom.isEmpty { candidates.append(custom) }
+        candidates += ["/opt/homebrew/bin/img2webp", "/usr/local/bin/img2webp"]
+        if let path = ProcessInfo.processInfo.environment["PATH"] {
+            candidates += path.split(separator: ":").map { String($0) + "/img2webp" }
+        }
+        for c in candidates where fm.isExecutableFile(atPath: c) { return URL(fileURLWithPath: c) }
+        return nil
+    }
+}
+
+/// img2webp へ渡す引数の計画(純粋関数・テスト対象)。
+public enum Img2WebPComposer {
+    /// 画質(0〜100)。従来の ffmpeg(libwebp)経路も crf を使っていないので、WebP では crf は使わず固定にする。
+    public static let quality = 75
+
+    /// 各コマの表示時間(ms)。1000/fps を 1 コマずつ丸めると合計がずれるので、累積時刻の差分で配る
+    /// (例: 30fps → 33, 34, 33, 34, … で、30 コマの合計はちょうど 1000ms)。
+    public static func frameDurationsMs(frameCount: Int, fps: Double) -> [Int] {
+        guard frameCount > 0, fps > 0, fps.isFinite else { return [] }
+        var out: [Int] = []
+        out.reserveCapacity(frameCount)
+        var prev = 0
+        for i in 0..<frameCount {
+            let t = Int(((Double(i + 1) * 1000) / fps).rounded())
+            out.append(max(1, t - prev))
+            prev = t
+        }
+        return out
+    }
+
+    /// img2webp の引数(出力先 `-o` は呼び出し側が足す)。`-d` は後続フレームの表示時間(ms)で、
+    /// 値が変わるときだけ差し込む(フレームごとに指定できることを対象 Mac で確認済み)。
+    public static func arguments(frameFiles: [String], durationsMs: [Int], loopCount: Int = 0) -> [String] {
+        var args = ["-loop", "\(max(0, loopCount))", "-lossy", "-q", "\(quality)"]
+        var lastDuration: Int? = nil
+        for (i, file) in frameFiles.enumerated() {
+            let d = i < durationsMs.count ? durationsMs[i] : (durationsMs.last ?? 100)
+            if d != lastDuration { args += ["-d", "\(d)"]; lastDuration = d }
+            args.append(file)
+        }
+        return args
+    }
+}
+
 /// 追加形式の書き出し本体。中間 MP4(既存 `Exporter`)→ ffmpeg 変換の 2 段。
 public enum FFmpegVideoExporter {
     /// 中間 MP4 のビットレート(再エンコード前提なので高め。最終画質は crf で決まる)。
@@ -174,10 +242,16 @@ public enum FFmpegVideoExporter {
         guard project.endTime > 0 else { throw FFmpegExportError.emptyProject }
         guard let ffmpeg = FFmpegLocator.find() else { throw FFmpegExportError.ffmpegNotFound }
         let encoders = FFmpegLocator.availableEncoders(at: ffmpeg)
-        if let reason = format.unavailableReason(encoders: encoders, ffmpegFound: true) {
+        // アニメーション WebP の予備道: ffmpeg に libwebp 系が無くても img2webp があれば書ける
+        let img2webp = format == .animatedWebP ? Img2WebPLocator.find() : nil
+        let useImg2WebP = format == .animatedWebP
+            && !(format.videoEncoderCandidates.contains { encoders?.contains($0) == true })
+            && img2webp != nil
+        if let reason = format.unavailableReason(encoders: encoders, ffmpegFound: true), !useImg2WebP {
             throw FFmpegExportError.unavailable(format: format.title, reason: reason)
         }
-        guard let videoEncoder = format.videoEncoderCandidates.first(where: { encoders?.contains($0) == true }) else {
+        let videoEncoder = format.videoEncoderCandidates.first(where: { encoders?.contains($0) == true }) ?? ""
+        if !useImg2WebP && videoEncoder.isEmpty {
             throw FFmpegExportError.encoderMissing(format: format.title, encoder: format.videoEncoderCandidates.first ?? "?")
         }
 
@@ -194,14 +268,73 @@ public enum FFmpegVideoExporter {
         let part = url.deletingLastPathComponent().appendingPathComponent(".moviecut-\(UUID().uuidString).part.\(format.fileExtension)")
         defer { try? FileManager.default.removeItem(at: part) }
         let duration = range?.duration ?? project.endTime
-        try await runFFmpeg(ffmpeg, arguments: ["-hide_banner", "-y", "-i", intermediate.path]
-            + format.ffmpegArguments(videoEncoder: videoEncoder, crf: crf)
-            + ["-f", format.ffmpegFormat, "-progress", "pipe:1", "-nostats", part.path], duration: duration) { v in
-            progress?(0.7 + v * 0.3)
+        if useImg2WebP, let img2webp {
+            try await convertToAnimatedWebPViaImg2WebP(ffmpeg: ffmpeg, img2webp: img2webp, intermediate: intermediate,
+                                                       tmpDir: tmpDir, fps: project.fps, duration: duration, part: part) { v in
+                progress?(0.7 + v * 0.3)
+            }
+        } else {
+            try await runFFmpeg(ffmpeg, arguments: ["-hide_banner", "-y", "-i", intermediate.path]
+                + format.ffmpegArguments(videoEncoder: videoEncoder, crf: crf)
+                + ["-f", format.ffmpegFormat, "-progress", "pipe:1", "-nostats", part.path], duration: duration) { v in
+                progress?(0.7 + v * 0.3)
+            }
         }
         try? FileManager.default.removeItem(at: url)
         do { try FileManager.default.moveItem(at: part, to: url) } catch { throw FFmpegExportError.ffmpegFailed(error.localizedDescription) }
         progress?(1.0)
+    }
+
+    /// アニメーション WebP の予備道: 中間 MP4 から ffmpeg で PNG 連番を取り出し、img2webp で合成する。
+    /// 進み具合はこの関数の中では 0〜1(取り出しが 0〜0.8、合成は完了で 1)。
+    private static func convertToAnimatedWebPViaImg2WebP(ffmpeg: URL, img2webp: URL, intermediate: URL, tmpDir: URL,
+                                                         fps: Double, duration: Double, part: URL,
+                                                         progress: @escaping (Double) -> Void) async throws {
+        let framesDir = tmpDir.appendingPathComponent("frames")
+        try FileManager.default.createDirectory(at: framesDir, withIntermediateDirectories: true)
+        let pattern = framesDir.appendingPathComponent("frame%06d.png").path
+        try await runFFmpeg(ffmpeg, arguments: ["-hide_banner", "-y", "-i", intermediate.path, "-an",
+                                                "-progress", "pipe:1", "-nostats", pattern],
+                            duration: duration) { v in progress(v * 0.8) }
+        if Task.isCancelled { throw CancellationError() }
+        let names = ((try? FileManager.default.contentsOfDirectory(atPath: framesDir.path)) ?? [])
+            .filter { $0.hasSuffix(".png") }.sorted()
+        guard !names.isEmpty else { throw FFmpegExportError.img2webpFailed("中間 MP4 からフレームを取り出せませんでした") }
+        let files = names.map { framesDir.appendingPathComponent($0).path }
+        let durations = Img2WebPComposer.frameDurationsMs(frameCount: files.count, fps: fps)
+        try await runImg2WebP(img2webp, arguments: Img2WebPComposer.arguments(frameFiles: files, durationsMs: durations) + ["-o", part.path])
+        progress(1.0)
+    }
+
+    /// img2webp を実行する(進捗出力が無いので待つだけ)。失敗時は標準エラーの末尾つきで投げる。
+    private static func runImg2WebP(_ tool: URL, arguments: [String]) async throws {
+        let box = ProcessBox()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+                let proc = Process()
+                box.process = proc
+                proc.executableURL = tool
+                proc.arguments = arguments
+                let errPipe = Pipe()
+                proc.standardOutput = Pipe()
+                proc.standardError = errPipe
+                let errBuffer = ErrorTail()
+                errPipe.fileHandleForReading.readabilityHandler = { h in errBuffer.append(h.availableData) }
+                proc.terminationHandler = { p in
+                    errPipe.fileHandleForReading.readabilityHandler = nil
+                    if box.cancelled {
+                        cont.resume(throwing: CancellationError())
+                    } else if p.terminationStatus == 0 {
+                        cont.resume()
+                    } else {
+                        cont.resume(throwing: FFmpegExportError.img2webpFailed(errBuffer.tail))
+                    }
+                }
+                do { try proc.run() } catch { cont.resume(throwing: FFmpegExportError.img2webpFailed(error.localizedDescription)) }
+            }
+        } onCancel: {
+            box.cancel()
+        }
     }
 
     /// ffmpeg を実行し、`-progress` の `out_time_ms` から進み具合を出す。失敗時は標準エラーの末尾つきで投げる。

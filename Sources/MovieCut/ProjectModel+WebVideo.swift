@@ -14,7 +14,7 @@ extension ProjectModel {
         let panel = NSSavePanel()
         panel.canCreateDirectories = true
         panel.title = "WebM / AV1 / WebP で書き出す"
-        panel.message = "これらの形式は ffmpeg を使って変換します(無い形式は理由を表示します)。"
+        panel.message = "これらの形式は ffmpeg(アニメーション WebP は img2webp も)を使って変換します(無い形式は理由を表示します)。"
 
         let formatPopup = NSPopUpButton(frame: .zero, pullsDown: false)
         formatPopup.addItems(withTitles: formats.map(\.title))
@@ -64,7 +64,7 @@ extension ProjectModel {
             // 書けない環境・形式なら、先に理由を見せて止める
             let ffmpeg = FFmpegLocator.find()
             let encoders = ffmpeg.map { FFmpegLocator.availableEncoders(at: $0) } ?? nil
-            if let reason = format.unavailableReason(encoders: encoders, ffmpegFound: ffmpeg != nil) {
+            if let reason = format.unavailableReason(encoders: encoders, ffmpegFound: ffmpeg != nil, img2webpFound: Img2WebPLocator.find() != nil) {
                 let alert = NSAlert()
                 alert.alertStyle = .warning
                 alert.messageText = "\(format.title) は書けません"

@@ -117,7 +117,7 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
 書き出し: H.264/HEVC (VideoToolbox) + AAC 256k、再生を待たず高速に、進捗表示、Dock の進行バーと完了時バウンス、Finder で表示、失敗時のエラー表示、2回連続OK。
 
 - **.ymmp 書き戻し**(`YmmpExporter`): `YmmpImporter` の変換対応表の逆向き。対応できないクリップ・機能は黙って落とさず、書き出しレポート(unsupported / droppedFeatures / notes)に理由つきで残し、アプリはアラート、CLI は stderr で必ず見せる。実 YMM4 での読み込みは未検証で、保証はインポーターとの往復と JSON 構造まで。
-- **追加形式(WebM / AV1 / アニメーション WebP)**(`FFmpegVideoExporter`): AVFoundation に VP9/AV1 エンコーダと WebM muxer が無く、ImageIO にも WebP 書き出しが無いため、OS 標準だけでは書けない。本体の原則(ffmpeg は使わない・起動に不要)は変えず、**ffmpeg が見つかったときだけ**中間 MP4(既存 `Exporter`、40 Mbps)を変換する任意バックエンドとする。エンコーダが無い形式は理由つきで断る(例: 対象 Mac の Homebrew ffmpeg には libwebp が無いので WebP は不可)。
+- **追加形式(WebM / AV1 / アニメーション WebP)**(`FFmpegVideoExporter`): AVFoundation に VP9/AV1 エンコーダと WebM muxer が無く、ImageIO にも WebP 書き出しが無いため、OS 標準だけでは書けない。本体の原則(ffmpeg は使わない・起動に不要)は変えず、**ffmpeg が見つかったときだけ**中間 MP4(既存 `Exporter`、40 Mbps)を変換する任意バックエンドとする。エンコーダが無い形式は理由つきで断る。アニメーション WebP だけは予備道があり、ffmpeg に libwebp が無くても Homebrew の img2webp(webp パッケージ)があれば、中間 MP4 から PNG 連番を取り出して合成して書ける(対象 Mac で実エンコード確認済み)。ffmpeg と img2webp のどちらも無ければ従来どおり WebP は理由つきで不可。
 メニュー: ファイル/編集/クリップ/再生/移動/出力/表示/ウィンドウ/ヘルプ(設定… Cmd+,。出力メニューに 解像度(7 プリセット ✓・最近使ったカスタム・カスタム…・縦横を入れ替える)・FPS(6 プリセット ✓・最近使ったカスタム・カスタム…)・書き出し形式・背景色のラジオ、動画の設定…、MP4 を書き出す… Cmd+E、書き出しプリセット。ウィンドウ内には解像度ピッカー・設定・書き出しのボタンは置かない)。Space/S/Delete/Home/End/矢印は入力欄で打てるよう通常キーのまま(KeyRouter)。メニューの項目は `AppMenuSpec`(項目表)→ `AppCommands`(SwiftUI)→ `AppMenu.perform`(モデルの関数)の 1 本道で、項目表を単体テストが見る。
 設定シート: VOICEVOX の URL、ゆっくり用の実行コマンド(任意)、動画設定。
 依存チェック: VOICEVOX / AquesTalkPlayer が無いときの案内(ffmpeg は不要)。
