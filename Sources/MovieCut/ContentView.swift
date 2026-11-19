@@ -80,6 +80,8 @@ struct ContentView: View {
         .sheet(item: $model.rigGroupPlan) { _ in RigGroupSheet(model: model) }
         .sheet(isPresented: $model.showRollSheet) { RollSlipSheet(model: model, slip: false) }
         .sheet(isPresented: $model.showSlipSheet) { RollSlipSheet(model: model, slip: true) }
+        .sheet(isPresented: $model.showSlideSheet) { RollSlipSheet(model: model, kind: .slide) }
+        .sheet(isPresented: $model.showSplitEditSheet) { RollSlipSheet(model: model, kind: .splitEdit) }
         .modifier(MulticamSheets(model: model))
         .sheet(isPresented: $model.showSilenceSheet) { SilenceCutSheet(model: model) }
         .sheet(isPresented: $model.showScreenRecordingSheet) { ScreenRecordingSheet(model: model) }

@@ -9,6 +9,9 @@ enum KeyCommand: Hashable, CaseIterable {
     case zoomIn
     /// J = 逆へ(遅く)、K = 停止、L = 速く(順 1 倍 / 2 倍 / 4 倍)。素のキーで、メニューのショートカットにはしない。
     case shuttleBack, shuttleStop, shuttleForward
+    /// Premiere互換プリセットでだけ割り当てる通常キー(既定ではキーなし。上書きが付いたときだけ効く)。
+    /// I = 書き出し開始、O = 書き出し終了、Q = 頭のリップルトリム、W = 尻のリップルトリム(Premiere Pro と同じ並び)。
+    case markIn, markOut, rippleHead, rippleTail
 }
 
 @MainActor

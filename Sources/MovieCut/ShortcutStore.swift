@@ -63,6 +63,61 @@ final class ShortcutStore: ObservableObject {
         save()
     }
 
+    // MARK: Premiere互換プリセット
+
+    private static let backupKey = "shortcut.prePresetBackup.v1"
+    private struct Backup: Codable { var menu: [String: MenuEntry]; var plain: [String: PlainEntry] }
+
+    /// プリセットの通常キー(Premiere Pro の主要キー割り当て)。J/K/L・Space・矢印は既定の時点で Premiere と同じなので含めない。
+    static let premierePlain: [(command: KeyCommand, keyCode: UInt16, display: String)] = [
+        (.split, 8, "C"),        // レーザーツールで分割
+        (.markIn, 34, "I"),      // イン点(書き出し開始)
+        (.markOut, 31, "O"),     // アウト点(書き出し終了)
+        (.rippleHead, 12, "Q"),  // 再生位置までリップルトリム(頭)
+        (.rippleTail, 13, "W"),  // 再生位置までリップルトリム(尻)
+    ]
+
+    /// プリセットのメニューの項目。
+    static let premiereMenu: [(command: MenuCommand, shortcut: MenuShortcut)] = [
+        (.split, MenuShortcut(key: "k", modifiers: [.command])),           // 編集点を追加
+        (.rippleDelete, MenuShortcut(key: .delete, modifiers: [.shift])),  // リップル削除
+    ]
+
+    /// プリセット適用前の控えがあるか。
+    var hasPrePresetBackup: Bool { defaults.data(forKey: Self.backupKey) != nil }
+
+    /// プリセットの割り当てがすべて効いているか。
+    var isPremierePresetApplied: Bool {
+        Self.premierePlain.allSatisfy { plainOverride(for: $0.command) == PlainBinding(keyCode: $0.keyCode, display: $0.display) }
+            && Self.premiereMenu.allSatisfy { menuOverride(for: Self.id(for: $0.command)) == $0.shortcut }
+    }
+
+    /// プリセットを適用する。書き換えるのはプリセットが触る割り当てだけで、それ以外のカスタムはそのまま残す。
+    /// 初めて適用するときだけ、適用前の割り当てを丸ごと控える(下の復元で戻せる)。
+    func applyPremierePreset() {
+        if !hasPrePresetBackup {
+            let backup = Backup(menu: menuOverrides.mapValues { MenuEntry(key: String($0.key), modifiers: $0.modifiersRaw) },
+                                plain: plainOverrides.mapValues { PlainEntry(keyCode: $0.keyCode, display: $0.display) })
+            if let data = try? JSONEncoder().encode(backup) { defaults.set(data, forKey: Self.backupKey) }
+        }
+        for p in Self.premierePlain { plainOverrides[String(describing: p.command)] = PlainBinding(keyCode: p.keyCode, display: p.display) }
+        for m in Self.premiereMenu { menuOverrides[Self.id(for: m.command)] = m.shortcut }
+        save()
+    }
+
+    /// プリセット適用前の割り当てに戻す。控えが無ければ何もしない。
+    func restorePrePresetBackup() {
+        guard let data = defaults.data(forKey: Self.backupKey),
+              let backup = try? JSONDecoder().decode(Backup.self, from: data) else { return }
+        menuOverrides = backup.menu.compactMapValues { e in
+            guard let ch = e.key.first else { return nil }
+            return MenuShortcut(key: KeyEquivalent(ch), modifiers: EventModifiers(rawValue: e.modifiers))
+        }
+        plainOverrides = backup.plain.mapValues { PlainBinding(keyCode: $0.keyCode, display: $0.display) }
+        defaults.removeObject(forKey: Self.backupKey)
+        save()
+    }
+
     // MARK: 全部戻す
 
     func resetAll() {
