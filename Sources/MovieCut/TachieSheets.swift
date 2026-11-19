@@ -53,7 +53,7 @@ struct TachieListSection: View {
     @ObservedObject var model: ProjectModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        MCDisclosure("left.tachies", defaultOpen: false) {
             HStack {
                 Text("立ち絵素材").font(.headline)
                 Spacer()
@@ -65,6 +65,7 @@ struct TachieListSection: View {
                     .disabled(model.isLocked)
                     .help("立ち絵素材を追加（パーツのフォルダ・PSD）")
             }
+        } content: {
             if model.project.tachies.isEmpty {
                 Text("パーツのフォルダか PSD を取り込むと、ここに並びます。")
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)

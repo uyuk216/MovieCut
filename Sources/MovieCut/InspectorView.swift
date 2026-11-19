@@ -7,14 +7,80 @@ import MovieCutCore
 /// 小さい見出し(タイミング / セリフ / …)。
 struct InspectorSection: View {
     let title: String
+    @Environment(\.inspectorHidesSectionHeader) private var hidden
     var body: some View {
+        if hidden { EmptyView() } else { header }
+    }
+    private var header: some View {
         HStack(spacing: 8) {
             Text(L10n.t(title))
                 .font(MCDesign.Font.calloutSemibold)
-                .foregroundStyle(.secondary)
-            Rectangle().fill(Color(nsColor: .separatorColor)).frame(height: 1)
+                .foregroundStyle(MCDesign.Color.textSecondary)
+            Rectangle().fill(MCDesign.Color.divider).frame(height: 1)
         }
         .padding(.top, 5)
+    }
+}
+
+private struct InspectorHidesSectionHeaderKey: EnvironmentKey { static let defaultValue = false }
+extension EnvironmentValues {
+    /// true のとき InspectorSection は見出しを描かない(外側の DisclosureGroup が見出しを担うとき)。
+    var inspectorHidesSectionHeader: Bool {
+        get { self[InspectorHidesSectionHeaderKey.self] }
+        set { self[InspectorHidesSectionHeaderKey.self] = newValue }
+    }
+}
+
+/// 開閉できる節。開閉は key ごとに UserDefaults へ残る(クリップを替えても、再起動しても保たれる)。
+struct MCDisclosure<Label: View, Content: View>: View {
+    @AppStorage private var isOpen: Bool
+    private let label: Label
+    private let content: Content
+
+    init(_ key: String, defaultOpen: Bool, @ViewBuilder label: () -> Label, @ViewBuilder content: () -> Content) {
+        _isOpen = AppStorage(wrappedValue: defaultOpen, "mc.disclosure.\(key)")
+        self.label = label()
+        self.content = content()
+    }
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $isOpen) {
+            VStack(alignment: .leading, spacing: 8) { content }
+                .padding(.top, MCDesign.Spacing.xs)
+        } label: { label }
+    }
+}
+
+extension MCDisclosure where Label == Text {
+    init(_ key: String, title: String, defaultOpen: Bool, @ViewBuilder content: () -> Content) {
+        self.init(key, defaultOpen: defaultOpen, label: {
+            Text(L10n.t(title)).font(.system(size: 12, weight: .semibold)).foregroundStyle(MCDesign.Color.textSecondary)
+        }, content: content)
+    }
+}
+
+/// 空状態の案内カード(アイコン + 見出し + 説明文)。未選択・複数選択のインスペクタで使う。
+struct InspectorGuideCard: View {
+    let symbol: String
+    let heading: String
+    let message: String
+    var body: some View {
+        VStack(spacing: MCDesign.Spacing.s) {
+            Image(systemName: symbol)
+                .font(.system(size: 28, weight: .light))
+                .foregroundStyle(MCDesign.Color.accent)
+            Text(L10n.t(heading)).font(MCDesign.Font.headline)
+            Text(L10n.t(message))
+                .font(MCDesign.Font.callout)
+                .foregroundStyle(MCDesign.Color.textSecondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(MCDesign.Spacing.l)
+        .frame(maxWidth: .infinity)
+        .background(MCDesign.Color.control, in: RoundedRectangle(cornerRadius: MCDesign.Radius.panel))
+        .overlay(RoundedRectangle(cornerRadius: MCDesign.Radius.panel).stroke(MCDesign.Color.divider))
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -285,12 +351,7 @@ struct InspectorView: View {
                         CharacterInspector(model: model, speakers: speakers, charId: id).id(id)
                     case .none:
                         VStack(alignment: .leading, spacing: 10) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("クリップを選ぶと、ここで編集できます")
-                                    .font(.callout).foregroundStyle(.secondary)
-                                Text("タイムライン上のクリップをクリックして選びます。")
-                                    .font(.caption).foregroundStyle(.tertiary)
-                            }
+                            InspectorGuideCard(symbol: "cursorarrow.click.2", heading: "クリップが選ばれていません", message: "クリップを選ぶと設定が出ます。")
                             CameraSection(model: model)
                         }
                     }
@@ -324,8 +385,7 @@ struct MultiSelectionInspector: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(Title.selected(count)).font(.system(size: 14, weight: .semibold))
-            Text(Title.hint).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            InspectorGuideCard(symbol: "square.on.square", heading: Title.selected(count), message: Title.hint)
             HStack(spacing: 8) {
                 Button(Title.duplicate) { model.duplicateSelected() }
                 Button(Title.delete) { model.deleteSelected() }
@@ -473,47 +533,58 @@ struct ClipInspector: View {
                             .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                     }
                 }
-                InspectorSection(title: "タイミング")
-                HStack(alignment: .top, spacing: 10) {
-                    num("開始（秒）", .start, step: 0.1, decimals: 3)
-                    num("長さ（秒）", .duration, step: 0.1, decimals: 3)
-                }
-                if let usage = SourceUsage.label(of: c) {
-                    HStack(spacing: 8) {
-                        Text(usage).font(MCDesign.Font.subheadline).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
-                        Button("この区間へ") { model.showSourceUsage() }
-                            .controlSize(.small)
-                            .help("再生位置をクリップの頭へ移し、元素材の使用範囲を状態欄に出す")
+                disclose("timing", "タイミング", open: true, hideHeader: true) {
+                    HStack(alignment: .top, spacing: 10) {
+                        num("開始（秒）", .start, step: 0.1, decimals: 3)
+                        num("長さ（秒）", .duration, step: 0.1, decimals: 3)
+                    }
+                    if let usage = SourceUsage.label(of: c) {
+                        HStack(spacing: 8) {
+                            Text(usage).font(MCDesign.Font.subheadline).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                            Button("この区間へ") { model.showSourceUsage() }
+                                .controlSize(.small)
+                                .help("再生位置をクリップの頭へ移し、元素材の使用範囲を状態欄に出す")
+                        }
                     }
                 }
-                InspectorSection(title: "注記")
-                ClipNoteField(model: model, clipId: clipId, note: c.note ?? "").id(clipId)
-                groupSection(c)
+                disclose("note", "注記", open: false, hideHeader: true) {
+                    ClipNoteField(model: model, clipId: clipId, note: c.note ?? "").id(clipId)
+                }
+                disclose("group", "グループ", open: false, hideHeader: true) { groupSection(c) }
                 TrackingSection(model: model, clip: c)
-                if c.type == .voice { voiceSections(c) }
-                if c.type == .text { textSections(c) }
+                if c.type == .voice { disclose("voice", "セリフ", open: true) { voiceSections(c) } }
+                if c.type == .text { disclose("text", "文字", open: true, hideHeader: true) { textSections(c) } }
                 if c.type == .tachie { TachieClipSection(model: model, clip: c) }
-                if TextStyleEditing.supports(c.type) { TextStyleInspector(model: model, store: model.textStyles, clipId: clipId) }
-                if [ClipType.image, .video, .text, .compound, .tachie].contains(c.type) { placeSections(c) }
-                if c.type == .compound { compoundSection(c) }
-                if EffectEditing.supports(c.type) { effectSections(c) }
-                if TransitionEditing.supportsVideo(c.type) { transitionSections(c) }
-                if c.type == .blur { blurSections(c) }
-                if c.type == .visualizer { visualizerSections(c) }
-                if c.type == .shape { shapeSections(c) }
-                if Clip.supportsSpeed(c.type) { speedSections(c) }
-                if StabilizeEditing.supports(c) { stabilizeSections(c) }
-                if Clip.supportsEffects(c.type) { maskSections(c) }
+                if TextStyleEditing.supports(c.type) { disclose("textStyle", "文字のスタイル", open: true) { TextStyleInspector(model: model, store: model.textStyles, clipId: clipId) } }
+                if [ClipType.image, .video, .text, .compound, .tachie].contains(c.type) { disclose("place", "位置・変形", open: true) { placeSections(c) } }
+                if c.type == .compound { disclose("compound", "中身", open: false, hideHeader: true) { compoundSection(c) } }
+                if EffectEditing.supports(c.type) { disclose("effect", "エフェクト", open: false, hideHeader: true) { effectSections(c) } }
+                if TransitionEditing.supportsVideo(c.type) { disclose("transition", "トランジション", open: false, hideHeader: true) { transitionSections(c) } }
+                if c.type == .blur { disclose("blur", "ぼかし", open: true) { blurSections(c) } }
+                if c.type == .visualizer { disclose("visualizer", "ビジュアライザ", open: true) { visualizerSections(c) } }
+                if c.type == .shape { disclose("shape", "図形", open: true) { shapeSections(c) } }
+                if Clip.supportsSpeed(c.type) { disclose("speed", c.isFreeze ? "フリーズフレーム" : "速度", open: false, hideHeader: true) { speedSections(c) } }
+                if StabilizeEditing.supports(c) { disclose("stabilize", "手ぶれ補正", open: false, hideHeader: true) { stabilizeSections(c) } }
+                if Clip.supportsEffects(c.type) { disclose("mask", "形のマスク", open: false, hideHeader: true) { maskSections(c) } }
                 if Clip.supportsWarp(c.type) { warpSections(c) }
                 if (c.type == .video || c.type == .audio) && !c.isFreeze {
-                    InspectorSection(title: "音声")
-                    slider("音量", .volume, step: 0.05, format: Self.pct)
-                    audioFadeFields(c)
-                    AudioFxPanel(model: model, clipId: clipId, forceExpanded: Self.expandAudioFx)
+                    disclose("audio", "音声", open: true, hideHeader: true) {
+                        InspectorSection(title: "音声")
+                        slider("音量", .volume, step: 0.05, format: Self.pct)
+                        audioFadeFields(c)
+                        AudioFxPanel(model: model, clipId: clipId, forceExpanded: Self.expandAudioFx)
+                    }
                 }
                 CameraSection(model: model)
             }
             .onDisappear { model.flushCoalesced() }
+        }
+    }
+
+    /// 節を DisclosureGroup で包む。hideHeader が true なら、中の InspectorSection の見出しは出さない(外側の見出しと重なるため)。
+    @ViewBuilder private func disclose<C: View>(_ key: String, _ title: String, open: Bool, hideHeader: Bool = false, @ViewBuilder _ content: () -> C) -> some View {
+        MCDisclosure("inspector.\(key)", title: title, defaultOpen: open) {
+            content().environment(\.inspectorHidesSectionHeader, hideHeader)
         }
     }
 

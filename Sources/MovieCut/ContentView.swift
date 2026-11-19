@@ -62,9 +62,11 @@ struct ContentView: View {
             Divider()
             // キャラクター・プレビュー・プロパティ・タイムライン(初期配置はこれまでの画面と同じ。並べ替えは DockLayout)
             DockHost(model: model, store: dock)
+            Divider()
+            StatusBar(model: model)
         }
         .frame(minWidth: 1100, minHeight: 700)
-        .background(MCDesign.Color.window)
+        .background(MCDesign.Color.background)
         .preferredColorScheme(.dark)
         .overlay { BusyOverlay(message: model.busyMessage, onCancel: model.transcribeCancel ?? model.aiCancel ?? model.proxyCancel ?? model.imageGenCancel) }
         .sheet(isPresented: $model.showSettings) { SettingsSheet(model: model) }
@@ -152,9 +154,6 @@ struct ContentView: View {
 
 struct ToolbarBar: View {
     @ObservedObject var model: ProjectModel
-    /// ツールバーの幅(解像度・fps は狭いときに省く)。測るまでは広い扱い。
-    @State private var width: CGFloat = 10_000
-
     /// 解像度・fps の表示を出す最小のツールバー幅。これより狭いときは時刻の .help に回す。
     static let resolutionMinWidth: CGFloat = 1280
     static func showsResolution(forWidth w: CGFloat) -> Bool { w >= resolutionMinWidth }
@@ -165,50 +164,74 @@ struct ToolbarBar: View {
         static let all = [addMedia, text, blur, split, delete]
     }
 
+    /// ツールバーの SF Symbols(題と対)。
+    enum Symbol {
+        static let addMedia = "plus.rectangle.on.folder", text = "textformat", blur = "eye.slash", split = "scissors", delete = "trash"
+    }
+
+    /// アイコン + ラベルの標準スタイルのボタンの中身。
+    private func label(_ title: String, _ symbol: String) -> some View {
+        Label(L10n.t(title), systemImage: symbol)
+    }
+
     var body: some View {
         HStack(spacing: 8) {
             Group {
-                Button(Title.addMedia) { model.chooseAndAddMedia() }
+                Button { model.chooseAndAddMedia() } label: { label(Title.addMedia, Symbol.addMedia) }
                     .help(L10n.t("画像・動画・音声を再生ヘッドの位置に追加(Finder からのドラッグ&ドロップも可)"))
-                Button(Title.text) { model.addTextClip() }
+                Button { model.addTextClip() } label: { label(Title.text, Symbol.text) }
                     .help(L10n.t("一番上のレイヤーに文字を追加"))
-                Button(Title.blur) { model.addBlurClip() }
+                Button { model.addBlurClip() } label: { label(Title.blur, Symbol.blur) }
                     .help(L10n.t("一番上のレイヤーにぼかし範囲を追加"))
             }
             .disabled(model.isLocked)
             Divider().frame(height: 18)
             Group {
-                Button(Title.split) { model.splitSelected() }
+                Button { model.splitSelected() } label: { label(Title.split, Symbol.split) }
                     .disabled(model.isLocked || !model.canSplit)
                     .help(L10n.t("選択中のクリップを再生ヘッドで分割(S)"))
-                Button(Title.delete) { model.deleteSelected() }
+                Button { model.deleteSelected() } label: { label(Title.delete, Symbol.delete) }
                     .disabled(model.isLocked || model.selectedClip == nil)
                     .help(L10n.t("選択中のクリップを削除(Delete)"))
             }
             Divider().frame(height: 18)
-            // 再生コントロール(⏮ ▶ 時刻 解像度·fps)は、プレビューの下ではなくここに置く
-            TransportBar(model: model, showsResolution: Self.showsResolution(forWidth: width))
+            // 再生コントロール(⏮ ▶ 時刻)は、プレビューの下ではなくここに置く。解像度・fps は下部のステータスバーへ移した
+            TransportBar(model: model, showsResolution: false)
             Spacer(minLength: 12)
-            Text(statusLine)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.tail)
         }
+        .labelStyle(.titleAndIcon)
         .padding(.horizontal, MCDesign.Spacing.m)
         .padding(.vertical, MCDesign.Spacing.xs)
-        .background(MCDesign.Color.underPage.opacity(0.5))
-        .background(GeometryReader { g in
-            Color.clear
-                .onAppear { width = g.size.width }
-                .onChange(of: g.size.width) { _, w in width = w }
-        })
+        .background(MCDesign.Color.barBackground.opacity(0.5))
     }
+}
 
-    private var statusLine: String {
-        if !model.statusText.isEmpty { return model.statusText }
-        let n = model.project.allClips.count
-        return n > 0 ? "クリップ \(n) 個" : ""
+// MARK: - ステータスバー(ウィンドウ下部)
+
+/// 左: 状態文(従来ツールバー右端にあった文と同じ出所)。右: クリップ数・解像度・fps。
+struct StatusBar: View {
+    @ObservedObject var model: ProjectModel
+
+    /// 左に出す状態文。statusText が空のときは何も出さない(クリップ数は右に常時出す)。
+    static func leftText(_ model: ProjectModel) -> String { model.statusText }
+    static func clipCountText(_ n: Int) -> String { "クリップ \(n) 個" }
+
+    var body: some View {
+        HStack(spacing: MCDesign.Spacing.m) {
+            Text(Self.leftText(model))
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Spacer(minLength: MCDesign.Spacing.m)
+            Text(L10n.t(Self.clipCountText(model.project.allClips.count)))
+            Text(TransportBar.chipText(model))
+        }
+        .font(MCDesign.Font.subheadline)
+        .monospacedDigit()
+        .foregroundStyle(MCDesign.Color.textSecondary)
+        .padding(.horizontal, MCDesign.Spacing.m)
+        .padding(.vertical, MCDesign.Spacing.xs)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(MCDesign.Color.barBackground.opacity(0.5))
     }
 }
 
@@ -227,28 +250,30 @@ struct LeftPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text(L10n.t("キャラクター")).font(.headline)
-                Spacer()
-                Button(L10n.t("＋")) { model.addCharacter() }
-                    .help(L10n.t("キャラクターを追加"))
-                    .accessibilityLabel(L10n.t("キャラクターを追加"))
-            }
-            .padding(.bottom, 8)
-            ScrollView {
-                VStack(spacing: 6) {
-                    ForEach(model.project.characters) { ch in
-                        CharacterRow(ch: ch, speakerName: ch.speaker.flatMap { speakers.label(for: $0) }, selected: ch.id == model.effectiveSelectedCharId, canDelete: model.project.characters.count > 1,
-                                     onDelete: { model.requestDeleteCharacter(ch.id) }) { model.selectCharacter(ch.id) }
-                            .contextMenu {
-                                Button(L10n.t("このキャラを消す"), role: .destructive) { model.requestDeleteCharacter(ch.id) }
-                                    .disabled(model.project.characters.count <= 1)
-                            }
+            MCDisclosure("left.characters", defaultOpen: true) {
+                HStack {
+                    Text(L10n.t("キャラクター")).font(.headline)
+                    Spacer()
+                    Button(L10n.t("＋")) { model.addCharacter() }
+                        .help(L10n.t("キャラクターを追加"))
+                        .accessibilityLabel(L10n.t("キャラクターを追加"))
+                }
+            } content: {
+                ScrollView {
+                    VStack(spacing: 6) {
+                        ForEach(model.project.characters) { ch in
+                            CharacterRow(ch: ch, speakerName: ch.speaker.flatMap { speakers.label(for: $0) }, selected: ch.id == model.effectiveSelectedCharId, canDelete: model.project.characters.count > 1,
+                                         onDelete: { model.requestDeleteCharacter(ch.id) }) { model.selectCharacter(ch.id) }
+                                .contextMenu {
+                                    Button(L10n.t("このキャラを消す"), role: .destructive) { model.requestDeleteCharacter(ch.id) }
+                                        .disabled(model.project.characters.count <= 1)
+                                }
+                        }
                     }
                 }
+                .frame(maxHeight: 176)
+                .fixedSize(horizontal: false, vertical: model.project.characters.count <= 3)
             }
-            .frame(maxHeight: 176)
-            .fixedSize(horizontal: false, vertical: model.project.characters.count <= 3)
             TachieListSection(model: model).padding(.top, 10)
             Text(L10n.t("台本")).font(.headline).padding(.top, 14).padding(.bottom, 4)
             Text(ScriptHelp.caption)
@@ -263,9 +288,9 @@ struct LeftPanel: View {
                     .font(MCDesign.Font.body)
                     .scrollContentBackground(.hidden)
                     .padding(4)
-                    .background(Color(nsColor: .textBackgroundColor))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(nsColor: .separatorColor)))
+                    .background(MCDesign.Color.fieldBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: MCDesign.Radius.control))
+                    .overlay(RoundedRectangle(cornerRadius: MCDesign.Radius.control).stroke(MCDesign.Color.divider))
                 if scriptText.isEmpty {
                     Text(ScriptHelp.placeholder)
                         .font(MCDesign.Font.body)
@@ -385,14 +410,19 @@ struct TransportBar: View {
         static let all = [toStart, play, pause]
     }
 
+    /// 再生バーの SF Symbols。
+    enum Symbol {
+        static let toStart = "backward.end.fill", play = "play.fill", pause = "pause.fill"
+    }
+
     static func chipText(_ model: ProjectModel) -> String { VideoText.chip(width: model.project.width, height: model.project.height, fps: model.project.fps) }
 
     var body: some View {
         HStack(spacing: 10) {
-            Button(Title.toStart) { model.playback.goToStart() }
+            Button { model.playback.goToStart() } label: { Image(systemName: Symbol.toStart) }
                 .help(L10n.t("先頭へ(Home)"))
                 .accessibilityLabel(L10n.t("先頭へ"))
-            Button(model.isPlaying ? Title.pause : Title.play) { model.playback.togglePlay() }
+            Button { model.playback.togglePlay() } label: { Image(systemName: model.isPlaying ? Symbol.pause : Symbol.play) }
                 .help(L10n.t("再生 / 一時停止(Space)"))
                 .accessibilityLabel(L10n.t(model.isPlaying ? "一時停止" : "再生"))
                 .disabled(model.isLocked)
@@ -405,7 +435,7 @@ struct TransportBar: View {
             if showsResolution {
                 Text(Self.chipText(model))
                     .font(MCDesign.Font.subheadline)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(MCDesign.Color.textTertiary)
                     .lineLimit(1)
                     .help(L10n.t("プロジェクトの解像度とフレームレート(出力メニューで変えられます)"))
             }
@@ -430,7 +460,7 @@ struct BusyOverlay: View {
                 }
                 .padding(24)
                 .frame(minWidth: 280)
-                .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .windowBackgroundColor)))
+                .background(RoundedRectangle(cornerRadius: 10).fill(MCDesign.Color.window))
                 .shadow(radius: 20)
             }
         }
