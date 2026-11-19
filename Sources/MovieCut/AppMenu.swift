@@ -144,6 +144,8 @@ enum MenuCommand: Hashable {
     case compoundGroup, compoundUngroup, compoundEnter, compoundExit
     // シーン(W3-01): 一覧・開く・出る(ショートカットは持たない)
     case sceneList, sceneEnter, sceneExit
+    // シーン(R2-3): 選択からシーンを作成(ショートカットは持たない)
+    case sceneCreateFromSelection
     // グループ制御(緩いグループ): 付ける・外す・有効/無効・複合化で合成(ショートカットは持たない)
     case groupClips, ungroupClips, groupToggleDisabled, groupToCompound
     // 編集 ▸ 検索と置換(テロップとセリフの一括置換。ショートカットは持たない)
@@ -420,6 +422,7 @@ struct MenuState: Equatable {
     var isInsideCompound = false     // いま複合クリップの中を編集している(出られる)
     var canSceneEnter = false        // 選択がシーンクリップ(シーンを開いて編集できる)
     var isInsideScene = false        // いまシーンの中を編集している(出られる)
+    var canSceneCreate = false       // クリップを 1 つ以上選んでいる(選択からシーンを作成できる)
     /// 表示 ▸ プレビューの背景(アプリ全体の設定)。
     var previewBackground = PreviewBackground.default
     /// 表示 ▸ プレビュー画質: 上書き(アプリ全体の設定。auto は予算から決める)。
@@ -578,6 +581,7 @@ struct MenuState: Equatable {
         isInsideCompound = m.isInsideCompound
         canSceneEnter = m.selectedSceneClipId != nil
         isInsideScene = m.isInsideScene
+        canSceneCreate = !m.selectedClipIDs.isEmpty
         canAudioAutoSync = AudioSyncEditing.isAvailable(in: p, ids: m.selectedClipIDs)
         canPasteEffects = !m.effectClipboard.isEmpty
         textStyleChoices = m.textStyles.all.map { TextStyleChoice(id: $0.id, name: $0.name, builtin: $0.isBuiltin) }
@@ -957,6 +961,7 @@ enum AppMenuSpec {
          MenuItemSpec(command: .compoundUngroup, title: "複合クリップを解除", shortcut: nil, enabled: s.canEdit && s.canCompoundUngroup, checked: nil),
          MenuItemSpec(command: .compoundEnter, title: "複合クリップの中を編集", shortcut: nil, enabled: s.canEdit && s.canCompoundEnter, checked: nil, hint: "タイムラインで複合クリップをダブルクリックしても入れます"),
          MenuItemSpec(command: .compoundExit, title: "複合クリップから出る", shortcut: nil, enabled: s.hasDocument && s.isInsideCompound, checked: nil),
+         MenuItemSpec(command: .sceneCreateFromSelection, title: "選択からシーンを作成", shortcut: nil, enabled: s.canEdit && s.canSceneCreate, checked: nil, hint: "選んだクリップを新しいシーンにまとめて置き換える"),
          MenuItemSpec(command: .sceneList, title: "シーン一覧…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "名前付きの独立タイムラインを作成・配置・再利用"),
          MenuItemSpec(command: .sceneEnter, title: "シーンを開く", shortcut: nil, enabled: s.canEdit && s.canSceneEnter, checked: nil, hint: "シーンの中身をタイムラインで編集"),
          MenuItemSpec(command: .sceneExit, title: "シーンから出る", shortcut: nil, enabled: s.hasDocument && s.isInsideScene, checked: nil),
@@ -1728,6 +1733,7 @@ enum AppMenu {
             case .compoundUngroup: m.ungroupSelectedCompound()
             case .compoundEnter: m.enterCompound()
             case .compoundExit: m.exitCompound()
+            case .sceneCreateFromSelection: m.createSceneFromSelection()
             case .sceneList: m.openSceneList()
             case .sceneEnter: m.enterSelectedScene()
             case .sceneExit: m.exitSceneScope()

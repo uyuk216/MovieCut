@@ -282,3 +282,109 @@ public enum SceneScope {
         return [rootTitle, s.name.isEmpty ? "シーン" : s.name]
     }
 }
+
+// MARK: - 選択からシーンを作成(R2-3)
+
+public extension SceneEditing {
+    /// 選んだクリップを新しいシーン定義にまとめ、元の位置にそのシーンを参照するシーンクリップを置く。
+    /// 複合クリップの `CompoundEditing.group` と同じ流儀: 中身は元のレイヤーごとに、同じ id・名前・状態の
+    /// レイヤーへ、選んだクリップだけを入れる(時刻は先頭からの秒、1e-9 秒の格子で丸める)。
+    /// シーンクリップは選んだクリップのうち最も前の元のレイヤーに、開始時刻順で入る。
+    ///
+    /// 複合との違いは 2 点:
+    /// - 中身はクリップ自身ではなくプロジェクト級の定義(`Project.scenes`)に置くので、同じシーンを他の場所にも配置して再利用できる。
+    /// - **1 つだけの選択でも作れる**(1 本のクリップを名前付きの再利用可能なシーンに昇格させる用途があるため。
+    ///   複合は「まとめる」操作なので 2 つ未満を拒否するが、こちらは「定義化」が目的なので 1 つでも意味がある)。
+    ///
+    /// 対応する選択範囲は既存の選択モデル(`ClipSelection`)そのまま: 複数トラック・複数クリップの任意の集合
+    /// (⌘クリックのばらばらの選択も、ラバーバンドの矩形選択も同じ経路)。同一レイヤーの一部だけの選択も可。
+    ///
+    /// 拒否するのは: 名前が空 / 選択が空・見つからない id を含む / ロックされたレイヤー・クリップを含む /
+    /// 中身(複合クリップ)に循環がある / 入れ子が深さ上限を超える / 配置先のシーン(`hostSceneId`)への参照を含み
+    /// 循環になる、のいずれか。作成後の描画・音声は作成前と一致する(シーンの描画・平坦化は複合と同じ窓・
+    /// 同じ走査順で中身を辿り、中身のレイヤーの状態(消音・ソロ・非表示)もそのまま写すため)。
+    static func createFromSelection(in p: Project, name: String, clipIds: [String], hostSceneId: String? = nil) -> (project: Project, sceneId: String, clipId: String)? {
+        let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !n.isEmpty else { return nil }
+        let wanted = Set(clipIds)
+        guard !wanted.isEmpty else { return nil }
+        var found: [(ti: Int, ci: Int)] = []
+        for (ti, tr) in p.tracks.enumerated() {
+            for (ci, c) in tr.clips.enumerated() where wanted.contains(c.id) { found.append((ti, ci)) }
+        }
+        guard found.count == wanted.count else { return nil }
+        guard !found.contains(where: { p.tracks[$0.ti].isLocked || p.tracks[$0.ti].clips[$0.ci].isClipLocked }) else { return nil }
+        let picked = found.map { p.tracks[$0.ti].clips[$0.ci] }
+        guard picked.allSatisfy({ !CompoundEditing.hasCycle($0) }) else { return nil }
+        // 深さ: 新しいシーンクリップの 1 段 + 中身の展開の深さが上限以内か(循環する参照は .max になって、ここで拒否される)
+        let innerDepth = picked.map { expansionCost(of: $0, in: p, seen: []) }.max() ?? 0
+        guard innerDepth != .max, 1 + innerDepth <= maxDepth else { return nil }
+        // 配置先がシーンの中のとき: 中身がそのシーンを(直接・間接に)参照していると、配置で循環ができるので拒否する
+        if let host = hostSceneId {
+            for sid in referencedSceneIds(inClips: picked) where sid == host || reaches(in: p, from: sid, target: host) { return nil }
+        }
+
+        let m = picked.map(\.start).min() ?? 0
+        let end = picked.map { $0.start + $0.duration }.max() ?? m
+
+        // 中身: 元のレイヤーごとに、同じ id・名前・状態のレイヤーへ、選んだクリップだけを入れる(時刻は頭からの秒)
+        var out = p
+        var kids: [Track] = []
+        for ti in Set(found.map(\.ti)).sorted() {
+            var kt = p.tracks[ti]
+            kt.clips = p.tracks[ti].clips.filter { wanted.contains($0.id) }.map { c in
+                var k = c
+                k.start = CompoundEditing.grid(c.start - m)
+                return k
+            }
+            kids.append(kt)
+            out.tracks[ti].clips.removeAll { wanted.contains($0.id) }
+        }
+        let scene = SceneDefinition(id: newId(), name: n, tracks: kids)
+        out.scenes.append(scene)
+        var clip = Clip()
+        clip.type = .scene
+        clip.sceneId = scene.id
+        clip.start = m
+        clip.duration = CompoundEditing.grid(end - m)
+        clip.offset = 0
+        let home = found.map(\.ti).min() ?? 0
+        CompoundEditing.insertByStart(clip, into: &out.tracks[home].clips)
+        // 念のための健全性確認: 循環ができていたら作らなかったことにする
+        guard !hasCycle(in: out) else { return nil }
+        return (out, scene.id, clip.id)
+    }
+
+    /// クリップ列の中から、シーン参照を(複合クリップの中まで)集める(`referencedSceneIds(in:)` のクリップ列版)。
+    private static func referencedSceneIds(inClips clips: [Clip]) -> Set<String> {
+        var out: Set<String> = []
+        func walk(_ cs: [Clip]) {
+            for c in cs {
+                if c.type == .scene, let sid = c.sceneId { out.insert(sid) }
+                if c.type == .compound, let kids = c.tracks { walk(kids.flatMap { $0.clips }) }
+            }
+        }
+        walk(clips)
+        return out
+    }
+
+    /// クリップを展開したときの入れ子の深さ(描画・音声の平坦化が積む段数と同じ数え方:
+    /// シーン参照・複合はそれぞれ 1 段、中身の最長で決まる。通常クリップは 0)。
+    /// 循環する参照に届いたら `.max`。参照先の無いシーンクリップは何も出ないので 0。
+    private static func expansionCost(of c: Clip, in p: Project, seen: Set<String>) -> Int {
+        switch c.type {
+        case .scene:
+            guard let sid = c.sceneId, let sc = p.scene(withId: sid) else { return 0 }
+            let key = "scene:\(sid)"
+            guard !seen.contains(key) else { return .max }
+            let inner = sc.tracks.flatMap { $0.clips }.map { expansionCost(of: $0, in: p, seen: seen.union([key])) }.max() ?? 0
+            return inner == .max ? .max : 1 + inner
+        case .compound:
+            guard !seen.contains(c.id) else { return .max }
+            let inner = (c.tracks ?? []).flatMap { $0.clips }.map { expansionCost(of: $0, in: p, seen: seen.union([c.id])) }.max() ?? 0
+            return inner == .max ? .max : 1 + inner
+        default:
+            return 0
+        }
+    }
+}

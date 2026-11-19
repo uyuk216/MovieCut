@@ -95,6 +95,42 @@ extension ProjectModel {
         return true
     }
 
+    // MARK: 選択から作成(R2-3)
+
+    /// 選択から作るときの既定の名前(「シーン 1」「シーン 2」…のうち、まだ使われていない最初のもの)。
+    func defaultSceneName() -> String {
+        let names = Set(project.scenes.map(\.name))
+        var i = 1
+        while names.contains("シーン \(i)") { i += 1 }
+        return "シーン \(i)"
+    }
+
+    /// 選んでいるクリップ(1 つ以上・複数トラック可)を新しいシーン定義にまとめ、元の位置にシーンクリップを置く。
+    /// 計算は `SceneEditing.createFromSelection`。全体で 1 回の Undo で、作ったシーンクリップを選ぶ。
+    /// シーンの中を編集中なら、そのシーンの中の選択が対象で、シーンクリップもその中へ置かれる
+    /// (循環になる作成は Core が拒否する)。名前を渡さなければ `defaultSceneName()`。
+    @discardableResult
+    func createSceneFromSelection(name: String? = nil) -> (sceneId: String, clipId: String)? {
+        guard !isLocked else { return nil }
+        let ids = LayerEditing.editableIds(selectedClipIDs, in: project)
+        guard !ids.isEmpty else { statusText = "シーンにするクリップを選んでください"; return nil }
+        let sceneName = name ?? defaultSceneName()
+        var made: (sceneId: String, clipId: String)?
+        let ok = edit("選択からシーンを作成") { p in
+            if let r = SceneEditing.createFromSelection(in: p, name: sceneName, clipIds: Array(ids), hostSceneId: editingSceneId) {
+                p = r.project
+                made = (sceneId: r.sceneId, clipId: r.clipId)
+            }
+        }
+        guard ok, let made else {
+            statusText = "シーンを作成できません(深すぎる入れ子、循環する参照のいずれか)"
+            return nil
+        }
+        selectOnly(made.clipId)
+        statusText = "選択からシーン「\(sceneName)」を作成しました"
+        return made
+    }
+
     /// 選んでいるクリップがシーンクリップか(メニューの有効・無効)。
     var selectedSceneClipId: String? {
         guard let c = selectedClip, c.type == .scene else { return nil }

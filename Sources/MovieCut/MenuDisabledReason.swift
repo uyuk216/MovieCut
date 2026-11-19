@@ -113,6 +113,7 @@ extension AppMenuSpec {
         case .motionTrack: return "文字・図形・画像のクリップを選んでください"
         case .groupClips: return "2 つ以上のクリップを選んでください"
         case .ungroupClips, .groupToggleDisabled, .groupToCompound: return "グループに入っているクリップを選んでください"
+        case .sceneCreateFromSelection: return "クリップを選んでください"
         case .compoundGroup: return "2 つ以上のクリップを選んでください"
         case .compoundUngroup: return "複合クリップを選んでください"
         case .compoundEnter: return "中身のある複合クリップを選んでください"
