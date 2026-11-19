@@ -33,7 +33,15 @@ extension ProjectModel {
     }
 
     func addPuppetPin(fixed: Bool, clipId: String? = nil) {
-        setClipProperty({ c in _ = WarpEditing.addPin(&c, hx: 0.5, hy: 0.5, fixed: fixed) }, name: Self.warpUndoName, clipId: clipId)
+        addPuppetPin(fixed: fixed, atX: 0.5, atY: 0.5, clipId: clipId)
+    }
+
+    /// ピンを任意の位置(割合・左上原点)に打つ。パペット変形が無ければ用意するところから 1 回の Undo。
+    func addPuppetPin(fixed: Bool, atX hx: Double, atY hy: Double, clipId: String? = nil) {
+        setClipProperty({ c in
+            _ = WarpEditing.ensurePuppet(&c)
+            _ = WarpEditing.addPin(&c, hx: hx, hy: hy, fixed: fixed)
+        }, name: Self.warpUndoName, clipId: clipId)
     }
 
     func removePuppetPin(index: Int, clipId: String? = nil) {
@@ -54,12 +62,26 @@ extension ProjectModel {
         if gestureBase != nil { updateGesture(p) } else if p != project { edit(Self.warpUndoName) { $0 = p } }
     }
 
+    /// スライダー・プレビューのドラッグ用: その座標にキーがあれば再生ヘッドのキーを書き、無ければ静的な値を書く。
     func liveMeshPoint(clipId: String, index: Int, x: Double, y: Double) {
-        liveWarp(clipId: clipId) { c in _ = WarpEditing.setMeshPoint(&c, index: index, x: x, y: y) }
+        let tol = keyTolerance
+        liveWarp(clipId: clipId) { c in _ = WarpEditing.setMeshPointKeyed(&c, index: index, x: x, y: y, at: min(max(currentTime - c.start, 0), c.duration), tolerance: tol) }
+    }
+
+    /// 1 座標だけの版(横/縦スライダー用。もう一方の座標にキーがあっても触らない)。
+    func liveMeshAxis(clipId: String, index: Int, axis: WarpKey.Axis, _ v: Double) {
+        let tol = keyTolerance
+        liveWarp(clipId: clipId) { c in _ = WarpEditing.setMeshAxisKeyed(&c, index: index, axis: axis, v, at: min(max(currentTime - c.start, 0), c.duration), tolerance: tol) }
     }
 
     func livePuppetPin(clipId: String, index: Int, x: Double, y: Double) {
-        liveWarp(clipId: clipId) { c in _ = WarpEditing.movePin(&c, index: index, x: x, y: y) }
+        let tol = keyTolerance
+        liveWarp(clipId: clipId) { c in _ = WarpEditing.movePinKeyed(&c, index: index, x: x, y: y, at: min(max(currentTime - c.start, 0), c.duration), tolerance: tol) }
+    }
+
+    func livePuppetAxis(clipId: String, index: Int, axis: WarpKey.Axis, _ v: Double) {
+        let tol = keyTolerance
+        liveWarp(clipId: clipId) { c in _ = WarpEditing.movePinAxisKeyed(&c, index: index, axis: axis, v, at: min(max(currentTime - c.start, 0), c.duration), tolerance: tol) }
     }
 
     func livePuppetRadius(clipId: String, _ radius: Double) {

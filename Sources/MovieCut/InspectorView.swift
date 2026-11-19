@@ -794,7 +794,7 @@ struct ClipInspector: View {
         }
     }
 
-    // MARK: メッシュ変形・パペット変形(数値編集。プレビュー上のドラッグは未達)
+    // MARK: メッシュ変形・パペット変形(数値編集 + プレビュー上のドラッグ + キーフレーム)
 
     @ViewBuilder private func warpSections(_ c: Clip) -> some View {
         InspectorSection(title: "メッシュ変形")
@@ -817,10 +817,10 @@ struct ClipInspector: View {
                         .controlSize(.mini)
                         .disabled(model.isLocked || (abs(pt.x - home.x) < 1e-9 && abs(pt.y - home.y) < 1e-9))
                 }
-                warpSlider("横", pt.x) { v in model.liveMeshPoint(clipId: clipId, index: i, x: v, y: pt.y) }
-                warpSlider("縦", pt.y) { v in model.liveMeshPoint(clipId: clipId, index: i, x: pt.x, y: v) }
+                warpSlider("横", model.animatedValue(WarpKey.mesh(i, .x), of: c), key: WarpKey.mesh(i, .x)) { v in model.liveMeshAxis(clipId: clipId, index: i, axis: .x, v) }
+                warpSlider("縦", model.animatedValue(WarpKey.mesh(i, .y), of: c), key: WarpKey.mesh(i, .y)) { v in model.liveMeshAxis(clipId: clipId, index: i, axis: .y, v) }
             }
-            Text("制御点を元の位置からずらすと、その周りが引っ張られて変形します。全点が元の位置のときは変形しません。")
+            Text("制御点を元の位置からずらすと、その周りが引っ張られて変形します。全点が元の位置のときは変形しません。プレビュー上でも制御点をドラッグでき、◇ でキーフレームを付けると位置が時間で動きます。")
                 .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
         InspectorSection(title: "パペット変形")
@@ -849,17 +849,17 @@ struct ClipInspector: View {
                     Text("元の位置（\(Int(pin.hx * 100))%, \(Int(pin.hy * 100))%）に固定されています")
                         .font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
                 } else {
-                    warpSlider("横", pin.x) { v in model.livePuppetPin(clipId: clipId, index: i, x: v, y: pin.y) }
-                    warpSlider("縦", pin.y) { v in model.livePuppetPin(clipId: clipId, index: i, x: pin.x, y: v) }
+                    warpSlider("横", model.animatedValue(WarpKey.pin(i, .x), of: c), key: WarpKey.pin(i, .x)) { v in model.livePuppetAxis(clipId: clipId, index: i, axis: .x, v) }
+                    warpSlider("縦", model.animatedValue(WarpKey.pin(i, .y), of: c), key: WarpKey.pin(i, .y)) { v in model.livePuppetAxis(clipId: clipId, index: i, axis: .y, v) }
                 }
             }
-            Text("ピンの元の位置は追加した場所（中央）です。ピンを動かすと、影響半径の内側が滑らかに追従します。固定ピンの周りは動きません。")
+            Text("ピンはプレビュー上でもドラッグでき、クリップの中をダブルクリックするとその場所にピンが増えます（Shift+ダブルクリックで固定ピン）。ピンを動かすと、影響半径の内側が滑らかに追従します。固定ピンの周りは動きません。◇ でキーフレームを付けると位置が時間で動きます。")
                 .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
     }
 
-    private func warpSlider(_ label: String, _ value: Double, range: ClosedRange<Double> = -0.5...1.5, change: @escaping (Double) -> Void) -> some View {
-        LiveSlider(label: label, value: value, range: range, step: 0.01, format: Self.pct,
+    private func warpSlider(_ label: String, _ value: Double, range: ClosedRange<Double> = -0.5...1.5, key: String? = nil, change: @escaping (Double) -> Void) -> some View {
+        LiveSlider(label: label, key: keyControl(key), value: value, range: range, step: 0.01, format: Self.pct,
                    begin: { model.beginGesture() },
                    change: change,
                    end: { model.commitGesture(ProjectModel.warpUndoName) })

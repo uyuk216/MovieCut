@@ -34,7 +34,12 @@ struct PreviewView: NSViewRepresentable {
               [ClipType.image, .video, .text, .tachie].contains(c.type), time >= c.start, time < c.start + c.duration,
               let size = Renderer(project: project, assets: assets).objectSize(of: c, at: time) else { return nil }
         let canvas = CGSize(width: project.width, height: project.height)
-        return PreviewOverlayTarget(clipId: c.id, box: TransformBox.make(clip: c, objectSize: size, at: time - c.start, canvas: canvas), canvas: canvas)
+        var target = PreviewOverlayTarget(clipId: c.id, box: TransformBox.make(clip: c, objectSize: size, at: time - c.start, canvas: canvas), canvas: canvas)
+        // メッシュ/パペット変形の取っ手(時刻で評価した位置)。変形が無いクリップでは空で、従来の表示と変わらない
+        target.warpHandles = c.warpHandles(at: time - c.start)
+        target.meshCols = c.meshWarp?.cols ?? 0
+        target.meshRows = c.meshWarp?.rows ?? 0
+        return target
     }
 }
 
@@ -43,6 +48,10 @@ struct PreviewOverlayTarget: Equatable {
     var clipId: String
     var box: TransformBox
     var canvas: CGSize
+    /// 変形の取っ手(メッシュの制御点・パペットのピン)。空なら変形の表示は出ない。
+    var warpHandles: [WarpHandle] = []
+    var meshCols: Int = 0
+    var meshRows: Int = 0
 }
 
 /// 描画要求をまとめる(古い要求は捨てて、最新だけ描く)。
@@ -116,6 +125,9 @@ final class PreviewCanvasView: NSView {
     // 直接操作(選択枠 + 4 つの角 + 回転の取っ手)
     private let outlineLayer = CAShapeLayer()
     private let handleLayer = CAShapeLayer()
+    /// 変形の取っ手(格子の線・ピンの元の位置は線レイヤー、動かせる取っ手は塗りレイヤー)。
+    private let warpLineLayer = CAShapeLayer()
+    private let warpHandleLayer = CAShapeLayer()
     private(set) var overlay: PreviewOverlayTarget?
     struct ManipulationDrag {
         var kind: DirectManipulation.Kind
@@ -124,6 +136,8 @@ final class PreviewCanvasView: NSView {
         var base: Clip
         var relTime: Double
         var name: String
+        /// 変形の取っ手のドラッグのとき、その取っ手の種類(通常の変形ドラッグでは nil)。
+        var warp: WarpKey.Kind? = nil
     }
     private(set) var manipulation: ManipulationDrag?
     /// ガイド線(表示 ▸ ガイド線)。プレビューの上に重ねるだけで、書き出しには入らない。
@@ -164,9 +178,19 @@ final class PreviewCanvasView: NSView {
         guideLayer.strokeColor = NSColor(white: 1, alpha: 0.6).cgColor
         guideLayer.lineWidth = 1
         guideLayer.isHidden = true
+        warpLineLayer.fillColor = nil
+        warpLineLayer.strokeColor = NSColor(srgbRed: 0.35, green: 0.8, blue: 1, alpha: 0.9).cgColor
+        warpLineLayer.lineWidth = 1
+        warpLineLayer.isHidden = true
+        warpHandleLayer.fillColor = NSColor.white.cgColor
+        warpHandleLayer.strokeColor = NSColor(srgbRed: 0.1, green: 0.45, blue: 0.7, alpha: 1).cgColor
+        warpHandleLayer.lineWidth = 1.25
+        warpHandleLayer.isHidden = true
         root.addSublayer(guideLayer)
         root.addSublayer(outlineLayer)
         root.addSublayer(handleLayer)
+        root.addSublayer(warpLineLayer)
+        root.addSublayer(warpHandleLayer)
         NotificationCenter.default.addObserver(self, selector: #selector(guidesChanged), name: PreviewGuideStore.didChange, object: nil)
     }
     required init?(coder: NSCoder) { fatalError() }
@@ -270,8 +294,10 @@ final class PreviewCanvasView: NSView {
     private func redrawOverlay() {
         guard let o = overlay, o.canvas.width > 0, frameLayer.frame.width > 0 else {
             outlineLayer.isHidden = true; handleLayer.isHidden = true
+            warpLineLayer.isHidden = true; warpHandleLayer.isHidden = true
             return
         }
+        redrawWarpHandles(o)
         let corners = o.box.corners.map { viewPoint($0, canvas: o.canvas) }
         let rot = viewPoint(o.box.rotationHandle, canvas: o.canvas)
         let top = viewPoint(CGPoint(x: (o.box.corners[0].x + o.box.corners[1].x) / 2, y: (o.box.corners[0].y + o.box.corners[1].y) / 2), canvas: o.canvas)
@@ -289,6 +315,55 @@ final class PreviewCanvasView: NSView {
         CATransaction.commit()
     }
 
+    /// 変形の取っ手を描く: 格子の線、ピンの元の位置(小さい丸)と現在位置への線、固定ピンの輪、
+    /// 動かせる取っ手(メッシュは四角、ピンは丸)。変形が無ければ両レイヤーを隠す。
+    private func redrawWarpHandles(_ o: PreviewOverlayTarget) {
+        guard !o.warpHandles.isEmpty else {
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            warpLineLayer.isHidden = true; warpHandleLayer.isHidden = true
+            CATransaction.commit()
+            return
+        }
+        func vp(_ p: WarpPoint) -> CGPoint { viewPoint(WarpDrag.canvasPoint(p, box: o.box), canvas: o.canvas) }
+        let lines = CGMutablePath()
+        if o.meshCols > 1, o.meshRows > 1 {
+            func meshPt(_ i: Int) -> CGPoint? {
+                o.warpHandles.first { $0.kind == .mesh(i) }.map { vp($0.position) }
+            }
+            for r in 0..<o.meshRows {
+                for c in 0..<(o.meshCols - 1) {
+                    if let a = meshPt(r * o.meshCols + c), let b = meshPt(r * o.meshCols + c + 1) { lines.move(to: a); lines.addLine(to: b) }
+                }
+            }
+            for c in 0..<o.meshCols {
+                for r in 0..<(o.meshRows - 1) {
+                    if let a = meshPt(r * o.meshCols + c), let b = meshPt((r + 1) * o.meshCols + c) { lines.move(to: a); lines.addLine(to: b) }
+                }
+            }
+        }
+        for h in o.warpHandles {
+            guard case .pin = h.kind else { continue }
+            let cur = vp(h.position), home = vp(h.home)
+            if cur != home { lines.move(to: home); lines.addLine(to: cur) }
+            lines.addEllipse(in: CGRect(x: home.x - 3, y: home.y - 3, width: 6, height: 6))
+            if h.fixed { lines.addEllipse(in: CGRect(x: cur.x - 6, y: cur.y - 6, width: 12, height: 12)) }
+        }
+        let handles = CGMutablePath()
+        for h in o.warpHandles where !h.fixed {
+            let c = vp(h.position)
+            switch h.kind {
+            case .mesh: handles.addRect(CGRect(x: c.x - 4.5, y: c.y - 4.5, width: 9, height: 9))
+            case .pin: handles.addEllipse(in: CGRect(x: c.x - 5.5, y: c.y - 5.5, width: 11, height: 11))
+            }
+        }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        warpLineLayer.path = lines
+        warpHandleLayer.path = handles
+        warpLineLayer.isHidden = false; warpHandleLayer.isHidden = false
+        CATransaction.commit()
+    }
+
     /// 取っ手に反応する半径をキャンバスの画素に直したもの。
     private func hitRadius(canvas: CGSize) -> Double {
         let f = frameLayer.frame
@@ -303,6 +378,8 @@ final class PreviewCanvasView: NSView {
         // 入力欄にフォーカスが残っていると、Delete・Space がクリップに届かない。プレビューを押したら入力を終える
         if KeyRouter.isTextInput(window?.firstResponder) { window?.makeFirstResponder(nil) }
         let v = convert(event.locationInWindow, from: nil)
+        // ダブルクリック: 選択中のクリップの中なら、その場所にパペットのピンを打つ(Shift で固定ピン)
+        if event.clickCount == 2, addPuppetPinAt(atViewPoint: v, fixed: event.modifierFlags.contains(.shift)) { return }
         // ⌥ クリック: その場所に重なったクリップを手前から奥へ巡回して選ぶ(ドラッグは始めない)
         if event.modifierFlags.contains(.option), pickOverlapping(atViewPoint: v) { return }
         // 選んでいる枠の上なら、そのままドラッグ(移動・拡大・回転)。外なら、押した場所のいちばん手前が立ち絵(絵のある所)のとき、それを選び、続けてドラッグできる
@@ -334,6 +411,18 @@ final class PreviewCanvasView: NSView {
         guard canvas.width > 0, canvas.height > 0 else { return false }
         return m.pickPreviewClip(atCanvasPoint: canvasPoint(v, canvas: canvas))
     }
+    /// ダブルクリックした場所(選択中のクリップの中)にパペットのピンを打つ。打てたら true。Undo は 1 回。
+    @discardableResult
+    func addPuppetPinAt(atViewPoint v: CGPoint, fixed: Bool = false) -> Bool {
+        guard let o = overlay, let m = model, !m.isLocked, let c = m.clip(o.clipId), Clip.supportsWarp(c.type) else { return false }
+        let p = canvasPoint(v, canvas: o.canvas)
+        guard o.box.hitTest(p, radius: 0) != .none else { return false }
+        let wp = WarpDrag.warpPoint(canvas: p, box: o.box)
+        guard wp.x >= -0.001, wp.x <= 1.001, wp.y >= -0.001, wp.y <= 1.001 else { return false }
+        m.addPuppetPin(fixed: fixed, atX: wp.x, atY: wp.y, clipId: c.id)
+        return m.clip(c.id)?.puppetWarp != nil
+    }
+
     override func mouseDragged(with event: NSEvent) { dragManipulation(toViewPoint: convert(event.locationInWindow, from: nil), snapRotation: event.modifierFlags.contains(.shift)) }
     override func mouseUp(with event: NSEvent) { endManipulation() }
 
@@ -342,6 +431,12 @@ final class PreviewCanvasView: NSView {
     func beginManipulation(atViewPoint v: CGPoint) -> Bool {
         guard let o = overlay, let m = model, !m.isLocked, let c = m.clip(o.clipId) else { return false }
         let p = canvasPoint(v, canvas: o.canvas)
+        // 変形の取っ手が一番手前(掴んだら、その点・ピンを動かす。通常の移動・拡大・回転より優先)
+        if let h = WarpDrag.hitTest(p, handles: o.warpHandles, box: o.box, radius: hitRadius(canvas: o.canvas)) {
+            m.beginGesture()
+            manipulation = ManipulationDrag(kind: .move, clipId: c.id, start: p, base: c, relTime: min(max(m.currentTime - c.start, 0), c.duration), name: "プレビューで変形", warp: h.kind)
+            return true
+        }
         let kind: DirectManipulation.Kind, name: String
         switch o.box.hitTest(p, radius: hitRadius(canvas: o.canvas)) {
         case .body: kind = .move; name = "プレビューで移動"
@@ -358,7 +453,12 @@ final class PreviewCanvasView: NSView {
         guard let d = manipulation, let o = overlay, let m = model, let base = m.gestureBase,
               let loc = ClipEditing.locate(d.clipId, in: base) else { return }
         let p = canvasPoint(v, canvas: o.canvas)
-        let c = DirectManipulation.apply(d.kind, to: d.base, at: d.relTime, tolerance: m.keyTolerance, from: d.start, to: p, canvas: o.canvas, snapRotation: snapRotation)
+        let c: Clip
+        if let wk = d.warp {
+            c = WarpDrag.apply(wk, to: d.base, at: d.relTime, tolerance: m.keyTolerance, canvas: p, box: o.box)
+        } else {
+            c = DirectManipulation.apply(d.kind, to: d.base, at: d.relTime, tolerance: m.keyTolerance, from: d.start, to: p, canvas: o.canvas, snapRotation: snapRotation)
+        }
         var pr = base
         pr.tracks[loc.track].clips[loc.index] = c
         m.updateGesture(pr)
