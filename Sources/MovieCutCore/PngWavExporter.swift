@@ -16,6 +16,9 @@ import CoreGraphics
 // - 音声が無いプロジェクトでも、尺いっぱいの無音 WAV を書く(NLE 側で映像と同期が取れる)。
 // - ラウドネス正規化は任意(既定は無効 = 従来のミックスそのまま)。有効時は WAV にだけ効く。
 // - キャンセル・失敗のときは、その回に書いたファイルをすべて消す(中途半端な組を残さない)。
+//   WAV は、その回に作ったもの(.part から置き換えたもの)だけを消す。WAV 工程に入る前に
+//   止まったときは、同名の既存 WAV(前回の書き出し結果など)には触らない(PNG 側の
+//   「書けたものだけ消す」流儀に揃える。既存 WAV の置き換えは、変換が成功してから行う)。
 
 /// 連番 PNG + WAV の書き出し設定。
 public struct PngWavOptions: Equatable, Sendable {
@@ -95,9 +98,14 @@ public enum PngWavExporter {
         let work = Task.detached(priority: .userInitiated) { () throws -> Result in
             var written: [String] = []
             let wavURL = directory.appendingPathComponent(p.wavFileName)
+            // F-5: この回に WAV を作ったか(.part の置き換えまで進んだか)と、変換途中の .part の場所。
+            // cleanup が既存 WAV を巻き込まないよう、作ったものだけを消すための記録。
+            var wavCreated = false
+            var wavPartURL: URL? = nil
             func cleanup() {
                 for f in written { try? FileManager.default.removeItem(at: directory.appendingPathComponent(f)) }
-                try? FileManager.default.removeItem(at: wavURL)
+                if let part = wavPartURL { try? FileManager.default.removeItem(at: part) }
+                if wavCreated { try? FileManager.default.removeItem(at: wavURL) }
             }
             do {
                 // 映像: 1 コマずつ描いて書く(長尺でも 1 コマ分しかメモリに置かない)
@@ -135,15 +143,21 @@ public enum PngWavExporter {
                 }
                 if Task.isCancelled { throw CancellationError() }
                 let partWav = directory.appendingPathComponent(".moviecut-\(UUID().uuidString).wav.part")
+                wavPartURL = partWav
                 do {
                     try WavFileWriter.convertToWav16(input: audioURL, output: partWav)
                     try? FileManager.default.removeItem(at: wavURL)
                     try FileManager.default.moveItem(at: partWav, to: wavURL)
+                    // ここから先は wavURL が「この回の WAV」。失敗・キャンセル時の cleanup で消してよい。
+                    wavCreated = true
+                    wavPartURL = nil
                 } catch {
                     try? FileManager.default.removeItem(at: partWav)
                     throw error
                 }
                 progress?(1.0)
+                // WAV を作った直後にキャンセルされていたら、その回のファイル一式を残さない(cleanup 側で消える)。
+                if Task.isCancelled { throw CancellationError() }
                 let info = try WavFileWriter.info(of: wavURL)
                 return Result(directory: directory, frameCount: written.count, files: written,
                               wavURL: wavURL, wavDuration: info.duration, hasAudio: mix.sourceCount > 0)
