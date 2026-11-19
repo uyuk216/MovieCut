@@ -1,9 +1,9 @@
 import SwiftUI
 import MovieCutCore
 
-/// 「アクセント編集…」: ボイスクリップの VOICEVOX アクセント句を、モーラ単位で核位置を変えて再合成する画面。
+/// 「アクセント編集…」: ボイスクリップの VOICEVOX アクセント句を、モーラ単位で核位置・長さ・音高を変えて再合成する画面。
 /// 初期表示は保存済みのアクセント。無ければ VOICEVOX から取得する(エンジンが止まっていれば起動を試す)。
-/// 「適用して再合成」は `resynthesizeVoice` で 1 回の Undo にまとめる。
+/// 「適用して再合成」は `resynthesizeVoice` で 1 回の Undo にまとめる(核位置・長さ・音高の変更は全部まとめて 1 回の Undo)。
 struct VoicevoxAccentSheet: View {
     @ObservedObject var model: ProjectModel
     let clipId: String
@@ -20,7 +20,7 @@ struct VoicevoxAccentSheet: View {
             Text("アクセント編集").font(.headline)
             Text("読み上げ文: \(bodyText)")
                 .font(MCDesign.Font.callout).foregroundStyle(MCDesign.Color.textSecondary).lineLimit(2)
-            Text("モーラ(かな)を押すと、そこで音が下がる位置(核)になります。もう一度押すと平板に戻ります。")
+            Text("モーラ(かな)を押すと、そこで音が下がる位置(核)になります。もう一度押すと平板に戻ります。各モーラの「長さ」と「音高」はスライダーで変えられます(長さは子音+母音の合計を、比率を保って伸縮します)。")
                 .font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary).fixedSize(horizontal: false, vertical: true)
             if loading {
                 HStack(spacing: 6) {
@@ -38,7 +38,7 @@ struct VoicevoxAccentSheet: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.vertical, 4)
             }
-            .frame(minHeight: 180, maxHeight: 320)
+            .frame(minHeight: 180, maxHeight: 420)
             HStack(spacing: 8) {
                 Button("再取得") { Task { await fetch() } }
                     .disabled(loading || model.isLocked)
@@ -95,12 +95,62 @@ struct VoicevoxAccentSheet: View {
                     Text("平板").font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary)
                 }
             }
+            // モーラ単位の長さ・音高スライダー(R2-1)
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(p.moras.indices, id: \.self) { m in moraSliderRow(i, m) }
+            }
+            .padding(.top, 2)
+        }
+    }
+
+    /// 1 モーラ分の長さ・音高スライダー。長さは子音+母音の合計(秒)、音高は log f0。
+    /// 音高が 0 のモーラ(無声)はスライダーを出さず、その旨だけ表示する。
+    private func moraSliderRow(_ i: Int, _ m: Int) -> some View {
+        let mora = phrases[i].moras[m]
+        return HStack(spacing: 6) {
+            Text(mora.text)
+                .font(MCDesign.Font.subheadline)
+                .frame(width: 22, alignment: .leading)
+            Text("長さ").font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary)
+            Slider(value: Binding(
+                get: { min(max(mora.totalLength, VoicevoxAccent.moraLengthSliderRange.lowerBound), VoicevoxAccent.moraLengthSliderRange.upperBound) },
+                set: { setMoraLength($0, phrase: i, mora: m) }),
+                   in: VoicevoxAccent.moraLengthSliderRange, step: 0.005)
+                .frame(width: 130)
+                .help("モーラ全体の長さ(子音+母音)。比率を保って伸縮します")
+            Text(String(format: "%.2f", mora.totalLength))
+                .font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary).monospacedDigit()
+                .frame(width: 34, alignment: .trailing)
+            Text("音高").font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary)
+            if mora.pitch > 0 {
+                Slider(value: Binding(
+                    get: { min(max(mora.pitch, VoicevoxAccent.moraPitchSliderRange.lowerBound), VoicevoxAccent.moraPitchSliderRange.upperBound) },
+                    set: { setMoraPitch($0, phrase: i, mora: m) }),
+                       in: VoicevoxAccent.moraPitchSliderRange, step: 0.05)
+                    .frame(width: 130)
+                    .help("モーラの音高")
+                Text(String(format: "%.2f", mora.pitch))
+                    .font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary).monospacedDigit()
+                    .frame(width: 34, alignment: .trailing)
+            } else {
+                Text("音高なし(無声)").font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary)
+            }
         }
     }
 
     /// 核位置を変える。範囲は句のモーラ数に収める(0 = 平板)。
     private func setAccent(_ v: Int, at i: Int) {
         phrases = VoicevoxAccent.settingAccent(v, at: i, in: phrases)
+    }
+
+    /// モーラ全体の長さを変える(子音・母音の比率は Core 側で保つ)。
+    private func setMoraLength(_ v: Double, phrase i: Int, mora m: Int) {
+        phrases = VoicevoxAccent.settingMoraLength(v, phrase: i, mora: m, in: phrases)
+    }
+
+    /// モーラの音高を変える。
+    private func setMoraPitch(_ v: Double, phrase i: Int, mora m: Int) {
+        phrases = VoicevoxAccent.settingMoraPitch(v, phrase: i, mora: m, in: phrases)
     }
 
     /// VOICEVOX から取得する。エンジンが止まっていれば起動を試し、だめなら日本語で止める。
