@@ -33,6 +33,8 @@ final class ExportPanelOptions: NSObject {
     /// 完成ミックスのラウドネス正規化(既定オフ)と目標値。ピーク上限は Core 既定(-1 dBTP)のまま。
     static let loudnessTargetChoices: [Double] = [-11, -14, -16, -18, -20]
     private let loudnessBox = NSButton(checkboxWithTitle: "ラウドネス正規化", target: nil, action: nil)
+    /// 字幕トラック(mov_text)の埋め込み(既定オフ = 従来どおり)。MP4 のときだけ効く。
+    private let embedBox = NSButton(checkboxWithTitle: L10n.t("字幕を埋め込む"), target: nil, action: nil)
     private let loudnessPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     weak var panel: NSSavePanel?
     /// 「現在の設定」で書き出すときのコーデック(ProRes なら .mov)。
@@ -63,6 +65,10 @@ final class ExportPanelOptions: NSObject {
         loudnessPopup.selectItem(at: Self.loudnessTargetChoices.firstIndex(of: LoudnessNormalizationSettings.defaultTargetLUFS) ?? 0)
         loudnessPopup.isEnabled = false
         loudnessPopup.setAccessibilityIdentifier("export-loudness-target")
+        embedBox.state = .off
+        embedBox.setAccessibilityIdentifier("export-embed-subtitles")
+        // 最初の選択が音声のみ / ProRes のときは、最初から無効にしておく(kindChanged と同じ条件)
+        embedBox.isEnabled = !initial.audioOnly && !(initial.spec == nil && OutputPlan.isProRes(projectCodec))
     }
 
     @objc func loudnessToggled(_ sender: Any?) { loudnessPopup.isEnabled = loudnessBox.state == .on }
@@ -73,6 +79,11 @@ final class ExportPanelOptions: NSObject {
         let i = loudnessPopup.indexOfSelectedItem
         let t = i >= 0 && i < Self.loudnessTargetChoices.count ? Self.loudnessTargetChoices[i] : LoudnessNormalizationSettings.defaultTargetLUFS
         return .enabled(targetLUFS: t)
+    }
+
+    /// 選んだ字幕埋め込みの設定(チェックがオフなら .disabled)。
+    var selectedSubtitleEmbed: SubtitleEmbedSettings {
+        embedBox.state == .on ? SubtitleEmbedSettings(enabled: true) : .disabled
     }
 
     var selectedChoice: ExportChoice { choices[max(0, min(kindPopup.indexOfSelectedItem, choices.count - 1))] }
@@ -88,6 +99,8 @@ final class ExportPanelOptions: NSObject {
         panel.allowedContentTypes = [contentType(for: c)]
         panel.nameFieldStringValue = c.spec?.suggestedFileName(documentName: documentName) ?? documentName + "." + OutputPlan.fileExtension(forCodec: projectCodec)
         panel.title = c.spec.map { "書き出し — \($0.name)" } ?? (OutputPlan.isProRes(projectCodec) ? "\(OutputPlan.codecLabel(projectCodec)) 書き出し" : "MP4 書き出し")
+        // 埋め込みは MP4 だけ(音声のみと ProRes の .mov では字幕トラックを入れない)
+        embedBox.isEnabled = !c.audioOnly && !(c.spec == nil && OutputPlan.isProRes(projectCodec))
     }
 
     /// 保存先の種類。音声のみは m4a、「現在の設定」で ProRes のときは .mov、他は mp4。
@@ -100,8 +113,8 @@ final class ExportPanelOptions: NSObject {
     /// 保存パネルのアクセサリ(範囲のチェックがあれば上に置く)。
     func accessoryView(rangeBox: NSButton?) -> NSView {
         let rows: [(String, NSView)] = [("書き出しの種類", kindPopup), ("ビットレート", ratePopup), ("目標ラウドネス", loudnessPopup)]
-        // 行: 範囲(あれば)+ 種類・ビットレート + ラウドネスのチェック + 目標ラウドネス
-        let h: CGFloat = CGFloat(rows.count + 1 + (rangeBox == nil ? 0 : 1)) * 30 + 8
+        // 行: 範囲(あれば)+ 種類・ビットレート + ラウドネスのチェック + 目標ラウドネス + 字幕埋め込みのチェック
+        let h: CGFloat = CGFloat(rows.count + 2 + (rangeBox == nil ? 0 : 1)) * 30 + 8
         let wrap = NSView(frame: NSRect(x: 0, y: 0, width: 380, height: h))
         var y = h - 30
         if let box = rangeBox {
@@ -123,6 +136,8 @@ final class ExportPanelOptions: NSObject {
             wrap.addSubview(control)
             y -= 30
         }
+        embedBox.frame = NSRect(x: 12, y: y, width: 360, height: 22)
+        wrap.addSubview(embedBox)
         return wrap
     }
 }

@@ -145,7 +145,7 @@ public enum ExportJob {
     }
 
     /// `spec`(保存したプリセットなど)があればそれを優先する。`bitrateMbps` は仕様の値より優先する(`--bitrate`)。
-    public static func run(project: Project, preset: ExportPreset?, spec: ExportSpec? = nil, bitrateMbps: Double? = nil, range: ExportRange? = nil, to url: URL, assets: RenderAssets = RenderAssets(), loudness: LoudnessNormalizationSettings = .disabled, pluginEffectProviders: [any VideoEffectProviding] = [], progress: ((Double) -> Void)? = nil) async throws {
+    public static func run(project: Project, preset: ExportPreset?, spec: ExportSpec? = nil, bitrateMbps: Double? = nil, range: ExportRange? = nil, to url: URL, assets: RenderAssets = RenderAssets(), loudness: LoudnessNormalizationSettings = .disabled, pluginEffectProviders: [any VideoEffectProviding] = [], subtitleEmbed: SubtitleEmbedSettings = .disabled, progress: ((Double) -> Void)? = nil) async throws {
         let chosen = spec ?? preset?.spec
         let p = chosen?.apply(to: project) ?? project
         let audioOnly = chosen?.audioOnly ?? false
@@ -154,7 +154,7 @@ public enum ExportJob {
         } else {
             let mbps = ExportSpec.validBitrate(bitrateMbps) ?? chosen?.bitrateMbps
             let rate = mbps.map { Int(($0 * 1_000_000).rounded()) }
-            try await Exporter(project: p, assets: assets, range: range, videoBitrate: rate, loudness: loudness, pluginEffectProviders: pluginEffectProviders).export(to: url, progress: progress)
+            try await Exporter(project: p, assets: assets, range: range, videoBitrate: rate, loudness: loudness, pluginEffectProviders: pluginEffectProviders, subtitleEmbed: subtitleEmbed).export(to: url, progress: progress)
         }
     }
 }
