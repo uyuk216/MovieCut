@@ -126,6 +126,69 @@ final class APNGProResTests: XCTestCase {
         XCTAssertNotNil(OutputPlan.make(width: 20000, height: 20000, codec: "prores422").error)
     }
 
+    // MARK: ProRes バリエーション(HQ / LT / Proxy、2026-11-19 追加)
+
+    /// 新バリエーションの設定値: OutputPlan がそのまま保持し、.mov・ProRes 判定・表示名が付く。大きなサイズでも HEVC へ切り替わらない。
+    func testOutputPlanKnowsNewProResVariants() {
+        let cases: [(String, String)] = [
+            (OutputPlan.proRes422HQ, "ProRes 422 HQ"),
+            (OutputPlan.proRes422LT, "ProRes 422 LT"),
+            (OutputPlan.proRes422Proxy, "ProRes 422 Proxy"),
+        ]
+        for (codec, label) in cases {
+            let p = OutputPlan.make(width: 8000, height: 4000, codec: codec)
+            XCTAssertEqual(p.codec, codec, "\(codec) はそのまま使われる")
+            XCTAssertFalse(p.usesFallbackCodec)
+            XCTAssertTrue(p.isProRes)
+            XCTAssertTrue(OutputPlan.isProRes(codec))
+            XCTAssertTrue(OutputPlan.isProRes(codec.uppercased()), "大文字でも判定できる")
+            XCTAssertEqual(p.fileExtension, "mov")
+            XCTAssertEqual(OutputPlan.codecLabel(codec), label)
+            XCTAssertNil(p.error)
+        }
+        // 既存 2 種は従来どおり
+        XCTAssertEqual(Set(OutputPlan.proResCodecs), [OutputPlan.proRes422, OutputPlan.proRes4444, OutputPlan.proRes422HQ, OutputPlan.proRes422LT, OutputPlan.proRes422Proxy])
+        XCTAssertFalse(OutputPlan.isProRes("h264"))
+    }
+
+    /// コーデック文字列 → AVAssetWriter の映像コーデックの対応(既存 422 / 4444 も含め全種)。
+    func testProResCodecTypeMapping() {
+        XCTAssertEqual(Exporter.proResCodecType(for: OutputPlan.proRes422), .proRes422)
+        XCTAssertEqual(Exporter.proResCodecType(for: OutputPlan.proRes4444), .proRes4444)
+        XCTAssertEqual(Exporter.proResCodecType(for: OutputPlan.proRes422HQ), .proRes422HQ)
+        XCTAssertEqual(Exporter.proResCodecType(for: OutputPlan.proRes422LT), .proRes422LT)
+        XCTAssertEqual(Exporter.proResCodecType(for: OutputPlan.proRes422Proxy), .proRes422Proxy)
+    }
+
+    /// 設定の保存: プロジェクトに設定した新バリエーションが JSON の往復で保持される。
+    func testNewProResVariantsSurviveProjectRoundTrip() throws {
+        for codec in [OutputPlan.proRes422HQ, OutputPlan.proRes422LT, OutputPlan.proRes422Proxy] {
+            var p = project(codec: codec)
+            p.codec = codec
+            let data = try JSONEncoder().encode(p)
+            let back = try JSONDecoder().decode(Project.self, from: data)
+            XCTAssertEqual(back.codec, codec, "\(codec) が保存・復元される")
+        }
+    }
+
+    /// 実書き出し: HQ / LT / Proxy それぞれ 1 秒を書き、ファイルのコーデック(FourCharCode)が一致する。
+    func testExportProResVariantsOneSecond() async throws {
+        let cases: [(String, FourCharCode)] = [
+            (OutputPlan.proRes422HQ, kCMVideoCodecType_AppleProRes422HQ),
+            (OutputPlan.proRes422LT, kCMVideoCodecType_AppleProRes422LT),
+            (OutputPlan.proRes422Proxy, kCMVideoCodecType_AppleProRes422Proxy),
+        ]
+        for (codec, want) in cases {
+            let p = project(width: 320, height: 180, duration: 1, fps: 30, codec: codec)
+            let out = tmp.appendingPathComponent("\(codec).mov")
+            try await Exporter(project: p, assets: RenderAssets()).export(to: out)
+            let info = try await inspect(out)
+            XCTAssertEqual(info.codec, want, "\(codec) で書かれている")
+            XCTAssertEqual(info.frames, 30, "\(codec) のコマ数")
+            XCTAssertEqual(info.duration, 1, accuracy: 0.05)
+        }
+    }
+
     private struct ProInfo { var codec: FourCharCode; var frames: Int; var duration: Double; var depth: Int?; var firstAlpha: Int?; var audioFormat: AudioFormatID? }
 
     /// 書かれた .mov を開き直して、コーデック・コマ数・(アルファ付きなら)左上の画素のアルファを読む。

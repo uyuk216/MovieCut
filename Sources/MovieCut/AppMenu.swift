@@ -626,7 +626,7 @@ struct MenuState: Equatable {
 /// menu.js と同じ構成の項目表。表示(SwiftUI)と試験の両方がこれを見る。
 enum AppMenuSpec {
     static let backgrounds: [(key: String, label: String)] = [("#000000", "黒"), ("#ffffff", "白"), ("#00b140", "緑（クロマキー）"), (Project.transparentBackground, "透明（ProRes 4444・APNG 用）")]
-    static let codecs: [(key: String, label: String)] = [("h264", "H.264"), ("hevc", "HEVC"), (OutputPlan.proRes422, "ProRes 422（.mov）"), (OutputPlan.proRes4444, "ProRes 4444（.mov・透明を残せる）")]
+    static let codecs: [(key: String, label: String)] = [("h264", "H.264"), ("hevc", "HEVC"), (OutputPlan.proRes422, "ProRes 422（.mov）"), (OutputPlan.proRes422HQ, "ProRes 422 HQ（.mov）"), (OutputPlan.proRes422LT, "ProRes 422 LT（.mov）"), (OutputPlan.proRes422Proxy, "ProRes 422 Proxy（.mov・下書き用）"), (OutputPlan.proRes4444, "ProRes 4444（.mov・透明を残せる）")]
 
     private static func cmd(_ k: KeyEquivalent, shift: Bool = false) -> MenuShortcut {
         MenuShortcut(key: k, modifiers: shift ? [.command, .shift] : .command)

@@ -726,6 +726,9 @@ struct SettingsSheet: View {
                                 Text(L10n.t("H.264（どこでも再生できる）")).tag("h264")
                                 Text(L10n.t("HEVC（同じ画質で小さい・4K向け）")).tag("hevc")
                                 Text(L10n.t("ProRes 422（編集用・.mov）")).tag(OutputPlan.proRes422)
+                                Text(L10n.t("ProRes 422 HQ（高画質・編集用・.mov）")).tag(OutputPlan.proRes422HQ)
+                                Text(L10n.t("ProRes 422 LT（軽い・編集用・.mov）")).tag(OutputPlan.proRes422LT)
+                                Text(L10n.t("ProRes 422 Proxy（最も軽い・下書き用・.mov）")).tag(OutputPlan.proRes422Proxy)
                                 Text(L10n.t("ProRes 4444（透明を残せる・.mov）")).tag(OutputPlan.proRes4444)
                             }.labelsHidden().frame(width: 260)
                             if draft.codec == "h264", let w = res.width, let h = res.height, !OutputPlan.h264Supports(width: w, height: h) {

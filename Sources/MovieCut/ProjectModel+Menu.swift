@@ -143,9 +143,9 @@ extension ProjectModel {
 
     func openFpsSheet() { if !isLocked { showFpsSheet = true } }
 
-    /// 書き出し形式(メニューの H.264 / HEVC / ProRes 422 / ProRes 4444)。Undo できる。
+    /// 書き出し形式(メニューの H.264 / HEVC / ProRes 各種)。Undo できる。
     func setCodec(_ codec: String) {
-        guard ["h264", "hevc", OutputPlan.proRes422, OutputPlan.proRes4444].contains(codec), !isLocked else { return }
+        guard ["h264", "hevc"].contains(codec) || OutputPlan.isProRes(codec), !isLocked else { return }
         edit("書き出し形式の変更") { $0.codec = codec }
     }
 
