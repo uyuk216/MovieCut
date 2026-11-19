@@ -118,10 +118,22 @@ public enum VST3HostAvailability: Equatable, Sendable {
 public struct VST3EffectProvider: AudioEffectProviding {
     public var plugins: [VST3BundleInfo]
     public var availability: VST3HostAvailability
+    /// 音声エフェクト ID(小文字) -> パラメータ記述一覧(R5-1 で追加)。
+    /// 実ホストがパラメータを取得できるようになるまでの間は空が普通で、その場合は
+    /// 従来どおり記述子の  は空になる。スキャンだけではパラメータは分からない
+    /// (moduleinfo.json には載らない)ため、ここは「取得できたときの置き場」。
+    public var parameterDescriptorsByEffectID: [String: [VST3ParameterDescriptor]]
 
-    public init(plugins: [VST3BundleInfo], availability: VST3HostAvailability = .current) {
+    public init(plugins: [VST3BundleInfo], availability: VST3HostAvailability = .current,
+                parameterDescriptorsByEffectID: [String: [VST3ParameterDescriptor]] = [:]) {
         self.plugins = plugins
         self.availability = availability
+        self.parameterDescriptorsByEffectID = parameterDescriptorsByEffectID
+    }
+
+    /// そのプラグインのパラメータ記述(無ければ空)。
+    public func parameterDescriptors(for info: VST3BundleInfo) -> [VST3ParameterDescriptor] {
+        parameterDescriptorsByEffectID[info.audioEffectID.lowercased()] ?? []
     }
 
     /// スキャン結果から作る(構造が揃ったものだけを並べる)。
@@ -131,7 +143,8 @@ public struct VST3EffectProvider: AudioEffectProviding {
 
     public var audioEffectDescriptors: [PluginAudioEffectDescriptor] {
         plugins.map { info in
-            PluginAudioEffectDescriptor(id: info.audioEffectID, label: info.name + "(VST3)", params: [])
+            PluginAudioEffectDescriptor(id: info.audioEffectID, label: info.name + "(VST3)",
+                                        params: parameterDescriptors(for: info).compactMap { $0.effectParamSpec() })
         }
     }
 
