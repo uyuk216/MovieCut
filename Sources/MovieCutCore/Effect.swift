@@ -29,6 +29,10 @@ public enum EffectKind: String, CaseIterable, Sendable {
     case colorTransfer
     /// 色温度・ティント(ホワイトバランス)と、持ち上げ・ガンマ・ゲインのカラーホイール。
     case whiteBalance, colorWheels
+    /// カラーカーブ: RGB・マスターのトーンカーブと、色相別(色相→色相/彩度/輝度)のカーブ。33³ の CIColorCube で適用する。
+    case colorCurves
+    /// HSLセカンダリ: 色相・彩度・輝度の範囲で選んだ色だけを補正する(範囲選択は `HSLSelection`)。
+    case hslSecondary
     /// 光学ミスト: 明るい所だけをぼかして重ね、ふんわり光らせる(ハイライトのにじみ)。
     case opticalMist
     /// ハイライト補正: 明るい部分だけを白の手前へなめらかに寄せる(フィルム風のトーンの肩)。
@@ -67,6 +71,8 @@ public enum EffectKind: String, CaseIterable, Sendable {
         case .colorTransfer: return "色調転写"
         case .whiteBalance: return "ホワイトバランス"
         case .colorWheels: return "カラーホイール"
+        case .colorCurves: return "カラーカーブ"
+        case .hslSecondary: return "HSLセカンダリ"
         case .opticalMist: return "光学ミスト"
         case .highlightRolloff: return "ハイライト補正"
         case .bokehBlur: return "絞りぼかし"
@@ -94,6 +100,19 @@ public enum EffectKind: String, CaseIterable, Sendable {
     private static func p(_ key: String, _ label: String, _ lo: Double, _ hi: Double, _ def: Double, _ step: Double, _ unit: EffectParamSpec.Unit = .plain) -> EffectParamSpec {
         EffectParamSpec(key: key, label: label, range: lo...hi, defaultValue: def, step: step, unit: unit)
     }
+
+    /// カラーカーブの引数(全 35): トーン 4 本 × 5 点 + 色相→色相/彩度/輝度 × 5 点。キーは `ColorCurves.toneCurves(from:)` / `hueCurves(from:)` と一致させる。
+    private static let colorCurvesParams: [EffectParamSpec] = {
+        var out: [EffectParamSpec] = []
+        let tone: [(String, String)] = [("master", "マスター点"), ("red", "赤点"), ("green", "緑点"), ("blue", "青点")]
+        for (key, label) in tone {
+            for (i, x) in ColorCurves.anchorX.enumerated() { out.append(p("\(key)\(i)", "\(label)\(i + 1)", 0, 1, x, 0.01)) }
+        }
+        for i in 0..<5 { out.append(p("hueHue\(i)", "色相→色相 点\(i + 1)", -180, 180, 0, 1, .degrees)) }
+        for i in 0..<5 { out.append(p("hueSat\(i)", "色相→彩度 点\(i + 1)", 0, 2, 1, 0.01)) }
+        for i in 0..<5 { out.append(p("hueLum\(i)", "色相→輝度 点\(i + 1)", -0.5, 0.5, 0, 0.01)) }
+        return out
+    }()
 
     /// 引数の仕様(インスペクタに並ぶ順)。px の値は 1920×1080 での大きさ(解像度に合わせて拡縮する)。
     public var params: [EffectParamSpec] {
@@ -126,6 +145,15 @@ public enum EffectKind: String, CaseIterable, Sendable {
             Self.p("liftAngle", "持ち上げ・色相（°）", -180, 180, 0, 1, .degrees), Self.p("liftAmount", "持ち上げ・強さ", 0, 1, 0, 0.01, .percent),
             Self.p("gammaAngle", "ガンマ・色相（°）", -180, 180, 0, 1, .degrees), Self.p("gammaAmount", "ガンマ・強さ", 0, 1, 0, 0.01, .percent),
             Self.p("gainAngle", "ゲイン・色相（°）", -180, 180, 0, 1, .degrees), Self.p("gainAmount", "ゲイン・強さ", 0, 1, 0, 0.01, .percent),
+        ]
+        case .colorCurves: return Self.colorCurvesParams
+        case .hslSecondary: return [
+            Self.p("hueCenter", "色相の中心（°）", 0, 360, 0, 1, .degrees), Self.p("hueWidth", "色相の幅（°）", 0, 360, 90, 1, .degrees),
+            Self.p("hueFeather", "色相のぼかし（°）", 0, 180, 45, 1, .degrees),
+            Self.p("satMin", "彩度の下限", 0, 1, 0, 0.01), Self.p("satMax", "彩度の上限", 0, 1, 1, 0.01), Self.p("satFeather", "彩度のぼかし", 0, 0.5, 0.1, 0.01),
+            Self.p("lumMin", "輝度の下限", 0, 1, 0, 0.01), Self.p("lumMax", "輝度の上限", 0, 1, 1, 0.01), Self.p("lumFeather", "輝度のぼかし", 0, 0.5, 0.1, 0.01),
+            Self.p("hueShift", "色相シフト（°）", -180, 180, 0, 1, .degrees), Self.p("satScale", "彩度", 0, 3, 1, 0.01),
+            Self.p("exposure", "露出（EV）", -3, 3, 0, 0.05), Self.p("strength", "強さ", 0, 1, 1, 0.01, .percent),
         ]
         case .opticalMist: return [Self.p("amount", "量", 0, 1, 0.5, 0.01, .percent), Self.p("threshold", "しきい値", 0, 1, 0.7, 0.01, .percent),
                                    Self.p("radius", "ぼかし半径（px）", 0, 100, 24, 1, .px)]

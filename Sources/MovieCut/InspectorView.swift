@@ -1006,7 +1006,12 @@ struct ClipInspector: View {
             }
             if let kind {
                 VStack(alignment: .leading, spacing: 6) {
-                    ForEach(kind.params, id: \.key) { effectSlider(c, i, $0) }
+                    if kind == .colorCurves {
+                        // カラーカーブは汎用スライダ列の代わりにカーブエディタを出す
+                        ColorCurvesInspector(model: model, clip: c, index: i, clipId: clipId)
+                    } else {
+                        ForEach(kind.params, id: \.key) { effectSlider(c, i, $0) }
+                    }
                     if kind.defaultColor != nil {
                         ColorField(label: kind == .chromaKey ? "抜く色" : "色", hex: e.colorOrDefault) { model.coalescedEffectColor($0, at: i, clipId: clipId) }
                     }

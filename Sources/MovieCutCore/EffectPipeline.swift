@@ -53,6 +53,8 @@ public enum EffectPipeline {
         case .faceBlur: return v("strength") < eps
         case .whiteBalance: return abs(v("temperature")) < eps && abs(v("tint")) < eps
         case .colorWheels: return v("liftAmount") < eps && v("gammaAmount") < eps && v("gainAmount") < eps
+        case .colorCurves: return ColorCurves.isIdentity(tone: ColorCurves.toneCurves(from: v), hue: ColorCurves.hueCurves(from: v), eps: eps)
+        case .hslSecondary: return HSLSecondary.correction(from: v).isIdentity
         case .opticalMist: return v("amount") < eps || v("radius") < eps
         case .highlightRolloff: return false
         case .bokehBlur: return v("radius") < 0.5
@@ -290,6 +292,16 @@ public enum EffectPipeline {
             let data = ColorWheels.cubeData(lift: lift, gamma: gamma, gain: gain)
             return img.unpremultiplyingAlpha()
                 .applyingFilter("CIColorCube", parameters: ["inputCubeDimension": ColorWheels.dimension, "inputCubeData": data])
+                .premultiplyingAlpha()
+        case .colorCurves:
+            let data = ColorCurves.cubeData(tone: ColorCurves.toneCurves(from: e.v), hue: ColorCurves.hueCurves(from: e.v))
+            return img.unpremultiplyingAlpha()
+                .applyingFilter("CIColorCube", parameters: ["inputCubeDimension": ColorCurves.cubeDimension, "inputCubeData": data])
+                .premultiplyingAlpha()
+        case .hslSecondary:
+            let data = HSLSecondary.cubeData(selection: HSLSecondary.selection(from: e.v), correction: HSLSecondary.correction(from: e.v))
+            return img.unpremultiplyingAlpha()
+                .applyingFilter("CIColorCube", parameters: ["inputCubeDimension": HSLSecondary.cubeDimension, "inputCubeData": data])
                 .premultiplyingAlpha()
         case .opticalMist:
             return OpticalMist.apply(img, amount: e.v("amount"), threshold: e.v("threshold"), sigma: e.v("radius") * scale)
