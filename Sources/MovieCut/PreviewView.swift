@@ -39,6 +39,8 @@ struct PreviewView: NSViewRepresentable {
         target.warpHandles = c.warpHandles(at: time - c.start)
         target.meshCols = c.meshWarp?.cols ?? 0
         target.meshRows = c.meshWarp?.rows ?? 0
+        // ペンマスクの制御点(キャンバス割合・左上原点)。ペンでなければ空で、従来の表示と変わらない
+        if let mask = c.mask, mask.shape == "pen" { target.penPoints = mask.points }
         return target
     }
 }
@@ -52,6 +54,8 @@ struct PreviewOverlayTarget: Equatable {
     var warpHandles: [WarpHandle] = []
     var meshCols: Int = 0
     var meshRows: Int = 0
+    /// ペンマスクの制御点(キャンバス割合・左上原点)。空ならペンの表示は出ない。
+    var penPoints: [MaskPoint] = []
 }
 
 /// 描画要求をまとめる(古い要求は捨てて、最新だけ描く)。
@@ -128,6 +132,9 @@ final class PreviewCanvasView: NSView {
     /// 変形の取っ手(格子の線・ピンの元の位置は線レイヤー、動かせる取っ手は塗りレイヤー)。
     private let warpLineLayer = CAShapeLayer()
     private let warpHandleLayer = CAShapeLayer()
+    /// ペンマスクの輪郭と取っ手(線レイヤーと塗りレイヤー)。
+    private let penLineLayer = CAShapeLayer()
+    private let penHandleLayer = CAShapeLayer()
     private(set) var overlay: PreviewOverlayTarget?
     struct ManipulationDrag {
         var kind: DirectManipulation.Kind
@@ -138,6 +145,14 @@ final class PreviewCanvasView: NSView {
         var name: String
         /// 変形の取っ手のドラッグのとき、その取っ手の種類(通常の変形ドラッグでは nil)。
         var warp: WarpKey.Kind? = nil
+        /// ペンマスクの取っ手のドラッグのとき、どの点のどの部分か(それ以外では nil)。
+        var pen: PenRef? = nil
+    }
+    /// ペンマスクの取っ手: 点の番号と、アンカー/入るハンドル/出るハンドルの区別。
+    struct PenRef: Equatable {
+        var index: Int
+        var part: Part
+        enum Part: Equatable { case anchor, inHandle, outHandle }
     }
     private(set) var manipulation: ManipulationDrag?
     /// ガイド線(表示 ▸ ガイド線)。プレビューの上に重ねるだけで、書き出しには入らない。
@@ -186,11 +201,21 @@ final class PreviewCanvasView: NSView {
         warpHandleLayer.strokeColor = NSColor(srgbRed: 0.1, green: 0.45, blue: 0.7, alpha: 1).cgColor
         warpHandleLayer.lineWidth = 1.25
         warpHandleLayer.isHidden = true
+        penLineLayer.fillColor = nil
+        penLineLayer.strokeColor = NSColor(srgbRed: 1, green: 0.45, blue: 0.75, alpha: 0.95).cgColor
+        penLineLayer.lineWidth = 1.25
+        penLineLayer.isHidden = true
+        penHandleLayer.fillColor = NSColor.white.cgColor
+        penHandleLayer.strokeColor = NSColor(srgbRed: 0.75, green: 0.15, blue: 0.45, alpha: 1).cgColor
+        penHandleLayer.lineWidth = 1.25
+        penHandleLayer.isHidden = true
         root.addSublayer(guideLayer)
         root.addSublayer(outlineLayer)
         root.addSublayer(handleLayer)
         root.addSublayer(warpLineLayer)
         root.addSublayer(warpHandleLayer)
+        root.addSublayer(penLineLayer)
+        root.addSublayer(penHandleLayer)
         NotificationCenter.default.addObserver(self, selector: #selector(guidesChanged), name: PreviewGuideStore.didChange, object: nil)
     }
     required init?(coder: NSCoder) { fatalError() }
@@ -295,9 +320,11 @@ final class PreviewCanvasView: NSView {
         guard let o = overlay, o.canvas.width > 0, frameLayer.frame.width > 0 else {
             outlineLayer.isHidden = true; handleLayer.isHidden = true
             warpLineLayer.isHidden = true; warpHandleLayer.isHidden = true
+            penLineLayer.isHidden = true; penHandleLayer.isHidden = true
             return
         }
         redrawWarpHandles(o)
+        redrawPenHandles(o)
         let corners = o.box.corners.map { viewPoint($0, canvas: o.canvas) }
         let rot = viewPoint(o.box.rotationHandle, canvas: o.canvas)
         let top = viewPoint(CGPoint(x: (o.box.corners[0].x + o.box.corners[1].x) / 2, y: (o.box.corners[0].y + o.box.corners[1].y) / 2), canvas: o.canvas)
@@ -362,6 +389,66 @@ final class PreviewCanvasView: NSView {
         warpHandleLayer.path = handles
         warpLineLayer.isHidden = false; warpHandleLayer.isHidden = false
         CATransaction.commit()
+    }
+
+    /// ペンマスクの輪郭と取っ手を描く: 曲線を平らにした輪郭、アンカー(四角)、
+    /// ハンドル(丸。アンカーと違う所にあるときだけ、アンカーからの線と一緒に)。
+    /// ペンでなければ両レイヤーを隠す。
+    private func redrawPenHandles(_ o: PreviewOverlayTarget) {
+        guard !o.penPoints.isEmpty else {
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            penLineLayer.isHidden = true; penHandleLayer.isHidden = true
+            CATransaction.commit()
+            return
+        }
+        func vp(_ x: Double, _ y: Double) -> CGPoint { viewPoint(CGPoint(x: x * o.canvas.width, y: y * o.canvas.height), canvas: o.canvas) }
+        let lines = CGMutablePath()
+        let poly = ClipMask(shape: "pen", points: o.penPoints).sampledPolygon()
+        if poly.count >= 3 {
+            lines.move(to: vp(poly[0].x, poly[0].y))
+            for p in poly.dropFirst() { lines.addLine(to: vp(p.x, p.y)) }
+            lines.closeSubpath()
+        }
+        for pt in o.penPoints where !pt.isCorner {
+            let a = vp(pt.x, pt.y)
+            lines.move(to: a); lines.addLine(to: vp(pt.inX, pt.inY))
+            lines.move(to: a); lines.addLine(to: vp(pt.outX, pt.outY))
+            let ih = vp(pt.inX, pt.inY), oh = vp(pt.outX, pt.outY)
+            lines.addEllipse(in: CGRect(x: ih.x - 3, y: ih.y - 3, width: 6, height: 6))
+            lines.addEllipse(in: CGRect(x: oh.x - 3, y: oh.y - 3, width: 6, height: 6))
+        }
+        let handles = CGMutablePath()
+        for pt in o.penPoints {
+            let c = vp(pt.x, pt.y)
+            handles.addRect(CGRect(x: c.x - 4.5, y: c.y - 4.5, width: 9, height: 9))
+            if !pt.isCorner {
+                for h in [vp(pt.inX, pt.inY), vp(pt.outX, pt.outY)] {
+                    handles.addEllipse(in: CGRect(x: h.x - 5, y: h.y - 5, width: 10, height: 10))
+                }
+            }
+        }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        penLineLayer.path = lines
+        penHandleLayer.path = handles
+        penLineLayer.isHidden = false; penHandleLayer.isHidden = false
+        CATransaction.commit()
+    }
+
+    /// ペンの取っ手へのヒットテスト(キャンバスの画素)。ハンドルをアンカーより優先する。
+    private func penHitTest(_ p: CGPoint, target o: PreviewOverlayTarget) -> PenRef? {
+        guard !o.penPoints.isEmpty, o.canvas.width > 0, o.canvas.height > 0 else { return nil }
+        let r = hitRadius(canvas: o.canvas)
+        func cp(_ x: Double, _ y: Double) -> CGPoint { CGPoint(x: x * o.canvas.width, y: y * o.canvas.height) }
+        func hit(_ q: CGPoint) -> Bool { hypot(p.x - q.x, p.y - q.y) <= r }
+        for (i, pt) in o.penPoints.enumerated() where !pt.isCorner {
+            if hit(cp(pt.inX, pt.inY)) { return PenRef(index: i, part: .inHandle) }
+            if hit(cp(pt.outX, pt.outY)) { return PenRef(index: i, part: .outHandle) }
+        }
+        for (i, pt) in o.penPoints.enumerated() {
+            if hit(cp(pt.x, pt.y)) { return PenRef(index: i, part: .anchor) }
+        }
+        return nil
     }
 
     /// 取っ手に反応する半径をキャンバスの画素に直したもの。
@@ -443,7 +530,13 @@ final class PreviewCanvasView: NSView {
     func beginManipulation(atViewPoint v: CGPoint) -> Bool {
         guard let o = overlay, let m = model, !m.isLocked, let c = m.clip(o.clipId) else { return false }
         let p = canvasPoint(v, canvas: o.canvas)
-        // 変形の取っ手が一番手前(掴んだら、その点・ピンを動かす。通常の移動・拡大・回転より優先)
+        // ペンマスクの取っ手が一番手前(掴んだら、その点・ハンドルを動かす)
+        if let ref = penHitTest(p, target: o) {
+            m.beginGesture()
+            manipulation = ManipulationDrag(kind: .move, clipId: c.id, start: p, base: c, relTime: min(max(m.currentTime - c.start, 0), c.duration), name: "プレビューでペンマスク", pen: ref)
+            return true
+        }
+        // 変形の取っ手が次に手前(掴んだら、その点・ピンを動かす。通常の移動・拡大・回転より優先)
         if let h = WarpDrag.hitTest(p, handles: o.warpHandles, box: o.box, radius: hitRadius(canvas: o.canvas)) {
             m.beginGesture()
             manipulation = ManipulationDrag(kind: .move, clipId: c.id, start: p, base: c, relTime: min(max(m.currentTime - c.start, 0), c.duration), name: "プレビューで変形", warp: h.kind)
@@ -466,7 +559,25 @@ final class PreviewCanvasView: NSView {
               let loc = ClipEditing.locate(d.clipId, in: base) else { return }
         let p = canvasPoint(v, canvas: o.canvas)
         let c: Clip
-        if let wk = d.warp {
+        if let pref = d.pen {
+            // ドラッグ開始時のクリップから毎回計算する(アンカーはハンドルごと、ハンドルは単独で動く)
+            var cc = d.base
+            if var mask = cc.mask, mask.shape == "pen", mask.points.indices.contains(pref.index), o.canvas.width > 0, o.canvas.height > 0 {
+                let nx = min(max(p.x / o.canvas.width, 0), 1), ny = min(max(p.y / o.canvas.height, 0), 1)
+                var pt = mask.points[pref.index]
+                switch pref.part {
+                case .anchor:
+                    let dx = nx - pt.x, dy = ny - pt.y
+                    pt.x = nx; pt.y = ny
+                    pt.inX += dx; pt.inY += dy; pt.outX += dx; pt.outY += dy
+                case .inHandle: pt.inX = nx; pt.inY = ny
+                case .outHandle: pt.outX = nx; pt.outY = ny
+                }
+                mask.points[pref.index] = pt.normalized
+                cc.mask = mask
+            }
+            c = cc
+        } else if let wk = d.warp {
             c = WarpDrag.apply(wk, to: d.base, at: d.relTime, tolerance: m.keyTolerance, canvas: p, box: o.box)
         } else {
             c = DirectManipulation.apply(d.kind, to: d.base, at: d.relTime, tolerance: m.keyTolerance, from: d.start, to: p, canvas: o.canvas, snapRotation: snapRotation)

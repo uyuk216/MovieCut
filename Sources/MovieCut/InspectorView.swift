@@ -768,7 +768,7 @@ struct ClipInspector: View {
         }
     }
 
-    /// 形のマスク(矩形・楕円・反転・羽根)。オフは nil(ファイルに書かない)。ドラッグは 1 回の Undo。
+    /// 形のマスク(矩形・楕円・ペン・反転・羽根)。オフは nil(ファイルに書かない)。ドラッグは 1 回の Undo。
     @ViewBuilder private func maskSections(_ c: Clip) -> some View {
         InspectorSection(title: "形のマスク")
         Toggle("形で切り抜く（外は透明）", isOn: Binding(get: { c.mask != nil }, set: { on in
@@ -777,23 +777,67 @@ struct ClipInspector: View {
         .toggleStyle(.checkbox)
         if let m = c.mask {
             Picker("形", selection: Binding(get: { m.shape }, set: { s in
-                model.setMaskField(clipId: clipId) { $0.shape = s }
+                model.setMaskShape(s, clipId: clipId)
             })) {
                 Text("矩形").tag("rect")
                 Text("楕円").tag("ellipse")
+                Text(L10n.t("ペン")).tag("pen")
             }
             .pickerStyle(.segmented)
             .disabled(model.isLocked)
-            maskSlider("横位置", m.x, \.x, range: 0...1)
-            maskSlider("縦位置", m.y, \.y, range: 0...1)
-            maskSlider("幅", m.w, \.w, range: 0.01...1)
-            maskSlider("高さ", m.h, \.h, range: 0.01...1)
+            if m.shape == "pen" {
+                penMaskSections(m)
+            } else {
+                maskSlider("横位置", m.x, \.x, range: 0...1)
+                maskSlider("縦位置", m.y, \.y, range: 0...1)
+                maskSlider("幅", m.w, \.w, range: 0.01...1)
+                maskSlider("高さ", m.h, \.h, range: 0.01...1)
+            }
             maskSlider("羽根（ぼかし）", m.feather, \.feather, range: 0...1)
             Toggle("反転（中を透明にする）", isOn: Binding(get: { m.invert }, set: { on in
                 model.setMaskField(clipId: clipId) { $0.invert = on }
             }))
             .toggleStyle(.checkbox)
         }
+    }
+
+    /// ペンマスクの点の編集: 追加・削除、各点のアンカーと入る/出るハンドルの位置。
+    /// 点の移動はプレビュー上でもドラッグできる(アンカーはハンドルごと動く)。
+    @ViewBuilder private func penMaskSections(_ m: ClipMask) -> some View {
+        Text(L10n.t("プレビューで点をドラッグして形を作ります。点の追加・削除とハンドルの調整は下で行えます。"))
+            .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        Button(L10n.t("点を追加")) { model.addPenPoint(clipId: clipId) }
+            .controlSize(.small)
+            .disabled(model.isLocked || m.points.count >= ClipMask.maxPoints)
+        ForEach(Array(m.points.enumerated()), id: \.offset) { i, pt in
+            HStack(spacing: 6) {
+                Text("点\(i + 1)").font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary)
+                Button(L10n.t("ハンドルをまっすぐにする")) { model.resetPenHandles(index: i, clipId: clipId) }
+                    .controlSize(.mini)
+                    .disabled(model.isLocked || pt.isCorner)
+                Button("削除") { model.removePenPoint(index: i, clipId: clipId) }
+                    .controlSize(.mini)
+                    .disabled(model.isLocked || m.points.count <= 3)
+            }
+            penSlider(L10n.t("点の横"), pt.x, index: i) { p, v in p.x = v }
+            penSlider(L10n.t("点の縦"), pt.y, index: i) { p, v in p.y = v }
+            penSlider(L10n.t("入るハンドルの横"), pt.inX, index: i) { p, v in p.inX = v }
+            penSlider(L10n.t("入るハンドルの縦"), pt.inY, index: i) { p, v in p.inY = v }
+            penSlider(L10n.t("出るハンドルの横"), pt.outX, index: i) { p, v in p.outX = v }
+            penSlider(L10n.t("出るハンドルの縦"), pt.outY, index: i) { p, v in p.outY = v }
+        }
+    }
+
+    /// ペンの点・ハンドル 1 座標のスライダー(ドラッグは 1 回の Undo)。値は割合(0〜1)。
+    private func penSlider(_ label: String, _ value: Double, index: Int, _ change: @escaping (inout MaskPoint, Double) -> Void) -> some View {
+        LiveSlider(label: label, value: value, range: 0...1, step: 0.01, format: Self.pct,
+                   begin: { model.beginGesture() },
+                   change: { v in model.liveMaskField(clipId: clipId) { mask in
+                       mask.ensurePenPoints()
+                       guard mask.points.indices.contains(index) else { return }
+                       change(&mask.points[index], v)
+                   } },
+                   end: { model.commitGesture(ProjectModel.maskUndoName) })
     }
 
     // MARK: メッシュ変形・パペット変形(数値編集 + プレビュー上のドラッグ + キーフレーム)
