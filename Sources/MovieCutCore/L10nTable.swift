@@ -380,6 +380,27 @@ enum L10nTable {
         "中身のある複合クリップを選んでください": "Select a compound clip that has contents",
         "複合クリップを選んでください": "Select a compound clip",
         "映像クリップを選んでください": "Select a video clip",
-        "クリップを選んでください": "Select a clip"
+        "クリップを選んでください": "Select a clip",
+        "文は見つかりませんでした": "No sentences found",
+        "音声に話し声が含まれているか、クリップを確かめてください。": "Make sure the audio contains speech, and check the clip.",
+        "案はまだありません": "No suggestions yet",
+        "テーマを変えて「セリフ案を作る」を押してください。": "Change the theme and press \"Generate Line Suggestions\".",
+        "辞書に登録された語はありません": "No words registered in the dictionary",
+        "「行を追加」か、下のテキスト取り込みで読みを登録します。": "Register readings with \"Add Row\" or the text import below.",
+        "ボイスクリップがありません": "No voice clips",
+        "台本から声を作ると、ここにセリフの一覧が出ます。": "When you make audio from the script, the lines appear here.",
+        "一致する素材はありません": "No matching media",
+        "検索語や種類の絞り込みを変えてみてください。": "Try changing the search term or type filter.",
+        "フィラー語は見つかりませんでした": "No filler words found",
+        "カットできる語はありません。": "There are no words to cut.",
+        "クリップがありません": "No clips",
+        "素材をタイムラインに置くと、ここに一覧が出ます。": "Place media on the timeline to see the list here.",
+        "音声がありません": "No audio",
+        "音のあるクリップを置くと測れます。": "Place a clip with audio to measure it.",
+        "同じセリフのボイスクリップがありません": "No voice clips with the same line",
+        "同じセリフのテイクが複数あると、ここで聞き比べられます。": "When there are multiple takes of the same line, you can compare them here.",
+        "未使用の素材はありません": "No unused media",
+        "すべての素材がクリップで使われています。": "All media is used in clips.",
+        "新規で作るか、「開く…」で既存のプロジェクトを選べます。": "Create a new project, or choose an existing one with \"Open…\"."
     ]
 }
