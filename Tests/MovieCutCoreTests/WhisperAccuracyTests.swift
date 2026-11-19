@@ -246,4 +246,121 @@ final class WhisperAccuracyTests: XCTestCase {
             XCTAssertGreaterThan(m.approximateMB, 0)
         }
     }
+
+    // MARK: 区間ごとの認識(区間計画)
+
+    private func pairs(_ p: [(start: Double, end: Double)]) -> [[Double]] { p.map { [$0.start, $0.end] } }
+
+    func testPlanKeepsSeparatedSpeechAsOneChunkEach() {
+        let p = WhisperChunking.plan(speechRanges: [SilenceRange(start: 0, end: 2), SilenceRange(start: 3, end: 5)], duration: 6)
+        XCTAssertEqual(pairs(p), [[0, 2], [3, 5]], "区間の前後の無音は含めない")
+    }
+
+    func testPlanMergesShortSpeechIntoTheNextRange() {
+        // 0.8 秒の断片は 1.5 秒未満なので、次の区間と連結する(間の無音も含めて延びる)
+        let p = WhisperChunking.plan(speechRanges: [SilenceRange(start: 0, end: 0.8), SilenceRange(start: 1.2, end: 4), SilenceRange(start: 5, end: 7)], duration: 8)
+        XCTAssertEqual(pairs(p), [[0, 4], [5, 7]])
+    }
+
+    func testPlanSplitsLongSpeechEvery30Seconds() {
+        let p = WhisperChunking.plan(speechRanges: [SilenceRange(start: 0, end: 70)], duration: 80)
+        XCTAssertEqual(pairs(p), [[0, 30], [30, 60], [60, 70]])
+    }
+
+    func testPlanFallsBackToWholeWhenNoSpeech() {
+        XCTAssertEqual(pairs(WhisperChunking.plan(speechRanges: [], duration: 5)), [[0, 5]])
+        XCTAssertEqual(pairs(WhisperChunking.plan(speechRanges: [SilenceRange(start: 9, end: 12)], duration: 5)), [[0, 5]], "範囲外は捨てて全体に倒す")
+        XCTAssertEqual(pairs(WhisperChunking.plan(speechRanges: [], duration: 0)), [[0, 0]])
+    }
+
+    func testSpeechRangesFindTwoBurstsAroundHalfSecondSilence() {
+        let s = sine(seconds: 2, amplitude: 0.3) + [Float](repeating: 0, count: 8000) + sine(seconds: 2, amplitude: 0.3)
+        let r = WhisperChunking.speechRanges(samples: s, sampleRate: 16000)
+        XCTAssertEqual(r.count, 2, "\(r)")
+        XCTAssertEqual(r.first?.start ?? -1, 0, accuracy: 0.02)
+        XCTAssertEqual(r.last?.end ?? -1, 4.5, accuracy: 0.02)
+    }
+
+    // MARK: 区間ごとの認識(時刻のずらし・持ち分)
+
+    func testShiftMovesSegmentsAndTheirWords() {
+        let w = TranscriptSegment(text: "a", start: 0.5, end: 0.8)
+        let seg = TranscriptSegment(text: "あ い", start: 0, end: 1, words: [w])
+        let s = WhisperChunking.shift([seg], by: 2.25)
+        XCTAssertEqual(s.first?.start ?? -1, 2.25, accuracy: 1e-9)
+        XCTAssertEqual(s.first?.end ?? -1, 3.25, accuracy: 1e-9)
+        XCTAssertEqual(s.first?.words.first?.start ?? -1, 2.75, accuracy: 1e-9)
+        XCTAssertEqual(s.first?.words.first?.end ?? -1, 3.05, accuracy: 1e-9)
+    }
+
+    func testOwnershipSplitsGapAtMidpointAndCoversEverything() {
+        let o = WhisperChunking.ownership([(start: 0, end: 2), (start: 2.4, end: 4)])
+        XCTAssertEqual(o[0].start, 0)
+        XCTAssertEqual(o[0].end, 2.2, accuracy: 1e-9)
+        XCTAssertEqual(o[1].start, 2.2, accuracy: 1e-9)
+        XCTAssertEqual(o[1].end, Double.infinity)
+    }
+
+    func testKeepDropsSegmentsOwnedByTheNeighbour() {
+        let a = TranscriptSegment(text: "前", start: 1.9, end: 2.5)   // 中心 2.2 → 境界ちょうどは後ろの持ち分
+        let b = TranscriptSegment(text: "後", start: 2.3, end: 2.9)   // 中心 2.6
+        XCTAssertEqual(WhisperChunking.keep([a, b], owned: (start: 0, end: 2.2)).map(\.text), [])
+        XCTAssertEqual(WhisperChunking.keep([a, b], owned: (start: 2.2, end: .infinity)).map(\.text), ["前", "後"])
+    }
+
+    func testProgressMapsChunksToFivePercentToOne() {
+        XCTAssertEqual(WhisperChunking.progress(index: 0, count: 2, inner: 0), 0.05, accuracy: 1e-9)
+        XCTAssertEqual(WhisperChunking.progress(index: 1, count: 2, inner: 0), 0.525, accuracy: 1e-9)
+        XCTAssertEqual(WhisperChunking.progress(index: 2, count: 2, inner: 0), 1.0, accuracy: 1e-9)
+        XCTAssertEqual(WhisperChunking.progress(index: 0, count: 1, inner: 7), 1.0, accuracy: 1e-9, "進みは 0〜1 に収める")
+    }
+
+    // MARK: 区間ごとの認識(実行)
+
+    /// 実行ごとに "run" と -f を record へ追記し、固定の JSON を返す偽スクリプト(追記式)。
+    private func appendingBody(record: String, jsonText: String) -> String {
+        """
+        out=""
+        echo "run" >> "\(record)"
+        while [ $# -gt 0 ]; do
+          case "$1" in
+            -f) echo "-f=$2" >> "\(record)"; shift 2;;
+            -of) out="$2"; shift 2;;
+            *) shift;;
+          esac
+        done
+        cat > "$out.json" <<'JSONEOF'
+        \(jsonText)
+        JSONEOF
+        """
+    }
+
+    func testTwoSpeechBurstsAreRecognisedSeparatelyWithOffset() async throws {
+        let record = tmp.appendingPathComponent("runs.txt").path
+        let fixed = #"{"transcription":[{"offsets":{"from":0,"to":1000},"text":" はい"}]}"#
+        let exe = try makeScript(body: appendingBody(record: record, jsonText: fixed))
+        let t = WhisperTranscriber(executablePath: exe, modelPath: try makeModel(), vadModelPath: "/nonexistent/vad.bin")
+        let audio = tmp.appendingPathComponent("bursts.wav")
+        try writeWAV16k(sine(seconds: 2, amplitude: 0.3) + [Float](repeating: 0, count: 8000) + sine(seconds: 2, amplitude: 0.3), to: audio)
+
+        let segs = try await t.transcribe(audioURL: audio, duration: 4.5, onProgress: { _ in })
+
+        let text = try String(contentsOfFile: record, encoding: .utf8)
+        XCTAssertEqual(text.components(separatedBy: "run").count - 1, 2, "区間ごとに 2 回実行される: \(text)")
+        XCTAssertEqual(segs.count, 2, "\(segs.map(\.text))")
+        XCTAssertEqual(segs.first?.start ?? -1, 0, accuracy: 0.01)
+        XCTAssertEqual(segs.last?.start ?? -1, 2.25, accuracy: 0.01, "2 件目は区間の開始のぶんずれている")
+    }
+
+    func testSilentAudioStaysOneRun() async throws {
+        let record = tmp.appendingPathComponent("runs.txt").path
+        let fixed = #"{"transcription":[{"offsets":{"from":0,"to":1000},"text":" はい"}]}"#
+        let exe = try makeScript(body: appendingBody(record: record, jsonText: fixed))
+        let t = WhisperTranscriber(executablePath: exe, modelPath: try makeModel(), vadModelPath: "/nonexistent/vad.bin")
+        let audio = tmp.appendingPathComponent("silent3s.wav")
+        try writeWAV16k([Float](repeating: 0, count: 48000), to: audio)
+        _ = try await t.transcribe(audioURL: audio, duration: 3, onProgress: { _ in })
+        let text = try String(contentsOfFile: record, encoding: .utf8)
+        XCTAssertEqual(text.components(separatedBy: "run").count - 1, 1, text)
+    }
 }

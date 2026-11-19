@@ -148,17 +148,68 @@ public struct WhisperTranscriber: Transcriber {
             try Task.checkCancellation()
         }
 
-        try await Self.run(executable: executable,
-                           arguments: Self.arguments(model: model, wav: whisperInput, language: language, outputPrefix: prefix, options: options),
-                           timeout: Self.timeout(forDuration: duration), onProgress: onProgress)
-        try Task.checkCancellation()
+        // 発話区間ごとに認識し直す。whisper は 1 ファイル 1 言語でデコードするため、途中で言語が変わると後半が欠けるのを避ける。
+        // 読めない・区間が 1 つだけのときは、従来どおり 1 回で認識する。
+        let decoded = try? await Task.detached(priority: .userInitiated) { try WhisperChunking.readMono(whisperInput) }.value
+        let chunks = decoded.map { d in
+            WhisperChunking.plan(speechRanges: WhisperChunking.speechRanges(samples: d.samples, sampleRate: d.sampleRate),
+                                 duration: Double(d.samples.count) / d.sampleRate)
+        } ?? []
 
-        guard let data = try? Data(contentsOf: json) else {
-            throw TranscriptionError.failed("whisper が結果(JSON)を出力しませんでした。")
+        let segments: [TranscriptSegment]
+        if let decoded, chunks.count > 1 {
+            segments = try await transcribeChunks(executable: executable, model: model, samples: decoded.samples, sampleRate: decoded.sampleRate,
+                                                  chunks: chunks, id: id, tmp: tmp, onProgress: onProgress)
+        } else {
+            try await Self.run(executable: executable,
+                               arguments: Self.arguments(model: model, wav: whisperInput, language: language, outputPrefix: prefix, options: options),
+                               timeout: Self.timeout(forDuration: duration), onProgress: onProgress)
+            try Task.checkCancellation()
+
+            guard let data = try? Data(contentsOf: json) else {
+                throw TranscriptionError.failed("whisper が結果(JSON)を出力しませんでした。")
+            }
+            segments = try WhisperJSONParser.parse(data)
         }
-        let segments = try WhisperJSONParser.parse(data)
         onProgress(1)
         return segments
+    }
+
+    /// 発話区間を 1 つずつ切り出して認識し、全体の時刻に直して開始順に連結する。
+    /// 各区間は前後に `WhisperChunking.padSeconds` の余白を付けて認識し、結果は「中心の時刻が自分の持ち分にある」ものだけ採る(隣との重複を避ける)。
+    private func transcribeChunks(executable: URL, model: URL, samples: [Float], sampleRate rate: Double,
+                                  chunks: [(start: Double, end: Double)], id: String, tmp: URL,
+                                  onProgress: @escaping @Sendable (Double) -> Void) async throws -> [TranscriptSegment] {
+        let owned = WhisperChunking.ownership(chunks)
+        var out: [TranscriptSegment] = []
+        for (i, c) in chunks.enumerated() {
+            try Task.checkCancellation()
+            let a = max(0, Int(((c.start - WhisperChunking.padSeconds) * rate).rounded()))
+            let b = min(samples.count, Int(((c.end + WhisperChunking.padSeconds) * rate).rounded()))
+            guard b > a else { continue }
+
+            let base = tmp.appendingPathComponent("moviecut-whisper-\(id)-\(i)")
+            let wav = base.appendingPathExtension("wav")
+            let json = base.appendingPathExtension("json")
+            defer {
+                try? FileManager.default.removeItem(at: wav)
+                try? FileManager.default.removeItem(at: json)
+            }
+            try WhisperPreprocessing.writeWAV(channels: [Array(samples[a..<b])], sampleRate: rate, to: wav)
+            try await Self.run(executable: executable,
+                               arguments: Self.arguments(model: model, wav: wav, language: language, outputPrefix: base, options: options),
+                               timeout: Self.timeout(forDuration: Double(b - a) / rate),
+                               onProgress: { p in onProgress(WhisperChunking.progress(index: i, count: chunks.count, inner: p)) })
+            try Task.checkCancellation()
+
+            guard let data = try? Data(contentsOf: json) else {
+                throw TranscriptionError.failed("whisper が結果(JSON)を出力しませんでした。")
+            }
+            let segs = try WhisperJSONParser.parse(data)
+            out += WhisperChunking.keep(WhisperChunking.shift(segs, by: Double(a) / rate), owned: owned[i])
+            onProgress(WhisperChunking.progress(index: i + 1, count: chunks.count, inner: 0))
+        }
+        return out
     }
 
     /// プロセスを起こして終わるまで待つ。キャンセルで terminate、タイムアウトでも terminate。
@@ -234,6 +285,105 @@ public struct WhisperTranscriber: Transcriber {
             let p: Process? = state.lock.withLock { state.cancelled = true; return state.process }
             if let p, p.isRunning { p.terminate() }
         }
+    }
+}
+
+// MARK: - 区間ごとの認識(区間計画・時刻のずらし)
+
+/// 発話区間ごとに認識するための計画。無音で区切り、区間ごとに言語を自動判定させる(日英混在でも後半が欠けない)。
+/// 区間の計画・時刻のずらし・持ち分の判定は純粋関数で、音声の読み込みだけが I/O。
+public enum WhisperChunking {
+    /// これより短い区間は次の区間と連結する(短すぎる断片は認識が不安定)。
+    public static let minChunkSeconds = 1.5
+    /// これを超える区間は、この長さごとに分割する。
+    public static let maxChunkSeconds = 30.0
+    /// 認識に渡すとき、区間の前後に足す余白(秒)。語頭・語尾を欠かさないため。
+    public static let padSeconds = 0.15
+    /// 発話区間を取るための無音の設定(最短無音 0.25 秒。文間ポーズ 0.23〜0.34 秒の下限に合わせて、短い間は切らない)。
+    public static let speechParams = SilenceParams(thresholdDb: -40, minSilence: 0.25, pad: 0.1)
+
+    /// 発話区間から認識の区間を決める。`speechRanges` は開始順の発話区間(無音を除いた残り)。
+    /// 発話が無いとき・計画が空になるときは [(0, duration)] を返す(呼び出し側は 1 区間なら従来どおり 1 回で認識する)。
+    public static func plan(speechRanges: [SilenceRange], duration: Double) -> [(start: Double, end: Double)] {
+        let whole = [(start: 0.0, end: max(0, duration))]
+        guard duration > 0 else { return whole }
+
+        var merged: [(start: Double, end: Double)] = []
+        for r in speechRanges {
+            let s = max(0, r.start), e = min(duration, r.end)
+            guard e > s else { continue }
+            if let last = merged.last, last.end - last.start < minChunkSeconds {
+                merged[merged.count - 1].end = max(last.end, e)
+            } else {
+                merged.append((start: s, end: e))
+            }
+        }
+
+        var out: [(start: Double, end: Double)] = []
+        for c in merged {
+            var s = c.start
+            while c.end - s > maxChunkSeconds {
+                out.append((start: s, end: s + maxChunkSeconds))
+                s += maxChunkSeconds
+            }
+            out.append((start: s, end: c.end))
+        }
+        return out.isEmpty ? whole : out
+    }
+
+    /// 音のサンプルから発話区間を求める(無音を除いた残り。前後 `speechParams.pad` の余白が入る)。
+    public static func speechRanges(samples: [Float], sampleRate: Double) -> [SilenceRange] {
+        let duration = Double(samples.count) / sampleRate
+        return SilenceDetector.profile(left: samples, sampleRate: sampleRate, duration: duration).keepRanges(speechParams)
+    }
+
+    /// 区間の持ち分。隣との境目は区間の間の中点にして、区間どうしで隙間も重なりも残さない。最初は 0 から、最後は無限大まで。
+    public static func ownership(_ plan: [(start: Double, end: Double)]) -> [(start: Double, end: Double)] {
+        plan.indices.map { i in
+            let lo = i == 0 ? 0 : (plan[i - 1].end + plan[i].start) / 2
+            let hi = i == plan.count - 1 ? Double.infinity : (plan[i].end + plan[i + 1].start) / 2
+            return (start: lo, end: hi)
+        }
+    }
+
+    /// 中心の時刻が持ち分 [start, end) に入る結果だけ残す(余白で二重に認識された語を捨てる)。
+    public static func keep(_ segs: [TranscriptSegment], owned: (start: Double, end: Double)) -> [TranscriptSegment] {
+        segs.filter { s in
+            let mid = (s.start + s.end) / 2
+            return mid >= owned.start && mid < owned.end
+        }
+    }
+
+    /// 区間の認識結果の時刻を全体の時刻へ直す(文と単語の両方)。
+    public static func shift(_ segs: [TranscriptSegment], by offset: Double) -> [TranscriptSegment] {
+        segs.map { s in
+            var t = s
+            t.start += offset
+            t.end += offset
+            t.words = shift(s.words, by: offset)
+            return t
+        }
+    }
+
+    /// 全体の進み。区間 `index` の中の進み `inner`(0〜1)を、0.05〜1 に区間数で按分する。
+    public static func progress(index: Int, count: Int, inner: Double) -> Double {
+        guard count > 0 else { return 0.05 }
+        let f = min(max(inner, 0), 1)
+        return 0.05 + 0.95 * (Double(index) + f) / Double(count)
+    }
+
+    /// 音声を 16kHz 想定の 1 チャンネル(先頭チャンネル)の Float サンプルとして読む。
+    public static func readMono(_ url: URL) throws -> (samples: [Float], sampleRate: Double) {
+        let file = try AVAudioFile(forReading: url)
+        let rate = file.processingFormat.sampleRate
+        let total = Int(file.length)
+        guard total > 0 else { return ([], rate) }
+        guard let buf = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(total)),
+              let data = buf.floatChannelData else {
+            throw TranscriptionError.failed("認識用の音声バッファを作れませんでした。")
+        }
+        try file.read(into: buf, frameCount: AVAudioFrameCount(total))
+        return (Array(UnsafeBufferPointer(start: data[0], count: Int(buf.frameLength))), rate)
     }
 }
 
