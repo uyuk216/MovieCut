@@ -318,6 +318,8 @@ final class ProjectModel: ObservableObject {
     /// 出力 ▸ 注記一覧…(注記のあるクリップの表・テキストと CSV の書き出し)のシート。
     @Published var showNoteListSheet = false
     @Published var showUnusedMediaSheet = false
+    /// 出力 ▸ プロキシを管理…(素材ごとのプロキシ・外部の関連付け・削除)のシート。
+    @Published var showProxySheet = false
     /// 素材の場所の再指定の結果(つながった・見つからなかった)。出すと結果のシートを表示する。
     @Published var relinkReport: MediaRelinkReport?
     /// 名前を変えているマーカー(シートを出す)。
@@ -402,6 +404,8 @@ final class ProjectModel: ObservableObject {
     var diarizationClipId: String?
     /// プロキシの作成(出力 ▸ プロキシを作成)と AI 画像生成(クリップ ▸ AIで画像を作る)の取り消し。
     var proxyCancel: (() -> Void)?
+    /// プロキシを置く場所(テストでは一時フォルダに差し替える)。作成・解決・削除はすべてこれを使う。
+    var proxyDirectory: URL = ProxyStore.defaultDirectory()
     var imageGenCancel: (() -> Void)?
     var voiceProviderFactory: (Project) -> VoiceProvider = { project in PluginVoiceRoutingProvider(host: AppServices.makePluginHost(for: project), fallback: RealVoiceProvider(project: project, engine: AppServices.engine)) }
     /// タイムラインの「全体表示」(タイムラインのビューが差し込む)。
@@ -455,10 +459,10 @@ final class ProjectModel: ObservableObject {
         OpenProjects.register(self)
         schedulePrewarm()
         // プロキシ編集の設定(アプリ全体)を、この書類の素材キャッシュへ。設定が変わったら付け直す。
-        assets.setPreviewProxies(ProxySettings.enabled(), lookup: ProjectModel.previewProxyPath)
-        nonisolated(unsafe) weak let a: RenderAssets? = assets
+        installPreviewProxies()
+        weak let model: ProjectModel? = self
         NotificationCenter.default.addObserver(forName: ProxySettings.didChange, object: nil, queue: .main) { _ in
-            a?.setPreviewProxies(ProxySettings.enabled(), lookup: ProjectModel.previewProxyPath)
+            MainActor.assumeIsolated { model?.installPreviewProxies() }
         }
         // メモリ予算(アプリ全体で 1 つ)と、プレビュー画質の縮小率を、この書類の素材キャッシュへ。画質の設定が変わったら縮小率だけ付け直す。
         assets.setBudgetManager(AppServices.cacheBudget)

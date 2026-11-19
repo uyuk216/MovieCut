@@ -262,6 +262,7 @@ struct AppCommands: Commands {
                 items(AppMenuSpec.exportQueueItems(s), run)
                 Divider()
                 MenuItemView(spec: AppMenuSpec.makeProxies(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.manageProxiesItem(s), perform: run)
                 Divider()
                 items(AppMenuSpec.rangeItems(s), run)
                 Divider()
@@ -311,6 +312,7 @@ struct AppCommands: Commands {
                 Menu(L10n.t("プレビュー画質")) { items(AppMenuSpec.previewTierItems(s), run) }
                 Menu(L10n.t("ガイド線")) { items(AppMenuSpec.guideItems(s), run) }
                 MenuItemView(spec: AppMenuSpec.previewProxy(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.proxyAutoCreateItem(s), perform: run)
                 Divider()
                 MenuItemView(spec: AppMenuSpec.scopeItem(s), perform: run)
                 Divider()

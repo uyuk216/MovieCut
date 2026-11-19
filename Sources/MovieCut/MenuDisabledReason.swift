@@ -119,7 +119,7 @@ extension AppMenuSpec {
         case .compoundEnter: return "中身のある複合クリップを選んでください"
         case .compoundExit: return "複合クリップの中を編集しているときだけ使えます"
         case .regenerateVoice, .makeVoices: return "ボイスのクリップを選んでください"
-        case .makeProxies: return "映像の素材がありません"
+        case .makeProxies, .manageProxies: return "映像の素材がありません"
         case .duplicate, .delete, .rippleDelete, .nudgeEarlier, .nudgeLater: return "クリップを選んでから実行します"
         default: return "今の状態では使えません"
         }

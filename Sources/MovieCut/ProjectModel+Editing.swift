@@ -76,6 +76,7 @@ extension ProjectModel {
         edit("素材の追加") { p in ids = ClipEditing.place(media: media, at: t, preferredTrack: TrackTarget.index(in: p), in: &p); UnusedMedia.register(media.map(\.path), in: &p) }
         selectedClipId = ids.last
         statusText = "\(ids.count) 個の素材を追加しました"
+        if !ids.isEmpty { autoCreateProxiesIfNeeded(forVideoPaths: media.filter { $0.kind == .video }.map(\.path)) }
         return specialIds + ids
     }
 
@@ -115,6 +116,7 @@ extension ProjectModel {
         guard !ids.isEmpty else { return specialIds }
         selectedClipId = ids.last
         statusText = "\(ids.count) 個の素材を追加しました"
+        autoCreateProxiesIfNeeded(forVideoPaths: media.filter { $0.kind == .video }.map(\.path))
         return specialIds + ids
     }
 
