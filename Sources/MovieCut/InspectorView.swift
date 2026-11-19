@@ -568,6 +568,7 @@ struct ClipInspector: View {
                 if Clip.supportsSpeed(c.type) { disclose("speed", c.isFreeze ? "フリーズフレーム" : "速度", open: false, hideHeader: true) { speedSections(c) } }
                 if StabilizeEditing.supports(c) { disclose("stabilize", "手ぶれ補正", open: false, hideHeader: true) { stabilizeSections(c) } }
                 if Clip.supportsEffects(c.type) { disclose("mask", "形のマスク", open: false, hideHeader: true) { maskSections(c) } }
+                ObjectMaskSection(model: model, clip: c)
                 if Clip.supportsWarp(c.type) { warpSections(c) }
                 if (c.type == .video || c.type == .audio) && !c.isFreeze {
                     disclose("audio", "音声", open: true, hideHeader: true) {

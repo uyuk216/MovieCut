@@ -249,6 +249,14 @@ final class ProjectModel: ObservableObject {
     @Published var objectTrackingProgress: Double? = nil
     /// 実行中の追跡セッション(キャンセル用。保存しない)。
     var objectTrackingSession: ObjectTrackingSession? = nil
+    /// オブジェクトマスク作成中の進捗(0〜1。nil なら実行していない)。
+    @Published var objectMaskProgress: Double? = nil
+    /// 実行中のオブジェクトマスク作成セッション(キャンセル用。保存しない)。
+    var objectMaskSession: ObjectTrackingSession? = nil
+    /// プレビューで対象をクリック指定する待ち状態のクリップ(nil なら待ち状態でない。保存しない)。
+    @Published var objectMaskPickingClipId: String? = nil
+    /// オブジェクトマスクの矩形指定の下書き(キャンバスに対する割合・左上原点。保存しない)。
+    var objectMaskSeedRect = TrackRect(x: 0.35, y: 0.35, w: 0.3, h: 0.3)
     /// 声を作っている間のメッセージ(nil なら作っていない)。
     @Published var busyMessage: String?
     @Published var errorMessage: String?
