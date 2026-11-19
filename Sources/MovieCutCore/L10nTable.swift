@@ -680,5 +680,18 @@ enum L10nTable {
         "メタデータを保存": "Save Metadata",
         "メタデータを消去": "Clear Metadata",
         "メモ": "Note",
+        "ベベル（アルファ）": "Bevel (Alpha)",
+        "ベベル＆エンボス": "Bevel & Emboss",
+        "放射ブラー": "Radial Blur",
+        "厚み（px）": "Thickness (px)",
+        "光の角度（°）": "Light Angle (deg)",
+        "柔らかさ（px）": "Softness (px)",
+        "ハイライトの強さ": "Highlight Strength",
+        "シャドウの強さ": "Shadow Strength",
+        "深さ（px）": "Depth (px)",
+        "中心X": "Center X",
+        "中心Y": "Center Y",
+        "量": "Amount",
+        "方式": "Mode",
     ]
 }

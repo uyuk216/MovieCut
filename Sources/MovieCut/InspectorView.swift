@@ -965,6 +965,7 @@ struct ClipInspector: View {
         case .mode: return { $0 >= 0.5 ? "ぼかし" : "モザイク" }
         case .toggle: return { $0 >= 0.5 ? "オン" : "オフ" }
         case .aperture: return { ApertureShape(value: $0).label }
+        case .radialMode: return { $0 >= 0.5 ? "回転" : "ズーム" }
         case .plain: return { s.step >= 1 ? "\(Int($0.rounded()))" : String(format: "%.2f", $0) }
         }
     }

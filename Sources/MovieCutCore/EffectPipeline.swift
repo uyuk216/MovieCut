@@ -71,6 +71,9 @@ public enum EffectPipeline {
         case .edgeBlur: return v("radius") < eps
         case .echo: return v("distance") < eps || v("opacity") < eps || v("count") < 0.5
         case .denoise: return v("strength") < eps
+        case .bevelAlpha: return v("size") < eps || (v("highlight") < eps && v("shadow") < eps)
+        case .bevelEmboss: return v("depth") < eps || v("strength") < eps
+        case .radialBlur: return v("amount") < eps
         }
     }
 
@@ -352,6 +355,15 @@ public enum EffectPipeline {
             return EchoGhost.apply(img, distance: e.v("distance") * scale, angleDegrees: e.v("angle"), count: Int(e.v("count").rounded()), opacity: e.v("opacity"))
         case .denoise:
             return VideoDenoise.apply(img, strength: e.v("strength"))
+        case .bevelAlpha:
+            return Bevel.apply(img, field: .alpha, size: e.v("size") * scale, angleDegrees: e.v("angle"), softness: e.v("softness") * scale, highlight: e.v("highlight"), shadow: e.v("shadow"))
+        case .bevelEmboss:
+            return Bevel.apply(img, field: .luminance, size: e.v("depth") * scale, angleDegrees: e.v("angle"), softness: e.v("softness") * scale, highlight: e.v("strength"), shadow: e.v("strength"))
+        case .radialBlur:
+            // 中心はクリップ枠に対する割合(0〜1)。Y は画面の約束(上が 0)に合わせ、CI 座標(y 上向き)へ直す。
+            // 量は割合ベースの量なので px と違い拡縮しない(中心からの距離そのものが解像度で伸びる)。
+            let c = CGPoint(x: bounds.minX + e.v("centerX") * bounds.width, y: bounds.maxY - e.v("centerY") * bounds.height)
+            return RadialBlur.apply(img, center: c, amount: e.v("amount"), mode: RadialBlur.mode(value: e.v("mode")))
         case .lut:
             guard let p = e.path, let c = LUTCache.shared.cube(atPath: p) else { return img }
             return LUTApply.apply(img, lut: c.lut, dimension: c.dimension, data: c.data, intensity: e.v("intensity"))
