@@ -5,7 +5,7 @@ import MovieCutCore
 enum MenuCommand: Hashable {
     case about, settings, videoSettings
     case checkForUpdates
-    case addMedia, screenRecord, importPSD, importSVG, importMIDI, importImageSequence, importRigFolder, importRigPSD, export, exportPreset(ExportPreset), exportCustomPreset(String), saveCustomPreset, importFcpXml
+    case addMedia, screenRecord, importPSD, importSVG, importMIDI, importImageSequence, importRigFolder, importRigPSD, export, exportPreset(ExportPreset), exportCustomPreset(String), saveCustomPreset, importFcpXml, importPrproj
     // 字幕(B3)とチャプター
     case importSubtitles, exportSubtitles, generateSubtitles, copyChapters, copyChaptersColor(MarkerColor)
     // 字幕を AI で翻訳して SRT に書き出す(ショートカットは持たない)
@@ -689,6 +689,7 @@ enum AppMenuSpec {
          MenuItemSpec(command: .importRigFolder, title: "立ち絵パーツのフォルダを読み込む…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "眉・目・口などを重ねて動かす"),
          MenuItemSpec(command: .importRigPSD, title: "PSDから立ち絵を作る…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "グループ名からパーツに分ける"),
          MenuItemSpec(command: .importFcpXml, title: "FCP XMLを読み込む…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "Premiere 等のタイムラインを取り込む"),
+         MenuItemSpec(command: .importPrproj, title: "Premiere Pro プロジェクト(.prproj)を読み込む…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "Premiere Pro のタイムラインを取り込む"),
          MenuItemSpec(command: .audioLibrary, title: "素材ブラウザを開く…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "BGM・効果音のフォルダ"),
          MenuItemSpec(command: .addFont, title: "フォントを追加…", shortcut: nil, enabled: true, checked: nil, hint: "テキストで使えるようにする")]
     }
@@ -1645,6 +1646,7 @@ enum AppMenu {
             case .screenRecord: m.showScreenRecordingSheet = true
             case .importPSD: m.chooseAndImportPSD()
             case .importFcpXml: m.chooseAndImportFcpXml()
+            case .importPrproj: m.chooseAndImportPrproj()
             case .importSVG: m.chooseAndImportSVG()
             case .importMIDI: m.chooseAndImportMIDI()
             case .importImageSequence: m.chooseAndImportImageSequence()

@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<PremiereData Version="3">
+	<Project ObjectID="1" ClassID="62ad66dd-0dcd-42da-a660-6d8fbde94876" Version="42">
+	</Project>
+	<Sequence ObjectUID="seq-t1" Version="11">
+		<TrackGroups Version="1">
+			<TrackGroup Version="1" Index="0">
+				<Second ObjectRef="10"/>
+			</TrackGroup>
+		</TrackGroups>
+		<Name>tiny</Name>
+	</Sequence>
+	<VideoTrackGroup ObjectID="10" Version="13">
+		<TrackGroup Version="1">
+			<Tracks Version="1">
+				<Track Index="0" ObjectURef="track-t1"/>
+			</Tracks>
+			<FrameRate>10160640000</FrameRate>
+		</TrackGroup>
+		<FrameRect>0,0,1920,1080</FrameRect>
+	</VideoTrackGroup>
+	<VideoClipTrack ObjectUID="track-t1" Version="1">
+		<ClipTrack Version="2">
+			<ClipItems Version="3">
+				<TrackItems Version="1">
+					<TrackItem Index="0" ObjectRef="100"/>
+				</TrackItems>
+			</ClipItems>
+		</ClipTrack>
+	</VideoClipTrack>
+	<VideoClipTrackItem ObjectID="100" Version="6">
+		<ClipTrackItem Version="8">
+			<TrackItem Version="3">
+				<Start>0</Start>
+				<End>508032000000</End>
+			</TrackItem>
+			<SubClip ObjectRef="110"/>
+		</ClipTrackItem>
+	</VideoClipTrackItem>
+	<SubClip ObjectID="110" Version="5">
+		<Clip ObjectRef="120"/>
+		<MasterClip ObjectURef="mc-t1"/>
+		<Name>tiny.mp4</Name>
+	</SubClip>
+	<MasterClip ObjectUID="mc-t1" Version="11">
+		<Name>tiny.mp4</Name>
+	</MasterClip>
+	<VideoClip ObjectID="120" Version="11">
+		<Clip Version="18">
+			<Source ObjectRef="130"/>
+			<InPoint>0</InPoint>
+			<OutPoint>508032000000</OutPoint>
+		</Clip>
+	</VideoClip>
+	<VideoMediaSource ObjectID="130" Version="2">
+		<MediaSource Version="4">
+			<Media ObjectURef="media-t1"/>
+		</MediaSource>
+	</VideoMediaSource>
+	<Media ObjectUID="media-t1" Version="28">
+		<FilePath>/media/tiny.mp4</FilePath>
+		<Title>tiny.mp4</Title>
+	</Media>
+</PremiereData>
