@@ -3,6 +3,19 @@ import Foundation
 /// 英語の対訳表(日本語が原文。キーは日本語の文字列そのもの)。足すときは `L10nTests` が重複・空欄・日本語のままの訳を検査する。
 enum L10nTable {
     static let english: [String: String] = [
+        "レビューコメントを追加…": "Add Review Comment…",
+        "レビューコメント一覧…": "Review Comments…",
+        "レビューコメントを書き出す…": "Export Review Comments…",
+        "レビューコメントを読み込む…": "Import Review Comments…",
+        "レビューコメント": "Review Comments",
+        "レビューコメントはありません": "No review comments",
+        "レビューコメントを編集": "Edit Review Comment",
+        "作成者名": "Author Name",
+        "コメント": "Comment",
+        "追加": "Add",
+        "解決済み": "Resolved",
+        "未解決": "Open",
+        "位置へ移動": "Go to Position",
         "FCP XML形式(.xml)で書き出す…": "Export as FCP XML (.xml)…",
         "EDL形式(.edl)で書き出す…": "Export as EDL (.edl)…",
         "FCP XMLを読み込む…": "Import FCP XML…",

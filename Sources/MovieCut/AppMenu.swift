@@ -120,6 +120,8 @@ enum MenuCommand: Hashable {
     // 移動(M7)
     case goStart, goEnd, prevEdit, nextEdit, prevLine, nextLine, jumpToTime
     case addMarker, renameMarker, prevMarker, nextMarker, deleteMarker, clearMarkers, jumpToMarker(String)
+    // レビューコメント(追加はシート、読み書きはファイル)
+    case addReviewComment, reviewCommentList, exportReviewComments, importReviewComments, jumpToReviewComment(String)
     // マーカーの色(再生位置のマーカー)
     case markerColor(MarkerColor)
     // キーフレーム / アニメーション
@@ -374,6 +376,8 @@ struct MenuState: Equatable {
     var hasNextEdit = false
     var hasPrevLine = false
     var hasNextLine = false
+    struct ReviewCommentItem: Equatable { var id: String; var time: Double; var body: String; var resolved: Bool }
+    var reviewComments: [ReviewCommentItem] = []
     var markers: [MarkerItem] = []
     var markerAtPlayhead = false
     /// 再生位置のマーカーの色(無ければ既定の色)。
@@ -620,6 +624,7 @@ struct MenuState: Equatable {
         hasPrevLine = firstVoice < t - ClipEditing.timeEpsilon
         hasNextLine = lastVoice > t + ClipEditing.timeEpsilon
         markers = p.markers.map { MarkerItem(id: $0.id, time: $0.time, name: $0.name) }
+        reviewComments = p.reviewComments.map { ReviewCommentItem(id: $0.id, time: $0.time, body: $0.body, resolved: $0.resolved) }
         markerAtPlayhead = m.markerNearPlayhead != nil
         playheadMarkerColor = MarkerColor.resolved(m.markerNearPlayhead?.color)
         hasPrevMarker = p.markers.contains { $0.time < t - MarkerEditing.epsilon }
@@ -1259,6 +1264,21 @@ enum AppMenuSpec {
         }
     }
 
+    static func reviewCommentItems(_ s: MenuState) -> [MenuItemSpec] {
+        [MenuItemSpec(command: .addReviewComment, title: "レビューコメントを追加…", shortcut: nil, enabled: s.canEdit, checked: nil),
+         MenuItemSpec(command: .reviewCommentList, title: "レビューコメント一覧…", shortcut: nil, enabled: s.canEdit, checked: nil),
+         MenuItemSpec(command: .exportReviewComments, title: "レビューコメントを書き出す…", shortcut: nil, enabled: s.canEdit && !s.reviewComments.isEmpty, checked: nil),
+         MenuItemSpec(command: .importReviewComments, title: "レビューコメントを読み込む…", shortcut: nil, enabled: s.canEdit, checked: nil)]
+    }
+
+    static func reviewCommentTitle(_ c: MenuState.ReviewCommentItem) -> String {
+        "\(timecode(c.time))  \(c.body)" + (c.resolved ? " ✓" : "")
+    }
+
+    static func reviewCommentList(_ s: MenuState) -> [MenuItemSpec] {
+        s.reviewComments.map { MenuItemSpec(command: .jumpToReviewComment($0.id), title: reviewCommentTitle($0), shortcut: nil, enabled: s.canEdit, checked: $0.resolved) }
+    }
+
     static func markerList(_ s: MenuState) -> [MenuItemSpec] {
         s.markers.map { MenuItemSpec(command: .jumpToMarker($0.id), title: markerTitle($0), shortcut: nil, enabled: s.canEdit, checked: nil) }
     }
@@ -1595,7 +1615,7 @@ enum AppMenuSpec {
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
         [about, checkForUpdates, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), textGenerationSettingsItem(s), imageGenerationSettingsItem(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s), apngExport(s), ymmpExport(s), webVideoExport(s), pngWavExport(s), exoExport(s), fcpXmlExport(s), edlExport(s)] + pluginExportItems(s) + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), trackMixerItem(s), clipListItem(s), noteListItem(s)] + scriptStoryboardItems(s) + scriptCSVItems(s) + [makeProxies(s), manageProxiesItem(s)] + [] + clipMenu(s).flatMap { $0 } + multicamItems(s) + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + pluginEffectItems(s) + effectPresetItems(s) + effectActions(s) + faceBlurItems(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textVerticalItem(s), textPerCharItem(s), textCounterItem(s), dictionaryItem(s), scriptTableItem(s), dialogueSuggestionsItem(s), saveItemTemplateItem(s)] + itemTemplateApplyItems(s) + itemTemplateCreateItems(s) + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [sceneSplitItem(s), silenceCutItem(s)] + rangeDeleteItems(s) + [audioAutoSyncItem(s), beatMarkersItem(s), remixItem(s), scaleDuplicateItem(s), beatPlaceItem(s), fillerCutItem(s), transcriptEditItem(s), speakerDiarizationItem(s), lutLoadItem(s), colorTransferItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
-            + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerColorItems(s) + markerList(s)
+            + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerColorItems(s) + markerList(s) + reviewCommentItems(s) + reviewCommentList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + previewTierItems(s) + guideItems(s) + [previewProxy(s), proxyAutoCreateItem(s), fullScreen(s)] + help.flatMap { $0 }
     }
@@ -1793,6 +1813,11 @@ enum AppMenu {
             case .clearMarkers: m.clearMarkers()
             case .markerColor(let c): m.setMarkerColorAtPlayhead(c)
             case .jumpToMarker(let id): m.jumpToMarker(id: id)
+            case .addReviewComment: m.showReviewCommentsSheet = true
+            case .reviewCommentList: m.showReviewCommentsSheet = true
+            case .exportReviewComments: m.chooseAndExportReviewComments()
+            case .importReviewComments: m.chooseAndImportReviewComments()
+            case .jumpToReviewComment(let id): m.jumpToReviewComment(id: id)
             case .toggleKeyframe: m.toggleKeyframeFromMenu()
             case .prevKeyframe: m.seekKeyframe(forward: false)
             case .nextKeyframe: m.seekKeyframe(forward: true)

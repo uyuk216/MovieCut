@@ -222,6 +222,15 @@ struct AppCommands: Commands {
                         items(AppMenuSpec.markerList(s), run)
                     }
                 }
+                Divider()
+                items(AppMenuSpec.reviewCommentItems(s), run)
+                Menu(L10n.t("レビューコメント")) {
+                    if s.reviewComments.isEmpty {
+                        Text(L10n.t("レビューコメントはありません"))
+                    } else {
+                        items(AppMenuSpec.reviewCommentList(s), run)
+                    }
+                }
             }
         }
 
