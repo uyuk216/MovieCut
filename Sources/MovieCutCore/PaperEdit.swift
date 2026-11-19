@@ -132,4 +132,45 @@ public enum PaperEdit {
         for c in made { CompoundEditing.insertByStart(c, into: &out.tracks[trackIndex].clips) }
         return (out, made.map(\.id), nil)
     }
+    // MARK: 並べ替え(組み立て列の操作)
+
+    /// 組み立て列の 1 件を別の位置へ動かした列を返す(ドラッグでの移動と同じ意味:
+    /// 元の位置から抜いて、行き先へ差す)。番号が範囲外・移動なしなら元の列をそのまま返す。
+    public static func moving(_ order: [Int], from: Int, to: Int) -> [Int] {
+        guard order.indices.contains(from), order.indices.contains(to), from != to else { return order }
+        var out = order
+        let v = out.remove(at: from)
+        out.insert(v, at: to)
+        return out
+    }
+
+    /// SwiftUI の `onMove` と同じ意味の並べ替え(シートでのドラッグ用)。
+    /// `fromOffsets` の件を抜いて、`toOffset` の位置へまとめて差す。
+    /// 指定が不正(範囲外・空)なら元の列をそのまま返す。
+    public static func reordered(_ order: [Int], fromOffsets: IndexSet, toOffset: Int) -> [Int] {
+        guard !fromOffsets.isEmpty,
+              fromOffsets.allSatisfy({ order.indices.contains($0) }),
+              (0...order.count).contains(toOffset) else { return order }
+        let moving = fromOffsets.sorted().map { order[$0] }
+        var out = order
+        for i in fromOffsets.sorted(by: >) { out.remove(at: i) }
+        let removedBefore = fromOffsets.filter { $0 < toOffset }.count
+        out.insert(contentsOf: moving, at: toOffset - removedBefore)
+        return out
+    }
+
+    /// 組み立て列の 1 件を隣と入れ替える(上へ/下へボタン用)。端・範囲外ではそのまま返す。
+    public static func movingEntry(_ order: [Int], at pos: Int, by delta: Int) -> [Int] {
+        let next = pos + delta
+        guard order.indices.contains(pos), order.indices.contains(next) else { return order }
+        var out = order
+        out.swapAt(pos, next)
+        return out
+    }
+
+    /// 組み立て列の 1 件を先頭または末尾へ動かす。範囲外ではそのまま返す。
+    public static func movingEntryToEdge(_ order: [Int], at pos: Int, toEnd: Bool) -> [Int] {
+        guard order.indices.contains(pos) else { return order }
+        return moving(order, from: pos, to: toEnd ? order.count - 1 : 0)
+    }
 }

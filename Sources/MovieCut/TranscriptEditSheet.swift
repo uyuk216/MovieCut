@@ -1,10 +1,13 @@
 import SwiftUI
 import MovieCutCore
 
-/// クリップ ▸ 文字起こしで編集…: 音声を文字にして文の一覧を出す。使い方は 2 つ:
+/// クリップ ▸ 文字起こしで編集…: 音声を文字にして文の一覧を出す。使い方は 3 つ:
 /// - 取り除く(従来): チェックを外した文を取り除く(全部チェック = 何も変えない)。
+/// - 単語を取り除く: 単語の時刻がある文では、単語 1 件ずつ選んで取り除ける(区間は詰まる)。
+///   単語の時刻が無い素材では単語単位は使えず、その旨を明示する(文単位まで)。
 /// - Paper Edit: 行を押した順に組み立て列へ入れ、選んだ文の区間だけを並べたクリップ列を
 ///   元のレイヤーの末尾または新しいシーンへ配置する(元クリップは変えない)。
+///   組み立て列はドラッグとボタン(上へ/下へ/先頭へ/末尾へ)で並べ替えられる。
 /// 閉じると認識は止まる(`.task` のキャンセル)。
 struct TranscriptEditSheet: View {
     @ObservedObject var model: ProjectModel
@@ -17,19 +20,23 @@ struct TranscriptEditSheet: View {
     @State private var paperOrder: [Int] = []
     @State private var paperDestination: PaperDestination = .timeline
     @State private var paperSceneName = "Paper Edit"
+    // 単語単位用の状態(文の状態とは混ぜない)。チェックした単語が取り除く対象。
+    @State private var wordSelection: Set<TranscriptWordEdit.Selection> = []
 
-    enum Mode { case remove, paper }
+    enum Mode { case remove, word, paper }
     enum PaperDestination { case timeline, scene }
 
     private var clipId: String? { model.transcriptEditClipId }
     private var clipStart: Double { clipId.flatMap { model.clip($0)?.start } ?? 0 }
     private var removedCount: Int { (found?.count ?? 0) - kept.count }
+    private var hasAnyWordTiming: Bool { found?.contains { $0.hasWordTiming } ?? false }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("文字起こしで編集").font(.headline)
             Picker("", selection: $mode) {
                 Text(L10n.t("文を取り除く")).tag(Mode.remove)
+                Text(L10n.t("単語を取り除く")).tag(Mode.word)
                 Text(L10n.t("選んだ文で組み立てる")).tag(Mode.paper)
             }
             .pickerStyle(.segmented)
@@ -41,6 +48,12 @@ struct TranscriptEditSheet: View {
                     } else {
                         if mode == .remove {
                             Text("\(f.count) 文あります。残す文にチェックを入れたまま、外した文は取り除かれます。")
+                        } else if mode == .word {
+                            if hasAnyWordTiming {
+                                Text(L10n.t("取り除く単語にチェックを入れます"))
+                            } else {
+                                Text("この素材は単語単位の時刻が無いため、単語単位では編集できません(文単位までです)")
+                            }
                         } else {
                             Text(L10n.t("行を押すと組み立てに追加されます。同じ行をもう一度押すと繰り返し追加されます。"))
                         }
@@ -55,6 +68,8 @@ struct TranscriptEditSheet: View {
                                                 .monospacedDigit()
                                         }
                                         .toggleStyle(.checkbox)
+                                    } else if mode == .word {
+                                        wordRows(sentenceIndex: i, sentence: s)
                                     } else {
                                         Button { paperOrder.append(i) } label: {
                                             HStack {
@@ -84,7 +99,7 @@ struct TranscriptEditSheet: View {
                 }
             }
             .font(.callout)
-            if mode == .remove {
+            if mode == .remove || mode == .word {
                 Toggle("後ろを詰める", isOn: $ripple).toggleStyle(.checkbox)
             } else {
                 VStack(alignment: .leading, spacing: 6) {
@@ -112,6 +127,11 @@ struct TranscriptEditSheet: View {
                         .buttonStyle(.borderedProminent)
                         .keyboardShortcut(.defaultAction)
                         .disabled(found == nil || removedCount <= 0)
+                } else if mode == .word {
+                    Button(wordSelection.isEmpty ? L10n.t("単語を取り除く") : "\(wordSelection.count) 単語を取り除く") { commitWord() }
+                        .buttonStyle(.borderedProminent)
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(found == nil || wordSelection.isEmpty)
                 } else {
                     Button(paperOrder.isEmpty ? L10n.t("組み立てる") : "\(paperOrder.count) 文で組み立てる") { commitPaper() }
                         .buttonStyle(.borderedProminent)
@@ -125,6 +145,33 @@ struct TranscriptEditSheet: View {
         .task { await scan() }
     }
 
+    /// 単語モードの行: 単語の時刻がある文は単語ごとのチェック、無い文はその旨の注記つきで文だけ出す。
+    @ViewBuilder
+    private func wordRows(sentenceIndex i: Int, sentence s: TranscriptSentence) -> some View {
+        if s.hasWordTiming {
+            ForEach(Array(s.words.enumerated()), id: \.offset) { wi, w in
+                Toggle(isOn: Binding(
+                    get: { wordSelection.contains(TranscriptWordEdit.Selection(sentence: i, word: wi)) },
+                    set: { on in
+                        let sel = TranscriptWordEdit.Selection(sentence: i, word: wi)
+                        if on { wordSelection.insert(sel) } else { wordSelection.remove(sel) }
+                    }
+                )) {
+                    Text("\(String(format: "%.2f", clipStart + w.start)) 秒  \(w.text)")
+                        .monospacedDigit()
+                }
+                .toggleStyle(.checkbox)
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(String(format: "%.2f", clipStart + s.start)) 秒  \(s.text)")
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                Text(L10n.t("単語単位の時刻がありません")).foregroundStyle(.secondary).font(.caption)
+            }
+        }
+    }
+
     /// Paper Edit: その行が組み立て列の何番目に入っているか(例: "#1, #3")。入っていなければ nil。
     private func paperBadge(for index: Int) -> String? {
         let positions = paperOrder.enumerated().filter { $0.element == index }.map { "#\($0.offset + 1)" }
@@ -132,36 +179,38 @@ struct TranscriptEditSheet: View {
     }
 
     /// Paper Edit: 組み立て列(並び順)の確認と並べ替え・取り消し。
+    /// 並べ替えはドラッグ(`onMove`)とボタン(先頭へ/上へ/下へ/末尾へ)の両方。計算は Core の `PaperEdit`。
     @ViewBuilder
     private func paperOrderList(_ f: [TranscriptSentence]) -> some View {
         if paperOrder.isEmpty {
             Text(L10n.t("組み立ての並びはまだ空です")).foregroundStyle(.secondary)
         } else {
             Text(L10n.t("組み立ての並び"))
-            ScrollView {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(Array(paperOrder.enumerated()), id: \.offset) { pos, idx in
-                        HStack {
-                            Text("\(pos + 1). \(f[idx].text)")
-                                .lineLimit(1)
-                            Spacer()
-                            Button(L10n.t("上へ")) { movePaperEntry(from: pos, by: -1) }
-                                .disabled(pos == 0)
-                            Button(L10n.t("下へ")) { movePaperEntry(from: pos, by: 1) }
-                                .disabled(pos == paperOrder.count - 1)
-                            Button(L10n.t("外す")) { paperOrder.remove(at: pos) }
-                        }
+            Text(L10n.t("ドラッグでも並べ替えられます")).foregroundStyle(.secondary).font(.caption)
+            List {
+                ForEach(Array(paperOrder.enumerated()), id: \.offset) { pos, idx in
+                    HStack {
+                        Text("\(pos + 1). \(f[idx].text)")
+                            .lineLimit(1)
+                        Spacer()
+                        Button(L10n.t("先頭へ移動")) { paperOrder = PaperEdit.movingEntryToEdge(paperOrder, at: pos, toEnd: false) }
+                            .disabled(pos == 0)
+                        Button(L10n.t("上へ")) { paperOrder = PaperEdit.movingEntry(paperOrder, at: pos, by: -1) }
+                            .disabled(pos == 0)
+                        Button(L10n.t("下へ")) { paperOrder = PaperEdit.movingEntry(paperOrder, at: pos, by: 1) }
+                            .disabled(pos == paperOrder.count - 1)
+                        Button(L10n.t("末尾へ移動")) { paperOrder = PaperEdit.movingEntryToEdge(paperOrder, at: pos, toEnd: true) }
+                            .disabled(pos == paperOrder.count - 1)
+                        Button(L10n.t("外す")) { paperOrder.remove(at: pos) }
                     }
                 }
+                .onMove { from, to in
+                    paperOrder = PaperEdit.reordered(paperOrder, fromOffsets: from, toOffset: to)
+                }
             }
-            .frame(maxHeight: 110)
+            .listStyle(.plain)
+            .frame(height: 110)
         }
-    }
-
-    private func movePaperEntry(from pos: Int, by delta: Int) {
-        let next = pos + delta
-        guard paperOrder.indices.contains(pos), paperOrder.indices.contains(next) else { return }
-        paperOrder.swapAt(pos, next)
     }
 
     private func scan() async {
@@ -180,6 +229,13 @@ struct TranscriptEditSheet: View {
         guard let id = clipId, let f = found else { return }
         let removed = f.indices.filter { !kept.contains($0) }.map { f[$0] }
         if model.cutTranscriptSentences(clipId: id, removed: removed, ripple: ripple) { model.showTranscriptEditSheet = false }
+    }
+
+    private func commitWord() {
+        guard let id = clipId, let f = found, !wordSelection.isEmpty else { return }
+        if model.cutTranscriptWords(clipId: id, sentences: f, selections: wordSelection, ripple: ripple) {
+            model.showTranscriptEditSheet = false
+        }
     }
 
     private func commitPaper() {
