@@ -584,6 +584,9 @@ enum L10nTable {
         "トーンカーブ(マスター)": "Tone Curve (Master)",
         "トーンカーブ(赤)": "Tone Curve (Red)",
         "トーンカーブ(緑)": "Tone Curve (Green)",
-        "トーンカーブ(青)": "Tone Curve (Blue)"
+        "トーンカーブ(青)": "Tone Curve (Blue)",
+        "差し替え可能項目を付ける(文字・色・画像)": "Add replaceable fields (text, color, image)",
+        "差し替える値を入力": "Enter Values to Replace",
+        "空欄の項目は、テンプレートに保存した値のままになります。色は #RRGGBB の形で入力します。": "Fields left blank keep the value saved in the template. Enter colors as #RRGGBB."
     ]
 }
