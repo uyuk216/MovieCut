@@ -15,6 +15,8 @@ enum TimelinePalette {
     static let unknown = rgb(0x3c4050)
     /// 複合クリップ(中身をまとめた 1 本)。
     static let compound = rgb(0x4f8f8f)
+    /// シーンクリップ(プロジェクトのシーンを参照する 1 本)。複合(青緑)・音声(紫)と見分けられる藍紫。
+    static let scene = rgb(0x6457c4)
     static let tachie = rgb(0xa8527f)
     static let voiceBase: (r: CGFloat, g: CGFloat, b: CGFloat) = (0x16 / 255.0, 0x17 / 255.0, 0x1c / 255.0)
     static let areaBG = rgb(0x191a1e), panel = rgb(0x26282f), line = rgb(0x383b45), rowLine = rgb(0x2a2c33)
@@ -35,6 +37,7 @@ enum TimelinePalette {
         case .text: return text
         case .blur: return blur
         case .compound: return compound
+        case .scene: return scene
         case .tachie: return tachie
         default: return unknown
         }
@@ -792,6 +795,7 @@ final class TimelineCanvas: NSView {
         case .text: return "T \(c.text ?? "")"
         case .blur: return "ぼかし範囲"
         case .compound: return "複合 (\(c.tracks?.reduce(0) { $0 + $1.clips.count } ?? 0)クリップ)"
+        case .scene: return SceneClipDisplay.label(for: c, in: project)
         case .tachie: return tachieLabel(c)
         default: return (c.src as NSString?)?.lastPathComponent ?? ""
         }
@@ -882,6 +886,19 @@ final class TimelineCanvas: NSView {
                                   withAttributes: [.font: NSFont.systemFont(ofSize: 9, weight: .bold), .foregroundColor: NSColor.black])
             ctx.restoreGState()
         }
+        // シーンの印(左上の小さな「シーン」札)。シーンクリップ専用表示(R2-3): 色・ラベル(シーン名)に加えて札でも見分ける。
+        // 注記の印があるときは、その右へ並べる。狭いクリップには出さない
+        let hasSceneBadge = c.type == .scene && r.width >= 56
+        if hasSceneBadge {
+            let box = NSRect(x: r.minX + 4 + (hasNoteBadge ? 17 : 0), y: r.minY + 3, width: 30, height: 13)
+            ctx.saveGState()
+            ctx.clip(to: r.insetBy(dx: 1, dy: 1))
+            NSColor(white: 0, alpha: 0.38).setFill()
+            NSBezierPath(roundedRect: box, xRadius: 3, yRadius: 3).fill()
+            ("シーン" as NSString).draw(at: NSPoint(x: box.minX + 3, y: box.minY + 1),
+                                  withAttributes: [.font: NSFont.systemFont(ofSize: 9, weight: .bold), .foregroundColor: NSColor.white])
+            ctx.restoreGState()
+        }
         // ロックの印(右上の小さな錠前)。ロックされたクリップだけ。狭いクリップには出さない
         if c.isClipLocked && r.width >= 24 { drawLockGlyph(in: NSRect(x: r.maxX - 15, y: r.minY + 3, width: 11, height: 11), ctx: ctx) }
         // 無効の印(右上、消音の左の小さな「無」)。無効化されたクリップだけ。狭いクリップには出さない
@@ -895,7 +912,7 @@ final class TimelineCanvas: NSView {
             let x = r.maxX - 15 - (c.isClipLocked && r.width >= 24 ? 17 : 0)
             drawMuteGlyph(in: NSRect(x: x, y: r.minY + 3, width: 11, height: 11), ctx: ctx)
         }
-        var textLeft = r.minX + 7 + (hasNoteBadge ? 15 : 0)
+        var textLeft = r.minX + 7 + (hasNoteBadge ? 15 : 0) + (hasSceneBadge ? 33 : 0)
         if let lb = leftBorder {
             // 左端の 3pt の線(キャラの色そのまま)
             ctx.saveGState()

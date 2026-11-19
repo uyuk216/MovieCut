@@ -518,6 +518,7 @@ struct ClipInspector: View {
         case .visualizer: return "音声ビジュアライザ"
         case .shape: return "図形"
         case .compound: return "複合クリップ"
+        case .scene: return "シーンクリップ"
         case .tachie: return "立ち絵"
         default: return t.rawValue
         }
@@ -556,8 +557,9 @@ struct ClipInspector: View {
                 if c.type == .text { disclose("text", "文字", open: true, hideHeader: true) { textSections(c) } }
                 if c.type == .tachie { TachieClipSection(model: model, clip: c) }
                 if TextStyleEditing.supports(c.type) { disclose("textStyle", "文字のスタイル", open: true) { TextStyleInspector(model: model, store: model.textStyles, clipId: clipId) } }
-                if [ClipType.image, .video, .text, .compound, .tachie].contains(c.type) { disclose("place", "位置・変形", open: true) { placeSections(c) } }
+                if [ClipType.image, .video, .text, .compound, .scene, .tachie].contains(c.type) { disclose("place", "位置・変形", open: true) { placeSections(c) } }
                 if c.type == .compound { disclose("compound", "中身", open: false, hideHeader: true) { compoundSection(c) } }
+                if c.type == .scene { disclose("scene", "シーン", open: true, hideHeader: true) { sceneSection(c) } }
                 if EffectEditing.supports(c.type) { disclose("effect", "エフェクト", open: false, hideHeader: true) { effectSections(c) } }
                 if TransitionEditing.supportsVideo(c.type) { disclose("transition", "トランジション", open: false, hideHeader: true) { transitionSections(c) } }
                 if c.type == .blur { disclose("blur", "ぼかし", open: true) { blurSections(c) } }
@@ -707,6 +709,30 @@ struct ClipInspector: View {
                 }
                 .help("スローモーションのコマ落ちを滑らかにします。ブレンドは前後のコマの重ね合わせ、オプティカルフローは動きを推定して動きに沿った中間のコマを作ります（重い処理なので、最初のコマは少し待ちます）")
             }
+        }
+    }
+
+    /// シーンクリップ専用表示(R2-3): 参照先シーンの名前と中身の概要(レイヤー・クリップ・尺・参照数)。
+    /// 中身の編集は「シーンを開く」から(この場では直さない。複合クリップの節と同じ流儀)。
+    @ViewBuilder private func sceneSection(_ c: Clip) -> some View {
+        InspectorSection(title: "シーン")
+        if let sid = c.sceneId, let scene = model.rootProject.scene(withId: sid) {
+            Text("シーン「\(scene.name)」を参照しています。シーンの中身を直すと、参照しているすべてのクリップに反映されます。")
+                .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            if let summary = SceneClipDisplay.summary(for: c, in: model.rootProject) {
+                Text(summary)
+                    .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            HStack(spacing: 8) {
+                Button("シーンを開く") { _ = model.enterScene(sid) }
+                    .disabled(model.isLocked || model.isInsideScene || model.isInsideCompound)
+                Button("シーン一覧…") { model.openSceneList() }
+                    .disabled(model.isLocked)
+            }
+            .controlSize(.small)
+        } else {
+            Text("参照先のシーンが見つかりません。このクリップは描画も音声も出ません。")
+                .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
     }
 
