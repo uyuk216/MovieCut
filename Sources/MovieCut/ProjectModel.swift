@@ -342,6 +342,8 @@ final class ProjectModel: ObservableObject {
     @Published var relinkReport: MediaRelinkReport?
     /// 名前を変えているマーカー(シートを出す)。
     @Published var renamingMarkerId: String?
+    /// レビューコメント一覧シートの表示。
+    @Published var showReviewCommentsSheet = false
     /// 左の台本欄の文字(ツールバー・メニューの「台本から音声を作る」が読む)。
     /// 保存するプロジェクトの一部(`Project.scriptText`)。Undo の対象にはしない(文字の Undo は TextEditor が持つ)が、変えたら書類を編集済みにする。
     /// 本体は `mirror`(保存・自動保存はそこから読む)。`project.scriptText` は開いたときの値のまま古くなるので読まない。
@@ -783,7 +785,7 @@ final class ProjectModel: ObservableObject {
 
     /// 書き出し(ツールバーのボタンも MC_DEBUG_EXPORT もこれを呼ぶ)。
     /// `preset` があれば、プロジェクトの「写し」にプリセットを当てて書き出す(ドキュメント自体は変えない)。
-    func runExport(to url: URL, preset: ExportPreset? = nil, spec: ExportSpec? = nil, bitrateMbps: Double? = nil, range: ExportRange? = nil, loudness: LoudnessNormalizationSettings = .disabled) async -> ExportOutcome {
+    func runExport(to url: URL, preset: ExportPreset? = nil, spec: ExportSpec? = nil, bitrateMbps: Double? = nil, range: ExportRange? = nil, loudness: LoudnessNormalizationSettings = .disabled, subtitleEmbed: SubtitleEmbedSettings = .disabled) async -> ExportOutcome {
         guard !directExportBlocked() else { return .failure(ExportError.writerFailed(nil)) }
         // 素材が欠けたまま書き出すと、その部分が静かに抜けるので止める(保存パネルの前にも同じ確認をする)
         if reportMissingMediaForExport() { return .failure(ExportError.writerFailed(nil)) }
@@ -800,7 +802,7 @@ final class ProjectModel: ObservableObject {
         let title = (chosen.map { $0.audioOnly ? "音声を書き出しています" : "\($0.name) で書き出しています" } ?? (plan.isProRes ? "\(OutputPlan.codecLabel(plan.codec)) の .mov を書き出しています" : "MP4 を書き出しています"))
         return await runJob(title: title, fileName: url.lastPathComponent, notices: notices,
                             success: "\(url.lastPathComponent) に書き出しました" + (plan.usesFallbackCodec && isVideo ? "(HEVC)" : ""), result: url) { progress in
-            try await ExportJob.run(project: snapshot, preset: preset, spec: spec, bitrateMbps: bitrateMbps, range: range, to: url, loudness: loudness, pluginEffectProviders: AppServices.pluginEffectProviders, progress: progress)
+            try await ExportJob.run(project: snapshot, preset: preset, spec: spec, bitrateMbps: bitrateMbps, range: range, to: url, loudness: loudness, pluginEffectProviders: AppServices.pluginEffectProviders, subtitleEmbed: subtitleEmbed, progress: progress)
         }
     }
 

@@ -114,6 +114,7 @@ struct ContentView: View {
             model.mediaBrowserWindow?.sync(open: open)
         }
         .sheet(isPresented: Binding(get: { model.renamingMarkerId != nil }, set: { if !$0 { model.renamingMarkerId = nil } })) { RenameMarkerSheet(model: model) }
+        .sheet(isPresented: $model.showReviewCommentsSheet) { ReviewCommentsSheet(model: model) }
         .sheet(isPresented: Binding(get: { model.isExporting }, set: { _ in })) { ExportSheet(model: model) }
         .alert(L10n.t(model.errorTitle), isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {
             Button(L10n.t("OK")) { model.errorMessage = nil }

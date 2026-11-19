@@ -42,7 +42,7 @@ final class MenuM7Tests: XCTestCase {
         let s = state()
         let groups = AppMenuSpec.clipMenu(s)
         XCTAssertEqual(groups.map { $0.map(\.title) }, [
-            ["テキストを追加", "ぼかし範囲を追加", "調整レイヤーを追加", "音声ビジュアライザを追加", "QRコードを追加…", "AIで画像を作る…", "AIで画像を生成(API)…", "立ち絵を追加…"],
+            ["テキストを追加", "ぼかし範囲を追加", "調整レイヤーを追加", "音声ビジュアライザを追加", "QRコードを追加…", "AIで画像を作る…", "AIで画像を生成(API)…", "AIで動画を生成(API)…", "AIで効果音を生成(API)…", "AIで音楽を生成(API)…", "AIでサウンドスケープを生成(API)…", "生成延長(API)…", "立ち絵を追加…"],
             ["クリップを分割", "クリップを複製", "クリップをロック", "クリップを消音", "立ち絵クリップを声の長さに合わせる", "クリップを削除", "すき間を詰めて削除", "選択クリップを再生ヘッドに揃える", "選択クリップをつなげて並べる", "1 コマ前へ動かす", "1 コマ後ろへ動かす", "手ぶれ補正（映像を滑らかにする）", "縦動画に自動リフレーム", "動きに追従させる", "複合クリップにまとめる", "複合クリップを解除", "複合クリップの中を編集", "複合クリップから出る", "選択からシーンを作成", "シーン一覧…", "シーンを開く", "シーンから出る", "グループにする", "グループを解除", "グループを無効にする", "グループを複合クリップにまとめる(画像を合成)"],
             ["再生位置より前を切り落とす", "再生位置より後ろを切り落とす", "ロール編集…", "スリップ編集…", "スライド編集…", "J/Lカット…", "リップルトリム(頭)を再生位置へ", "リップルトリム(尻)を再生位置へ", "リップルトリムをすべてのレイヤーに", "分割点を統合"],
             ["前のクリップを選択", "次のクリップを選択", "選択クリップを上のレイヤーへ", "選択クリップを下のレイヤーへ", "再生位置のクリップを選ぶ", "重なったクリップを巡回選択", "短いクリップを選ぶ", "元素材の使用範囲を表示"],
@@ -50,7 +50,7 @@ final class MenuM7Tests: XCTestCase {
             ["同じセリフのテイクを比較…", "候補クリップを比較して差し替え…", "選択クリップを別プロジェクトへ複製…", "範囲を指定してサブクリップを一括作成…"],
         ])
         XCTAssertEqual(groups.map { $0.map(\.shortcut) }, [
-            [sc("t", [.command, .shift]), sc("b", [.command, .shift]), nil, nil, nil, nil, nil, nil],
+            [sc("t", [.command, .shift]), sc("b", [.command, .shift]), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil],
             [nil, sc("d", .command), nil, nil, nil, nil, sc(.delete, [.option, .command]), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil],
             [sc("[", [.option, .command]), sc("]", [.option, .command]), nil, nil, nil, nil, nil, nil, nil, nil],
             [sc("[", .command), sc("]", .command), sc("[", [.shift, .command]), sc("]", [.shift, .command]), sc(.upArrow, [.control, .option]), nil, nil, nil],
@@ -125,7 +125,7 @@ final class MenuM7Tests: XCTestCase {
         // 選択あり・再生位置がクリップの中・真ん中の行
         s = state { $0.hasSelection = true; $0.canTrim = true; $0.canSplit = true; $0.canMoveUp = true; $0.canMoveDown = true; $0.hasPrevClip = true; $0.hasNextClip = true ; $0.canCompoundGroup = true; $0.hasClips = true; $0.hasSourceUsage = true }
         // 手ぶれ補正・AI・ボイス・複合の解除は、ここでは対象外(それぞれの選択条件でだけ使える)
-        let gated: Set<MenuCommand> = [.clipMute, .treatAsVoice, .fitTachieToVoice, .regenerateVoice, .aiRewrite, .stabilizeToggle, .autoReframe, .motionTrack, .compoundUngroup, .compoundEnter, .compoundExit, .sceneEnter, .sceneExit, .sceneCreateFromSelection, .groupClips, .ungroupClips, .groupToggleDisabled, .groupToCompound, .concatenateClips, .selectShortClips, .cycleOverlapping, .mergeSplits, .rollEdit, .slipEdit, .slideEdit, .splitEdit, .rippleTrimHead, .rippleTrimTail, .multicamCreate, .multicamSwitch, .multicamCut(0), .multicamCut(1), .multicamCut(2), .multicamCut(3), .multicamCut(4), .multicamCut(5), .multicamCut(6), .multicamCut(7), .multicamCut(8), .compareTakes, .candidateSwap, .transferClips, .generateImageAPI]
+        let gated: Set<MenuCommand> = [.clipMute, .treatAsVoice, .fitTachieToVoice, .regenerateVoice, .aiRewrite, .stabilizeToggle, .autoReframe, .motionTrack, .compoundUngroup, .compoundEnter, .compoundExit, .sceneEnter, .sceneExit, .sceneCreateFromSelection, .groupClips, .ungroupClips, .groupToggleDisabled, .groupToCompound, .concatenateClips, .selectShortClips, .cycleOverlapping, .mergeSplits, .rollEdit, .slipEdit, .slideEdit, .splitEdit, .rippleTrimHead, .rippleTrimTail, .multicamCreate, .multicamSwitch, .multicamCut(0), .multicamCut(1), .multicamCut(2), .multicamCut(3), .multicamCut(4), .multicamCut(5), .multicamCut(6), .multicamCut(7), .multicamCut(8), .compareTakes, .candidateSwap, .transferClips, .generateImageAPI, .generateVideoAPI, .generateAudioAPI, .generateMusicAPI, .generateSoundscapeAPI, .generativeExtend]
         XCTAssertTrue(AppMenuSpec.clipMenu(s).flatMap { $0 }.filter { !gated.contains($0.command) }.allSatisfy(\.enabled))
         XCTAssertFalse(item(AppMenuSpec.clipLayerAndVoice(s), .regenerateVoice).enabled, "ボイス以外では押せない")
         s.isVoiceSelected = true

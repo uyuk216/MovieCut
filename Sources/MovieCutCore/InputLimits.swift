@@ -93,6 +93,15 @@ extension Project {
         if height < 1 || height > InputLimits.maxPixelSide { height = min(max(height, 1), InputLimits.maxPixelSide) }
         for i in tracks.indices { Self.sanitize(&tracks[i], depth: 0) }
         for i in markers.indices { markers[i].time = InputLimits.clamp(markers[i].time, -InputLimits.maxSeconds...InputLimits.maxSeconds) }
+        // レビューコメント: 件数の上限と時刻の範囲(正常な値は変えない)
+        if reviewComments.count > ReviewComment.maxCount { reviewComments = Array(reviewComments.prefix(ReviewComment.maxCount)) }
+        for i in reviewComments.indices {
+            reviewComments[i].time = InputLimits.clamp(reviewComments[i].time, 0...InputLimits.maxSeconds)
+            if let e = reviewComments[i].endTime {
+                let ce = InputLimits.clamp(e, 0...InputLimits.maxSeconds)
+                reviewComments[i].endTime = ce > reviewComments[i].time ? ce : nil
+            }
+        }
         rangeIn = InputLimits.clampOpt(rangeIn, -InputLimits.maxSeconds...InputLimits.maxSeconds)
         rangeOut = InputLimits.clampOpt(rangeOut, -InputLimits.maxSeconds...InputLimits.maxSeconds)
         // 素材メタデータとスマートコレクション: 値を安全な形に整え、空の項目は落とす(正常な値は変えない)
