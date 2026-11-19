@@ -828,7 +828,7 @@ enum AppMenuSpec {
     }
 
     static func webVideoExport(_ s: MenuState) -> MenuItemSpec {
-        MenuItemSpec(command: .exportWebVideo, title: "WebM / AV1 / WebP で書き出す…", shortcut: nil, enabled: s.canEdit && s.canExport, checked: nil, hint: "ffmpeg があるときだけ")
+        MenuItemSpec(command: .exportWebVideo, title: "WebM / AV1 / WebP / DNxHR で書き出す…", shortcut: nil, enabled: s.canEdit && s.canExport, checked: nil, hint: "ffmpeg があるときだけ")
     }
 
     static func pngWavExport(_ s: MenuState) -> MenuItemSpec {

@@ -52,6 +52,11 @@ public enum WebVideoFormat: String, CaseIterable, Sendable {
     case webmAV1
     case mp4AV1
     case animatedWebP
+    case dnxhrLB
+    case dnxhrSQ
+    case dnxhrHQ
+    case dnxhrHQX
+    case dnxhr444
 
     public var title: String {
         switch self {
@@ -59,14 +64,35 @@ public enum WebVideoFormat: String, CaseIterable, Sendable {
         case .webmAV1: return "WebM (AV1)"
         case .mp4AV1: return "MP4 (AV1)"
         case .animatedWebP: return "アニメーション WebP"
+        case .dnxhrLB: return "DNxHR LB"
+        case .dnxhrSQ: return "DNxHR SQ"
+        case .dnxhrHQ: return "DNxHR HQ"
+        case .dnxhrHQX: return "DNxHR HQX"
+        case .dnxhr444: return "DNxHR 444"
         }
     }
+
+    /// DNxHR 形式のときのプロファイル。それ以外は nil(詳細は `DNxExport.swift`)。
+    public var dnxProfile: DNxHRProfile? {
+        switch self {
+        case .dnxhrLB: return .lb
+        case .dnxhrSQ: return .sq
+        case .dnxhrHQ: return .hq
+        case .dnxhrHQX: return .hqx
+        case .dnxhr444: return .finishing444
+        case .webmVP9, .webmAV1, .mp4AV1, .animatedWebP: return nil
+        }
+    }
+
+    /// DNxHR 形式か。
+    public var isDNx: Bool { dnxProfile != nil }
 
     public var fileExtension: String {
         switch self {
         case .webmVP9, .webmAV1: return "webm"
         case .mp4AV1: return "mp4"
         case .animatedWebP: return "webp"
+        case .dnxhrLB, .dnxhrSQ, .dnxhrHQ, .dnxhrHQX, .dnxhr444: return "mov"
         }
     }
 
@@ -76,6 +102,7 @@ public enum WebVideoFormat: String, CaseIterable, Sendable {
         case .webmVP9: return ["libvpx-vp9"]
         case .webmAV1, .mp4AV1: return ["libsvtav1", "libaom-av1"]
         case .animatedWebP: return ["libwebp_anim", "libwebp"]
+        case .dnxhrLB, .dnxhrSQ, .dnxhrHQ, .dnxhrHQX, .dnxhr444: return ["dnxhd"]
         }
     }
 
@@ -85,6 +112,8 @@ public enum WebVideoFormat: String, CaseIterable, Sendable {
         case .webmVP9, .webmAV1: return "libopus"
         case .mp4AV1: return "aac"
         case .animatedWebP: return nil
+        case .dnxhrLB, .dnxhrSQ, .dnxhrHQ: return "pcm_s16le"
+        case .dnxhrHQX, .dnxhr444: return "pcm_s24le"
         }
     }
 
@@ -115,6 +144,7 @@ public enum WebVideoFormat: String, CaseIterable, Sendable {
         case .webmVP9, .webmAV1: return "webm"
         case .mp4AV1: return "mp4"
         case .animatedWebP: return "webp"
+        case .dnxhrLB, .dnxhrSQ, .dnxhrHQ, .dnxhrHQX, .dnxhr444: return "mov"
         }
     }
 
@@ -129,6 +159,11 @@ public enum WebVideoFormat: String, CaseIterable, Sendable {
             return ["-c:v", videoEncoder, "-crf", "\(crf)", "-preset", "8", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart"]
         case .animatedWebP:
             return ["-c:v", videoEncoder, "-loop", "0", "-an"]
+        case .dnxhrLB, .dnxhrSQ, .dnxhrHQ, .dnxhrHQX, .dnxhr444:
+            // DNxHR: ビットレートはプロファイルとフレームサイズから ffmpeg が自動で決めるため、
+            // -b:v も -crf も付けない(付けても効かないことが ASWF ガイドに明記されている)。
+            guard let profile = dnxProfile, let audio = audioEncoder else { return ["-c:v", videoEncoder] }
+            return ["-c:v", videoEncoder, "-profile:v", profile.ffmpegProfile, "-pix_fmt", profile.pixelFormat, "-c:a", audio]
         }
     }
 }
@@ -154,7 +189,9 @@ public enum FFmpegLocator {
         for line in output.split(separator: "\n") {
             let parts = line.split(whereSeparator: { $0 == " " || $0 == "\t" }).map(String.init)
             // 行の形: " V....D libvpx-vp9  説明..."(先頭は種別フラグ)
-            guard parts.count >= 2, parts[0].count >= 2, parts[0].allSatisfy({ "VASDIL.|=-".contains($0) }) else { continue }
+            // フラグ文字には F(フレーム単位の並列化)も含まれる。dnxhd は "VFS..D" のため、
+            // F を許さないと dnxhd 行を取りこぼして DNxHR が常時「エンコーダが無い」になる(2026-11-19 発覚)。
+            guard parts.count >= 2, parts[0].count >= 2, parts[0].allSatisfy({ "VASFDIL.|=-".contains($0) }) else { continue }
             names.insert(parts[1])
         }
         return names
@@ -255,12 +292,21 @@ public enum FFmpegVideoExporter {
             throw FFmpegExportError.encoderMissing(format: format.title, encoder: format.videoEncoderCandidates.first ?? "?")
         }
 
+        // DNxHR はフレームサイズの下限・上限があるため、中間書き出しの前に確かめる
+        // (ffmpeg に進んでから断られると、理由が英語ログの末尾になって分かりにくい)。
+        if format.dnxProfile != nil,
+           let message = DNxHRProfile.validationError(width: project.width, height: project.height, fps: project.fps) {
+            throw FFmpegExportError.unavailable(format: format.title, reason: message)
+        }
+
         let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("moviecut-ffmpeg-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tmpDir) }
-        let intermediate = tmpDir.appendingPathComponent("intermediate.mp4")
+        // DNxHR の中間は ProRes(他の形式は従来どおり H.264 の MP4)。
+        // H.264 中間だと HQX / 444 のビット深度・色差が変換前に落ちてしまうため。
+        let intermediate = tmpDir.appendingPathComponent(format.dnxProfile == nil ? "intermediate.mp4" : "intermediate.\(DNxExport.intermediateFileExtension)")
         var intermediateProject = project
-        intermediateProject.codec = "h264"
+        intermediateProject.codec = format.dnxProfile.map { DNxExport.intermediateCodec(for: $0) } ?? "h264"
         try await Exporter(project: intermediateProject, assets: assets, range: range, videoBitrate: intermediateBitrate, loudness: loudness, pluginEffectProviders: pluginEffectProviders)
             .export(to: intermediate) { v in progress?(v * 0.7) }
         if Task.isCancelled { throw CancellationError() }

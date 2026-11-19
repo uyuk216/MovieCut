@@ -3,7 +3,7 @@ import AppKit
 import UniformTypeIdentifiers
 import MovieCutCore
 
-/// 出力 ▸ WebM / AV1 / WebP で書き出す…(ffmpeg が見つかるときだけ使える任意形式)。
+/// 出力 ▸ WebM / AV1 / WebP / DNxHR で書き出す…(ffmpeg が見つかるときだけ使える任意形式)。
 /// AVFoundation / ImageIO では書けない形式のため、裏側は `FFmpegVideoExporter`(中間 MP4 + ffmpeg 変換)。
 /// 書けない形式は、選んだ時点で理由をアラートで見せる(黙って失敗させない)。
 extension ProjectModel {
@@ -13,8 +13,8 @@ extension ProjectModel {
         let formats = WebVideoFormat.allCases
         let panel = NSSavePanel()
         panel.canCreateDirectories = true
-        panel.title = "WebM / AV1 / WebP で書き出す"
-        panel.message = "これらの形式は ffmpeg(アニメーション WebP は img2webp も)を使って変換します(無い形式は理由を表示します)。"
+        panel.title = "WebM / AV1 / WebP / DNxHR で書き出す"
+        panel.message = "これらの形式は ffmpeg(アニメーション WebP は img2webp も)を使って変換します(無い形式は理由を表示します)。DNxHR は MOV(音声は無圧縮 PCM)で書き出します。"
 
         let formatPopup = NSPopUpButton(frame: .zero, pullsDown: false)
         formatPopup.addItems(withTitles: formats.map(\.title))
@@ -25,6 +25,12 @@ extension ProjectModel {
         let row = NSStackView(views: [NSTextField(labelWithString: "形式"), formatPopup])
         row.orientation = .horizontal
         row.spacing = 8
+
+        // DNxHR のときだけ、プロファイルの説明(用途・ビット深度・色差)を出す
+        let detailLabel = NSTextField(wrappingLabelWithString: "")
+        detailLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        detailLabel.textColor = .secondaryLabelColor
+        detailLabel.setAccessibilityIdentifier("webvideo-format-detail")
 
         // ラウドネス正規化(通常書き出しと同じ設定。F-3: WebVideo 経路にも引き継ぐ)
         let loudnessBox = NSButton(checkboxWithTitle: "ラウドネス正規化", target: nil, action: nil)
@@ -40,7 +46,7 @@ extension ProjectModel {
         let loudnessRow = NSStackView(views: [loudnessBox, loudnessPopup])
         loudnessRow.orientation = .horizontal
         loudnessRow.spacing = 8
-        let column = NSStackView(views: [row, loudnessRow])
+        let column = NSStackView(views: [row, detailLabel, loudnessRow])
         column.orientation = .vertical
         column.alignment = .leading
         column.spacing = 8
@@ -49,6 +55,8 @@ extension ProjectModel {
 
         // 形式を変えたら拡張子を合わせる
         let handler = WebVideoPanelHandler(panel: panel, formats: formats, documentName: documentName)
+        handler.detailLabel = detailLabel
+        handler.updateDetail(index: 0)
         handler.loudnessBox = loudnessBox
         handler.loudnessPopup = loudnessPopup
         formatPopup.target = handler
@@ -69,6 +77,18 @@ extension ProjectModel {
                 alert.alertStyle = .warning
                 alert.messageText = "\(format.title) は書けません"
                 alert.informativeText = reason + "\n\nMP4 / MOV / GIF / APNG は通常どおり書き出せます。"
+                alert.addButton(withTitle: "OK")
+                if let w = self.window { alert.beginSheetModal(for: w) } else { alert.runModal() }
+                return
+            }
+            // DNxHR はサイズの対応範囲があるため、書き出し前に理由を見せて止める(ffmpeg の英語ログで失敗させない)
+            if let profile = format.dnxProfile,
+               let message = DNxHRProfile.validationError(width: self.project.width, height: self.project.height, fps: self.project.fps) {
+                _ = profile
+                let alert = NSAlert()
+                alert.alertStyle = .warning
+                alert.messageText = "\(format.title) は書けません"
+                alert.informativeText = message
                 alert.addButton(withTitle: "OK")
                 if let w = self.window { alert.beginSheetModal(for: w) } else { alert.runModal() }
                 return
@@ -103,6 +123,13 @@ private final class WebVideoPanelHandler: NSObject {
     let documentName: String
     var loudnessBox: NSButton?
     var loudnessPopup: NSPopUpButton?
+    var detailLabel: NSTextField?
+    /// 形式に合わせた説明文(DNxHR プロファイルの用途・ビット深度・色差。それ以外は空)。
+    func updateDetail(index: Int) {
+        let format = formats[max(0, min(index, formats.count - 1))]
+        guard let profile = format.dnxProfile else { detailLabel?.stringValue = ""; return }
+        detailLabel?.stringValue = "\(L10n.t(profile.summary)) · \(profile.bitDepth)bit \(profile.chromaSubsampling) · MOV"
+    }
     init(panel: NSSavePanel, formats: [WebVideoFormat], documentName: String) {
         self.panel = panel; self.formats = formats; self.documentName = documentName
     }
@@ -115,6 +142,7 @@ private final class WebVideoPanelHandler: NSObject {
         return .enabled(targetLUFS: t)
     }
     @objc func formatChanged(_ sender: NSPopUpButton) {
+        updateDetail(index: sender.indexOfSelectedItem)
         let format = formats[max(0, min(sender.indexOfSelectedItem, formats.count - 1))]
         panel.allowedContentTypes = [UTType(filenameExtension: format.fileExtension) ?? .movie]
         panel.nameFieldStringValue = documentName + "." + format.fileExtension
