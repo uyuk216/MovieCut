@@ -17,7 +17,8 @@ struct UnusedMediaSheet: View {
             Text("どのクリップにも使われていない素材です。削除しても、ディスクのファイルは消えません(このプロジェクトの素材リストから外すだけです)。")
                 .font(.caption).foregroundStyle(.secondary)
             if items.isEmpty {
-                Text("未使用の素材はありません。").foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 160)
+                InspectorGuideCard(symbol: "checkmark.circle", heading: "未使用の素材はありません", message: "すべての素材がクリップで使われています。")
+                    .frame(maxWidth: .infinity, minHeight: 160)
             } else {
                 List(items, id: \.path) { item in
                     HStack {

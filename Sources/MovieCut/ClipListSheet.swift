@@ -17,7 +17,7 @@ struct ClipListSheet: View {
                 Text("\(rows.count) 件").foregroundStyle(.secondary).monospacedDigit()
             }
             if rows.isEmpty {
-                Text("クリップがありません").foregroundStyle(.secondary)
+                InspectorGuideCard(symbol: "film.stack", heading: "クリップがありません", message: "素材をタイムラインに置くと、ここに一覧が出ます。")
                     .frame(maxWidth: .infinity, minHeight: 200)
             } else {
                 Table(rows, selection: $selection) {

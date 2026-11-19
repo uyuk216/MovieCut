@@ -16,8 +16,8 @@ struct NoteListSheet: View {
                 Text("\(rows.count) 件").foregroundStyle(.secondary).monospacedDigit()
             }
             if rows.isEmpty {
-                Text("注記はありません。インスペクタの「注記」に書くと、ここに出ます。")
-                    .foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 160)
+                InspectorGuideCard(symbol: "note.text", heading: "注記はありません", message: "インスペクタの「注記」に書くと、ここに出ます。")
+                    .frame(maxWidth: .infinity, minHeight: 160)
             } else {
                 Table(rows, selection: $selection) {
                     TableColumn("開始") { Text(String(format: "%.3f", $0.start)).monospacedDigit() }.width(min: 60, ideal: 72)
