@@ -525,6 +525,8 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var disabled: Bool? = nil
     /// 録音した音声クリップを「声」として扱う指定(BGM の自動ダッキングの引き金になる)。true のときだけファイルに書く。
     public var treatAsVoice: Bool? = nil
+    /// エッセンシャルサウンドの種別(会話 / ミュージック / 効果音 / アンビエンス)。無いときは未分類(ファイルに書かない)。
+    public var audioCategory: AudioCategory? = nil
     /// 字幕に出す文(ボイスクリップ)。無いときは読み上げる文 `text` が字幕。空文字は「字幕なし」。読み上げ(口パクの母音判定を含む)は常に `text`。
     public var subtitleText: String? = nil
     /// 立ち絵クリップの素材(`Project.tachies` の id)。
@@ -547,7 +549,7 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var hslMask: HSLMask? = nil
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["id", "type", "voicevoxAccent", "subtitleText", "tachieId", "mouthDrive", "speakingOnly", "followsProjectEnd", "playsAnimation", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "bokehShape", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "frameFlow", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "valueRef", "duck", "visualizer", "stabilize", "stabilizeRoll", "tracks", "sceneId", "mask", "meshWarp", "puppetWarp", "blendMode", "group", "ruby", "figure", "note", "locked", "muted", "disabled", "treatAsVoice", "tracking", "objectMask", "hslMask"]
+    static let knownKeys: Set<String> = ["id", "type", "voicevoxAccent", "subtitleText", "tachieId", "mouthDrive", "speakingOnly", "followsProjectEnd", "playsAnimation", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "bokehShape", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "frameFlow", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "valueRef", "duck", "visualizer", "stabilize", "stabilizeRoll", "tracks", "sceneId", "mask", "meshWarp", "puppetWarp", "blendMode", "group", "ruby", "figure", "note", "locked", "muted", "disabled", "treatAsVoice", "audioCategory", "tracking", "objectMask", "hslMask"]
 
     public init() {}
 
@@ -586,6 +588,8 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var isDisabled: Bool { disabled ?? false }
     /// 声として扱う指定があるか(音声クリップ向け)。
     public var isTreatedAsVoice: Bool { treatAsVoice ?? false }
+    /// エッセンシャルサウンドの種別が付いているか(未分類でない)。
+    public var hasAudioCategory: Bool { audioCategory != nil }
     /// トランジションが 1 つでもあるか(描画の速い道の判定)。
     public var hasTransition: Bool { transitionIn != nil || transitionOut != nil }
     public var fadeInOrDefault: Double { max(0, fadeIn ?? 0) }
@@ -751,6 +755,10 @@ public struct Clip: Codable, Equatable, Identifiable {
         if let raw: JSONValue = l.value("treatAsVoice") {
             if l.bool("treatAsVoice") == true { treatAsVoice = true } else { extra["treatAsVoice"] = raw }   // true 以外は捨てずに書き戻す
         }
+        // エッセンシャルサウンドの種別: 知らない種別・型が違う値は捨てずに書き戻す(blendMode と同じ作法)
+        if let raw: JSONValue = l.value("audioCategory") {
+            if let name: String = l.value("audioCategory"), let cat = AudioCategory(rawValue: name) { audioCategory = cat } else { extra["audioCategory"] = raw }
+        }
         // アクセント編集: 読めない型は捨てずに書き戻す。空は未設定と同じ
         if let raw: JSONValue = l.value("voicevoxAccent") {
             if let v: [VoicevoxAccentPhrase] = l.value("voicevoxAccent") { voicevoxAccent = v.isEmpty ? nil : v } else { extra["voicevoxAccent"] = raw }
@@ -887,6 +895,7 @@ public struct Clip: Codable, Equatable, Identifiable {
         if muted == true { try c.encode(true, forKey: AnyKey("muted")) }
         if disabled == true { try c.encode(true, forKey: AnyKey("disabled")) }
         if treatAsVoice == true { try c.encode(true, forKey: AnyKey("treatAsVoice")) }
+        if let cat = audioCategory { try c.encode(cat.rawValue, forKey: AnyKey("audioCategory")) }
         if let a = voicevoxAccent, !a.isEmpty { try c.encode(a, forKey: AnyKey("voicevoxAccent")) }
         if let tr = tracking, tr.hasValidSamples { try c.encode(tr, forKey: AnyKey("tracking")) }
         if let om = objectMask, om.hasValidSamples { try c.encode(om, forKey: AnyKey("objectMask")) }
