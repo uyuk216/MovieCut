@@ -705,6 +705,8 @@ enum L10nTable {
         "いちばん強い周波数": "Strongest Frequency",
         "解析した長さ": "Analyzed Duration",
         "長いクリップのため、先頭だけを解析しました。": "Only the beginning was analyzed because the clip is long.",
-        "選択中のクリップに音声が無いため、スペクトログラムは出せません。": "The selected clip has no audio, so no spectrogram can be shown."
+        "選択中のクリップに音声が無いため、スペクトログラムは出せません。": "The selected clip has no audio, so no spectrogram can be shown.",
+        "アイテムテンプレートを適用": "Apply Item Template",
+        "テンプレートからクリップを作成": "Create Clip from Template"
     ]
 }
