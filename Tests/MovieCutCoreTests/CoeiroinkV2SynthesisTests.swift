@@ -11,12 +11,13 @@ final class FakeCoeiroinkV2Server: URLProtocol {
     nonisolated(unsafe) static var calls: [Call] = []
     nonisolated(unsafe) static var wav = Data()
     nonisolated(unsafe) static var engineInfoStatus = 200
+    nonisolated(unsafe) static var versionStatus = 200
     nonisolated(unsafe) static var synthesisStatus = 200
     nonisolated(unsafe) static var duplicateStyle = false
     static let lock = NSLock()
 
     static func reset() {
-        lock.withLock { calls = []; engineInfoStatus = 200; synthesisStatus = 200; duplicateStyle = false }
+        lock.withLock { calls = []; engineInfoStatus = 200; versionStatus = 200; synthesisStatus = 200; duplicateStyle = false }
     }
     static func session() -> URLSession {
         let c = URLSessionConfiguration.ephemeral
@@ -67,7 +68,8 @@ final class FakeCoeiroinkV2Server: URLProtocol {
                 if obj == nil || !required.allSatisfy({ obj?[$0] != nil }) { status = 422 } else { data = Self.wav }
             }
         case "/version":
-            data = Data(#""1.0.0""#.utf8)
+            status = Self.versionStatus
+            if status == 200 { data = Data(#""1.0.0""#.utf8) }
         case "/audio_query":
             data = Data(#"{"accent_phrases":[],"speedScale":9,"outputSamplingRate":24000}"#.utf8)
         case "/synthesis":

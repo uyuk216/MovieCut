@@ -15,9 +15,14 @@ final class CoeiroinkSharevoxAppTests: XCTestCase {
         XCTAssertTrue(ids.contains(AquesTalkPlugin.manifest.id))
 
         XCTAssertFalse(host.isLoaded(pluginID: CoeiroinkPlugin.manifest.id))
-        let coeiro = try XCTUnwrap(try host.voiceProviderIfAvailable(forEngine: "coeiroink") as? VoicevoxFamilyPluginProvider)
-        XCTAssertEqual(coeiro.spec, CoeiroinkPlugin.spec)
+        // R3-2: アプリ配線は自動判定プロバイダ(v2 応答時は v2、無応答時は従来 v1 へ委譲)
+        let coeiro = try XCTUnwrap(try host.voiceProviderIfAvailable(forEngine: "coeiroink") as? CoeiroinkAutoProvider)
         XCTAssertEqual(coeiro.baseURL, "http://127.0.0.1:50032")
+        XCTAssertEqual(coeiro.v1Provider.spec, CoeiroinkPlugin.spec)
+        XCTAssertEqual(coeiro.v1Provider.baseURL, "http://127.0.0.1:50032")
+        XCTAssertEqual(coeiro.v2Provider.baseURL, "http://127.0.0.1:50032")
+        // v1 のアクセント差し替えが配線切替で失われないよう、アクセント対応のままであること
+        XCTAssertTrue(coeiro is any VoicevoxAccentProviding)
         XCTAssertTrue(host.isLoaded(pluginID: CoeiroinkPlugin.manifest.id))
 
         let share = try XCTUnwrap(try host.voiceProviderIfAvailable(forEngine: "sharevox") as? VoicevoxFamilyPluginProvider)
