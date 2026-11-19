@@ -43,9 +43,9 @@ public struct CoeiroinkV2Voice: Equatable, Sendable {
 ///   (coeiro-operator、CoeiroClip、astarot ほか複数)で確定した。詳細は
 ///   docs/追加TTS-COEIROINK-SHAREVOX.md の「COEIROINK v2 合成(R3-1)」。
 ///   v2 の合成は `CoeiroinkV2Client` / `CoeiroinkV2Provider` が担当する。
-///   アプリの標準配線(coeiroink → v1 互換プロバイダ)は従来のまま変えていない。
-///   v1 / v2 を自動判定して切り替える `CoeiroinkAutoProvider` も用意してあり、
-///   配線を切り替えるかどうかは統括の判断に委ねる(docs 参照)。
+///   アプリの標準配線は R3-2 で v1 / v2 自動判定の `CoeiroinkAutoProvider` へ
+///   切り替えた(AppServices が `makeAutoProvider()` を使う)。v2 が応答しない環境では
+///   従来の v1 互換プロバイダへ委譲されるため、v1 の合成結果は変わらない。
 public enum CoeiroinkPlugin {
     public static let pluginID = "jp.local.moviecut.plugin.coeiroink"
     public static let engineID = "coeiroink"
@@ -282,12 +282,15 @@ public final class CoeiroinkV2Provider: VoiceProvider {
     }
 }
 
-/// COEIROINK の v1 / v2 自動判定プロバイダ。
+/// COEIROINK の v1 / v2 自動判定プロバイダ(R3-2 でアプリの標準配線に採用)。
 /// GET /v1/engine_info(v2 専用)が応答すれば v2 プロバイダへ、しなければ従来の
 /// v1 互換プロバイダ(`VoicevoxFamilyPluginProvider`)へ委譲する。v1 経路の合成手順
 /// 自体は一切変えず、委譲先が従来どおり処理する(判定のための参照が 1 回増えるだけ)。
-/// アプリの標準配線はまだこのプロバイダに切り替えていない(docs 参照)。
-public final class CoeiroinkAutoProvider: VoiceProvider {
+/// エンジン未起動時は判定が失敗して v1 へ委譲され、v1 側が従来どおりの案内文
+/// (「COEIROINK に接続できません…」)で止まるため、利用者向けの挙動は変わらない。
+/// アクセント句つき合成も v1 経路では従来どおり v1 へ委譲する。v2 にはアクセント句に
+/// 相当する API が無いため、v2 経路では通常合成に落とす。
+public final class CoeiroinkAutoProvider: VoicevoxAccentProviding {
     public let baseURL: String
     public let v2Provider: CoeiroinkV2Provider
     public let v1Provider: VoicevoxFamilyPluginProvider
@@ -301,17 +304,27 @@ public final class CoeiroinkAutoProvider: VoiceProvider {
         self.v1Provider = VoicevoxFamilyPluginProvider(spec: CoeiroinkPlugin.spec, baseURL: raw, cache: cache, session: session, policy: policy)
     }
 
+    /// v2 判定(差し替え点があればそれを使い、無ければ GET /v1/engine_info で判定する)。
+    private func probeIsV2() async -> Bool {
+        if let override = v2ProbeOverride { return await override(baseURL) }
+        return await v2Provider.client.isAlive()
+    }
+
     public func synthesize(character: Character, text: String, in directory: URL) async throws -> VoiceResult {
-        let isV2: Bool
-        if let override = v2ProbeOverride {
-            isV2 = await override(baseURL)
-        } else {
-            isV2 = await v2Provider.client.isAlive()
-        }
-        if isV2 {
+        if await probeIsV2() {
             _ = try v2Provider.client.validatedBaseURL()
             return try await v2Provider.synthesizeAvailable(character: character, text: text)
         }
         return try await v1Provider.synthesize(character: character, text: text, in: directory)
+    }
+
+    /// アクセント句つき合成。v1 経路では従来どおり v1 プロバイダの差し替え合成へ委譲し、
+    /// v2 経路では通常合成に落とす(クラス冒頭の注記参照)。
+    public func synthesizeWithAccent(character: Character, text: String, accentPhrases: [VoicevoxAccentPhrase], in directory: URL) async throws -> VoiceResult {
+        if await probeIsV2() {
+            _ = try v2Provider.client.validatedBaseURL()
+            return try await v2Provider.synthesizeAvailable(character: character, text: text)
+        }
+        return try await v1Provider.synthesizeWithAccent(character: character, text: text, accentPhrases: accentPhrases, in: directory)
     }
 }
