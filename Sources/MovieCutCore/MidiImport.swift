@@ -3,9 +3,12 @@ import Foundation
 // MARK: - MIDI の取り込み(#5)
 //
 // 取り込んだ MIDI は 2 つの形でタイムラインに載せる:
-//   1. 音声化: ノートを簡易シンセ(倍音つき正弦波 + 減衰)で WAV に描き、通常の音声クリップとして置く。
-//      既存の音声基盤(再生・波形・書き出し・フェード・音量)がそのまま使える。SoundFont は使わない
-//      (YMM4 の方式とは違う。到達範囲はここまでで、音色の再現はしない)。
+//   1. 音声化: ノートを WAV に描き、通常の音声クリップとして置く。
+//      既存の音声基盤(再生・波形・書き出し・フェード・音量)がそのまま使える。
+//      音色は 2 系統ある:
+//        - 既定: 簡易シンセ(倍音つき正弦波 + 減衰)。従来どおりで、出力は不変。
+//        - SoundFont(.sf2)を指定した場合: SoundFontRenderer がプリセットのサンプルで描く
+//          (R2-4。自前 .sf2 パーサ + サンプル再生。到達範囲は docs/MIDIとSoundFont.md)。
 //   2. マーカー: ノートの開始ごとにマーカーを置き、ノート情報(音名)をタイムライン上で辿れるようにする。
 
 public enum MidiImporter {
@@ -42,6 +45,10 @@ public enum MidiImporter {
 
     public static func isMIDI(path: String) -> Bool {
         ["mid", "midi"].contains((path as NSString).pathExtension.lowercased())
+    }
+
+    public static func isSoundFont(path: String) -> Bool {
+        (path as NSString).pathExtension.lowercased() == "sf2"
     }
 
     // MARK: 音声化(簡易シンセ)
@@ -119,15 +126,38 @@ public enum MidiImporter {
     /// (ただしパースは毎回行い、呼び出し側がノート数などを知れるようにする)。
     @discardableResult
     public static func prepare(atPath path: String, cacheDir: URL) throws -> (wavPath: String, file: MidiFileData) {
+        try prepare(atPath: path, cacheDir: cacheDir, soundFontPath: nil)
+    }
+
+    /// SoundFont を指定できる版。`soundFontPath` が nil のときは従来の簡易シンセで、
+    /// 従来のキャッシュ(rendered.wav)をそのまま使う(従来互換)。
+    /// SoundFont を指定したときは、そのファイルの同一性(パス+更新日時+サイズ)から決まる
+    /// 別名のキャッシュ(rendered-sf-<key>.wav)に描くので、簡易シンセのキャッシュと混ざらない。
+    /// 取り込み上限ガード(総尺・ノート数)はどちらの経路でも同じく prepare が先に弾く。
+    @discardableResult
+    public static func prepare(atPath path: String, cacheDir: URL, soundFontPath: String?) throws -> (wavPath: String, file: MidiFileData) {
         let file = try MidiParser.parseFile(atPath: path)
         try validate(file)
         let fm = FileManager.default
-        let url = cacheDir.appendingPathComponent("rendered.wav")
+        guard let soundFontPath else {
+            let url = cacheDir.appendingPathComponent("rendered.wav")
+            if let a = try? fm.attributesOfItem(atPath: url.path), (a[.size] as? NSNumber)?.intValue ?? 0 > 0 {
+                return (url.path, file)
+            }
+            try fm.createDirectory(at: cacheDir, withIntermediateDirectories: true)
+            try renderWAV(file).write(to: url, options: .atomic)
+            return (url.path, file)
+        }
+        let soundFont = try SoundFontParser.parseFile(atPath: soundFontPath)
+        let sfAttrs = try? fm.attributesOfItem(atPath: soundFontPath)
+        let sfKey = cacheKey(path: soundFontPath, modified: sfAttrs?[.modificationDate] as? Date,
+                             size: (sfAttrs?[.size] as? NSNumber)?.int64Value)
+        let url = cacheDir.appendingPathComponent("rendered-sf-\(sfKey).wav")
         if let a = try? fm.attributesOfItem(atPath: url.path), (a[.size] as? NSNumber)?.intValue ?? 0 > 0 {
             return (url.path, file)
         }
         try fm.createDirectory(at: cacheDir, withIntermediateDirectories: true)
-        try renderWAV(file).write(to: url, options: .atomic)
+        try SoundFontRenderer.renderWAV(file, soundFont: soundFont).write(to: url, options: .atomic)
         return (url.path, file)
     }
 
