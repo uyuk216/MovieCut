@@ -10,10 +10,10 @@ extension ProjectModel {
     func chooseAndExportSubtitles() {
         guard canExportSubtitles else { return }
         let panel = NSSavePanel()
-        panel.allowedContentTypes = [UTType(filenameExtension: "srt"), UTType(filenameExtension: "vtt")].compactMap { $0 }
+        panel.allowedContentTypes = [UTType(filenameExtension: "srt"), UTType(filenameExtension: "vtt"), UTType(filenameExtension: "scc"), UTType(filenameExtension: "stl")].compactMap { $0 }
         panel.nameFieldStringValue = documentName + ".srt"
         panel.canCreateDirectories = true
-        panel.title = "字幕を書き出す(拡張子 .srt か .vtt)"
+        panel.title = "字幕を書き出す(拡張子 .srt / .vtt / .scc / .stl)"
         let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
             guard resp == .OK, let url = panel.url, let self else { return }
             self.writeSubtitles(to: url)
@@ -24,12 +24,26 @@ extension ProjectModel {
     /// 拡張子で形式を決めて書く(.vtt 以外は SRT)。
     @discardableResult
     func writeSubtitles(to url: URL) -> Bool {
-        let fmt = SubtitleFormat(pathExtension: url.pathExtension) ?? .srt
         let cues = SubtitleFile.cues(from: project)
         guard !cues.isEmpty else { return false }
         do {
-            try SubtitleFile.format(cues, as: fmt).write(to: url, atomically: true, encoding: .utf8)
-            statusText = "字幕 \(cues.count) 件を書き出しました: \(url.lastPathComponent)"
+            // 放送・配信用形式(.scc / .stl)は拡張子で分ける。それ以外は従来どおり SRT / VTT。
+            let warnings: [String]
+            switch url.pathExtension.lowercased() {
+            case "scc":
+                let r = SCCExporter.export(cues)
+                try r.text.write(to: url, atomically: true, encoding: .utf8)
+                warnings = r.warnings
+            case "stl":
+                let r = EBUSTLExporter.export(cues, options: EBUSTLOptions(frameRate: project.fps < 27.5 ? .fps25 : .fps30, programmeTitle: documentName))
+                try r.data.write(to: url, options: .atomic)
+                warnings = r.warnings
+            default:
+                let fmt = SubtitleFormat(pathExtension: url.pathExtension) ?? .srt
+                try SubtitleFile.format(cues, as: fmt).write(to: url, atomically: true, encoding: .utf8)
+                warnings = []
+            }
+            statusText = "字幕 \(cues.count) 件を書き出しました: \(url.lastPathComponent)" + (warnings.isEmpty ? "" : "。注意: " + warnings.joined(separator: " / "))
             return true
         } catch {
             statusText = "字幕を書き出せませんでした: \(error.localizedDescription)"

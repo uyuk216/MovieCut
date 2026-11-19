@@ -165,6 +165,7 @@ enum L10nTable {
         "台本を書き出す…": "Export Script…",
         "同じセリフのテイクを比較…": "Compare Takes…",
         "字幕を書き出す…": "Export Subtitles…",
+        "字幕を書き出す(拡張子 .srt / .vtt / .scc / .stl)": "Export Subtitles (.srt / .vtt / .scc / .stl)",
         "字幕を翻訳して書き出す…": "Translate and Export Subtitles…",
         "字幕を自動生成": "Generate Subtitles",
         "字幕を読み込む…": "Import Subtitles…",
