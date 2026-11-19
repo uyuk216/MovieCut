@@ -705,6 +705,10 @@ enum L10nTable {
         "いちばん強い周波数": "Strongest Frequency",
         "解析した長さ": "Analyzed Duration",
         "長いクリップのため、先頭だけを解析しました。": "Only the beginning was analyzed because the clip is long.",
-        "選択中のクリップに音声が無いため、スペクトログラムは出せません。": "The selected clip has no audio, so no spectrogram can be shown."
+        "選択中のクリップに音声が無いため、スペクトログラムは出せません。": "The selected clip has no audio, so no spectrogram can be shown.",
+        "VST3 プラグイン": "VST3 Plug-ins",
+        "パラメータ": "Parameter",
+        "プラグイン状態データあり": "Plug-in state data saved",
+        "VST3 パラメータの変更": "Change VST3 Parameter"
     ]
 }
