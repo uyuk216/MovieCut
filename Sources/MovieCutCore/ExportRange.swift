@@ -118,9 +118,10 @@ public enum StillExporter {
     public static let jpegQuality = 0.92
 
     /// 1 コマを描いて、PNG / JPEG で書く(プロジェクトの解像度・ビューアと同じ `Renderer`)。
-    public static func write(project: Project, assets: RenderAssets = RenderAssets(), at t: Double, format: StillFormat, to url: URL) throws {
+    public static func write(project: Project, assets: RenderAssets = RenderAssets(), at t: Double, format: StillFormat, to url: URL,
+                             pluginEffectProviders: [any VideoEffectProviding] = []) throws {
         guard project.width > 0, project.height > 0 else { throw ExportError.noOutputSize(width: project.width, height: project.height) }
-        let renderer = Renderer(project: project, assets: assets)
+        let renderer = Renderer(project: project, assets: assets, pluginEffectProviders: pluginEffectProviders)
         guard let img = renderer.renderImage(t: t) else { throw ExportError.pixelBufferFailed(-1) }
         try writeImage(img, format: format, to: url)
     }
@@ -155,7 +156,8 @@ public enum ImageSequenceExporter {
     /// 進み具合は 0〜1。ディレクトリが無ければ作る。
     @discardableResult
     public static func export(project: Project, assets: RenderAssets = RenderAssets(), range: ExportRange? = nil, to directory: URL,
-                              base: String, format: StillFormat, progress: ((Double) -> Void)? = nil) async throws -> Result {
+                              base: String, format: StillFormat, pluginEffectProviders: [any VideoEffectProviding] = [],
+                              progress: ((Double) -> Void)? = nil) async throws -> Result {
         let p = plan(project: project, range: range, base: base, format: format)
         guard p.frames > 0 else { throw ExportError.emptyProject }
         guard project.width > 0, project.height > 0 else { throw ExportError.noOutputSize(width: project.width, height: project.height) }
@@ -164,7 +166,7 @@ public enum ImageSequenceExporter {
         let rate = project.frameRate
         let t0 = range?.start ?? 0
         let work = Task.detached(priority: .userInitiated) { () throws -> Result in
-            let renderer = Renderer(project: project, assets: assets)
+            let renderer = Renderer(project: project, assets: assets, pluginEffectProviders: pluginEffectProviders)
             assets.beginExportMode()
             defer { assets.endExportMode() }
             var written: [String] = []

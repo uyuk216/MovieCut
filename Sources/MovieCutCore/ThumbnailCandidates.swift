@@ -125,11 +125,12 @@ public enum ThumbnailCandidateFinder {
     /// 顔の検出器は差し替えられる(テストでは偽物)。
     public static func find(project: Project, assets: RenderAssets = RenderAssets(), start: Double, duration: Double,
                             count: Int = ThumbnailScoring.defaultCount, samples: Int = ThumbnailScoring.defaultSamples,
+                            pluginEffectProviders: [any VideoEffectProviding] = [],
                             detector: FaceDetecting = VisionFaceDetector()) -> [ThumbnailCandidate] {
         guard project.width > 0, project.height > 0 else { return [] }
         let n = min(ThumbnailScoring.maxCount, max(1, count))
         let times = ThumbnailScoring.sampleTimes(start: start, duration: duration, samples: max(samples, n))
-        let renderer = Renderer(project: project, assets: assets)
+        let renderer = Renderer(project: project, assets: assets, pluginEffectProviders: pluginEffectProviders)
         var all: [ThumbnailCandidate] = []
         for t in times {
             let snapped = project.frameRate.snapped(t)
@@ -145,13 +146,14 @@ public enum ThumbnailCandidateFinder {
     /// 候補のコマを 1280×720 の画像として `folder` に書く。ファイル名は `<base>_candidate_01_t12.34s.<ext>`(点数の高い順)。書いた URL を返す。
     @discardableResult
     public static func write(_ candidates: [ThumbnailCandidate], project: Project, assets: RenderAssets = RenderAssets(),
-                             baseName: String, format: StillFormat = .png, to folder: URL) throws -> [URL] {
+                             baseName: String, format: StillFormat = .png,
+                             pluginEffectProviders: [any VideoEffectProviding] = [], to folder: URL) throws -> [URL] {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         var urls: [URL] = []
         for (i, c) in candidates.enumerated() {
             let name = String(format: "%@_candidate_%02d_t%.2fs.%@", baseName, i + 1, c.time, format.fileExtension)
             let url = folder.appendingPathComponent(name)
-            try ThumbnailExporter.write(project: project, assets: assets, at: c.time, format: format, to: url)
+            try ThumbnailExporter.write(project: project, assets: assets, at: c.time, format: format, to: url, pluginEffectProviders: pluginEffectProviders)
             urls.append(url)
         }
         return urls

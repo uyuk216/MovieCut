@@ -31,9 +31,10 @@ public enum ThumbnailExporter {
     }
 
     /// 時刻 t のコマを、1280×720 にして書く(PNG / JPEG は `format`)。
-    public static func write(project: Project, assets: RenderAssets = RenderAssets(), at t: Double, format: StillFormat, to url: URL) throws {
+    public static func write(project: Project, assets: RenderAssets = RenderAssets(), at t: Double, format: StillFormat, to url: URL,
+                             pluginEffectProviders: [any VideoEffectProviding] = []) throws {
         guard project.width > 0, project.height > 0 else { throw ExportError.noOutputSize(width: project.width, height: project.height) }
-        guard let frame = Renderer(project: project, assets: assets).renderImage(t: t) else { throw ExportError.pixelBufferFailed(-1) }
+        guard let frame = Renderer(project: project, assets: assets, pluginEffectProviders: pluginEffectProviders).renderImage(t: t) else { throw ExportError.pixelBufferFailed(-1) }
         guard let thumb = compose(frame, background: parseHexColor(project.bg)) else { throw ExportError.pixelBufferFailed(-1) }
         try StillExporter.writeImage(thumb, format: format, to: url)
     }

@@ -42,7 +42,7 @@ extension ProjectModel {
         let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
             guard resp == .OK, let url = panel.url, let self else { return }
             do {
-                try Storyboard.write(project: self.project, to: url)
+                try Storyboard.write(project: self.project, pluginEffectProviders: AppServices.pluginEffectProviders, to: url)
                 self.statusText = "絵コンテを \(url.lastPathComponent) に書き出しました"
                 NSWorkspace.shared.activateFileViewerSelecting([url])
             } catch {

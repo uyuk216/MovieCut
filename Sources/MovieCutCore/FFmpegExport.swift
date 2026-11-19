@@ -169,6 +169,7 @@ public enum FFmpegVideoExporter {
     public static func export(project: Project, assets: RenderAssets = RenderAssets(), range: ExportRange? = nil,
                               format: WebVideoFormat, crf: Int = 32, to url: URL,
                               loudness: LoudnessNormalizationSettings = .disabled,
+                              pluginEffectProviders: [any VideoEffectProviding] = [],
                               progress: ((Double) -> Void)? = nil) async throws {
         guard project.endTime > 0 else { throw FFmpegExportError.emptyProject }
         guard let ffmpeg = FFmpegLocator.find() else { throw FFmpegExportError.ffmpegNotFound }
@@ -186,7 +187,7 @@ public enum FFmpegVideoExporter {
         let intermediate = tmpDir.appendingPathComponent("intermediate.mp4")
         var intermediateProject = project
         intermediateProject.codec = "h264"
-        try await Exporter(project: intermediateProject, assets: assets, range: range, videoBitrate: intermediateBitrate, loudness: loudness)
+        try await Exporter(project: intermediateProject, assets: assets, range: range, videoBitrate: intermediateBitrate, loudness: loudness, pluginEffectProviders: pluginEffectProviders)
             .export(to: intermediate) { v in progress?(v * 0.7) }
         if Task.isCancelled { throw CancellationError() }
 

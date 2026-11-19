@@ -781,7 +781,7 @@ final class ProjectModel: ObservableObject {
         let n = ImageSequenceExporter.plan(project: snapshot, range: range, base: base, format: format).frames
         return await runJob(title: "連番画像(\(format.title))を書き出しています", fileName: directory.lastPathComponent, notices: [],
                             success: "\(directory.lastPathComponent) に \(n) 枚書き出しました", result: directory) { progress in
-            try await ImageSequenceExporter.export(project: snapshot, range: range, to: directory, base: base, format: format, progress: progress)
+            try await ImageSequenceExporter.export(project: snapshot, range: range, to: directory, base: base, format: format, pluginEffectProviders: AppServices.pluginEffectProviders, progress: progress)
         }
     }
 

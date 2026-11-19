@@ -91,7 +91,7 @@ extension ProjectModel {
         let snapshot = project
         return await runJob(title: "\(format.title) を書き出しています", fileName: url.lastPathComponent, notices: [],
                             success: "\(url.lastPathComponent) に \(format.title) を書き出しました", result: url) { progress in
-            try await FFmpegVideoExporter.export(project: snapshot, range: range, format: format, to: url, loudness: loudness, progress: progress)
+            try await FFmpegVideoExporter.export(project: snapshot, range: range, format: format, to: url, loudness: loudness, pluginEffectProviders: AppServices.pluginEffectProviders, progress: progress)
         }
     }
 }
