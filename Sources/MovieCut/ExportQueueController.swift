@@ -91,11 +91,11 @@ struct ExportQueueSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("書き出しキュー").font(.title3.bold())
+            Text("書き出しキュー").font(MCDesign.Font.title3.bold())
             if controller.entries.isEmpty {
-                Text("キューは空です。出力 ▸ 書き出しキューに追加… で、今の設定の MP4 を積めます。")
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, minHeight: 120, alignment: .leading)
+                InspectorGuideCard(symbol: "tray", heading: "キューは空です",
+                                   message: "出力 ▸ 書き出しキューに追加… で、今の設定の MP4 を積めます。")
+                    .frame(maxWidth: .infinity, minHeight: 120)
             } else {
                 List(controller.entries) { e in row(e) }
                     .frame(minHeight: 200)
@@ -119,9 +119,9 @@ struct ExportQueueSheet: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(e.title).lineLimit(1).truncationMode(.middle)
                 if let dest = controller.destination(of: e.id) {
-                    Text(dest).font(.caption2).foregroundStyle(.tertiary).lineLimit(1).truncationMode(.head)
+                    Text(dest).font(MCDesign.Font.caption).foregroundStyle(MCDesign.Color.textTertiary).lineLimit(1).truncationMode(.head)
                 }
-                Text(Self.statusText(e.state)).font(.caption).foregroundStyle(.secondary)
+                Text(Self.statusText(e.state)).font(MCDesign.Font.caption).foregroundStyle(MCDesign.Color.textSecondary)
                 if case .running(let v) = e.state {
                     ProgressView(value: v).frame(width: 300)
                 }

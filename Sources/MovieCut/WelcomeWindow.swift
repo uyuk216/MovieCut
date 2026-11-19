@@ -82,7 +82,7 @@ struct QuickStartHint: View {
             Text(L10n.t(QuickStart.title)).font(MCDesign.Font.calloutSemibold)
             ForEach(QuickStart.steps, id: \.self) { Text(L10n.t($0)).font(MCDesign.Font.callout) }
         }
-        .foregroundStyle(.secondary)
+        .foregroundStyle(MCDesign.Color.textSecondary)
         .fixedSize()
     }
 }
@@ -94,12 +94,14 @@ struct WelcomeView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Text(L10n.t("Movie Cut へようこそ")).font(.title2.bold()).padding(.top, 18)
-            Text(L10n.t("最近使ったプロジェクト")).font(.subheadline).foregroundStyle(.secondary).padding(.bottom, 8)
+            Text(L10n.t("Movie Cut へようこそ")).font(MCDesign.Font.title2.bold()).padding(.top, MCDesign.Spacing.l)
+            Text(L10n.t("最近使ったプロジェクト")).font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary).padding(.bottom, MCDesign.Spacing.s)
             if controller.recents.entries.isEmpty {
                 Spacer()
-                Text(L10n.t("最近使ったプロジェクトはありません")).foregroundStyle(.secondary)
-                QuickStartHint().padding(.top, 14)
+                InspectorGuideCard(symbol: "clock.arrow.circlepath", heading: "最近使ったプロジェクトはありません",
+                                   message: "新規で作るか、「開く…」で既存のプロジェクトを選べます。")
+                    .frame(maxWidth: 360)
+                QuickStartHint().padding(.top, MCDesign.Spacing.m)
                 Spacer()
             } else {
                 List(selection: $selection) {
@@ -138,12 +140,12 @@ struct WelcomeView: View {
         HStack(spacing: 10) {
             Image(systemName: missing ? "exclamationmark.triangle" : "film").frame(width: 22)
             VStack(alignment: .leading, spacing: 2) {
-                Text(e.name).font(.headline)
-                Text((e.path as NSString).abbreviatingWithTildeInPath).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                Text(e.name).font(MCDesign.Font.headline)
+                Text((e.path as NSString).abbreviatingWithTildeInPath).font(MCDesign.Font.caption).foregroundStyle(MCDesign.Color.textSecondary).lineLimit(1).truncationMode(.middle)
             }
             Spacer()
             Text(missing ? WelcomePolicy.missingText : WelcomePolicy.dateText(e.modified ?? e.lastOpened))
-                .font(.caption).foregroundStyle(missing ? Color.red : Color.secondary)
+                .font(MCDesign.Font.caption).foregroundStyle(missing ? MCDesign.Color.destructive : MCDesign.Color.textSecondary)
         }
         .opacity(missing ? 0.45 : 1)
         .padding(.vertical, 3)

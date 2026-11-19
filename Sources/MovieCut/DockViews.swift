@@ -56,10 +56,10 @@ struct DockHost: View {
                     .onChange(of: geo.size) { _, n in dropState.hostSize = n }
             }
         } else {
-            VStack(spacing: 10) {
-                Text(L10n.t("パネルがありません")).font(.headline)
-                Text(L10n.t("別ウインドウに出しているか、閉じています。表示メニューの「パネル」から開けます。"))
-                    .font(.callout).foregroundStyle(.secondary)
+            VStack(spacing: MCDesign.Spacing.m) {
+                InspectorGuideCard(symbol: "rectangle.3.group", heading: "パネルがありません",
+                                   message: "別ウインドウに出しているか、閉じています。表示メニューの「パネル」から開けます。")
+                    .frame(maxWidth: 360)
                 Button(L10n.t("初期配置に戻す")) { store.apply(.initial) }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -120,8 +120,8 @@ struct DockSplitView: View {
         let horizontal = axis == .horizontal
         let t = CGFloat(DockMetrics.dividerThickness)
         return ZStack {
-            Color(nsColor: .underPageBackgroundColor).opacity(0.5)
-            Rectangle().fill(Color(nsColor: .separatorColor))
+            MCDesign.Color.barBackground.opacity(0.5)
+            Rectangle().fill(MCDesign.Color.divider)
                 .frame(width: horizontal ? 1 : nil, height: horizontal ? nil : 1)
         }
         .frame(width: horizontal ? t : nil, height: horizontal ? nil : t)
@@ -180,7 +180,7 @@ struct DockTabBar: View {
         }
         .padding(.horizontal, 4)
         .frame(height: DockGroupView.tabBarHeight)
-        .background(Color(nsColor: .underPageBackgroundColor).opacity(0.6))
+        .background(MCDesign.Color.barBackground.opacity(0.6))
     }
 }
 
@@ -193,8 +193,8 @@ struct DockTab: View {
 
     var body: some View {
         Text(L10n.t(panel.title))
-            .font(.system(size: 12, weight: active ? .semibold : .regular))
-            .foregroundStyle(active ? Color.primary : Color.secondary)
+            .font(active ? MCDesign.Font.calloutSemibold : MCDesign.Font.callout)
+            .foregroundStyle(active ? MCDesign.Color.label : MCDesign.Color.textSecondary)
             .lineLimit(1)
             .padding(.horizontal, 10).padding(.vertical, 1)
             .background(RoundedRectangle(cornerRadius: 5).fill(active ? Color.accentColor.opacity(0.35) : Color.clear))
@@ -246,7 +246,7 @@ struct DockDropHighlight: View {
                     Rectangle().fill(Color.accentColor.opacity(0.30))
                     Rectangle().stroke(Color.accentColor, lineWidth: 2)
                     Text(zone.label)
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(MCDesign.Font.calloutSemibold)
                         .padding(.horizontal, 10).padding(.vertical, 4)
                         .background(Capsule().fill(Color.black.opacity(0.65)))
                 }
@@ -271,7 +271,7 @@ struct DockOuterHighlight: View {
                     Rectangle().fill(Color.accentColor.opacity(0.30))
                     Rectangle().stroke(Color.accentColor, lineWidth: 3)
                     Text(t.label)
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(MCDesign.Font.calloutSemibold)
                         .padding(.horizontal, 10).padding(.vertical, 4)
                         .background(Capsule().fill(Color.black.opacity(0.65)))
                 }

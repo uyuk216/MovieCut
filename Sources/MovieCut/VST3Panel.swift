@@ -25,8 +25,8 @@ struct VST3Panel: View {
                 VStack(alignment: .leading, spacing: 6) {
                     // 誤解させないための明示(到達状態の単一の置き場は Core の VST3HostAvailability)
                     Label(VST3HostAvailability.current.userFacingNote, systemImage: "info.circle")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(MCDesign.Font.caption)
+                        .foregroundStyle(MCDesign.Color.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
 
                     ForEach(Array(slots.enumerated()), id: \.offset) { index, slot in
@@ -59,14 +59,14 @@ struct VST3Panel: View {
                     }
                     if let scanResult {
                         Text(scanSummary(scanResult))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(MCDesign.Font.caption)
+                            .foregroundStyle(MCDesign.Color.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 .padding(.top, 4)
             } label: {
-                Text("VST3 プラグイン(検出のみ)")
+                Text("VST3 プラグイン(検出のみ)").font(MCDesign.Font.calloutSemibold).foregroundStyle(MCDesign.Color.textSecondary)
             }
             .onAppear { if scanResult == nil { rescan() } }
         }
@@ -82,8 +82,8 @@ struct VST3Panel: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(slot.displayName)
                     Text(slotStatus(slot: slot, detected: detected))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(MCDesign.Font.caption)
+                        .foregroundStyle(MCDesign.Color.textSecondary)
                 }
             }
             Spacer()
