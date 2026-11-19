@@ -14,6 +14,10 @@ case voiceProviderMissing(pluginID: String)
 case noEffectPlugin(effectID: String)
 /// プラグインは見つかったがエフェクトプロバイダを持っていない。
 case effectProviderMissing(pluginID: String)
+/// 担当プラグインが見つからない音声エフェクト識別子。
+case noAudioEffectPlugin(effectID: String)
+/// プラグインは見つかったが音声エフェクトプロバイダを持っていない。
+case audioEffectProviderMissing(pluginID: String)
 /// 担当プラグインが見つからない書き出し形式識別子。
 case noExportPlugin(formatID: String)
 /// プラグインは見つかったが書き出しバックエンドを持っていない。
@@ -27,8 +31,8 @@ case incompatibleAppVersion(pluginID: String, required: String, current: String)
 /// 実体化されたプラグイン。本体が提供するサービスをここに集約する。
 ///
 /// 接続点は音声(`VoiceProvider`)・映像エフェクト(`VideoEffectProviding`)・
-/// 書き出し(`ExportBackendProviding`)の 3 種。importer フックは将来ここに口を追加する想定で、
-/// マニフェスト側の種別だけ先に定義してある。
+/// 音声エフェクト(`AudioEffectProviding`)・書き出し(`ExportBackendProviding`)の 4 種。
+/// importer フックは将来ここに口を追加する想定で、マニフェスト側の種別だけ先に定義してある。
 public struct LoadedPlugin {
 public var manifest: PluginManifest
 public var directory: URL
@@ -36,17 +40,21 @@ public var directory: URL
 public var voiceProvider: (any VoiceProvider)?
 /// エフェクトフックの実体。エフェクトを提供しないプラグインでは nil。
 public var effectProvider: (any VideoEffectProviding)?
+/// 音声エフェクトフックの実体。音声エフェクトを提供しないプラグインでは nil。
+public var audioEffectProvider: (any AudioEffectProviding)?
 /// 書き出しフックの実体。書き出しを提供しないプラグインでは nil。
 public var exportBackend: (any ExportBackendProviding)?
 
 public init(manifest: PluginManifest, directory: URL, voiceProvider: (any VoiceProvider)? = nil,
             effectProvider: (any VideoEffectProviding)? = nil,
-            exportBackend: (any ExportBackendProviding)? = nil) {
+            exportBackend: (any ExportBackendProviding)? = nil,
+            audioEffectProvider: (any AudioEffectProviding)? = nil) {
 self.manifest = manifest
 self.directory = directory
 self.voiceProvider = voiceProvider
 self.effectProvider = effectProvider
 self.exportBackend = exportBackend
+self.audioEffectProvider = audioEffectProvider
 }
 }
 
@@ -267,6 +275,44 @@ return out
 /// 登録済みエフェクトプラグインが提供するエフェクト記述子の一覧(登録順)。
 public func effectDescriptors() -> [PluginEffectDescriptor] {
 allEffectProviders().flatMap { $0.effectDescriptors }
+}
+
+// MARK: - 音声エフェクトフック
+
+/// 音声エフェクト識別子を担当するプラグインの `AudioEffectProviding` を解決する。
+/// 該当プラグインはこの呼び出しで初めて実体化される(遅延読み込み)。
+/// 担当プラグインが登録されていなければ nil(呼び出し側がバイパスに落とせるよう、ここでは投げない版)。
+public func audioEffectProviderIfAvailable(forAudioEffectID effectID: String) throws -> (any AudioEffectProviding)? {
+guard let manifest = registeredManifests.first(where: { $0.handlesAudioEffect(effectID)}) else { return nil}
+let loaded = try loadIfNeeded(pluginID: manifest.id)
+return loaded.audioEffectProvider
+}
+
+/// `audioEffectProviderIfAvailable` の「無ければエラー」版。
+public func audioEffectProvider(forAudioEffectID effectID: String) throws -> any AudioEffectProviding {
+guard let manifest = registeredManifests.first(where: { $0.handlesAudioEffect(effectID)}) else {
+throw PluginError.noAudioEffectPlugin(effectID: effectID)
+}
+let loaded = try loadIfNeeded(pluginID: manifest.id)
+guard let provider = loaded.audioEffectProvider else {
+throw PluginError.audioEffectProviderMissing(pluginID: manifest.id)
+}
+return provider
+}
+
+/// 登録済み音声エフェクトプラグインすべてのプロバイダ(登録順)。実体化に失敗したものは飛ばす。
+public func allAudioEffectProviders() -> [any AudioEffectProviding] {
+var out: [any AudioEffectProviding] = []
+for manifest in registeredManifests where manifest.provides(.audioEffect) {
+guard let loaded = try? loadIfNeeded(pluginID: manifest.id), let provider = loaded.audioEffectProvider else { continue }
+out.append(provider)
+}
+return out
+}
+
+/// 登録済み音声エフェクトプラグインが提供する記述子の一覧(登録順)。
+public func audioEffectDescriptors() -> [PluginAudioEffectDescriptor] {
+allAudioEffectProviders().flatMap { $0.audioEffectDescriptors }
 }
 
 // MARK: - 書き出しフック
