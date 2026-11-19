@@ -304,10 +304,14 @@ public struct Track: Codable, Equatable, Identifiable {
     public var solo: Bool? = nil
     /// A6: 行の高さ("small" / "large")。標準は書かない。知らない値は標準として読む(値そのものは書き戻す)。
     public var height: String? = nil
+    /// トラックミキサー: レイヤーの音量(線形 0〜2)。標準(1.0)は書かない。
+    public var volume: Double? = nil
+    /// トラックミキサー: レイヤーのパン(-1〜1。-1 が左いっぱい)。標準(0=中央)は書かない。
+    public var pan: Double? = nil
     public var clips: [Clip] = []
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["id", "name", "hidden", "muted", "locked", "solo", "height", "clips"]
+    static let knownKeys: Set<String> = ["id", "name", "hidden", "muted", "locked", "solo", "height", "volume", "pan", "clips"]
 
     public init() {}
     public init(name: String) { self.name = name }
@@ -318,6 +322,18 @@ public struct Track: Codable, Equatable, Identifiable {
     public var isMuted: Bool { muted ?? false }
     public var isLocked: Bool { locked ?? false }
     public var isSolo: Bool { solo ?? false }
+    /// レイヤーの音量(線形)。未設定・有限でない値は 1、0〜2 に丸める。
+    public var trackVolumeOrDefault: Double {
+        guard let v = volume, v.isFinite else { return 1 }
+        return min(max(v, 0), 2)
+    }
+    /// レイヤーのパン。未設定・有限でない値は 0(中央)、-1〜1 に丸める。
+    public var trackPanOrDefault: Double {
+        guard let p = pan, p.isFinite else { return 0 }
+        return min(max(p, -1), 1)
+    }
+    /// 音量かパンが標準でないか(トラックミキサーの設定があるか)。
+    public var hasTrackMix: Bool { trackVolumeOrDefault != 1 || trackPanOrDefault != 0 }
 
     public init(from decoder: Decoder) throws {
         let l = Lenient(c: try decoder.container(keyedBy: AnyKey.self), known: Self.knownKeys)
@@ -328,10 +344,12 @@ public struct Track: Codable, Equatable, Identifiable {
         locked = l.bool("locked")
         solo = l.bool("solo")
         height = l.string("height")
+        volume = l.double("volume")
+        pan = l.double("pan")
         clips = l.value("clips") ?? []
         extra = l.extra()
-        // 型が違って読めなかった A6 の項目は、捨てずにそのまま書き戻す
-        for (key, ok) in [("locked", locked != nil), ("solo", solo != nil), ("height", height != nil)] where !ok {
+        // 型が違って読めなかった A6・トラックミキサーの項目は、捨てずにそのまま書き戻す
+        for (key, ok) in [("locked", locked != nil), ("solo", solo != nil), ("height", height != nil), ("volume", volume != nil), ("pan", pan != nil)] where !ok {
             if let raw: JSONValue = l.value(key) { extra[key] = raw }
         }
     }
@@ -346,6 +364,8 @@ public struct Track: Codable, Equatable, Identifiable {
         try c.encodeIfPresent(locked, forKey: AnyKey("locked"))
         try c.encodeIfPresent(solo, forKey: AnyKey("solo"))
         try c.encodeIfPresent(height, forKey: AnyKey("height"))
+        try c.encodeIfPresent(volume, forKey: AnyKey("volume"))
+        try c.encodeIfPresent(pan, forKey: AnyKey("pan"))
         try c.encode(clips, forKey: AnyKey("clips"))
     }
 }

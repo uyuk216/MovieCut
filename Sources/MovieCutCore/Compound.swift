@@ -180,7 +180,23 @@ public enum CompoundEditing {
         return out
     }
 
+    /// `audibleClips(in:)` と同じ平らな列に、レイヤーごとのトラックゲイン(`TrackMix`)を添えて返す(トラックミキサー用)。
+    /// トップレベルは音の出るレイヤーの設定、複合クリップ・シーンの中は、鳴る中のレイヤーの設定を外側へ掛け算して合成する。
+    public static func audibleClipsWithTrackMix(in p: Project) -> [(clip: Clip, mix: TrackMixGains)] {
+        var out: [(clip: Clip, mix: TrackMixGains)] = []
+        for tr in p.tracks where p.isAudible(tr) {
+            flatten(tr.clips, base: nil, stack: [], scenes: p.scenes, mix: TrackMixGains.identity.multiplied(by: TrackMix.of(tr)), into: &out)
+        }
+        return out
+    }
+
     private static func flatten(_ clips: [Clip], base: Double?, stack: Set<String>, scenes: [SceneDefinition] = [], into out: inout [Clip]) {
+        var tmp: [(clip: Clip, mix: TrackMixGains)] = []
+        flatten(clips, base: base, stack: stack, scenes: scenes, mix: .identity, into: &tmp)
+        out.append(contentsOf: tmp.map { $0.clip })
+    }
+
+    private static func flatten(_ clips: [Clip], base: Double?, stack: Set<String>, scenes: [SceneDefinition] = [], mix: TrackMixGains, into out: inout [(clip: Clip, mix: TrackMixGains)]) {
         for c in clips {
             if c.isMuted { continue }   // クリップ単位の消音は絶対(複合クリップ自身なら中身ごと。レイヤーのソロでも鳴らさない)
             if c.isDisabled { continue }   // 無効化も絶対(音も絵も出ない)
@@ -194,7 +210,7 @@ public enum CompoundEditing {
                 let kids = sc.tracks
                 let solo = kids.contains { $0.isSolo }
                 for kt in kids where !kt.isMuted && (!solo || kt.isSolo) {
-                    flatten(window(kt.clips, from: c.offset, duration: c.duration), base: abs, stack: stack.union([key]), scenes: scenes, into: &out)
+                    flatten(window(kt.clips, from: c.offset, duration: c.duration), base: abs, stack: stack.union([key]), scenes: scenes, mix: mix.multiplied(by: TrackMix.of(kt)), into: &out)
                 }
             } else if c.type == .compound {
                 guard stack.count < maxDepth, !stack.contains(c.id) else { continue }
@@ -203,12 +219,12 @@ public enum CompoundEditing {
                 let solo = kids.contains { $0.isSolo }
                 for kt in kids where !kt.isMuted && (!solo || kt.isSolo) {
                     // 描画と同じ窓: 複合の頭からの時刻 offset ... offset + duration の中身だけを、窓の頭へ詰めて流す
-                    flatten(window(kt.clips, from: c.offset, duration: c.duration), base: abs, stack: stack.union([c.id]), scenes: scenes, into: &out)
+                    flatten(window(kt.clips, from: c.offset, duration: c.duration), base: abs, stack: stack.union([c.id]), scenes: scenes, mix: mix.multiplied(by: TrackMix.of(kt)), into: &out)
                 }
             } else {
                 var x = c
                 if let b = base { x.start = grid(b + c.start) }
-                out.append(x)
+                out.append((clip: x, mix: mix))
             }
         }
     }

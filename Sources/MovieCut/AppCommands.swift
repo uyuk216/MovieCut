@@ -283,6 +283,7 @@ struct AppCommands: Commands {
                 }
                 Divider()
                 MenuItemView(spec: AppMenuSpec.loudnessItem(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.trackMixerItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.clipListItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.noteListItem(s), perform: run)
                 items(AppMenuSpec.scriptStoryboardItems(s), run)

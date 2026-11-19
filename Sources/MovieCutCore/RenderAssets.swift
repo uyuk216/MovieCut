@@ -305,9 +305,12 @@ public final class RenderAssets {
 
     /// 音に関わる部分の指紋(音のあるクリップと、トラックが鳴るかどうか)。映像・文字だけの変更では変わらない。
     static func mixKey(_ project: Project) -> String {
-        struct AudioTrack: Encodable { let audible: Bool; let clips: [Clip] }
+        // volume / pan はトラックミキサーの設定。標準のときは nil にして書かない(設定が無いプロジェクトの指紋は従来と同じ)
+        struct AudioTrack: Encodable { let audible: Bool; let volume: Double?; let pan: Double?; let clips: [Clip] }
         let parts = project.tracks.map { tr in
             AudioTrack(audible: project.isAudible(tr),
+                       volume: tr.trackVolumeOrDefault == 1 ? nil : tr.trackVolumeOrDefault,
+                       pan: tr.trackPanOrDefault == 0 ? nil : tr.trackPanOrDefault,
                        clips: tr.clips.filter { [ClipType.audio, .voice, .video].contains($0.type) })
         }
         let enc = JSONEncoder()
