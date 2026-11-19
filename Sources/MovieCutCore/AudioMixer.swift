@@ -30,12 +30,17 @@ private let mixSampleRate = 48000.0
 
 /// AVAudioFile(WAV / MP3 / M4A / CAF など)から読む。サンプルレート違いは AVAudioConverter、チャンネル数はここで揃える(モノ → 左右同じ)。
 /// 3ch 以上は `MultichannelDownmix` の係数でステレオへ落とす(従来は ch0/ch1 だけを拾い、センター等を黙って捨てていた)。
+/// レート違い+3ch 以上では順序を入れ替え、素材レートのまま先にダウンミックスしてからステレオでリサンプルする
+/// (理由は `init` のコメント参照。ダウンミックスもリサンプルも線形なので、順序を入れ替えても結果は等しい)。
 final class FilePCMSource: PCMSource {
     private static let chunk: AVAudioFrameCount = 16384
     private let file: AVAudioFile
     private var converter: AVAudioConverter?
     private let inBuf: AVAudioPCMBuffer
     private let outBuf: AVAudioPCMBuffer
+    /// リサンプル前にダウンミックスしたステレオ(素材レート)をコンバータへ渡す中間バッファ。
+    /// 3ch 以上かつレート違いのときだけ使う。それ以外は nil で、従来の経路のまま。
+    private let midBuf: AVAudioPCMBuffer?
     private var outCount = 0
     private var outPos = 0
     private var inputEOF = false
@@ -54,15 +59,62 @@ final class FilePCMSource: PCMSource {
         }
         inBuf = ib
         if abs(inFmt.sampleRate - mixSampleRate) > 0.5 {
-            guard let outFmt = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: mixSampleRate, channels: inFmt.channelCount, interleaved: false),
-                  let conv = AVAudioConverter(from: inFmt, to: outFmt),
-                  let ob = AVAudioPCMBuffer(pcmFormat: outFmt, frameCapacity: Self.chunk) else {
-                throw AudioMixerError.cannotRead(path: url.path, underlying: nil)
+            if inFmt.channelCount > 2 {
+                // 3ch 以上をそのまま AVAudioConverter に通すと、変換後の 3ch 目以降が 0 になって
+                // 最初の 2ch しか残らない(2026-11-20 の Mac 対象テストで確定: 24 kHz の 5.1ch DC
+                // [0.42, -0.36, 0.30, 0.12, 0.24, -0.24] が、期待値 0.8018 / -0.3176 ではなく
+                // ch0/ch1 だけの 0.4200 / -0.3600 になった。無音の混入・チャンネル順の入れ替わり・
+                // インターリーブされた単一ストリームとしての補間ではこの数値を再現できない)。
+                // 出力フォーマットをチャンネル数だけで作る(レイアウトを持たない)多チャンネル変換が
+                // 経路として信用できないため、多チャンネルはコンバータに渡さない。
+                // 先に素材レートでダウンミックスし、実績のあるステレオ変換(44.1 kHz ステレオ等で
+                // 既存テスト通過)だけを通す。ダウンミックス(サンプルごとの線形結合)もリサンプル
+                // (チャンネルごとに同じ線形フィルタ)も線形なので順序の入れ替えは等価で、
+                // DC でも期待値はそのまま一致する。
+                guard let midFmt = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: inFmt.sampleRate, channels: 2, interleaved: false),
+                      let outFmt = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: mixSampleRate, channels: 2, interleaved: false),
+                      let conv = AVAudioConverter(from: midFmt, to: outFmt),
+                      let mb = AVAudioPCMBuffer(pcmFormat: midFmt, frameCapacity: Self.chunk),
+                      // 1 塊ぶんの入力から出る出力が入り切る大きさにする(WhisperAudioConverter と同じ見積もり)
+                      let ob = AVAudioPCMBuffer(pcmFormat: outFmt, frameCapacity: AVAudioFrameCount((Double(Self.chunk) * mixSampleRate / inFmt.sampleRate).rounded(.up)) + 1024) else {
+                    throw AudioMixerError.cannotRead(path: url.path, underlying: nil)
+                }
+                converter = conv
+                midBuf = mb
+                outBuf = ob
+            } else {
+                guard let outFmt = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: mixSampleRate, channels: inFmt.channelCount, interleaved: false),
+                      let conv = AVAudioConverter(from: inFmt, to: outFmt),
+                      let ob = AVAudioPCMBuffer(pcmFormat: outFmt, frameCapacity: Self.chunk) else {
+                    throw AudioMixerError.cannotRead(path: url.path, underlying: nil)
+                }
+                converter = conv
+                midBuf = nil
+                outBuf = ob
             }
-            converter = conv
-            outBuf = ob
         } else {
+            midBuf = nil
             outBuf = ib
+        }
+    }
+
+    /// inBuf(素材のチャンネル数)を `weights` でステレオへ落として dst(素材レート・2ch)へ書く。
+    /// リサンプル前段専用。係数 0 のチャンネル(LFE 等)は飛ばす。
+    private func downmixIntoStereo(_ src: AVAudioPCMBuffer, into dst: AVAudioPCMBuffer) {
+        let frames = Int(src.frameLength)
+        dst.frameLength = src.frameLength
+        guard frames > 0, let sCh = src.floatChannelData, let dCh = dst.floatChannelData else { return }
+        let sStride = src.stride, dStride = dst.stride
+        for k in 0..<frames { dCh[0][k * dStride] = 0; dCh[1][k * dStride] = 0 }
+        for c in 0..<min(Int(src.format.channelCount), weights.count) {
+            let (wl, wr) = (weights[c].l, weights[c].r)
+            if wl == 0 && wr == 0 { continue }
+            let s = sCh[c]
+            for k in 0..<frames {
+                let v = s[k * sStride]
+                dCh[0][k * dStride] += v * wl
+                dCh[1][k * dStride] += v * wr
+            }
         }
     }
 
@@ -82,6 +134,12 @@ final class FilePCMSource: PCMSource {
             do { try file.read(into: inBuf, frameCount: Self.chunk) } catch { inputEOF = true; status.pointee = .endOfStream; return nil }
             if inBuf.frameLength == 0 { inputEOF = true; status.pointee = .endOfStream; return nil }
             status.pointee = .haveData
+            // 3ch 以上は素材のまま渡さず、先にダウンミックスしたステレオ(midBuf)を渡す(init 参照)。
+            // この経路では outBuf もステレオなので、read() は係数を二重に掛けず速い道でそのまま出す。
+            if let mb = midBuf {
+                downmixIntoStereo(inBuf, into: mb)
+                return mb
+            }
             return inBuf
         }
         outCount = Int(outBuf.frameLength)
