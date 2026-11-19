@@ -559,6 +559,38 @@ public struct Renderer {
         return assets.videoFrame(path: src, time: st, reverse: c.effectiveReverse, exact: remap)
     }
 
+    /// モーフカット: 時刻 t でモーフが効いていれば、境界の相手のコマと raw を変形してつないだコマを返す。相手が無い・作れないときは raw のまま。
+    func morphAdjustedFrame(_ c: Clip, raw: CGImage, at t: Double) -> CGImage {
+        guard let st = TransitionMath.apply(c, t: t).morphCut else { return raw }
+        // 相手クリップとそのコマ
+        guard let track = project.tracks.first(where: { $0.clips.contains { $0.id == c.id } }),
+              let ni = MorphCut.neighborIndex(clips: track.clips, for: c.id, edge: st.isIn ? .in : .out) else { return raw }
+        let n = track.clips[ni]
+        guard let nFrame = morphNeighborFrame(n, edge: st.isIn ? .in : .out) else { return raw }
+        let (a, b) = st.isIn ? (nFrame, raw) : (raw, nFrame)
+        // フロー(境界ペアでキャッシュ。相手→自分の向きで A→B)
+        let key = "morph|\(st.isIn ? n.id : c.id)|\(st.isIn ? c.id : n.id)"
+        let flow = assets.flowCache.flow(forKey: key) { OpticalFlowInterpolator.flow(from: a, to: b) }
+        // 顔(位置合わせ優先のときだけ検出。キャッシュ経由)
+        let tr = st.isIn ? c.transitionIn : c.transitionOut
+        let params = tr?.morphParameters ?? MorphCutParameters()
+        var facesA: [CGRect] = [], facesB: [CGRect] = []
+        if params.facePriority {
+            facesA = FaceDetectionCache.shared.rects(key: "morphface|\(key)|a") { a }
+            facesB = FaceDetectionCache.shared.rects(key: "morphface|\(key)|b") { b }
+        }
+        return MorphCut.morphImage(a, b, weight: st.weight, flow: flow, facesA: facesA, facesB: facesB, params: params) ?? raw
+    }
+
+    /// 境界の相手クリップの代表コマ。.in の相手 = 自分の直前のコマ(相手の末尾)、.out の相手 = 相手の先頭コマ。
+    func morphNeighborFrame(_ n: Clip, edge: TransitionEdge) -> CGImage? {
+        guard let src = n.src else { return nil }
+        if n.type == .image { return assets.image(at: src) }
+        guard n.type == .video else { return nil }
+        let t = edge == .in ? max(n.start, n.start + n.duration - 1 / max(project.fps, 1)) : n.start
+        return videoFrame(n, src: src, at: t)
+    }
+
     /// 上下反転した ctx(左上原点)に CGImage を rect へ描く。
     func drawCG(_ ctx: CGContext, _ img: CGImage, _ rect: CGRect) {
         ctx.saveGState()
@@ -587,6 +619,8 @@ public struct Renderer {
             if c.type == .video, c.stabilizeStrength > 0, let src = c.src, let raw = img {
                 img = stabilized(c, src: src, frame: raw, t: t)
             }
+            // モーフカット(映像・画像のみ): 境界の相手のコマと変形してつなぐ。モーフでなければ従来のまま
+            if c.type == .video || c.type == .image, let raw = img { img = morphAdjustedFrame(c, raw: raw, at: t) }
             guard var im = img, im.width > 0, im.height > 0 else {
                 // 画像が取れなかったとき、素材ファイルが無ければ札を出す(プレビューのみ。存在確認はここでだけ)
                 if missingMediaPlaceholder, c.type != .compound, c.type != .scene, MissingMediaPlaceholder.isMissing(c) {

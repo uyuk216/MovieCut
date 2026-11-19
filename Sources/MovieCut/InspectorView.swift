@@ -1123,6 +1123,18 @@ struct ClipInspector: View {
                     }
                 }
             }
+            if tr.known == .morphCut {
+                InspectorField(label: "モーフの強さ") {
+                    NumField(value: tr.morphParameters.strength, step: 0.05, decimals: 2,
+                             clamp: { min(max($0, 0), 1) },
+                             onCommit: { model.setTransitionMorphStrength($0, edge: edge, clipId: clipId) },
+                             onStep: { model.coalescedTransitionMorphStrength($0, edge: edge, clipId: clipId) })
+                }
+                Toggle("顔の位置合わせを優先", isOn: Binding(
+                    get: { tr.morphParameters.facePriority },
+                    set: { model.setTransitionMorphFacePriority($0, edge: edge, clipId: clipId) }))
+                    .font(MCDesign.Font.callout)
+            }
         }
     }
 

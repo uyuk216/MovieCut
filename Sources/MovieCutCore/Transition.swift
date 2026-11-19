@@ -32,6 +32,8 @@ public enum TransitionKind: String, CaseIterable, Sendable {
     case fadeZoom, pop, blurRelease, mosaicRelease, edgeBlurRelease, skewIn, shatter, bounceIn, riseIn
     case regionLeft, regionRight, regionUp, regionDown
     case driftLeft, driftRight, driftUp, driftDown
+    // モーフカット: クリップの境界を、前後のコマのオプティカルフロー補間でつなぐ
+    case morphCut
 
     /// 画面に出す名前。
     public var label: String {
@@ -68,6 +70,7 @@ public enum TransitionKind: String, CaseIterable, Sendable {
         case .driftRight: return "移動フェード（右）"
         case .driftUp: return "移動フェード（上）"
         case .driftDown: return "移動フェード（下）"
+        case .morphCut: return "モーフカット"
         default: return ruleKind?.label ?? rawValue
         }
     }
@@ -83,7 +86,7 @@ public enum TransitionKind: String, CaseIterable, Sendable {
         case .ruleHorizontal, .ruleVertical, .ruleDiagonal, .ruleCircle, .ruleSquare, .ruleDiamond,
              .ruleClock, .ruleChecker, .ruleStripesH, .ruleStripesV, .ruleSpiral, .ruleCustom:
             return .ruleWipe
-        case .blur, .spin, .blurRelease, .mosaicRelease, .edgeBlurRelease, .skewIn, .shatter, .bounceIn, .riseIn:
+        case .blur, .spin, .blurRelease, .mosaicRelease, .edgeBlurRelease, .skewIn, .shatter, .bounceIn, .riseIn, .morphCut:
             return .effect
         }
     }
@@ -108,6 +111,9 @@ public enum TransitionKind: String, CaseIterable, Sendable {
 
     /// ルール画像ワイプか(やわらかさ等の設定が効く)。
     public var isRuleWipe: Bool { ruleKind != nil || self == .ruleCustom }
+
+    /// モーフカットか(強さ・顔の位置合わせの設定が効く)。
+    public var isMorphCut: Bool { self == .morphCut }
 
     var isSlide: Bool { [.slideLeft, .slideRight, .slideUp, .slideDown].contains(self) }
 
@@ -247,6 +253,8 @@ public struct TransitionState: Equatable, Sendable {
     /// 境界ぼかしの帯の幅(短い辺に対する割合 0〜0.5)。大きい方を取る
     public var feather = 0.0
     public var mask: TransitionMask?
+    /// モーフカット(境界の相手のコマとの変形補間)。他のフィールドは変えない
+    public var morphCut: MorphCutVisualState?
 
     public init() {}
 
@@ -265,6 +273,7 @@ public struct TransitionState: Equatable, Sendable {
         s.skewXAdd += o.skewXAdd
         s.feather = max(s.feather, o.feather)
         s.mask = o.mask ?? mask
+        s.morphCut = o.morphCut ?? morphCut
         return s
     }
 }
@@ -377,6 +386,8 @@ public enum TransitionMath {
         case .driftDown:
             s.offsetY = 0.25 * r
             s.opacityMul = u
+        case .morphCut:
+            s.morphCut = MorphCutVisualState(isIn: edge == .in, weight: edge == .in ? u : 1 - u)
         }
         return s
     }
