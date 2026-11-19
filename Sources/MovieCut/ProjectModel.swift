@@ -301,6 +301,10 @@ final class ProjectModel: ObservableObject {
     @Published var showSceneListSheet = false
     /// クリップ ▸ 台本を編集…(ボイスクリップの一覧編集)のシート。
     @Published var showScriptTableSheet = false
+    /// AIでセリフ案を作る(W3-08)のシート。
+    @Published var showDialogueSuggestionSheet = false
+    /// クリップ ▸ 話者分離…(W3-27)のシート。
+    @Published var showDiarizationSheet = false
     /// 同じセリフのテイク比較シート(表示の状態)と、試聴の出口・鳴らしているテイクの id
     @Published var showTakeSheet = false
     @Published var takePlayingId: String?
@@ -389,6 +393,11 @@ final class ProjectModel: ObservableObject {
     var aiCancel: (() -> Void)?
     /// 音声認識(出力 ▸ 音声から字幕を作る)の取り消し。
     var transcribeCancel: (() -> Void)?
+    /// AIテキスト生成(W3-08)の画面部品(テストで差し替える)と、生成中のキャンセル。
+    var textGenUI = TextGenUI()
+    var textGenCancel: (() -> Void)?
+    /// 話者分離(W3-27)の対象クリップ。
+    var diarizationClipId: String?
     /// プロキシの作成(出力 ▸ プロキシを作成)と AI 画像生成(クリップ ▸ AIで画像を作る)の取り消し。
     var proxyCancel: (() -> Void)?
     var imageGenCancel: (() -> Void)?
