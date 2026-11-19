@@ -20,7 +20,7 @@ enum AppServices {
                 LoadedPlugin(manifest: AquesTalkPlugin.manifest, directory: dir, voiceProvider: AquesTalkPluginProvider(project: project))
             },
             CoeiroinkPlugin.manifest.id: {
-                LoadedPlugin(manifest: CoeiroinkPlugin.manifest, directory: dir, voiceProvider: CoeiroinkPlugin.makeProvider())
+                LoadedPlugin(manifest: CoeiroinkPlugin.manifest, directory: dir, voiceProvider: CoeiroinkPlugin.makeAutoProvider())
             },
             SharevoxPlugin.manifest.id: {
                 LoadedPlugin(manifest: SharevoxPlugin.manifest, directory: dir, voiceProvider: SharevoxPlugin.makeProvider())
