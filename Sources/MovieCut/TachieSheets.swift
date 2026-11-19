@@ -72,7 +72,7 @@ struct TachieListSection: View {
             ForEach(model.project.tachies) { t in
                 HStack(spacing: 6) {
                     Image(systemName: "person.crop.rectangle").foregroundStyle(.secondary)
-                    Text(t.name.isEmpty ? "立ち絵" : t.name).font(.system(size: 13)).lineLimit(1)
+                    Text(t.name.isEmpty ? "立ち絵" : t.name).font(MCDesign.Font.body).lineLimit(1)
                     Spacer(minLength: 0)
                     Button { _ = model.addTachieClip(tachieId: t.id) } label: { Image(systemName: "plus.rectangle.on.rectangle") }
                         .buttonStyle(.plain).disabled(model.isLocked).help("再生位置に立ち絵クリップを置く")

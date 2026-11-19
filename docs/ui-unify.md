@@ -38,6 +38,7 @@
 | InspectorTachie.swift | 7 | 0 | フォントトークン化 |
 | CameraInspector.swift | 0 | 0 | 様式確認（見出し・余白・空状態） |
 | ClipNoteField.swift | 1 | 0 | フォントトークン化 |
+| EaseCurveEditor.swift | 4 | 0 | フォントトークン化（イージング曲線エディタ。初版の棚卸し表から漏れていたため検証時に追加） |
 
 ### B. シート／ダイアログ
 
@@ -213,3 +214,11 @@
 - `swift build`：成功（警告・エラー無し）
 - `swift test`：合計 3,398 件（アプリ `MovieCutTests` 853 件 ＋ Core `MovieCutCoreTests` 2,545 件）、スキップ 8、失敗 0。基準と一致。
 - テストの文言・定数・フォント期待値は変更していない。
+
+## 検証担当による追加・訂正（2026-11-19）
+
+- **EaseCurveEditor.swift を追加実施**：初版の棚卸し表から漏れていた4件のフォント直書き（12→callout、11→subheadline、10→footnote、12 monospacedDigit→callout.monospacedDigit()）をトークン化し、ボタンアイコンの色も  に寄せた。Canvas 描画色（曲線・制御点）は機能色として対象外のまま。
+- **TachieSheets.swift の TachieListSection**：残っていた （立ち絵名ラベル）を  に置換（13pt 通常ウェイトで描画は同一）。
+- **AudioFx の節見出しについて訂正**：実施報告では「InspectorView の節は headline（13pt）で約1pt差」とされたが、実際の  の見出しは （12pt）＋ textSecondary であり、AudioFx 側の calloutSemibold はメイン画面の節見出しと一致している。追加変更は不要。
+- **MediaThumbnail.swift の **：サムネイル寸法に比例する動的サイズ（アイコンのグリフ）であり、テキストスタイルのトークン化になじまないため据え置きが妥当と確認。
+- 検証担当が全テストを再実行し、結果をこのドキュメント末尾ではなく完了報告に記載する（テスト総数・失敗・スキップは実施報告の基準どおりであることを確認する）。

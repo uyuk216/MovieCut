@@ -10,8 +10,8 @@ struct EaseCurveButton: View {
     var body: some View {
         Button { shown = true } label: {
             Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
-                .font(.system(size: 12))
-                .foregroundStyle(ease == .linear ? Color.secondary : Color.accentColor)
+                .font(MCDesign.Font.callout)
+                .foregroundStyle(ease == .linear ? MCDesign.Color.textSecondary : MCDesign.Color.accent)
                 .frame(width: 22, height: 22)
                 .contentShape(Rectangle())
         }
@@ -139,14 +139,14 @@ struct EaseCurveEditor: View {
             ForEach(EaseCurve.presets, id: \.label) { pr in
                 Button(pr.label) { apply(pr.ease) }
                     .controlSize(.small)
-                    .font(.system(size: 11))
+                    .font(MCDesign.Font.subheadline)
             }
         }
     }
 
     private func field(_ label: String, _ kp: WritableKeyPath<(x1: Double, y1: Double, x2: Double, y2: Double), Double>, x: Bool) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(label).font(.system(size: 10)).foregroundStyle(.secondary)
+            Text(label).font(MCDesign.Font.footnote).foregroundStyle(.secondary)
             CurveNumField(value: p[keyPath: kp]) { v in
                 var q = p
                 q[keyPath: kp] = v
@@ -168,7 +168,7 @@ private struct CurveNumField: View {
         TextField("", text: $text)
             .textFieldStyle(.roundedBorder)
             .multilineTextAlignment(.trailing)
-            .font(.system(size: 12).monospacedDigit())
+            .font(MCDesign.Font.callout.monospacedDigit())
             .focused($focused)
             .onSubmit { commit(); focused = false }
             .onChange(of: focused) { _, now in if !now { commit() } }
