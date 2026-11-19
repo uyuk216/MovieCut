@@ -30,6 +30,8 @@ public struct Project: Codable, Equatable {
     public var tracks: [Track] = Track.defaultLayers()
     /// タイムライン上のマーカー(M7)。空のときはファイルに書かない。
     public var markers: [Marker] = []
+    /// レビューコメント(タイムコード付きの指摘)。空のときはファイルに書かない(使っていないプロジェクトは従来と完全一致)。定義は ReviewComments.swift。
+    public var reviewComments: [ReviewComment] = []
     /// 書き出し範囲のイン点 / アウト点(秒)。設定したときだけファイルに書く。
     public var rangeIn: Double? = nil
     public var rangeOut: Double? = nil
@@ -78,7 +80,7 @@ public struct Project: Codable, Equatable {
     /// 知らないキー(保持して書き戻す)
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["formatVersion", "scriptText", "width", "height", "fps", "bg", "codec", "voicevoxUrl", "aquestalkCommand", "characters", "tracks", "markers", "rangeIn", "rangeOut", "mediaHints", "mediaFingerprints", "proxyLinks", "mediaPool", "mediaMetadata", "smartCollections", "targetTrackId", "multicams", "tachies", "readingDictionary", "subtitleY", "scenes", "camera"]
+    static let knownKeys: Set<String> = ["formatVersion", "scriptText", "width", "height", "fps", "bg", "codec", "voicevoxUrl", "aquestalkCommand", "characters", "tracks", "markers", "reviewComments", "rangeIn", "rangeOut", "mediaHints", "mediaFingerprints", "proxyLinks", "mediaPool", "mediaMetadata", "smartCollections", "targetTrackId", "multicams", "tachies", "readingDictionary", "subtitleY", "scenes", "camera"]
 
     public init() {}
 
@@ -98,6 +100,7 @@ public struct Project: Codable, Equatable {
         if let v: [Character] = l.value("characters"), !v.isEmpty { characters = v }
         if let v: [Track] = l.value("tracks"), !v.isEmpty { tracks = v }
         markers = l.value("markers") ?? []
+        reviewComments = l.value("reviewComments") ?? []
         rangeIn = l.value("rangeIn"); rangeOut = l.value("rangeOut")
         mediaHints = l.value("mediaHints") ?? [:]
         mediaFingerprints = l.value("mediaFingerprints") ?? [:]
@@ -124,6 +127,7 @@ public struct Project: Codable, Equatable {
         if smartCollections.isEmpty, let raw: JSONValue = l.value("smartCollections"), raw != .array([]) { extra["smartCollections"] = raw }
         if readingDictionary.isEmpty, let raw: JSONValue = l.value("readingDictionary"), raw != .array([]) { extra["readingDictionary"] = raw }
         if scenes.isEmpty, let raw: JSONValue = l.value("scenes"), raw != .array([]) { extra["scenes"] = raw }
+        if reviewComments.isEmpty, let raw: JSONValue = l.value("reviewComments"), raw != .array([]) { extra["reviewComments"] = raw }
         if scriptText.isEmpty, let raw: JSONValue = l.value("scriptText"), raw != .string("") { extra["scriptText"] = raw }
     }
 
@@ -143,6 +147,7 @@ public struct Project: Codable, Equatable {
         try c.encode(characters, forKey: AnyKey("characters"))
         try c.encode(tracks, forKey: AnyKey("tracks"))
         if !markers.isEmpty { try c.encode(markers, forKey: AnyKey("markers")) }
+        if !reviewComments.isEmpty { try c.encode(reviewComments, forKey: AnyKey("reviewComments")) }
         try c.encodeIfPresent(rangeIn, forKey: AnyKey("rangeIn"))
         try c.encodeIfPresent(rangeOut, forKey: AnyKey("rangeOut"))
         if !mediaHints.isEmpty { try c.encode(mediaHints, forKey: AnyKey("mediaHints")) }

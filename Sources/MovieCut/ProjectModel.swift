@@ -342,6 +342,8 @@ final class ProjectModel: ObservableObject {
     @Published var relinkReport: MediaRelinkReport?
     /// 名前を変えているマーカー(シートを出す)。
     @Published var renamingMarkerId: String?
+    /// レビューコメント一覧シートの表示。
+    @Published var showReviewCommentsSheet = false
     /// 左の台本欄の文字(ツールバー・メニューの「台本から音声を作る」が読む)。
     /// 保存するプロジェクトの一部(`Project.scriptText`)。Undo の対象にはしない(文字の Undo は TextEditor が持つ)が、変えたら書類を編集済みにする。
     /// 本体は `mirror`(保存・自動保存はそこから読む)。`project.scriptText` は開いたときの値のまま古くなるので読まない。

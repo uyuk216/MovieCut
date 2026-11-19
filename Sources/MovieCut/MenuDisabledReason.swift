@@ -27,6 +27,8 @@ extension AppMenuSpec {
         case .prevGap, .nextGap: return "空白がありません(クリップが途切れていません)"
         case .selectClipAtPlayhead, .speechShare, .clipList: return "クリップがありません"
         case .noteList: return "注記のあるクリップがありません"
+        case .exportReviewComments: return "レビューコメントがありません"
+        case .jumpToReviewComment: return "レビューコメントがありません"
         case .fitTachieToVoice: return "連動する声のある立ち絵クリップを選んでください"
         case .cycleOverlapping: return "再生位置でクリップが 2 つ以上重なっていません"
         case .transferClips: return "複製するクリップを選んでください"
