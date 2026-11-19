@@ -45,12 +45,18 @@ enum ShortcutList {
         (.shuttleBack, "逆再生(J を押すたびに速く・遅く)", "J"),
         (.shuttleStop, "停止", "K"),
         (.shuttleForward, "速く再生(L を押すたびに 1・2・4 倍)", "L"),
+        // 既定ではキーなし。Premiere互換プリセットを適用すると I / O / Q / W が付く(個別に変更もできる)
+        (.markIn, "書き出し開始を現在位置に", "I"),
+        (.markOut, "書き出し終了を現在位置に", "O"),
+        (.rippleHead, "リップルトリム(頭)を再生位置へ", "Q"),
+        (.rippleTail, "リップルトリム(尻)を再生位置へ", "W"),
     ]
 
     /// ドラッグ操作の行(キー割り当ての対象ではない)。
     static let mouseRows: [(title: String, keys: String)] = [
         ("ロール編集(隣り合うクリップの境界を動かす)", "⌥ + 端をドラッグ"),
         ("スリップ編集(使う素材の区間をずらす)", "⌥⇧ + クリップをドラッグ"),
+        ("スライド編集(前後のクリップが連動する)", "⌥ + クリップをドラッグ"),
     ]
 
     private static func numbered(_ pairs: [(String, String)]) -> [ShortcutRow] {
@@ -125,6 +131,14 @@ struct ShortcutSheetView: View {
                                 onReset: { store.setMenuOverride(nil, for: entry.id) })
                     }
                 }
+            }
+            HStack(spacing: 8) {
+                Button("Premiere互換プリセットを適用") { store.applyPremierePreset(); message = "Premiere互換プリセットを適用しました(C = 分割、I / O = 書き出し範囲、Q / W = リップルトリム、⌘K = 分割、⇧⌫ = すき間を詰めて削除)。プリセットが触らない割り当てはそのまま残ります" }
+                    .disabled(store.isPremierePresetApplied)
+                if store.hasPrePresetBackup {
+                    Button("プリセット適用前に戻す") { store.restorePrePresetBackup(); message = "プリセット適用前の割り当てに戻しました" }
+                }
+                Spacer()
             }
             HStack {
                 Button("すべて既定に戻す") { store.resetAll(); message = "すべて既定に戻しました" }

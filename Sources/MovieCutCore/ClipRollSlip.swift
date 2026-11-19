@@ -1,6 +1,6 @@
 import Foundation
 
-/// ロール編集とスリップ編集(画面にも Undo にも依存しない純粋な計算)。
+/// ロール編集とスリップ編集とスライド編集(画面にも Undo にも依存しない純粋な計算)。
 /// - ロール: 同じレイヤーでぴったり隣り合う 2 つのクリップの境界を動かす。片方の終わりを縮め、もう片方の頭を同じだけ延ばす(逆も同じ)。全体の長さは変わらない。
 /// - スリップ: クリップの頭の位置と長さはそのままで、使う素材の区間(offset)だけをずらす。
 /// どちらも素材の範囲を越えず(越える分は手前で止める)、ロックされたクリップ・レイヤーは断る。何も変わらないときは nil(Undo に載せない)。
@@ -110,5 +110,53 @@ public enum ClipRollSlip {
 
     public static func slip(in project: Project, clipId: String, frames: Int) -> Project? {
         slip(in: project, clipId: clipId, deltaT: Double(frames) * ClipNudge.frameSeconds(fps: project.fps))
+    }
+
+    // MARK: スライド
+
+    /// スライドできない理由(日本語)。使えるなら nil。
+    /// スライドは前後のクリップにぴったり挟まれていることが前提(片側だけなら通常の移動とトリムで足りる)。
+    public static func slideBlockedReason(in project: Project, clipId: String) -> String? {
+        guard ClipEditing.locate(clipId, in: project) != nil else { return "クリップを選んでください" }
+        guard let l = leftNeighbor(of: clipId, in: project), let r = rightNeighbor(of: clipId, in: project) else {
+            return "前後のクリップに挟まれたクリップを選んでください"
+        }
+        if locked(clipId, project) || locked(l, project) || locked(r, project) { return "ロックされたレイヤー・クリップは編集できません" }
+        return nil
+    }
+
+    /// スライド: 前後に挟まれたクリップの位置だけを `deltaT` 秒動かし(正 = 後ろへ)、前のクリップの終わりと
+    /// 後ろのクリップの頭が同じだけ連動する。真ん中のクリップの長さ・使う素材の区間(offset)は変わらない。
+    /// 前のクリップの素材の終わり・後ろのクリップの素材の頭・最短の長さで止まる。動かせない・変わらないときは nil。
+    public static func slide(in project: Project, clipId: String, deltaT: Double) -> Project? {
+        guard deltaT.isFinite, deltaT != 0, slideBlockedReason(in: project, clipId: clipId) == nil,
+              let leftId = leftNeighbor(of: clipId, in: project),
+              let rightId = rightNeighbor(of: clipId, in: project) else { return nil }
+        guard let a = slid(project, leftId, clipId, rightId, deltaT) else { return nil }
+        // 両側とも動けた量(符号が同じ小さい方)に合わせて、もう一度計算する(ロールと同じやり方)
+        let moved = deltaT > 0 ? min(a.left, a.right) : max(a.left, a.right)
+        guard moved != 0, (moved > 0) == (deltaT > 0) else { return nil }
+        guard let b = slid(project, leftId, clipId, rightId, moved) else { return nil }
+        return b.project == project ? nil : b.project
+    }
+
+    /// 左の終わり・右の頭を `d` 動かし、真ん中を同じだけずらした結果と、左右が実際に動いた量。
+    private static func slid(_ project: Project, _ leftId: String, _ midId: String, _ rightId: String, _ d: Double)
+        -> (project: Project, left: Double, right: Double)? {
+        guard let ll = ClipEditing.locate(leftId, in: project), let rl = ClipEditing.locate(rightId, in: project) else { return nil }
+        let l0 = project.tracks[ll.track].clips[ll.index], r0 = project.tracks[rl.track].clips[rl.index]
+        let t1 = ClipEditing.trimRight(in: project, clipId: leftId, deltaT: d, playhead: 0, pps: 1, snapEnabled: false).project
+        let t2 = ClipEditing.trimLeft(in: t1, clipId: rightId, deltaT: d, playhead: 0, pps: 1, snapEnabled: false).project
+        guard let l1 = ClipEditing.locate(leftId, in: t2), let r1 = ClipEditing.locate(rightId, in: t2),
+              let m1 = ClipEditing.locate(midId, in: t2) else { return nil }
+        var p = t2
+        p.tracks[m1.track].clips[m1.index].start += d
+        let lc = p.tracks[l1.track].clips[l1.index], rc = p.tracks[r1.track].clips[r1.index]
+        return (p, lc.duration - l0.duration, rc.start - r0.start)
+    }
+
+    /// コマ数で動かす版(負 = 前へ)。
+    public static func slide(in project: Project, clipId: String, frames: Int) -> Project? {
+        slide(in: project, clipId: clipId, deltaT: Double(frames) * ClipNudge.frameSeconds(fps: project.fps))
     }
 }

@@ -276,6 +276,8 @@ final class ProjectModel: ObservableObject {
     /// クリップ ▸ ロール編集… / スリップ編集… のシート(コマ数で境界・素材の区間をずらす)。
     @Published var showRollSheet = false
     @Published var showSlipSheet = false
+    @Published var showSlideSheet = false
+    @Published var showSplitEditSheet = false
     /// 「読み辞書を編集…」のシート。
     @Published var showDictionarySheet = false
     /// 「無音をカット…」のシートと、その対象のクリップ。
@@ -623,6 +625,11 @@ final class ProjectModel: ObservableObject {
             .delete: { [weak self] in guard let m = self, !m.isLocked, m.isDocumentKeyWindow, m.selectedClip != nil else { return false }; return m.deleteSelected() },
             .zoomIn: { [weak self] in guard let m = self, !m.isLocked, m.isDocumentKeyWindow else { return false }; m.zoomTimeline(by: AppMenu.zoomStep); return true },
             .deselect: { [weak self] in guard let m = self, m.isDocumentKeyWindow, m.selectedClipId != nil else { return false }; m.selectedClipId = nil; return true },
+            // Premiere互換プリセットで割り当てる通常キー(既定ではキーなし。KeyRouter の上書きでのみ届く)
+            .markIn: { [weak self] in guard let m = self, !m.isLocked, m.isDocumentKeyWindow else { return false }; return m.setRangeInAtCurrent() },
+            .markOut: { [weak self] in guard let m = self, !m.isLocked, m.isDocumentKeyWindow else { return false }; return m.setRangeOutAtCurrent() },
+            .rippleHead: { [weak self] in guard let m = self, !m.isLocked, m.isDocumentKeyWindow else { return false }; return m.rippleTrimSelectedToPlayhead(edge: .head) },
+            .rippleTail: { [weak self] in guard let m = self, !m.isLocked, m.isDocumentKeyWindow else { return false }; return m.rippleTrimSelectedToPlayhead(edge: .tail) },
         ]
         keyRouter.install()
         playback.warmUp()

@@ -105,6 +105,8 @@ enum L10nTable {
         "サムネイル画像を書き出す…": "Export Thumbnail…",
         "スコープ…": "Scopes…",
         "スリップ編集…": "Slip Edit…",
+        "スライド編集…": "Slide Edit…",
+        "J/Lカット…": "J/L Cut…",
         "タイトル案をAIで作る…": "Suggest Titles with AI…",
         "タイムラインを全体表示": "Fit Timeline",
         "タイムラインを拡大": "Zoom In Timeline",

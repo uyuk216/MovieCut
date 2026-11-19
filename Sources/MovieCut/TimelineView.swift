@@ -183,7 +183,7 @@ final class TimelineCanvas: NSView {
     private var projectEnd = 0.0
 
     // ドラッグ編集(M4a)
-    enum DragMode { case move, trimLeft, trimRight, roll, slip, rippleLeft, rippleRight }
+    enum DragMode { case move, trimLeft, trimRight, roll, slip, slide, rippleLeft, rippleRight }
     struct ClipDrag {
         var clipId: String
         var mode: DragMode
@@ -1817,6 +1817,7 @@ final class TimelineCanvas: NSView {
             case .trimRight: name = "クリップの右端トリム"
             case .roll: name = "ロール編集"
             case .slip: name = "スリップ編集"
+            case .slide: name = "スライド編集"
             case .rippleLeft, .rippleRight: name = ProjectModel.rippleUndoName
             }
             model?.commitGesture(name)             // 変わっていれば 1 回の Undo
@@ -1840,7 +1841,7 @@ final class TimelineCanvas: NSView {
         return true
     }
 
-    /// ⌥ ドラッグ: クリップの端ならロール(隣り合うクリップとの境界を動かす)、⌥⇧ でクリップ本体ならスリップ(素材の区間をずらす)。
+    /// ⌥ ドラッグ: クリップの端ならロール(隣り合うクリップとの境界を動かす)、⌥⇧ でクリップ本体ならスリップ(素材の区間をずらす)、⌥ でクリップ本体ならスライド(前後のクリップが連動する)。
     /// 始められないとき(ロック・隣がない・スリップできない種類)は false を返し、いつもの操作に任せる。
     private func beginRollSlip(on id: String, at p: NSPoint, shift: Bool) -> Bool {
         guard let m = model, !m.isLocked, let loc = ClipEditing.locate(id, in: project) else { return false }
@@ -1852,6 +1853,8 @@ final class TimelineCanvas: NSView {
         var right: String?
         if shift, zone == .body {
             if ClipRollSlip.slipBlockedReason(in: project, clipId: id) == nil { mode = .slip }
+        } else if !shift, zone == .body {
+            if ClipRollSlip.slideBlockedReason(in: project, clipId: id) == nil { mode = .slide }
         } else if !shift, zone != .body {
             if zone == .right, let n = ClipRollSlip.rightNeighbor(of: id, in: project) { left = id; right = n }
             else if zone == .left, let l = ClipRollSlip.leftNeighbor(of: id, in: project) { left = l; right = id }
@@ -1892,6 +1895,8 @@ final class TimelineCanvas: NSView {
         case .slip:
             // 右へドラッグ = 絵が右へ動く = 前の素材が見える(区間は前へ)
             result = ClipEditing.Result(project: ClipRollSlip.slip(in: d.base, clipId: d.clipId, deltaT: -dt) ?? d.base, guides: [])
+        case .slide:
+            result = ClipEditing.Result(project: ClipRollSlip.slide(in: d.base, clipId: d.clipId, deltaT: dt) ?? d.base, guides: [])
         }
         snapGuides = result.guides
         m.updateGesture(result.project)

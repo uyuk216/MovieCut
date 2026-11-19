@@ -12,6 +12,8 @@ enum MenuCommand: Hashable {
     case translateSubtitles
     // クリップ ▸ ロール編集… / スリップ編集…(シートでコマ数を指定。ショートカットは持たない)
     case rollEdit, slipEdit
+    // クリップ ▸ スライド編集… / J/Lカット…(シートでコマ数を指定。ショートカットは持たない)
+    case slideEdit, splitEdit
     // クリップ ▸ リップルトリム(頭 / 尻を再生位置へ。後ろを詰める)と、その対象を全レイヤーにする設定(ショートカットは持たない)
     case rippleTrimHead, rippleTrimTail, rippleAllLayersToggle
     // クリップ ▸ マルチカメラ: 作る… / 切替…(シート)/ 再生位置からアングル N(0 始まりの番号)に切り替える(ショートカットは持たない。1〜9 のキーは切替シートの中だけ)
@@ -320,6 +322,9 @@ struct MenuState: Equatable {
     /// 選んだクリップ 1 つが、隣り合うクリップとのロールができる / スリップできる
     var canRoll = false
     var canSlip = false
+    /// 選んだクリップ 1 つが、前後に挟まれたスライドができる / その境界で J/Lカットができる
+    var canSlide = false
+    var canSplitEdit = false
     /// リップルトリム: 頭 / 尻を再生位置へトリムできる、対象はすべてのレイヤーか
     var canRippleHead = false
     var canRippleTail = false
@@ -511,6 +516,8 @@ struct MenuState: Equatable {
         canSplit = m.canSplit
         canRoll = m.canRoll
         canSlip = m.canSlip
+        canSlide = m.canSlide
+        canSplitEdit = m.canSplitEdit
         canRippleHead = m.canRipple(edge: .head)
         canRippleTail = m.canRipple(edge: .tail)
         rippleAllLayers = m.rippleTrimAllLayers
@@ -998,7 +1005,7 @@ enum AppMenuSpec {
     static func clipTrim(_ s: MenuState) -> [MenuItemSpec] {
         [MenuItemSpec(command: .trimBefore, title: "再生位置より前を切り落とす", shortcut: MenuShortcut(key: "[", modifiers: [.option, .command]), enabled: s.canEdit && s.canTrim, checked: nil),
          MenuItemSpec(command: .trimAfter, title: "再生位置より後ろを切り落とす", shortcut: MenuShortcut(key: "]", modifiers: [.option, .command]), enabled: s.canEdit && s.canTrim, checked: nil),
-         rollEditItem(s), slipEditItem(s)] + rippleItems(s) + [
+         rollEditItem(s), slipEditItem(s), slideEditItem(s), splitEditItem(s)] + rippleItems(s) + [
          MenuItemSpec(command: .mergeSplits, title: "分割点を統合", shortcut: nil, enabled: s.canEdit && s.hasMergeableSplits, checked: nil, hint: "同じ素材の続きを 1 つに")]
     }
 
@@ -1010,6 +1017,16 @@ enum AppMenuSpec {
     /// クリップ ▸ スリップ編集…(位置と長さはそのままで、使う素材の区間をずらす)。タイムラインではクリップ本体を ⌥⇧ ドラッグでも。
     static func slipEditItem(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .slipEdit, title: "スリップ編集…", shortcut: nil, enabled: s.canEdit && s.canSlip, checked: nil, hint: "素材の区間をずらす。⌥⇧ ドラッグでも")
+    }
+
+    /// クリップ ▸ スライド編集…(前後に挟まれたクリップを滑らせ、前後のクリップが連動する)。タイムラインではクリップ本体を ⌥ ドラッグでも。
+    static func slideEditItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .slideEdit, title: "スライド編集…", shortcut: nil, enabled: s.canEdit && s.canSlide, checked: nil, hint: "前後のクリップが連動。⌥ ドラッグでも")
+    }
+
+    /// クリップ ▸ J/Lカット…(映像の境界はそのままに、音だけのクリップの境界をずらす)。
+    static func splitEditItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .splitEdit, title: "J/Lカット…", shortcut: nil, enabled: s.canEdit && s.canSplitEdit, checked: nil, hint: "音の境界だけをずらす")
     }
 
     /// クリップ ▸ リップルトリム(頭 / 尻を再生位置へ。同じレイヤーの後ろを詰める)と、すべてのレイヤーを対象にする設定。タイムラインでは端を ⌘ ドラッグでも。
@@ -1581,6 +1598,8 @@ enum AppMenu {
             case .multicamSwitch: m.openMulticamSwitchSheet()
             case .multicamCut(let i): m.multicamCut(angle: i)
             case .slipEdit: m.openSlipSheet()
+            case .slideEdit: m.openSlideSheet()
+            case .splitEdit: m.openSplitEditSheet()
             case .removeBackground: m.removeBackgroundSelected()
             case .imageChroma: m.addEffectSelected(.chromaKey)
             case .toggleRangeLoop: m.rangeLoop.toggle()
