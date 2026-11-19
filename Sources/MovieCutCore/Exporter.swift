@@ -72,8 +72,10 @@ public final class Exporter {
     public let renderBackend: RenderBackend
     /// プラグインエフェクトのプロバイダ(F-1 配線。既定は空 = 従来描画と完全一致)。
     public let pluginEffectProviders: [any VideoEffectProviding]
+    /// 字幕トラック(mov_text)の埋め込み(既定は無効 = 従来どおり字幕トラックなし)。
+    public let subtitleEmbed: SubtitleEmbedSettings
 
-    public init(project: Project, assets: RenderAssets, range: ExportRange? = nil, videoBitrate: Int? = nil, loudness: LoudnessNormalizationSettings = .disabled, renderBackend: RenderBackend = .auto, pluginEffectProviders: [any VideoEffectProviding] = []) {
+    public init(project: Project, assets: RenderAssets, range: ExportRange? = nil, videoBitrate: Int? = nil, loudness: LoudnessNormalizationSettings = .disabled, renderBackend: RenderBackend = .auto, pluginEffectProviders: [any VideoEffectProviding] = [], subtitleEmbed: SubtitleEmbedSettings = .disabled) {
         self.project = project
         self.assets = assets
         self.range = range
@@ -81,6 +83,7 @@ public final class Exporter {
         self.loudness = loudness
         self.renderBackend = renderBackend
         self.pluginEffectProviders = pluginEffectProviders
+        self.subtitleEmbed = subtitleEmbed
     }
 
     /// ProRes のコーデック文字列 → AVAssetWriter の映像コーデック。HQ / LT / Proxy も AVAssetWriter で直接書ける(実機確認済み 2026-11-19)。
@@ -174,6 +177,11 @@ public final class Exporter {
         catch { throw ExportError.cannotCreateWriter(error) }
         if !isProRes { writer.shouldOptimizeForNetworkUse = true }
 
+        // 字幕の埋め込み(選んだときだけ・MP4 のときだけ・載せる字幕があるときだけ。それ以外は従来どおり)
+        let embedSamples: [SubtitleCue] = subtitleEmbed.enabled && !isProRes
+            ? SubtitleEmbed.samples(from: SubtitleEmbed.cues(from: project, range: range), trackDuration: range?.duration ?? project.endTime)
+            : []
+
         // 映像入力
         let isHEVC = plan.codec == "hevc"
         let base = Double(ew) * Double(eh) * fpsValue * 0.1
@@ -256,6 +264,19 @@ public final class Exporter {
             aInput = ai; aReader = r; aOutput = o
         }
 
+        // 字幕入力(埋め込みを選んでいて、載せる字幕があるときだけ)
+        var tInput: AVAssetWriterInput?
+        var tFormat: CMFormatDescription?
+        if !embedSamples.isEmpty {
+            guard let fmt = SubtitleEmbed.makeFormatDescription(width: ew, height: eh) else { throw ExportError.cannotAddInput("字幕") }
+            let ti = AVAssetWriterInput(mediaType: .text, outputSettings: nil, sourceFormatHint: fmt)
+            ti.expectsMediaDataInRealTime = false
+            ti.languageCode = subtitleEmbed.languageCode
+            guard writer.canAdd(ti) else { throw ExportError.cannotAddInput("字幕") }
+            writer.add(ti)
+            tInput = ti; tFormat = fmt
+        }
+
         guard writer.startWriting() else { throw ExportError.cannotStartWriting(writer.error) }
         writer.startSession(atSourceTime: .zero)
         assets.beginExportMode()
@@ -315,6 +336,26 @@ public final class Exporter {
                         finish(); return
                     }
                     if !ai.append(sb) { control.fail(ExportError.appendFailed(frame: -1, underlying: writer.error)); finish(); return }
+                }
+            }
+        }
+
+        if let ti0 = tInput, let fmt0 = tFormat {
+            nonisolated(unsafe) let ti = ti0, fmt = fmt0
+            let tQueue = DispatchQueue(label: "moviecut.export.subtitles")
+            var tDone = false          // tQueue からだけ触る
+            var nextCue = 0            // 同上
+            group.enter()
+            ti.requestMediaDataWhenReady(on: tQueue) {
+                if tDone { return }
+                func finish() { tDone = true; ti.markAsFinished(); group.leave() }
+                while ti.isReadyForMoreMediaData {
+                    if control.shouldStop || nextCue >= embedSamples.count { finish(); return }
+                    guard let sb = SubtitleEmbed.makeSample(format: fmt, cue: embedSamples[nextCue]) else {
+                        control.fail(ExportError.appendFailed(frame: -2, underlying: writer.error)); finish(); return
+                    }
+                    if !ti.append(sb) { control.fail(ExportError.appendFailed(frame: -2, underlying: writer.error)); finish(); return }
+                    nextCue += 1
                 }
             }
         }

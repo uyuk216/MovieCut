@@ -70,8 +70,9 @@ extension ProjectModel {
             let choice = options.selectedChoice
             let bitrate = options.selectedBitrate
             let loudness = options.selectedLoudness
+            let subtitleEmbed = options.selectedSubtitleEmbed
             Task { @MainActor in
-                if case .success(let u) = await self.runExport(to: url, preset: choice.preset, spec: choice.spec, bitrateMbps: bitrate, range: useRange, loudness: loudness) {
+                if case .success(let u) = await self.runExport(to: url, preset: choice.preset, spec: choice.spec, bitrateMbps: bitrate, range: useRange, loudness: loudness, subtitleEmbed: subtitleEmbed) {
                     NSWorkspace.shared.activateFileViewerSelecting([u])
                 }
             }

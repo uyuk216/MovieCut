@@ -34,7 +34,7 @@ func parseFps(_ s: String) -> Double {
 }
 
 /// 書き出して、進み具合(約10%ごと)を stderr、最後に コマ数・秒・実時間比 を stdout に出す。
-func runExport(_ p: Project, to url: URL, preset: ExportPreset? = nil, spec: ExportSpec? = nil, bitrateMbps: Double? = nil, range: ExportRange? = nil, loudness: LoudnessNormalizationSettings = .disabled) async throws {
+func runExport(_ p: Project, to url: URL, preset: ExportPreset? = nil, spec: ExportSpec? = nil, bitrateMbps: Double? = nil, range: ExportRange? = nil, loudness: LoudnessNormalizationSettings = .disabled, subtitleEmbed: SubtitleEmbedSettings = .disabled) async throws {
     let chosen = spec ?? preset?.spec
     let audioOnly = chosen?.audioOnly ?? false
     let resolved = chosen?.apply(to: p) ?? p
@@ -47,7 +47,7 @@ func runExport(_ p: Project, to url: URL, preset: ExportPreset? = nil, spec: Exp
     }
     var nextMark = 0.1
     let t0 = Date()
-    try await ExportJob.run(project: p, preset: preset, spec: spec, bitrateMbps: bitrateMbps, range: range, to: url, loudness: loudness) { v in
+    try await ExportJob.run(project: p, preset: preset, spec: spec, bitrateMbps: bitrateMbps, range: range, to: url, loudness: loudness, subtitleEmbed: subtitleEmbed) { v in
         if v >= nextMark - 1e-9 {
             FileHandle.standardError.write(Data(String(format: "  %3.0f%%\n", v * 100).utf8))
             nextMark = (v * 10 + 1e-9).rounded(.down) / 10 + 0.1
@@ -341,7 +341,8 @@ case "rig-frame" where args.count >= 2:
         }
     } catch { fail("rig-frame: \(error)") }
 case "export" where args.count >= 3:
-    // export <in.mcpjc> <out.mp4|out.m4a> [--loudness [--loudness-target -14]] [--range a:b|project] [--preset <組み込み名 または保存したプリセット名>] [--bitrate 8(Mbps)] [--size WxH] [--fps 29.97] [--codec h264|hevc|prores422|prores422hq|prores422lt|prores422proxy|prores4444]
+    // export <in.mcpjc> <out.mp4|out.m4a> [--loudness [--loudness-target -14]] [--embed-subtitles] [--range a:b|project] [--preset <組み込み名 または保存したプリセット名>] [--bitrate 8(Mbps)] [--size WxH] [--fps 29.97] [--codec h264|hevc|prores422|prores422hq|prores422lt|prores422proxy|prores4444]
+    // --embed-subtitles で字幕を MP4 内の字幕トラック(mov_text)として埋め込む(既定は従来どおり埋め込まない。ProRes の .mov では埋め込まない)
     // --preset はプロジェクトの写しに当てるだけ(入力ファイルは変えない)。--size / --codec は、プリセットの前に当てる。
     do {
         var p = try Project.load(from: URL(fileURLWithPath: args[1]))
@@ -379,8 +380,9 @@ case "export" where args.count >= 3:
         } else if args.contains("--loudness") {
             loudness = .youtube
         }
+        let subtitleEmbed: SubtitleEmbedSettings = args.contains("--embed-subtitles") ? .japanese : .disabled
         let range = parseRange(p)
-        try await runExport(p, to: URL(fileURLWithPath: args[2]), preset: preset, spec: spec, bitrateMbps: bitrate, range: range, loudness: loudness)
+        try await runExport(p, to: URL(fileURLWithPath: args[2]), preset: preset, spec: spec, bitrateMbps: bitrate, range: range, loudness: loudness, subtitleEmbed: subtitleEmbed)
     } catch { fail("書き出せませんでした: \(error.localizedDescription)") }
 case "loudness" where args.count >= 2:
     // loudness <project> [--range a:b|project]: 書き出しと同じミックスダウンを BS.1770 で測る(読み取りのみ・自動では音量を変えない)
