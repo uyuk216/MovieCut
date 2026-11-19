@@ -26,8 +26,19 @@ Movie Cut は、音声から字幕を作る第 2 のエンジンとして [whisp
 | base | `ggml-base.bin` | 142 MB |
 | small | `ggml-small.bin` | 466 MB |
 | medium | `ggml-medium.bin` | 1.5 GB |
+| large-v3-turbo | `ggml-large-v3-turbo.bin` | 1.6 GB |
+| large-v3 | `ggml-large-v3.bin` | 3.1 GB |
 
 **日本語は base 以上をおすすめします。** 大きいほど精度は上がりますが、時間とメモリを使います。
+**精度を上げたいときは large-v3(約 3.1 GB)をおすすめします。** 設定画面の Whisper 欄に「large-v3 をダウンロード…」ボタンがあり、押すと配布元のページ(Hugging Face)を開きます。ダウンロードはアプリがしません。取得したファイルを配置先に置いてください。
+
+## 2.1 VAD モデル(任意・推奨)
+
+無音の区間を先に取り除く VAD(音声区間検出)のモデルを置くと、自動で使います。無音の区間で出やすい誤認識(幻覚)が減ることを期待しています。効果は素材によって違い、実機での比較は未確認です。
+
+- ファイル: `ggml-silero-v5.1.2.bin`(配布元: <https://huggingface.co/ggml-org/whisper-vad>)
+- 置き場所: 配布先と同じ `Whisper/` フォルダ(`Application Support/MovieCut/Whisper/`)。名前に `silero` を含む `ggml-*.bin` を優先し、無ければ `vad` を含むものを使います。
+- 無いときは VAD なしで認識します(従来どおり)。設定画面の Whisper 欄に、VAD を使うかどうかの状態を表示します。
 
 ## 3. 置き場所
 
@@ -45,11 +56,20 @@ Homebrew の `whisper-cli` はシンボリックリンクです。Movie Cut は�
 ## 4. 使い方
 
 - **アプリ**: 音のあるクリップを選び、メニュー「出力 ▸ 音声から字幕を作る(Whisper)…」。認識した文が「字幕」レイヤーに入ります。1 回で元に戻せ、途中でキャンセルできます。
+- **アプリ(書き出し)**: 「出力 ▸ 文字起こしを書き出す（Whisper）…」で、認識した文字を `.txt`(本文だけ)か `.srt`(時刻つき)で保存します。保存先を決めたあと、タイムラインの字幕レイヤーにも載せるかを聞きます。詳しくは [transcribe-export.md](transcribe-export.md)。
 - **CLI**:
   ```sh
   moviecut-cli transcribe --engine whisper --locale ja-JP ...
   ```
-  `--engine` は `apple`(既定)か `whisper`。`--locale ja-JP` は Whisper では言語コード `ja` として渡されます。その他の引数は `moviecut-cli transcribe` の usage を見てください。
+  `--engine` は `apple`(既定)か `whisper`。`--locale` を付けないときの Whisper は**言語の自動判定**です。`--locale ja-JP` は言語コード `ja` として渡されます。`--locale auto` も自動判定です。`--out` は `.srt` / `.vtt` / `.txt` から選びます。その他の引数は `moviecut-cli transcribe` の usage を見てください。
+
+## 4.1 言語と精度の設定
+
+- **言語は既定で自動判定**です(whisper の `-l auto`)。日英が混ざった音声でも、英語の単語は英語のまま、日本語は日本語のまま出ます(カタカナに直されません)。言語を固定したいときだけ `ja` などを指定します。
+- **デコード**: ビーム探索の幅 5、候補数 5、温度 0(揺らぎを抑える)、記号・音楽記号の抑止を既定にしています(`WhisperOptions`)。
+- **VAD**: 上の 2.1 のモデルがあれば自動で有効になります。
+- **前処理**: 認識の前に、ノイズ除去(強さ 0.5)と音量の正規化(ピークを -1 dBFS へ。増幅は最大 +24 dB まで)をかけます。長さ(時刻)は変えません。30 分を超える素材はノイズ除去を省き、音量の正規化だけにします。前処理が失敗したときは、元の音声のまま認識します。
+- 前処理を切るには `WhisperTranscriber(preprocessing: false)` を指定します(アプリの設定画面には出していません)。
 
 ## 5. ライセンス
 

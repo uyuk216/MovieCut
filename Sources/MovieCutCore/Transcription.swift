@@ -183,18 +183,28 @@ public enum TranscriptionAudio {
 // MARK: - 実行(音を書き出す → 認識する → 字幕レイヤーへ)
 
 public enum SubtitleTranscription {
-    /// 選んだクリップの音声を文字にして、「字幕」レイヤーに文字クリップとして足す(見た目は `style`。字幕の自動生成と同じ)。
-    /// 認識結果が無ければ nil(何も変えない)。キャンセルは `CancellationError`。一時ファイルは終わったら消す。
-    public static func run(clip: Clip, project: Project, transcriber: Transcriber, style: TextLook?,
-                           tempDirectory: URL = FileManager.default.temporaryDirectory,
-                           onProgress: @escaping @Sendable (Double) -> Void = { _ in }) async throws -> SubtitleGeneration.Result? {
-        guard TranscriptionSupport.supports(clip) else { return nil }
+    /// 選んだクリップの音声を書き出して認識するだけ(プロジェクトは変えない)。
+    /// 対象外のクリップは空配列。キャンセルは `CancellationError`。一時ファイルは終わったら消す。
+    public static func segments(clip: Clip, transcriber: Transcriber,
+                                tempDirectory: URL = FileManager.default.temporaryDirectory,
+                                onProgress: @escaping @Sendable (Double) -> Void = { _ in }) async throws -> [TranscriptSegment] {
+        guard TranscriptionSupport.supports(clip) else { return [] }
         let url = tempDirectory.appendingPathComponent("moviecut-transcribe-\(UUID().uuidString).wav")
         defer { try? FileManager.default.removeItem(at: url) }
         try await Task.detached(priority: .userInitiated) { try TranscriptionAudio.writeWAV(clip: clip, to: url) }.value
         try Task.checkCancellation()
         let segments = try await transcriber.transcribe(audioURL: url, duration: clip.duration, onProgress: onProgress)
         try Task.checkCancellation()
+        return segments
+    }
+
+    /// 選んだクリップの音声を文字にして、「字幕」レイヤーに文字クリップとして足す(見た目は `style`。字幕の自動生成と同じ)。
+    /// 認識結果が無ければ nil(何も変えない)。キャンセルは `CancellationError`。一時ファイルは終わったら消す。
+    public static func run(clip: Clip, project: Project, transcriber: Transcriber, style: TextLook?,
+                           tempDirectory: URL = FileManager.default.temporaryDirectory,
+                           onProgress: @escaping @Sendable (Double) -> Void = { _ in }) async throws -> SubtitleGeneration.Result? {
+        guard TranscriptionSupport.supports(clip) else { return nil }
+        let segments = try await segments(clip: clip, transcriber: transcriber, tempDirectory: tempDirectory, onProgress: onProgress)
         let cues = TranscriptSubtitles.cues(from: segments, clip: clip)
         // 単語の時刻があるときだけ、カラオケ字幕の単位ごとの開始秒を入れる(スタイルにカラオケが無ければ何もしない)
         let words = segments.flatMap(\.words)

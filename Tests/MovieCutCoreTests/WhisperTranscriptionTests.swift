@@ -257,8 +257,10 @@ final class WhisperTranscriptionTests: XCTestCase {
         XCTAssertTrue(lines.contains("-l=ja"), "\(lines)")
         let f = lines.first { $0.hasPrefix("-f=") }
         XCTAssertNotNil(f)
-        // 既に 16kHz の入力はそのまま渡される
-        XCTAssertEqual(f.map { URL(fileURLWithPath: String($0.dropFirst(3))).lastPathComponent }, audio.lastPathComponent)
+        // 既定は前処理(音量正規化・ノイズ除去)を通した一時ファイルが渡される。入力そのものは書き換えない(前処理の中身は WhisperAccuracyTests で確かめる)
+        let passed = f.map { URL(fileURLWithPath: String($0.dropFirst(3))).lastPathComponent }
+        XCTAssertNotEqual(passed, audio.lastPathComponent)
+        XCTAssertTrue(passed?.hasSuffix("-pre.wav") ?? false, "\(lines)")
         XCTAssertTrue(lines.contains { $0.hasPrefix("-of=") })
     }
 
