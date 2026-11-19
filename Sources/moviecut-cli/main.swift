@@ -476,15 +476,26 @@ case "apng" where args.count >= 2:
         print(String(format: "wrote %@ frames=%d bytes=%d wall=%.2fs (%.1f fps)", outPath, r.frameCount, r.bytes, wall, Double(r.frameCount) / max(wall, 1e-9)))
     } catch { fail("書き出せませんでした: \(error.localizedDescription)") }
 case "subs" where args.count >= 2:
-    // subs <project> --out x.srt|x.vtt: 字幕(ボイスの字幕と「字幕」レイヤーの文字)を書き出す(画面なしの確認用)
+    // subs <project> --out x.srt|x.vtt|x.scc|x.stl: 字幕(ボイスの字幕と「字幕」レイヤーの文字)を書き出す(画面なしの確認用)
     guard let outPath = optValue("--out") else { fail("--out が必要です") }
     let outURL = URL(fileURLWithPath: outPath)
-    guard let fmt = SubtitleFormat(pathExtension: outURL.pathExtension) else { fail("--out の拡張子は .srt か .vtt") }
     do {
         let p = try Project.load(from: URL(fileURLWithPath: args[1]))
         let cues = SubtitleFile.cues(from: p)
         guard !cues.isEmpty else { fail("字幕にできるクリップがありません") }
-        try SubtitleFile.format(cues, as: fmt).write(to: outURL, atomically: true, encoding: .utf8)
+        switch outURL.pathExtension.lowercased() {
+        case "scc":
+            let r = SCCExporter.export(cues)
+            try r.text.write(to: outURL, atomically: true, encoding: .utf8)
+            for w in r.warnings { print("warning: \(w)") }
+        case "stl":
+            let r = EBUSTLExporter.export(cues, options: EBUSTLOptions(frameRate: p.fps < 27.5 ? .fps25 : .fps30))
+            try r.data.write(to: outURL, options: .atomic)
+            for w in r.warnings { print("warning: \(w)") }
+        default:
+            guard let fmt = SubtitleFormat(pathExtension: outURL.pathExtension) else { fail("--out の拡張子は .srt か .vtt か .scc か .stl") }
+            try SubtitleFile.format(cues, as: fmt).write(to: outURL, atomically: true, encoding: .utf8)
+        }
         print("wrote \(outPath) cues=\(cues.count)")
     } catch { fail("書けませんでした: \(error)") }
 case "subtitle-check" where args.count == 2:

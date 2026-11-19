@@ -684,7 +684,7 @@ enum AppMenuSpec {
 
     /// 出力 ▸ 字幕を書き出す… / チャプターをコピー(ショートカットは持たない)。
     static func subtitleExport(_ s: MenuState) -> MenuItemSpec {
-        MenuItemSpec(command: .exportSubtitles, title: "字幕を書き出す…", shortcut: nil, enabled: s.canEdit && s.canExportSubtitles, checked: nil, hint: "SRT / VTT")
+        MenuItemSpec(command: .exportSubtitles, title: "字幕を書き出す…", shortcut: nil, enabled: s.canEdit && s.canExportSubtitles, checked: nil, hint: "SRT / VTT / SCC / STL")
     }
 
     /// 出力 ▸ 字幕を翻訳して書き出す…(AI。送る前と保存の前に内容を見せる)
