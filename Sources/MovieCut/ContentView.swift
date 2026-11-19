@@ -91,6 +91,8 @@ struct ContentView: View {
         .sheet(isPresented: $model.showClipListSheet) { ClipListSheet(model: model) }
         .sheet(isPresented: $model.showSceneListSheet) { SceneListSheet(model: model) }
         .sheet(isPresented: $model.showScriptTableSheet) { ScriptTableSheet(model: model) }
+        .sheet(isPresented: $model.showDialogueSuggestionSheet) { DialogueSuggestionSheet(model: model) }
+        .sheet(isPresented: $model.showDiarizationSheet) { DiarizationSheet(model: model) }
         .sheet(isPresented: Binding(get: { model.candidateSession != nil }, set: { if !$0 { model.cancelCandidateSwap() } })) { CandidateSwapSheet(model: model) }
         .sheet(isPresented: $model.showSubclipSheet) { SubclipBatchSheet(model: model) }
         .sheet(isPresented: $model.showTakeSheet) { TakeCompareSheet(model: model) }
@@ -252,6 +254,9 @@ struct LeftPanel: View {
             Text(ScriptHelp.caption)
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, 6)
+            Button(L10n.t("AIでセリフ案を作る…")) { model.openDialogueSuggestionSheet() }
+                .font(.caption)
                 .padding(.bottom, 6)
             ZStack(alignment: .topLeading) {
                 TextEditor(text: $scriptText)

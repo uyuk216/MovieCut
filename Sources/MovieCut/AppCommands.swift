@@ -92,6 +92,7 @@ struct AppCommands: Commands {
                 Divider()
                 MenuItemView(spec: AppMenuSpec.aiScript(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.aiSettings(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.textGenerationSettingsItem(s), perform: run)
             }
         }
 
@@ -157,8 +158,10 @@ struct AppCommands: Commands {
                 MenuItemView(spec: AppMenuSpec.beatPlaceItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.fillerCutItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.transcriptEditItem(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.speakerDiarizationItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.dictionaryItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.scriptTableItem(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.dialogueSuggestionsItem(s), perform: run)
                 Divider()
                 MenuItemView(spec: AppMenuSpec.saveItemTemplateItem(s), perform: run)
                 Menu(L10n.t("アイテムテンプレートを適用")) { items(AppMenuSpec.itemTemplateApplyItems(s), run) }

@@ -77,6 +77,7 @@ struct ScriptTableSheet: View {
             }
             HStack {
                 Text("\(rows.count) 行").font(.system(size: 11)).foregroundStyle(.secondary)
+                Button("AIでセリフ案…") { model.openDialogueSuggestionsFromScriptTable() }
                 Spacer()
                 Button("キャンセル") { dismiss() }.keyboardShortcut(.cancelAction)
                 Button("保存") { save() }.buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)

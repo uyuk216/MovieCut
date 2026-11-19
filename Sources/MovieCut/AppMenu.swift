@@ -42,6 +42,8 @@ enum MenuCommand: Hashable {
     // クリップ ▸ 音声の作り直しで後続を詰める(アプリの設定のオン/オフ。ショートカットなし)
     case toggleVoiceRipple
     case aiScript, aiChapters, aiTitles, aiRewrite, aiSettings
+    // AIテキスト生成(W3-08)と話者分離(W3-27。ショートカットは持たない)
+    case dialogueSuggestions, textGenerationSettings, speakerDiarization
     // 書き出し範囲(イン / アウト / 解除)と、静止画・連番画像の書き出し
     case rangeIn, rangeOut, rangeClear, exportStill, exportSequence
     // 書き出し範囲の中身を全レイヤーから削除(リップルは後ろを詰める)
@@ -774,6 +776,10 @@ enum AppMenuSpec {
     static func aiRewrite(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .aiRewrite, title: "AIでセリフを直す…", shortcut: nil, enabled: s.canEdit && s.isVoiceSelected, checked: nil)
     }
+    /// ファイル ▸ AIテキスト生成の設定…(W3-08。接続情報はユーザーが入れる。未設定なら生成は無効)。
+    static func textGenerationSettingsItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .textGenerationSettings, title: "AIテキスト生成の設定…", shortcut: nil, enabled: s.canEdit, checked: nil)
+    }
 
     /// 出力 ▸ MP4 を書き出す…(⌘E)と、書き出しプリセット。
     static func exportCurrent(_ s: MenuState) -> MenuItemSpec {
@@ -1342,6 +1348,16 @@ enum AppMenuSpec {
         MenuItemSpec(command: .scriptTable, title: "台本を編集…", shortcut: nil, enabled: s.canEdit && s.hasVoiceClips, checked: nil, hint: "セリフの一覧編集")
     }
 
+    /// クリップ ▸ AIでセリフ案を作る…(W3-08。台本欄・台本編集ウィンドウからも開ける。ショートカットは持たない)。
+    static func dialogueSuggestionsItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .dialogueSuggestions, title: "AIでセリフ案を作る…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "AIテキスト生成")
+    }
+
+    /// クリップ ▸ 話者分離…(W3-27。音声認識を使うので文字起こしと同じ条件。音響特徴による簡易判定。ショートカットは持たない)。
+    static func speakerDiarizationItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .speakerDiarization, title: "話者分離…", shortcut: nil, enabled: s.canEdit && s.canTranscribe, checked: nil, hint: "簡易判定")
+    }
+
     /// クリップ ▸ 選択クリップをアイテムテンプレートとして保存…(クリップを選んでいるとき)。
     static func saveItemTemplateItem(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .saveItemTemplate, title: "選択クリップをアイテムテンプレートとして保存…", shortcut: nil, enabled: s.canEdit && s.hasSelection, checked: nil, hint: "設定一式を保存")
@@ -1480,7 +1496,7 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, checkForUpdates, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s), apngExport(s), ymmpExport(s), webVideoExport(s), pngWavExport(s), exoExport(s)] + pluginExportItems(s) + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), clipListItem(s), noteListItem(s)] + scriptStoryboardItems(s) + scriptCSVItems(s) + [makeProxies(s)] + [] + clipMenu(s).flatMap { $0 } + multicamItems(s) + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + pluginEffectItems(s) + effectPresetItems(s) + effectActions(s) + faceBlurItems(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textVerticalItem(s), textPerCharItem(s), textCounterItem(s), dictionaryItem(s), scriptTableItem(s), saveItemTemplateItem(s)] + itemTemplateApplyItems(s) + itemTemplateCreateItems(s) + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [sceneSplitItem(s), silenceCutItem(s)] + rangeDeleteItems(s) + [audioAutoSyncItem(s), beatMarkersItem(s), scaleDuplicateItem(s), beatPlaceItem(s), fillerCutItem(s), transcriptEditItem(s), lutLoadItem(s), colorTransferItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
+        [about, checkForUpdates, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), textGenerationSettingsItem(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s), apngExport(s), ymmpExport(s), webVideoExport(s), pngWavExport(s), exoExport(s)] + pluginExportItems(s) + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), clipListItem(s), noteListItem(s)] + scriptStoryboardItems(s) + scriptCSVItems(s) + [makeProxies(s)] + [] + clipMenu(s).flatMap { $0 } + multicamItems(s) + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + pluginEffectItems(s) + effectPresetItems(s) + effectActions(s) + faceBlurItems(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textVerticalItem(s), textPerCharItem(s), textCounterItem(s), dictionaryItem(s), scriptTableItem(s), dialogueSuggestionsItem(s), saveItemTemplateItem(s)] + itemTemplateApplyItems(s) + itemTemplateCreateItems(s) + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [sceneSplitItem(s), silenceCutItem(s)] + rangeDeleteItems(s) + [audioAutoSyncItem(s), beatMarkersItem(s), scaleDuplicateItem(s), beatPlaceItem(s), fillerCutItem(s), transcriptEditItem(s), speakerDiarizationItem(s), lutLoadItem(s), colorTransferItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerColorItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + previewTierItems(s) + guideItems(s) + [previewProxy(s), fullScreen(s)] + help.flatMap { $0 }
@@ -1576,6 +1592,8 @@ enum AppMenu {
             case .aiTitles: m.openAITitles()
             case .aiRewrite: m.openAIRewrite()
             case .aiSettings: AIDialogs.editSettings()
+            case .textGenerationSettings: TextGenerationDialogs.editSettings()
+            case .dialogueSuggestions: m.openDialogueSuggestionSheet()
             case .rangeIn: m.setRangeInAtCurrent()
             case .rangeOut: m.setRangeOutAtCurrent()
             case .rangeClear: m.clearExportRange()
@@ -1721,6 +1739,7 @@ enum AppMenu {
             case .beatPlace: m.openBeatPlaceSheet()
             case .fillerCut: m.openFillerSheet()
             case .transcriptEdit: m.openTranscriptEditSheet()
+            case .speakerDiarization: m.openDiarizationSheet()
             case .findReplace: m.openFindReplace()
             case .readingDictionary: m.openDictionarySheet()
             case .scriptTable: m.openScriptTable()
