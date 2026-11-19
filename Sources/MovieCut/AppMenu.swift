@@ -167,8 +167,8 @@ enum MenuCommand: Hashable {
     case nudgeEarlier, nudgeLater
     case resolution(String), swapResolution, fps(Double), fpsCustom, codec(String), background(String)
     case fullScreen
-    // プロキシ編集(表示 ▸ プロキシで編集 は設定の切り替え、出力 ▸ プロキシを作成 はショートカットなし)
-    case previewProxyToggle, makeProxies
+    // プロキシ編集(表示 ▸ プロキシで編集・取り込み時に自動作成 は設定の切り替え、出力 ▸ プロキシを作成・プロキシを管理… はショートカットなし)
+    case previewProxyToggle, proxyAutoCreateToggle, makeProxies, manageProxies
     // クリップ ▸ AIで画像を作る…(ショートカットは持たない)
     case aiImage
     // 表示 ▸ プレビューの背景(アプリ全体の設定)
@@ -438,6 +438,7 @@ struct MenuState: Equatable {
     var previewGuides: Set<PreviewGuide> = []
     /// プロキシ編集: 表示のチェック / 映像の素材があって作れる
     var previewProxyEnabled = false
+    var proxyAutoCreateEnabled = false
     var canMakeProxies = false
 
     struct MarkerItem: Equatable {
@@ -458,6 +459,7 @@ struct MenuState: Equatable {
         recentItems = rc.recents.entries.map { RecentMenuItem(path: $0.path, name: $0.name, missing: rc.isMissing($0)) }
         welcomeAtLaunch = WelcomeSettings.showAtLaunch()
         previewProxyEnabled = ProxySettings.enabled()
+        proxyAutoCreateEnabled = ProxySettings.autoCreateEnabled()
         dockVisible = Set(DockPanel.allCases.filter { AppServices.panelDock.layout.isVisible($0) })
         guard let m = model else { return }
         itemTemplateNames = ItemTemplateLibraryCache.names
@@ -1490,9 +1492,19 @@ enum AppMenuSpec {
         MenuItemSpec(command: .previewProxyToggle, title: "プロキシで編集", shortcut: nil, enabled: true, checked: s.previewProxyEnabled, hint: "プレビューを軽く")
     }
 
+    /// 表示 ▸ 取り込み時にプロキシを自動作成(チェック付き。既定はオフ。アプリ全体の設定)。
+    static func proxyAutoCreateItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .proxyAutoCreateToggle, title: "取り込み時にプロキシを自動作成", shortcut: nil, enabled: true, checked: s.proxyAutoCreateEnabled, hint: "映像の取り込み時")
+    }
+
     /// 出力 ▸ プロキシを作成(映像の素材ごとに 540p。作成中は編集をロック)。
     static func makeProxies(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .makeProxies, title: "プロキシを作成", shortcut: nil, enabled: s.canEdit && s.canMakeProxies, checked: nil, hint: "540p・背景で")
+    }
+
+    /// 出力 ▸ プロキシを管理…(素材ごとの作成・関連付け・削除のシート)。
+    static func manageProxiesItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .manageProxies, title: "プロキシを管理…", shortcut: nil, enabled: s.canEdit && s.canMakeProxies, checked: nil, hint: "関連付け・削除")
     }
 
     /// 表示 ▸ ガイド線 ▸ タイトルセーフ・アクションセーフ・中心線・三分割線(チェックで出す。ショートカットは持たない)。
@@ -1530,10 +1542,10 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, checkForUpdates, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), textGenerationSettingsItem(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s), apngExport(s), ymmpExport(s), webVideoExport(s), pngWavExport(s), exoExport(s)] + pluginExportItems(s) + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), clipListItem(s), noteListItem(s)] + scriptStoryboardItems(s) + scriptCSVItems(s) + [makeProxies(s)] + [] + clipMenu(s).flatMap { $0 } + multicamItems(s) + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + pluginEffectItems(s) + effectPresetItems(s) + effectActions(s) + faceBlurItems(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textVerticalItem(s), textPerCharItem(s), textCounterItem(s), dictionaryItem(s), scriptTableItem(s), dialogueSuggestionsItem(s), saveItemTemplateItem(s)] + itemTemplateApplyItems(s) + itemTemplateCreateItems(s) + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [sceneSplitItem(s), silenceCutItem(s)] + rangeDeleteItems(s) + [audioAutoSyncItem(s), beatMarkersItem(s), scaleDuplicateItem(s), beatPlaceItem(s), fillerCutItem(s), transcriptEditItem(s), speakerDiarizationItem(s), lutLoadItem(s), colorTransferItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
+        [about, checkForUpdates, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), textGenerationSettingsItem(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s), apngExport(s), ymmpExport(s), webVideoExport(s), pngWavExport(s), exoExport(s)] + pluginExportItems(s) + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), clipListItem(s), noteListItem(s)] + scriptStoryboardItems(s) + scriptCSVItems(s) + [makeProxies(s), manageProxiesItem(s)] + [] + clipMenu(s).flatMap { $0 } + multicamItems(s) + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + pluginEffectItems(s) + effectPresetItems(s) + effectActions(s) + faceBlurItems(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textVerticalItem(s), textPerCharItem(s), textCounterItem(s), dictionaryItem(s), scriptTableItem(s), dialogueSuggestionsItem(s), saveItemTemplateItem(s)] + itemTemplateApplyItems(s) + itemTemplateCreateItems(s) + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [sceneSplitItem(s), silenceCutItem(s)] + rangeDeleteItems(s) + [audioAutoSyncItem(s), beatMarkersItem(s), scaleDuplicateItem(s), beatPlaceItem(s), fillerCutItem(s), transcriptEditItem(s), speakerDiarizationItem(s), lutLoadItem(s), colorTransferItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerColorItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
-            + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + previewTierItems(s) + guideItems(s) + [previewProxy(s), fullScreen(s)] + help.flatMap { $0 }
+            + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + previewTierItems(s) + guideItems(s) + [previewProxy(s), proxyAutoCreateItem(s), fullScreen(s)] + help.flatMap { $0 }
     }
 }
 
@@ -1571,6 +1583,9 @@ enum AppMenu {
         case .previewProxyToggle:
             ProxySettings.set(!ProxySettings.enabled())
             ActiveDocument.shared.refresh()
+        case .proxyAutoCreateToggle:
+            ProxySettings.setAutoCreate(!ProxySettings.autoCreateEnabled())
+            ActiveDocument.shared.refresh()
         default:
             guard let m = model else { return }
             switch c {
@@ -1598,6 +1613,7 @@ enum AppMenu {
             case .transcribeExportWhisper: m.chooseAndExportTranscriptWithWhisper()
             case .relinkMedia: m.chooseAndRelinkMedia()
             case .unusedMedia: m.showUnusedMediaSheet = true
+            case .manageProxies: m.showProxySheet = true
             case .restoreVersion: m.showVersionRestore()
             case .packageSave: m.saveAsPackage()
             case .addFont: m.chooseAndAddFonts()

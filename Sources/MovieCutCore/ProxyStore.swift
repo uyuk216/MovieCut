@@ -188,3 +188,57 @@ public enum ProxySettings {
         NotificationCenter.default.post(name: didChange, object: nil)
     }
 }
+
+extension ProxyStore {
+    /// 生成済みのプロキシだけを消す。素材・外部ファイルには触らない。消したら true(素材が読めない・プロキシが無いときは false)。
+    @discardableResult
+    public static func deleteProxy(for source: URL, directory: URL = defaultDirectory()) -> Bool {
+        guard let u = existingProxy(for: source, directory: directory) else { return false }
+        return (try? FileManager.default.removeItem(at: u)) != nil
+    }
+
+    /// 複数の素材の生成済みプロキシを消し、消せた件数を返す。
+    @discardableResult
+    public static func deleteProxies(for sources: [URL], directory: URL = defaultDirectory()) -> Int {
+        sources.reduce(0) { $0 + (deleteProxy(for: $1, directory: directory) ? 1 : 0) }
+    }
+
+    /// 置き場所にあるプロキシのファイル(*.mp4。作成途中の *.part.mp4 は除く)。フォルダが無ければ []。
+    public static func listProxyFiles(in directory: URL = defaultDirectory()) -> [URL] {
+        guard let items = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) else { return [] }
+        return items
+            .filter { $0.pathExtension.lowercased() == "mp4" && !$0.lastPathComponent.lowercased().hasSuffix(".part.mp4") }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+    }
+
+    /// プロキシのファイルの合計バイト数。
+    public static func totalBytes(in directory: URL = defaultDirectory()) -> Int64 {
+        listProxyFiles(in: directory).reduce(Int64(0)) { sum, u in
+            let n = (try? FileManager.default.attributesOfItem(atPath: u.path))?[.size] as? NSNumber
+            return sum + (n?.int64Value ?? 0)
+        }
+    }
+
+    /// 映像の表示上の大きさ(preferredTransform を適用した後)。読めなければ nil。自動作成の要否判定に使う。
+    public static func displayedSize(source: URL) async -> CGSize? {
+        let asset = AVURLAsset(url: source)
+        guard let track = try? await asset.loadTracks(withMediaType: .video).first,
+              let transform = try? await track.load(.preferredTransform),
+              let natural = try? await track.load(.naturalSize) else { return nil }
+        let rect = CGRect(origin: .zero, size: natural).applying(transform)
+        let size = CGSize(width: abs(rect.width), height: abs(rect.height))
+        return size.width > 0 && size.height > 0 ? size : nil
+    }
+}
+
+extension ProxySettings {
+    /// 取り込み時にプロキシを自動で作るか(既定オフ)。重い変換を勝手に始めず、プレビュー設定がオンのときだけ効くプロキシの未使用ファイルを作らないため。
+    public static let autoCreateKey = "proxyAutoCreateEnabled"
+
+    public static func autoCreateEnabled(_ d: UserDefaults = DataLocations.current.defaults) -> Bool { d.bool(forKey: autoCreateKey) }
+
+    public static func setAutoCreate(_ on: Bool, _ d: UserDefaults = DataLocations.current.defaults) {
+        d.set(on, forKey: autoCreateKey)
+        NotificationCenter.default.post(name: didChange, object: nil)
+    }
+}
