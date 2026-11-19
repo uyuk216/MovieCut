@@ -58,6 +58,24 @@ extension ProjectModel {
         setClipProperty({ _ = TransitionEditing.setRuleSource(&$0, edge: edge, src) }, name: "\(edge.label)トランジションのルール画像の変更", clipId: clipId)
     }
 
+    /// モーフカットの「強さ」。
+    func setTransitionMorphStrength(_ v: Double, edge: TransitionEdge, clipId: String? = nil) {
+        guard !isLocked else { return }
+        setClipProperty({ _ = TransitionEditing.setMorphStrength(&$0, edge: edge, v) }, name: "\(edge.label)トランジションのモーフの強さの変更", clipId: clipId)
+    }
+
+    /// モーフカットの「強さ」(ステッパーなどの連続編集)。
+    func coalescedTransitionMorphStrength(_ v: Double, edge: TransitionEdge, clipId: String? = nil) {
+        guard !isLocked else { return }
+        coalescedClipProperty({ _ = TransitionEditing.setMorphStrength(&$0, edge: edge, v) }, name: "\(edge.label)トランジションのモーフの強さの変更", clipId: clipId)
+    }
+
+    /// モーフカットの「顔の位置合わせを優先」。
+    func setTransitionMorphFacePriority(_ on: Bool, edge: TransitionEdge, clipId: String? = nil) {
+        guard !isLocked else { return }
+        setClipProperty({ _ = TransitionEditing.setMorphFacePriority(&$0, edge: edge, on) }, name: "\(edge.label)トランジションの顔の位置合わせの変更", clipId: clipId)
+    }
+
     // MARK: 音声フェード
 
     func setAudioFade(_ seconds: Double, edge: TransitionEdge, clipId: String? = nil) {

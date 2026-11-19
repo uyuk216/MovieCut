@@ -98,6 +98,31 @@ public enum TransitionEditing {
         return true
     }
 
+    // MARK: モーフカットの引数(params)
+
+    /// モーフカットの「強さ」(0〜1)。既定値と同じなら params から消す。モーフカットのときだけ。
+    @discardableResult
+    public static func setMorphStrength(_ c: inout Clip, edge: TransitionEdge, _ v: Double) -> Bool {
+        guard var tr = transition(c, edge), tr.known?.isMorphCut == true else { return false }
+        let before = tr
+        let nv = MorphCutParameters.clampedStrength(v)
+        setParam(&tr, key: "morphStrength", nv == MorphCutParameters.defaultStrength ? nil : .number(round3(nv)))
+        guard tr != before else { return false }
+        store(&c, edge, tr)
+        return true
+    }
+
+    /// モーフカットの「顔の位置合わせを優先」。既定(オン)なら params から消す。モーフカットのときだけ。
+    @discardableResult
+    public static func setMorphFacePriority(_ c: inout Clip, edge: TransitionEdge, _ on: Bool) -> Bool {
+        guard var tr = transition(c, edge), tr.known?.isMorphCut == true else { return false }
+        let before = tr
+        setParam(&tr, key: "morphFace", on ? nil : .bool(false))
+        guard tr != before else { return false }
+        store(&c, edge, tr)
+        return true
+    }
+
     /// インスペクタの進み方の選択肢。
     public static let easeChoices: [(label: String, ease: Ease)] = [
         ("なめらか", .easeInOut), ("一定", .linear), ("ゆっくり開始", .easeIn), ("ゆっくり終了", .easeOut),
