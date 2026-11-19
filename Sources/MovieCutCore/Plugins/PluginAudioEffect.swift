@@ -87,13 +87,19 @@ public final class BypassAudioEffectProcessor: AudioEffectProcessing {
 public enum VST3HostAvailability: Equatable, Sendable {
     /// スキャン(検出・メタ情報)はできるが、音声処理ホストは未実装。処理は常にバイパス。
     case processingNotImplemented
+    /// C++ ブリッジ(`VST3BridgeRuntime`)が見つかりハンドシェイクも通った。
+    /// この環境では実処理の経路が有効(読み込めないプラグインは個別にバイパス)。
+    /// Mac 実機でのフィクスチャ検証が済むまでは「検証待ち」であることを docs に明記する。
+    case bridgeAvailable
 
-    /// このビルドの到達状態。
-    public static var current: VST3HostAvailability { .processingNotImplemented }
+    /// この環境の到達状態。ブリッジライブラリが無い環境では従来どおり検出のみ。
+    public static var current: VST3HostAvailability {
+        VST3BridgeRuntime.isAvailable ? .bridgeAvailable : .processingNotImplemented
+    }
 
     /// 音声を実際に処理できるか。
     public var canProcessAudio: Bool {
-        switch self { case .processingNotImplemented: return false }
+        switch self { case .processingNotImplemented: return false; case .bridgeAvailable: return true }
     }
 
     /// ユーザー向けの正直な説明(誤解させない文言をここに固定する)。
@@ -101,12 +107,17 @@ public enum VST3HostAvailability: Equatable, Sendable {
         switch self {
         case .processingNotImplemented:
             return "VST3 プラグインは「検出のみ」対応です。音声処理は未対応のため、指定しても音はそのまま(バイパス)になります。"
+        case .bridgeAvailable:
+            return "VST3 プラグインの音声処理ブリッジが見つかりました。読み込めないプラグインは音がそのまま(バイパス)になります。"
         }
     }
 
     /// バイパス処理器に付ける理由。
     public var bypassReason: String {
-        switch self { case .processingNotImplemented: return "VST3 ホスト未実装(検出のみ対応)" }
+        switch self {
+        case .processingNotImplemented: return "VST3 ホスト未実装(検出のみ対応)"
+        case .bridgeAvailable: return "VST3 プラグインを読み込めなかったためバイパス"
+        }
     }
 }
 
@@ -123,12 +134,17 @@ public struct VST3EffectProvider: AudioEffectProviding {
     /// 従来どおり記述子の  は空になる。スキャンだけではパラメータは分からない
     /// (moduleinfo.json には載らない)ため、ここは「取得できたときの置き場」。
     public var parameterDescriptorsByEffectID: [String: [VST3ParameterDescriptor]]
+    /// テスト/組み込み用のバックエンド差し替え口。nil なら、ブリッジが使える環境で
+    /// `VST3NativeBridgeBackend` を使う。差し替えた場合は availability よりこちらを優先する。
+    public var backendFactory: ((VST3BundleInfo) -> (any VST3BridgeBackend)?)?
 
     public init(plugins: [VST3BundleInfo], availability: VST3HostAvailability = .current,
-                parameterDescriptorsByEffectID: [String: [VST3ParameterDescriptor]] = [:]) {
+                parameterDescriptorsByEffectID: [String: [VST3ParameterDescriptor]] = [:],
+                backendFactory: ((VST3BundleInfo) -> (any VST3BridgeBackend)?)? = nil) {
         self.plugins = plugins
         self.availability = availability
         self.parameterDescriptorsByEffectID = parameterDescriptorsByEffectID
+        self.backendFactory = backendFactory
     }
 
     /// そのプラグインのパラメータ記述(無ければ空)。
@@ -149,9 +165,31 @@ public struct VST3EffectProvider: AudioEffectProviding {
     }
 
     public func makeProcessor(effectID: String, sampleRate: Double, values: [String: Double]) -> (any AudioEffectProcessing)? {
-        guard descriptor(forAudioEffectID: effectID) != nil else { return nil }
-        // ホスト未実装の間は、対応するプラグインでも必ずバイパス(音を変えない)。
-        // `availability.canProcessAudio` が true になる将来の実装では、ここで実ホストの処理器を返す。
-        return BypassAudioEffectProcessor(effectID: effectID, reason: availability.bypassReason)
+        makeProcessor(effectID: effectID, sampleRate: sampleRate, values: values, stateData: nil)
+    }
+
+    /// 状態チャンク付きで処理器を作る(W6-1)。実処理が成立しなければ必ずバイパスを返す
+    /// (nil は「担当外」のときだけ。音声経路が止まることはない)。
+    public func makeProcessor(effectID: String, sampleRate: Double, values: [String: Double], stateData: Data?) -> (any AudioEffectProcessing)? {
+        guard descriptor(forAudioEffectID: effectID) != nil,
+              let info = plugins.first(where: { $0.audioEffectID.lowercased() == effectID.lowercased() }) else { return nil }
+        let backend: (any VST3BridgeBackend)?
+        if let backendFactory {
+            backend = backendFactory(info)
+        } else if availability.canProcessAudio {
+            backend = VST3NativeBridgeBackend()
+        } else {
+            backend = nil
+        }
+        guard let backend else {
+            return BypassAudioEffectProcessor(effectID: effectID, reason: availability.bypassReason)
+        }
+        let cid = info.moduleClasses.first { $0.isAudioModule }?.cid
+        let host = VST3HostProcessor(effectID: effectID, backend: backend, bundlePath: info.bundleURL.path,
+                                     cid: cid, sampleRate: sampleRate, values: values, stateData: stateData)
+        guard host.isReady else {
+            return BypassAudioEffectProcessor(effectID: effectID, reason: availability.bypassReason)
+        }
+        return host
     }
 }

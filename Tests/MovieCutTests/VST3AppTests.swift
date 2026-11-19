@@ -55,6 +55,32 @@ final class VST3AppTests: XCTestCase {
         _ = VST3Panel(model: m, clipId: "m", forceExpanded: true).body
     }
 
+    func testVST3ParamEditIsOneUndoStep() {
+        let m = makeModel()
+        m.setAudioFx({ _ = AudioFxEditing.addVST3Slot(&$0, bundleID: "com.example.testverb", name: "TestVerb") },
+                     name: ProjectModel.vst3UndoName, clipId: "m")
+        m.setAudioFx({ _ = AudioFxEditing.setVST3SlotParam(&$0, at: 0, key: "0", value: 0.5) },
+                     name: ProjectModel.vst3ParamUndoName, clipId: "m")
+        XCTAssertEqual(m.clip("m")?.audioFx?.vst3Slots[0].params?["0"], 0.5)
+        // 同じ値の再設定は履歴に載らない
+        m.setAudioFx({ _ = AudioFxEditing.setVST3SlotParam(&$0, at: 0, key: "0", value: 0.5) },
+                     name: ProjectModel.vst3ParamUndoName, clipId: "m")
+        XCTAssertEqual(undoSteps(m), 2, "追加 1 + パラメータ 1")
+        m.setAudioFx({ _ = AudioFxEditing.setVST3SlotState(&$0, at: 0, stateData: Data([1, 2])) },
+                     name: ProjectModel.vst3UndoName, clipId: "m")
+        XCTAssertEqual(m.clip("m")?.audioFx?.vst3Slots[0].stateData, Data([1, 2]))
+        XCTAssertEqual(undoSteps(m), 3)
+    }
+
+    func testVST3PanelWithParamsInstantiates() {
+        let m = makeModel()
+        m.setAudioFx({ _ = AudioFxEditing.addVST3Slot(&$0, bundleID: "com.example.testverb", name: "TestVerb") },
+                     name: ProjectModel.vst3UndoName, clipId: "m")
+        m.setAudioFx({ _ = AudioFxEditing.setVST3SlotParam(&$0, at: 0, key: "0", value: 0.5) },
+                     name: ProjectModel.vst3ParamUndoName, clipId: "m")
+        _ = VST3Panel(model: m, clipId: "m", forceExpanded: true).body
+    }
+
     func testVST3AvailabilityNoteIsHonest() {
         // UI が参照する到達状態は「処理未対応・バイパス」であること(文言の単一の置き場は Core)
         XCTAssertFalse(VST3HostAvailability.current.canProcessAudio)

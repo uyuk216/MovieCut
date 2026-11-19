@@ -307,8 +307,22 @@ public enum AudioMixer {
     /// プロジェクト全体の音声を 48 kHz ステレオ Float32 の CAF/WAV(拡張子で決まる)に書き、長さ(秒)を返す。
     /// 対象: audio / voice クリップと、video クリップの音声トラック。消音レイヤーは飛ばす。
     @discardableResult
-    public static func mixdown(project: Project, assets: RenderAssets, to url: URL) throws -> Double {
-        try mixdownDetailed(project: project, to: url).duration
+    public static func mixdown(project: Project, assets: RenderAssets, to url: URL,
+                               vst3Provider: (any AudioEffectProviding)? = nil) throws -> Double {
+        try mixdownDetailed(project: project, to: url, vst3Provider: vst3Provider).duration
+    }
+
+    /// VST3 プロバイダから、1 クリップ分の処理器列を作る(有効なスロットの順)。
+    /// プロバイダが `VST3EffectProvider` のときは状態チャンクも渡す。
+    /// 作れないスロットはプロバイダ側の約束でバイパス処理器になる(nil は担当外)。
+    static func vst3Processors(for fx: AudioFx, provider: any AudioEffectProviding, sampleRate: Double) -> [any AudioEffectProcessing] {
+        fx.enabledVST3Slots.compactMap { slot in
+            if let vst3 = provider as? VST3EffectProvider {
+                return vst3.makeProcessor(effectID: slot.audioEffectID, sampleRate: sampleRate,
+                                          values: slot.params ?? [:], stateData: slot.stateData)
+            }
+            return provider.makeProcessor(effectID: slot.audioEffectID, sampleRate: sampleRate, values: slot.params ?? [:])
+        }
     }
 
     private struct Item {
@@ -344,7 +358,7 @@ public enum AudioMixer {
     }
 
     /// `range` があれば、その区間だけを切り出して書く(出力の 0 秒 = range.start)。nil なら全体。
-    static func mixdownDetailed(project: Project, to url: URL, range: ExportRange? = nil) throws -> MixResult {
+    static func mixdownDetailed(project: Project, to url: URL, range: ExportRange? = nil, vst3Provider: (any AudioEffectProviding)? = nil) throws -> MixResult {
         let sr = mixSampleRate
         // 範囲の頭(サンプル)。クリップの位置をこの分だけ前へずらすと、負の開始と同じ扱いで頭が切られる
         let shift = range.map { Int(($0.start * sr).rounded()) } ?? 0
@@ -376,7 +390,7 @@ public enum AudioMixer {
                     item.equalPower = c.fadeIsEqualPower
                 }
                 if c.hasVolumeKeys { item.volumeEnv = VolumeEnvelope(c.keyframes["volume"], sr: sr) }
-                if let fx = c.audioFx, fx.isActive { item.fx = fx }
+                if let fx = c.audioFx, fx.isActive || (vst3Provider != nil && !fx.enabledVST3Slots.isEmpty) { item.fx = fx }
                 if c.hasPan { item.pan = AudioPan.gains(c.panOrDefault) }
                 if c.hasDuck, Clip.supportsDuck(c), !voiceSpans.isEmpty { item.duck = c.duck }
                 items.append(item)
@@ -422,8 +436,9 @@ public enum AudioMixer {
                     guard let s = try openItem(it, remapDir: remapDir) else { failed.insert(idx); continue }
                     sources[idx] = s; opened += 1; src = s
                     if let fx = it.fx {
-                        if fx.hasChain { chains[idx] = AudioFxChain(fx, sr: sr) }
-                        if let n = fx.normalize, n.isActive { normGains[idx] = try normalizeGain(for: it, fx: fx, normalize: n, remapDir: remapDir, tL: tL, tR: tR) }
+                        let processors = vst3Provider.map { vst3Processors(for: fx, provider: $0, sampleRate: sr) } ?? []
+                        if fx.hasChain || !processors.isEmpty { chains[idx] = AudioFxChain(fx, sr: sr, vst3Processors: processors) }
+                        if let n = fx.normalize, n.isActive { normGains[idx] = try normalizeGain(for: it, fx: fx, normalize: n, remapDir: remapDir, tL: tL, tR: tR, vst3Provider: vst3Provider) }
                     }
                 }
                 let a = max(cs, it.startFrame), b = min(ce, it.endFrame)
@@ -479,9 +494,12 @@ public enum AudioMixer {
 
     /// ノーマライズの倍率: クリップの使う範囲をもう一度読み、EQ → コンプレッサー → リバーブをかけた音のピーク(またはラウドネス)を測って決める。
     private static func normalizeGain(for it: Item, fx: AudioFx, normalize n: AudioFx.Normalize, remapDir: URL,
-                                      tL: UnsafeMutablePointer<Float>, tR: UnsafeMutablePointer<Float>) throws -> Float {
+                                      tL: UnsafeMutablePointer<Float>, tR: UnsafeMutablePointer<Float>,
+                                      vst3Provider: (any AudioEffectProviding)? = nil) throws -> Float {
         guard let src = try openItem(it, remapDir: remapDir) else { return 1 }
-        let chain: AudioFxChain? = fx.hasChain ? AudioFxChain(fx, sr: mixSampleRate) : nil
+        // 測定にも本番と同じ処理を通す(VST3 処理器は状態を持つので、測定用に別インスタンスを作る)
+        let processors = vst3Provider.map { vst3Processors(for: fx, provider: $0, sampleRate: mixSampleRate) } ?? []
+        let chain: AudioFxChain? = (fx.hasChain || !processors.isEmpty) ? AudioFxChain(fx, sr: mixSampleRate, vst3Processors: processors) : nil
         let meter = LevelMeter()
         var left = it.endFrame - it.startFrame
         let block = 16384

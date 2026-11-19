@@ -7,8 +7,11 @@ import Foundation
 // `docs/vst3-bridge/MovieCutVST3Bridge.h` に置き、この Swift 定義と 1 対 1 で対応させる
 // (番号・並びを変えるときは両方を同時に変えること。テストが対応を固定する)。
 //
-// このファイルに実装は無い: 関数ポインタの解決・dlopen・実プラグインの生成は
-// すべて実ホスト工程の仕事で、ここは「契約の置き場」に徹する。
+// このファイルは「契約の置き場」。実装は W6-1 で別ファイルに足した:
+// バックエンド境界 `VST3BridgeBackend.swift`、dlopen で C ABI を呼ぶ
+// `VST3NativeBridge.swift`、処理器 `VST3HostProcessor.swift`、
+// C++ 実体 `Bridges/MovieCutVST3Host/MovieCutVST3Bridge.cpp`。
+// ブリッジが無い環境では到達状態は従来どおり「検出のみ」で、音はバイパス。
 // 外部プロセス分離(案 B)にする場合も、この opcode / status の組をそのまま IPC に載せられる。
 
 /// ブリッジプロトコルの版数。互換の無い変更で +1 する。
@@ -119,7 +122,9 @@ public struct VST3HostPrerequisites: Equatable, Sendable {
         self.fixturePluginAvailable = fixturePluginAvailable; self.distributionDecisionMade = distributionDecisionMade
     }
 
-    /// 現在のビルドの実態(すべて未達。進んだら実態に合わせて更新する)。
+    /// 配布・検証の前提の実態(すべて未達。進んだら実態に合わせて更新する)。
+    /// 実行時にブリッジが見つかるか(`VST3BridgeRuntime.isAvailable`)とは別軸で、
+    /// こちらは「SDK の同梱・フィクスチャでの Mac 実機検証・配布判断まで済んだか」の記録。
     public static let current = VST3HostPrerequisites()
 
     /// 音声処理へ進んでよい前提が揃ったか。

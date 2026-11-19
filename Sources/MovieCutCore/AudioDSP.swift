@@ -411,8 +411,13 @@ final class AudioFxChain {
     private let reverb: ReverbProcessor?
     private let delay: DelayProcessor?
     private let extended: ExtendedChain?
+    /// VST3 処理器(拡張エフェクトの後・リミッターの前。W6-1 で決めた接続位置)。
+    /// 呼び出し側がプロバイダ経由で作って渡したときだけ入る。空なら従来と完全に同じ。
+    /// バイパス処理器が混ざっていても音は変わらない(バイパス = 無操作)。
+    let vst3Processors: [any AudioEffectProcessing]
 
-    init(_ fx: AudioFx, sr: Double) {
+    init(_ fx: AudioFx, sr: Double, vst3Processors: [any AudioEffectProcessing] = []) {
+        self.vst3Processors = vst3Processors
         // 強(スペクトル)のときは、ミキサーが入力の側でかける(`SpectralDenoiseSource`)ので、ここでは簡易版を使わない
         denoise = fx.denoiseStrength > 0 && !fx.spectralDenoiseOn ? DenoiseProcessor(strength: fx.denoiseStrength, sr: sr) : nil
         gate = fx.gateDb.map { GateProcessor(thresholdDb: $0, sr: sr) }
@@ -432,6 +437,7 @@ final class AudioFxChain {
         reverb?.process(l, r, n)
         delay?.process(l, r, n)
         extended?.process(l, r, n)
+        for processor in vst3Processors { processor.process(left: l, right: r, frames: n) }
         limiter?.process(l, r, n)
     }
 }

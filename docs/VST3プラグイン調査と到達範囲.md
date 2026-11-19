@@ -17,11 +17,17 @@
 | クリップへの VST3 指定の保存(`audioFx.vst3`) | 実装済み | `AudioFx.VST3Slot` |
 | パラメータ記述モデルと検証/整形(R5-1) | 実装済み | `VST3Parameter.swift` |
 | 処理契約の純粋ロジック(バス/setup交渉・ブロック検証・補償計算)(R5-1) | 実装済み | `VST3ProcessingContract.swift` |
-| C++ ブリッジの ABI 定義(宣言のみ。実装なし)(R5-1) | 定義済み | `docs/vst3-bridge/MovieCutVST3Bridge.h` / `VST3Bridge.swift` |
+| C++ ブリッジの ABI 定義(R5-1) | 定義済み | `docs/vst3-bridge/MovieCutVST3Bridge.h` / `VST3Bridge.swift` |
+| C++ ブリッジの実装(W6-1) | 実装済み(VM/Linux で実音検証済み。Mac 未検証) | `Bridges/MovieCutVST3Host/MovieCutVST3Bridge.cpp` |
+| Swift 側バックエンド境界 + ネイティブ接続(W6-1) | 実装済み | `VST3BridgeBackend.swift` / `VST3NativeBridge.swift` / `VST3HostProcessor.swift` |
+| チェーン接続(拡張の後・リミッターの前)(W6-1) | 実装済み(プロバイダを渡した経路のみ) | `AudioFxChain` / `AudioMixer.mixdown(vst3Provider:)` |
+| 検証用フィクスチャ MovieCutGain(W6-1) | 実装済み(Linux でビルド・検証済み。Mac 未検証) | `Bridges/MovieCutVST3Host/Fixture/MovieCutGain/` |
+| パラメータ簡易 UI(W6-1) | 実装済み(控えのある項目のスライダー) | `VST3Panel` |
+| 状態チャンクの保存形式(W6-1) | 実装済み(`state` キー、値があるときだけ書く) | `AudioFx.VST3Slot.state` |
 | インスペクタでの一覧・追加・削除・状態表示 | 実装済み | `VST3Panel` |
-| **実際の音声処理(プラグインを鳴らす)** | **未達** | 理由は「未達の範囲」節 |
-| パラメータ UI(プラグイン純正 GUI / 自動生成) | 未達 | 同上 |
-| プラグイン状態(プリセット/チャンク)の保存と復元 | 未達(項目の置き場だけ用意: スロットの `params` 控え) | 同上 |
+| **実際の音声処理(プラグインを鳴らす)** | **実装済み・Mac 実機検証待ち** | ブリッジ経由の経路のみ。ブリッジが無い環境では従来どおりバイパス(「未達の範囲」節) |
+| パラメータ UI(プラグイン純正 GUI / 自動生成) | 部分実装(自動生成側の簡易スライダー。純正 GUI は未達) | 同上 |
+| プラグイン状態(プリセット/チャンク)の保存と復元 | 保存形式と往復は実装済み(取得はブリッジ経由、Mac 検証待ち) | 同上 |
 
 ## 1. MovieCut の現在の音声基盤(調査結果)
 
@@ -164,12 +170,88 @@ VST3 プラグイン(.vst3 バンドル = Mach-O バイナリ)を鳴らすには
   補償・順序契約と、「前提が揃っていない間は到達状態が未実装のまま」を確認。
   既存の VST3 テスト(ミックス経由のバイト一致を含む)も従来どおり通る。
 
+## 6.6 W6-1 で実装した範囲(ホスト本体)
+
+2026-11-20、ブランチ `feat/vst3-host`(base: `feat/muse-access` d8dddc1)で、
+「次にやるなら」の 1〜3 を実装した。作業は VM(Linux)のみで、Mac には触っていない。
+VST3 SDK は GitHub の steinbergmedia/vst3sdk 3.8.1 相当(pluginterfaces / base /
+public.sdk の各リポジトリ)を VM に clone して参照した(SDK は MIT)。
+
+- **C++ ブリッジ実装**(`Bridges/MovieCutVST3Host/MovieCutVST3Bridge.cpp`、CMake 同梱):
+  ABI ヘッダの全関数 + 追加関数(クラス列挙・パラメータ現在値・レイテンシ/テール)。
+  ロードは自前 dlopen(macOS は Contents/MacOS の実行ファイル + bundleEntry/bundleExit、
+  Linux は .so + ModuleEntry/ModuleExit)。IComponent と IEditController は
+  同一オブジェクト/別クラスの両対応で、IConnectionPoint で接続し、状態も同期する。
+  バスはメイン 1 組を要求どおりに確定し、プラグインが別構成へ化けたら RESULT_FALSE
+  (黙った変換はしない)。補助バスは無音入力/捨て出力で満たす。ProcessContext
+  (サンプルレート・再生位置・テンポ)も渡す。SDK の ParameterInfo.flags の実値
+  (bypass=1<<16 等)は ABI の割当へ変換する。setProcessing の kNotImplemented は
+  SDK 既定実装の正常応答として許容する。
+- **Swift 側**: バックエンド境界 `VST3BridgeBackend` と、dlopen で C ABI を直接呼ぶ
+  `VST3NativeBridgeBackend`(構造体はバイトバッファ + オフセットで読み書きし、
+  レイアウトは C++ 側 static_assert と Swift 側 `VST3CABI` 定数で二重に固定)。
+  処理器 `VST3HostProcessor` は `VST3BridgeSession` の順序契約どおりに接続し、
+  失敗したらその場でバイパス化する。出力は作業バッファ経由で、成功したときだけ
+  入力へ戻す。`VST3EffectProvider.makeProcessor` はブリッジが使える環境
+  (`VST3HostAvailability.bridgeAvailable`)でのみ実処理器を返し、それ以外は従来どおり
+  バイパス処理器を返す。到達状態の `current` は実行時のブリッジ有無で決まる。
+- **チェーン接続**: `AudioFxChain` に VST3 段(拡張エフェクトの後・リミッターの前)を追加。
+  `AudioMixer.mixdown(..., vst3Provider:)` を渡したときだけ、VST3 スロットだけの
+  クリップも処理対象になる。**プロバイダを渡さない既定経路は従来とバイト一致**で、
+  `AudioFx.isActive` / `hasChain` / `cacheToken` も従来どおり(含めない)。
+  アプリ本体の再生/書き出し経路へのプロバイダ受け渡しは Mac 検証とセットで次段にする
+  (現状はテストと明示呼び出しからのみ実処理が起きる)。将来キャッシュ鍵へ足す材料として
+  `AudioFx.vst3CacheToken` を用意した。
+- **保存形式**: スロットに `state`(Base64 の状態チャンク)を追加。値があるときだけ書き、
+  未知キー保持・未使用時のバイト一致は従来どおり。パラメータ/状態の編集 API
+  (`setVST3SlotParam` / `removeVST3SlotParam` / `setVST3SlotState`)も追加。
+- **UI**: パネル題をブリッジ有無で切替。スロットのパラメータ控えを正規化スライダーで
+  操作できる(ドラッグ = 1 Undo)。状態データの有無も表示する。新規文言は L10nTable に
+  日英 4 件追加(重複なし)。
+- **フィクスチャ**: `Fixture/MovieCutGain`(SingleComponentEffect 継承、ゲイン id=0 /
+  バイパス id=1 / Vu id=2、状態はゲイン+バイパスの往復)。SDK のビルドシステムに
+  依存しない単独 CMake で .vst3 バンドルを組み立てる。
+- **VM での実検証(2026-11-20)**: ブリッジとフィクスチャを Linux でビルドし、
+  `Bridges/MovieCutVST3Host/Tests/smoke_test.py`(ctypes で ABI のみ使用)が **全項目 PASS**:
+  handshake / open / クラス列挙(CID 取得)/ create(CID 指定も)/ パラメータ 3 件取得 /
+  setup / active / process(既定ゲイン 0.75 で 0.5→0.375、変化点 0.5 で →0.25)/
+  状態取得→別インスタンスへ復元して同じゲイン / dispose。
+- **テスト**: Swift 側に Core 19 件(`VST3HostTests`: フェイクバックエンドでの接続・
+  ブロック分割・パラメータ往復・状態往復・途中失敗時のバイパス切替・チェーン順序・
+  ミックス経由のゲイン・探索順・ABI 定数・スロット編集)と App 2 件(パラメータ編集の
+  Undo 歩数・パネル生成)を追加。**Swift テストは VM で実行できないため未実行**(Mac で実行する)。
+
+### Mac で統括が行う検証手順(実機検証待ちの範囲)
+
+1. SDK 取得: Mac の `(ローカルの作業フォルダ)` にある SDK 一式のルートを確認
+   (無ければ `git clone --recursive https://github.com/steinbergmedia/vst3sdk`、3.8 以降、MIT)。
+2. ブリッジビルド: `cmake -S Bridges/MovieCutVST3Host -B /tmp/vst3bridge-build -DSDK_ROOT=<SDKルート> -DCMAKE_BUILD_TYPE=Release && cmake --build /tmp/vst3bridge-build`
+   → `libMovieCutVST3Bridge.dylib` ができること、static_assert が通ること。
+3. フィクスチャビルド: 同様に `Fixture/MovieCutGain` をビルドし、出てきた
+   `MovieCutGain.vst3` を `~/Library/Audio/Plug-Ins/VST3/` へ置く。
+4. スモーク: `python3 Bridges/MovieCutVST3Host/Tests/smoke_test.py /tmp/vst3bridge-build/libMovieCutVST3Bridge.dylib ~/Library/Audio/Plug-Ins/VST3/MovieCutGain.vst3`
+   が ALL PASS になること(macOS バンドル形式でのロード確認)。
+5. Swift テスト: `swift test --filter VST3` を直列で実行(既存 34 件 + 新規 21 件)。
+   注意: テスト実行環境にブリッジを置かないこと(探索候補に `/usr/local/lib` は入れていないが、
+   環境変数 `MOVIECUT_VST3_BRIDGE_LIBRARY` や xctest の実行ファイル隣に置くと
+   到達状態が変わり、既存の「検出のみ」を固定したテストが落ちる)。
+6. アプリ経由: 環境変数 `MOVIECUT_VST3_BRIDGE_LIBRARY=<2 の dylib>` を付けてアプリを起動し、
+   クリップに MovieCutGain を追加 → パラメータ 0 を 0.5 にして書き出し、音量が半分になること。
+   実プラグイン(手持ちの市販/フリー VST3)でもロード可否と音を確認する。
+   確認できたら、再生/書き出し経路(`PlaybackController` / `RenderAssets`)へ
+   `vst3Provider` を渡す配線と、`cacheToken` への `vst3CacheToken` 組み込みを次段で行う。
+7. 配布判断: ブリッジをアプリの Frameworks へ同梱するか、公証と
+   `disable-library-validation` の要否(従来どおり未決)。
+
 ## 7. 未達の範囲と理由
 
-- **音声処理ホスト本体**: C++ ブリッジ(SwiftPM への C++ ターゲット追加)+ SDK 組み込み +
-  処理接続 + 状態保存 + GUI の一式が残る。加えて **この Mac には VST3 プラグインが
-  1 つもインストールされておらず**(標準フォルダ自体が存在しない)、作っても実プラグインで
-  検証できない。検証できない音声処理を「対応」とは言えないため、ここで線を引いた。
+- **Mac 実機での音声処理の検証**(W6-1 で更新): ホスト本体・処理接続・状態保存・
+  簡易パラメータ UI は実装し、VM(Linux)ではフィクスチャで実音検証まで済んだ。
+  残るのは Mac 実機での確認(macOS バンドル形式のロード、実プラグイン、アプリ経由の
+  書き出し)で、手順は 6.6 節に置いた。検証が済むまでは、アプリ本体の再生/書き出し経路へは
+  プロバイダを渡していない(= 既定では音は従来どおり)。SwiftPM への C++ ターゲット追加は
+  採らず、ブリッジは独立 CMake + dlopen とした(既存ビルドへの影響をゼロにするため)。
+- **プラグイン純正 GUI**: 未達(IPlugView の別窓表示は未実装)。
 - **パラメータ UI**: 純正 GUI の埋め込みも自動生成 UI も未実装。パラメータの「控え」の
   保存場所(スロットの `params`)に加え、R5-1 で記述モデルと自動生成 UI への変換
   (`EffectParamSpec`)まで用意したが、実プラグインから記述を取得する手段が無いため
@@ -196,3 +278,15 @@ VST3 プラグイン(.vst3 バンドル = Mach-O バイナリ)を鳴らすには
    外部プロセス分離(案 B)にするなら、この判断はヘルパー側だけに閉じ込められる。
 5. 状態チャンクの保存先(プロジェクト内のバイナリ置き場)を設計する。パラメータ自動生成 UI は
    R5-1 の記述モデル(`EffectParamSpec` 変換)を使うので、残るは実取得と画面への接続だけ。
+
+### 8.1 W6-1 での進み具合(上の手順との対応)
+
+- 手順 1: SDK は vendor 同梱せず、ビルド時に `SDK_ROOT` で外から指す方式にした
+  (ライセンス記録は `Bridges/MovieCutVST3Host/README.md`)。取得自体は Mac 側の検証手順に残る。
+- 手順 2: SwiftPM への C++ ターゲット追加は採らず、独立 CMake + dlopen に変更
+  (理由は 6.6 節)。オフライン処理・交渉・検証の接続まで実装済み。
+- 手順 3: `makeProcessor` の差し替えとチェーン接続は実装済み。ただし
+  `hasChain` / `cacheToken` への組み込みと、アプリ本体の再生/書き出し経路への
+  プロバイダ受け渡しは Mac 実機検証とセットで次段(6.6 節の判断メモ参照)。
+- 手順 4(配布判断・公証)と 5(状態チャンクの置き場設計: 現状はスロットの
+  `state` に Base64 で内包する方式を実装済み。バイナリ置き場への分離は未検討)は残り。

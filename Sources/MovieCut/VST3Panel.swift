@@ -66,15 +66,38 @@ struct VST3Panel: View {
                 }
                 .padding(.top, 4)
             } label: {
-                Text("VST3 プラグイン(検出のみ)").font(MCDesign.Font.calloutSemibold).foregroundStyle(MCDesign.Color.textSecondary)
+                Text(VST3HostAvailability.current.canProcessAudio ? L10n.t("VST3 プラグイン") : "VST3 プラグイン(検出のみ)")
+                    .font(MCDesign.Font.calloutSemibold).foregroundStyle(MCDesign.Color.textSecondary)
             }
             .onAppear { if scanResult == nil { rescan() } }
         }
     }
 
+    /// パラメータ控えの簡易操作(W6-1)。控えがある項目だけを正規化値スライダーで出す。
+    /// ドラッグは他の音声パネルと同じく 1 回の Undo にまとまる。
+    @ViewBuilder
+    private func paramSliders(index: Int, slot: AudioFx.VST3Slot) -> some View {
+        if let params = slot.params, !params.isEmpty {
+            ForEach(params.keys.sorted(), id: \.self) { key in
+                LiveSlider(label: L10n.t("パラメータ") + " " + key, value: params[key] ?? 0, range: 0...1, step: 0.01,
+                           format: { "\(Int(($0 * 100).rounded()))%" },
+                           begin: { model.beginGesture() },
+                           change: { v in model.liveAudioFx({ _ = AudioFxEditing.setVST3SlotParam(&$0, at: index, key: key, value: v) },
+                                                            name: ProjectModel.vst3ParamUndoName, clipId: clipId) },
+                           end: { model.commitGesture(ProjectModel.vst3ParamUndoName) })
+            }
+        }
+        if slot.state != nil {
+            Text(L10n.t("プラグイン状態データあり"))
+                .font(MCDesign.Font.caption)
+                .foregroundStyle(MCDesign.Color.textSecondary)
+        }
+    }
+
     private func slotRow(index: Int, slot: AudioFx.VST3Slot) -> some View {
         let detected = scanResult?.plugin(forSlotIdentifier: slot.bundleID)
-        return HStack(spacing: 6) {
+        return VStack(alignment: .leading, spacing: 4) {
+        HStack(spacing: 6) {
             Toggle(isOn: Binding(
                 get: { slot.enabled },
                 set: { on in model.setAudioFx({ _ = AudioFxEditing.setVST3SlotEnabled(&$0, at: index, enabled: on) },
@@ -95,6 +118,8 @@ struct VST3Panel: View {
             }
             .buttonStyle(.borderless)
             .help("この VST3 指定を外す")
+        }
+        if slot.enabled { paramSliders(index: index, slot: slot) }
         }
     }
 

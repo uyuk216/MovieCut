@@ -908,6 +908,10 @@ enum L10nTable {
         "メッシュ変形": "Mesh Warp",
         "素材を追加": "Add Media",
         "ぼかし範囲": "Blur Area",
-        "分割": "Split"
+        "分割": "Split",
+        "VST3 プラグイン": "VST3 Plug-ins",
+        "パラメータ": "Parameter",
+        "プラグイン状態データあり": "Plug-in state data saved",
+        "VST3 パラメータの変更": "Change VST3 Parameter"
     ]
 }
