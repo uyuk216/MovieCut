@@ -24,13 +24,17 @@ public struct AudioFx: Codable, Equatable, Sendable {
     public var delay: Delay?
     /// 拡張エフェクト群(フィルタ・歪み・モジュレーション系など)。未設定 = なし。定義は `AudioFxExtended.swift`。
     public var extended: Extended?
+    /// VST3 プラグインの指定(スロット配列)。未設定/空 = なし。定義と到達範囲は `AudioFxVST3.swift`。
+    /// 音声処理ホスト未実装のため、スロットは音を変えない(バイパスが仕様)。そのため
+    /// `isActive` / `hasChain` / `cacheToken` には含めない(ホスト接続時に初めて含める)。
+    public var vst3: [VST3Slot]?
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["eq", "compressor", "reverb", "normalize", "denoise", "denoiseSpectral", "pitch", "gate", "limiter", "delay", "extended"]
+    static let knownKeys: Set<String> = ["eq", "compressor", "reverb", "normalize", "denoise", "denoiseSpectral", "pitch", "gate", "limiter", "delay", "extended", "vst3"]
 
-    public init(eq: EQ? = nil, compressor: Compressor? = nil, reverb: Reverb? = nil, normalize: Normalize? = nil, denoise: Double? = nil, pitch: Double? = nil, gate: Double? = nil, limiter: Double? = nil, delay: Delay? = nil, extended: Extended? = nil) {
+    public init(eq: EQ? = nil, compressor: Compressor? = nil, reverb: Reverb? = nil, normalize: Normalize? = nil, denoise: Double? = nil, pitch: Double? = nil, gate: Double? = nil, limiter: Double? = nil, delay: Delay? = nil, extended: Extended? = nil, vst3: [VST3Slot]? = nil) {
         self.eq = eq; self.compressor = compressor; self.reverb = reverb; self.normalize = normalize; self.denoise = denoise; self.pitch = pitch
-        self.gate = gate; self.limiter = limiter; self.delay = delay; self.extended = extended
+        self.gate = gate; self.limiter = limiter; self.delay = delay; self.extended = extended; self.vst3 = vst3
     }
 
     public static let gateRange: ClosedRange<Double> = -80 ... -20
@@ -48,7 +52,7 @@ public struct AudioFx: Codable, Equatable, Sendable {
     }
 
     /// 何も入っていない(ファイルに書かない)。
-    public var isEmpty: Bool { eq == nil && compressor == nil && reverb == nil && normalize == nil && denoiseStrength == 0 && pitchSemitones == 0 && gateDb == nil && limiterDb == nil && delay == nil && (extended?.isEmpty ?? true) && extra.isEmpty }
+    public var isEmpty: Bool { eq == nil && compressor == nil && reverb == nil && normalize == nil && denoiseStrength == 0 && pitchSemitones == 0 && gateDb == nil && limiterDb == nil && delay == nil && (extended?.isEmpty ?? true) && (vst3?.isEmpty ?? true) && extra.isEmpty }
 
     /// 音程の半音数(−24〜+24 に収めた値。有限でなければ 0)。0 でないときだけ音程を変える。
     public var pitchSemitones: Double { Self.clampPitch(pitch) }
@@ -352,7 +356,7 @@ public struct AudioFx: Codable, Equatable, Sendable {
         denoiseSpectral = l.bool("denoiseSpectral")
         pitch = l.double("pitch")
         gate = l.double("gate"); limiter = l.double("limiter")
-        delay = l.value("delay"); extended = l.value("extended")
+        delay = l.value("delay"); extended = l.value("extended"); vst3 = l.value("vst3")
         extra = l.extra()
         // 読めなかった項目は捨てずに、そのまま書き戻す
         for key in Self.knownKeys {
@@ -369,6 +373,7 @@ public struct AudioFx: Codable, Equatable, Sendable {
             case "limiter": ok = limiter != nil
             case "delay": ok = delay != nil
             case "extended": ok = extended != nil
+            case "vst3": ok = vst3 != nil
             default: ok = normalize != nil
             }
             if !ok { extra[key] = raw }
@@ -389,6 +394,7 @@ public struct AudioFx: Codable, Equatable, Sendable {
         if let v = limiterDb { try c.encode(v, forKey: AnyKey("limiter")) }
         try c.encodeIfPresent(delay, forKey: AnyKey("delay"))
         if let x = extended, !x.isEmpty { try c.encode(x, forKey: AnyKey("extended")) }
+        if let v = vst3, !v.isEmpty { try c.encode(v, forKey: AnyKey("vst3")) }
     }
 }
 

@@ -85,6 +85,7 @@ struct AudioFxPanel: View {
                 delayGroup(c)
                 normalizeGroup(c)
                 AudioFxExtendedPanel(model: model, clipId: clipId, forceExpanded: forceExpanded)
+                VST3Panel(model: model, clipId: clipId, forceExpanded: forceExpanded)
                 duckGroup(c)
                 voiceDesignationToggle(c)
             }

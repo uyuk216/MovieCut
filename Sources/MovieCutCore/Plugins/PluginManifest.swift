@@ -8,6 +8,8 @@ public enum PluginHook: String, Codable, CaseIterable, Sendable {
     case importer
     /// 映像・音声エフェクト。
     case effect
+    /// 音声エフェクト(ブロック単位のオフライン処理。境界は `PluginAudioEffect.swift`)。
+    case audioEffect
     /// 書き出し形式。
     case exporter
 }
@@ -37,6 +39,9 @@ public struct PluginManifest: Codable, Equatable, Sendable {
     /// 識別子は `Effect.kind`(文字列)そのもので、内蔵の `EffectKind.rawValue` と衝突しないよう
     /// 接頭辞付きにする(例: "plugin.invert")。`PluginHost.effectProvider(forEffectID:)` の解決キー。
     public var effectIDs: [String]
+    /// 音声エフェクトフック(`hooks` に `.audioEffect` を含むとき)が担当する、音声エフェクト識別子の一覧。
+    /// VST3 は "vst3.<バンドルID>" の形(`VST3BundleInfo.audioEffectID`)。`PluginHost.audioEffectProvider(forAudioEffectID:)` の解決キー。
+    public var audioEffectIDs: [String]
     /// 書き出しフック(`hooks` に `.exporter` を含むとき)が担当する、書き出し形式識別子の一覧。
     /// 例: ["gif"] / ["project-json"]。`PluginHost.exportBackend(forFormat:)` の解決キー。
     public var exportFormatIDs: [String]
@@ -54,6 +59,7 @@ public struct PluginManifest: Codable, Equatable, Sendable {
                 voiceEngineIDs: [String] = [],
                 effectIDs: [String] = [],
                 exportFormatIDs: [String] = [],
+                audioEffectIDs: [String] = [],
                 requiresLicense: Bool = false,
                 description: String? = nil) {
         self.id = id
@@ -65,12 +71,13 @@ public struct PluginManifest: Codable, Equatable, Sendable {
         self.voiceEngineIDs = voiceEngineIDs
         self.effectIDs = effectIDs
         self.exportFormatIDs = exportFormatIDs
+        self.audioEffectIDs = audioEffectIDs
         self.requiresLicense = requiresLicense
         self.description = description
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, version, hooks, entryPoint, minimumAppVersion, voiceEngineIDs, effectIDs, exportFormatIDs, requiresLicense, description
+        case id, name, version, hooks, entryPoint, minimumAppVersion, voiceEngineIDs, effectIDs, exportFormatIDs, audioEffectIDs, requiresLicense, description
     }
 
     public init(from decoder: Decoder) throws {
@@ -84,6 +91,7 @@ public struct PluginManifest: Codable, Equatable, Sendable {
         voiceEngineIDs = try c.decodeIfPresent([String].self, forKey: .voiceEngineIDs) ?? []
         effectIDs = try c.decodeIfPresent([String].self, forKey: .effectIDs) ?? []
         exportFormatIDs = try c.decodeIfPresent([String].self, forKey: .exportFormatIDs) ?? []
+        audioEffectIDs = try c.decodeIfPresent([String].self, forKey: .audioEffectIDs) ?? []
         requiresLicense = try c.decodeIfPresent(Bool.self, forKey: .requiresLicense) ?? false
         description = try c.decodeIfPresent(String.self, forKey: .description)
     }
@@ -103,6 +111,13 @@ public struct PluginManifest: Codable, Equatable, Sendable {
         guard provides(.effect) else { return false }
         let needle = effectID.trimmingCharacters(in: .whitespaces).lowercased()
         return effectIDs.contains { $0.trimmingCharacters(in: .whitespaces).lowercased() == needle }
+    }
+
+    /// 指定の音声エフェクト識別子を担当するか(大文字小文字は区別しない)。
+    public func handlesAudioEffect(_ effectID: String) -> Bool {
+        guard provides(.audioEffect) else { return false }
+        let needle = effectID.trimmingCharacters(in: .whitespaces).lowercased()
+        return audioEffectIDs.contains { $0.trimmingCharacters(in: .whitespaces).lowercased() == needle }
     }
 
     /// 指定の書き出し形式識別子を担当するか(大文字小文字は区別しない)。
