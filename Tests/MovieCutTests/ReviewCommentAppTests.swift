@@ -93,4 +93,53 @@ final class ReviewCommentAppTests: XCTestCase {
         let back = try ReviewCommentExchange.decodeJSON(data)
         XCTAssertEqual(back, m.project.reviewComments)
     }
+
+    // MARK: 継続作業で追加(CSV 読み込み・移動・無効理由)
+
+    /// CSV の交換ファイルも、読み込みは Undo 1 回で戻せる(JSON と同じ入口で形式を判定する)。
+    func testImportCSVDataMergesInOneUndoStep() {
+        let m = makeModel()
+        let um = m.effectiveUndoManager
+        var c = ReviewComment(time: 7, body: "CSV からの指摘", author: "佐藤")
+        c.id = "csv1"
+        let data = Data(ReviewCommentExchange.csv([c]).utf8)
+        let r = m.importReviewComments(data: data)
+        XCTAssertEqual(r?.added, 1)
+        XCTAssertEqual(m.project.reviewComments.first?.body, "CSV からの指摘")
+        XCTAssertEqual(m.project.reviewComments.first?.time, 7)
+        XCTAssertEqual(um.undoActionName, "レビューコメントの読み込み")
+        um.undo()
+        XCTAssertEqual(m.project.reviewComments.count, 0, "CSV の読み込みも Undo 1 回で戻る")
+        XCTAssertFalse(um.canUndo)
+    }
+
+    /// 新しい形式の交換ファイルは、バージョンを理由に断り、プロジェクトを変えない。
+    func testImportNewerVersionIsRejectedWithReason() {
+        let m = makeModel()
+        let data = Data(#"{"format":"moviecut-review-comments","version":99,"comments":[]}"#.utf8)
+        XCTAssertNil(m.importReviewComments(data: data))
+        XCTAssertTrue(m.errorMessage?.contains("バージョン 99") ?? false, "理由: \(m.errorMessage ?? "なし")")
+        XCTAssertTrue(m.project.reviewComments.isEmpty)
+        XCTAssertFalse(m.effectiveUndoManager.canUndo)
+    }
+
+    func testJumpToReviewCommentMovesPlayhead() {
+        let m = makeModel()
+        m.currentTime = 3
+        let id = m.addReviewCommentAtPlayhead(body: "ここ", author: "")
+        m.currentTime = 0
+        XCTAssertTrue(m.jumpToReviewComment(id: id!))
+        XCTAssertEqual(m.currentTime, 3)
+        XCTAssertFalse(m.jumpToReviewComment(id: "ghost"))
+    }
+
+    func testExportDisabledReasonMentionsNoComments() {
+        let empty = state { _ in }
+        let spec = AppMenuSpec.reviewCommentItems(empty)[2]
+        XCTAssertEqual(AppMenuSpec.disabledReason(for: spec, state: empty), "レビューコメントがありません")
+        let withOne = state { $0.reviewComments = [MenuState.ReviewCommentItem(id: "a", time: 1, body: "x", resolved: false)] }
+        let spec2 = AppMenuSpec.reviewCommentItems(withOne)[2]
+        XCTAssertTrue(spec2.enabled)
+        XCTAssertNil(AppMenuSpec.disabledReason(for: spec2, state: withOne))
+    }
 }

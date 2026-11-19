@@ -133,12 +133,107 @@ final class ReviewCommentTests: XCTestCase {
         XCTAssertEqual(r2.project, r.project)
     }
 
+    /// CSV の作法は既存の書き出し(使用クリップ一覧・注記一覧)に合わせた: 先頭 BOM・行末 CRLF・RFC 4180 引用。
+    /// (WIP 時点の「BOM なし・LF のみ」から変更した。理由: 表計算ソフトで日本語が崩れない既存作法への統一)
     func testCSVExportEscapesAndHeaders() {
         var c = ReviewComment(time: 65, body: "a,b\"c\"\n次の行", author: "x")
         c.id = "z"
         let csv = ReviewCommentExchange.csv([c])
-        XCTAssertTrue(csv.hasPrefix("id,timecode,time,endTime,author,resolved,clipId,body\n"))
+        XCTAssertTrue(csv.hasPrefix("\u{FEFF}id,timecode,time,endTime,author,resolved,clipId,body\r\n"))
         XCTAssertTrue(csv.contains("1:05"), "タイムコード列")
         XCTAssertTrue(csv.contains("\"a,b\"\"c\"\"\n次の行\""), "RFC 4180 式の引用")
+        XCTAssertTrue(csv.hasSuffix("\r\n"), "最終行も CRLF で終える")
+    }
+
+    // MARK: CSV 読み込み・形式判定(継続作業で追加)
+
+    /// CSV の往復: id・時刻・範囲・作者・解決済み・対象クリップ・本文(引用符・カンマ・改行を含む)が戻る。
+    /// `createdAt` は CSV に無いので往復の対象外(正は JSON)。
+    func testCSVRoundTrip() {
+        var a = ReviewComment(time: 12.5, body: "音が大きい, 直して", author: "田中")
+        a.id = "c1"
+        var b = ReviewComment(time: 3, body: "改行を\n含む本文", author: "")
+        b.id = "c2"; b.endTime = 5.5; b.clipId = "clip9"; b.resolved = true
+        let back = ReviewCommentExchange.decodeCSV(ReviewCommentExchange.csv([a, b]))
+        XCTAssertEqual(ReviewCommentEditing.sorted(back), ReviewCommentEditing.sorted([a, b]))
+    }
+
+    func testCSVImportWithoutHeaderUsesExportColumnOrder() {
+        let text = "x1,0:10,10,,佐藤,open,,頭出しを確認\r\ny2,0:20,20,25,,resolved,clip1,ここまで直す\r\n"
+        let got = ReviewCommentExchange.decodeCSV(text)
+        XCTAssertEqual(got.count, 2)
+        XCTAssertEqual(got[0].id, "x1"); XCTAssertEqual(got[0].time, 10); XCTAssertEqual(got[0].author, "佐藤")
+        XCTAssertFalse(got[0].resolved)
+        XCTAssertEqual(got[1].endTime, 25); XCTAssertTrue(got[1].resolved); XCTAssertEqual(got[1].clipId, "clip1")
+    }
+
+    func testCSVImportJapaneseHeaderAndTimecodeFallback() {
+        // time 列が空でも timecode 列から復元する。id が無い行には新しい id が付く
+        let text = "タイムコード,作成者,本文,解決済み\r\n1:05,鈴木,サビ前を確認,解決済み\r\n"
+        let got = ReviewCommentExchange.decodeCSV(text)
+        XCTAssertEqual(got.count, 1)
+        XCTAssertEqual(got[0].time, 65)
+        XCTAssertEqual(got[0].author, "鈴木")
+        XCTAssertTrue(got[0].resolved)
+        XCTAssertFalse(got[0].id.isEmpty)
+        // 本文が空の行は捨てる
+        XCTAssertEqual(ReviewCommentExchange.decodeCSV("id,timecode,time,endTime,author,resolved,clipId,body\r\nq,0:01,1,,,,,\r\n").count, 0)
+    }
+
+    func testParseTimecode() {
+        XCTAssertEqual(ReviewCommentExchange.parseTimecode("65"), 65)
+        XCTAssertEqual(ReviewCommentExchange.parseTimecode("65.5"), 65.5)
+        XCTAssertEqual(ReviewCommentExchange.parseTimecode("1:05"), 65)
+        XCTAssertEqual(ReviewCommentExchange.parseTimecode("1:02:03.5"), 3723.5)
+        XCTAssertEqual(ReviewCommentExchange.parseTimecode("0:00:01,5"), 1.5, "小数のカンマも可")
+        XCTAssertNil(ReviewCommentExchange.parseTimecode(""))
+        XCTAssertNil(ReviewCommentExchange.parseTimecode("abc"))
+        XCTAssertNil(ReviewCommentExchange.parseTimecode("-3"))
+        XCTAssertNil(ReviewCommentExchange.parseTimecode("1:2:3:4"))
+    }
+
+    func testDecodeExchangeSniffsJSONAndCSVAndRejectsText() throws {
+        let comments = sample()
+        let json = try ReviewCommentExchange.encodeJSON(comments)
+        XCTAssertEqual(try ReviewCommentExchange.decodeExchange(json).count, 2)
+        var plain = ReviewComment(time: 1, body: "CSV 側", author: "")
+        plain.id = "p1"
+        let csvData = Data(ReviewCommentExchange.csv([plain]).utf8)
+        XCTAssertEqual(try ReviewCommentExchange.decodeExchange(csvData), [plain])
+        XCTAssertThrowsError(try ReviewCommentExchange.decodeExchange(Data("ただの文章です".utf8))) {
+            XCTAssertEqual($0 as? ReviewCommentExchange.ExchangeError, .notReviewCommentFile)
+        }
+    }
+
+    // MARK: 安全策・保持(継続作業で追加)
+
+    func testExchangeJSONPreservesUnknownCommentKeys() throws {
+        let data = Data(#"{"format":"moviecut-review-comments","version":1,"comments":[{"id":"k","time":1,"body":"x","vendorFlag":{"on":true}}]}"#.utf8)
+        let got = try ReviewCommentExchange.decodeJSON(data)
+        XCTAssertEqual(got.count, 1)
+        let back = try ReviewCommentExchange.decodeJSON(ReviewCommentExchange.encodeJSON(got))
+        XCTAssertEqual(back, got, "未知のキーも交換の往復で残る")
+    }
+
+    func testDecodingTruncatesOverlongBodyAndAuthor() throws {
+        let longBody = String(repeating: "あ", count: ReviewComment.maxBodyLength + 10)
+        let longAuthor = String(repeating: "a", count: ReviewComment.maxAuthorLength + 10)
+        let json = "{\"reviewComments\":[{\"id\":\"t\",\"time\":1,\"body\":\"\(longBody)\",\"author\":\"\(longAuthor)\"}]}"
+        let p = try Project.decode(from: Data(json.utf8))
+        XCTAssertEqual(p.reviewComments[0].body.count, ReviewComment.maxBodyLength)
+        XCTAssertEqual(p.reviewComments[0].author.count, ReviewComment.maxAuthorLength)
+    }
+
+    func testSanitizeClampsCommentTimes() throws {
+        let p = try Project.decode(from: Data(#"{"reviewComments":[{"id":"s","time":999999999,"body":"x","endTime":9999999999}]}"#.utf8))
+        XCTAssertEqual(p.reviewComments[0].time, InputLimits.maxSeconds, "時刻は上限に収める")
+        XCTAssertNil(p.reviewComments[0].endTime, "上限に収めた結果、開始以下になった範囲の終わりは落とす")
+    }
+
+    func testOpenAndResolvedCounts() {
+        var p = Project()
+        p.reviewComments = sample()   // c1 未解決・c2 解決済み
+        XCTAssertEqual(ReviewCommentEditing.openCount(in: p), 1)
+        XCTAssertEqual(ReviewCommentEditing.resolvedCount(in: p), 1)
     }
 }

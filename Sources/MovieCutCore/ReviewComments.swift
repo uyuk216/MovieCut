@@ -25,6 +25,13 @@ public struct ReviewComment: Codable, Equatable, Identifiable {
 
     static let knownKeys: Set<String> = ["id", "time", "endTime", "body", "author", "clipId", "resolved", "createdAt", "updatedAt"]
 
+    /// 1 プロジェクトあたりのコメント数の上限(読み込み時の安全策。`InputLimits` の sanitize と交換読み込みで使う)。
+    public static let maxCount = 10_000
+    /// 本文の長さの上限(文字数。素材メタデータのメモと同じ 4000)。
+    public static let maxBodyLength = 4000
+    /// 作成者名の長さの上限(文字数)。
+    public static let maxAuthorLength = 100
+
     public init() {}
     public init(time: Double, body: String, author: String = "") {
         self.time = max(0, time.isFinite ? time : 0)
@@ -38,8 +45,8 @@ public struct ReviewComment: Codable, Equatable, Identifiable {
         let t = l.double("time") ?? 0
         time = t.isFinite ? max(0, t) : 0
         if let e = l.double("endTime"), e.isFinite, e > time { endTime = e }
-        body = l.string("body") ?? body
-        author = l.string("author") ?? author
+        body = String((l.string("body") ?? body).prefix(Self.maxBodyLength))
+        author = String((l.string("author") ?? author).prefix(Self.maxAuthorLength))
         clipId = l.string("clipId").flatMap { $0.isEmpty ? nil : $0 }
         resolved = l.bool("resolved") ?? false
         createdAt = l.string("createdAt").flatMap { $0.isEmpty ? nil : $0 }
@@ -118,16 +125,24 @@ public enum ReviewCommentEditing {
 
     /// 未解決の数。
     public static func openCount(in project: Project) -> Int {
-        project.reviewComments.count { !$0.resolved }
+        project.reviewComments.filter { !$0.resolved }.count
+    }
+
+    /// 解決済みの数。
+    public static func resolvedCount(in project: Project) -> Int {
+        project.reviewComments.filter { $0.resolved }.count
     }
 }
 
-/// レビューコメントの交換ファイル(JSON が正、CSV は書き出し専用の閲覧用)。
+/// レビューコメントの交換ファイル(JSON が正、CSV も読み書きできる)。
 /// 形式: `{ "format": "moviecut-review-comments", "version": 1, "exportedAt": "...", "comments": [ ... ] }`
 /// 読み込みは素の配列 `[ ... ]` も受け付ける(他の道具が作った一覧を取り込めるように)。
+/// CSV は `createdAt` / `updatedAt` と未知のキー(`extra`)を持たないので、往復の正は JSON とする。
 public enum ReviewCommentExchange {
     public static let formatName = "moviecut-review-comments"
     public static let formatVersion = 1
+    /// 交換ファイル 1 件の大きさの上限(字幕ファイルと同じ 8MB)。
+    public static let maxExchangeBytes = 8 * 1024 * 1024
 
     public struct MergeResult: Equatable {
         public var project: Project
@@ -136,9 +151,15 @@ public enum ReviewCommentExchange {
         public var unchanged: Int
     }
 
-    public enum ExchangeError: Error, Equatable {
+    public enum ExchangeError: Error, Equatable, LocalizedError {
         case notReviewCommentFile
         case unsupportedVersion(Int)
+        public var errorDescription: String? {
+            switch self {
+            case .notReviewCommentFile: return "レビューコメントの交換ファイルとして読み取れませんでした"
+            case .unsupportedVersion(let v): return "この交換ファイルは新しい形式(バージョン \(v))で、このアプリでは読み込めません"
+            }
+        }
     }
 
     /// 交換用 JSON を作る(キーは整列、コメントは時刻順。人間が読める字下げ付き)。
@@ -177,7 +198,107 @@ public enum ReviewCommentExchange {
 
     private static func decodeComments(_ arr: [Any]) throws -> [ReviewComment] {
         let data = try JSONSerialization.data(withJSONObject: arr)
-        return try JSONDecoder().decode([ReviewComment].self, from: data)
+        let decoded = try JSONDecoder().decode([ReviewComment].self, from: data)
+        return Array(decoded.prefix(ReviewComment.maxCount))
+    }
+
+    // MARK: 形式の自動判定・ファイル読み込み
+
+    /// 交換ファイルの中身から形式を見分けて読む(先頭が `{` / `[` なら JSON、それ以外は CSV)。
+    /// CSV として読んだ結果が 0 件で、本文のある行が 1 つも無いときは `ExchangeError` で断る(関係ないテキストを黙って空にしない)。
+    public static func decodeExchange(_ data: Data) throws -> [ReviewComment] {
+        let rawText = String(decoding: data, as: UTF8.self)
+        var text = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.hasPrefix("\u{FEFF}") { text.removeFirst() }
+        // JSON は前後の空白と BOM を落とした文字列から読む(CSV は元の文字列をそのまま渡す)
+        if text.hasPrefix("{") || text.hasPrefix("[") { return try decodeJSON(Data(text.utf8)) }
+        let comments = decodeCSV(rawText)
+        guard !comments.isEmpty else { throw ExchangeError.notReviewCommentFile }
+        return comments
+    }
+
+    /// 交換ファイルを大きさの上限つきで読む(`InputLimits` の作法)。
+    public static func read(from url: URL) throws -> [ReviewComment] {
+        let data = try InputLimits.readFile(url, limit: maxExchangeBytes, what: "レビューコメントの交換ファイル")
+        return try decodeExchange(data)
+    }
+
+    // MARK: CSV
+
+    /// タイムコード文字列を読む: `65` / `65.5`(秒)、`1:05`、`1:02:03.5` のどれでもよい。小数の区切りは `.` と `,` の両方可。
+    /// 読めない・負・非有限なら nil。
+    public static func parseTimecode(_ raw: String) -> Double? {
+        let s = raw.trimmingCharacters(in: .whitespaces)
+        guard !s.isEmpty else { return nil }
+        let parts = s.split(separator: ":", omittingEmptySubsequences: false)
+        guard parts.count <= 3 else { return nil }
+        var total = 0.0
+        for (i, part) in parts.enumerated() {
+            let isLast = i == parts.count - 1
+            let piece = isLast ? part.replacingOccurrences(of: ",", with: ".") : String(part)
+            guard let v = Double(piece), v.isFinite, v >= 0 else { return nil }
+            if !isLast, v != v.rounded() { return nil }
+            total = total * 60 + v
+        }
+        return total.isFinite ? total : nil
+    }
+
+    /// CSV を読む。見出し行があれば列名(英語・日本語)で対応づけ、無ければ書き出しと同じ列順
+    /// (id, timecode, time, endTime, author, resolved, clipId, body)とみなす。
+    /// 本文が空の行・列が足りない行は捨てる。`time` 列が読めなければ `timecode` 列から復元する。
+    /// `id` が無い行には新しい id を振る。件数は上限で切る。
+    public static func decodeCSV(_ text: String) -> [ReviewComment] {
+        let noBom = text.hasPrefix("\u{FEFF}") ? String(text.dropFirst()) : text
+        var rows = ScriptCSV.rows(fromCSV: noBom)
+        guard !rows.isEmpty else { return [] }
+
+        // 既定は書き出しの列順
+        var idx: [String: Int] = ["id": 0, "timecode": 1, "time": 2, "endTime": 3, "author": 4, "resolved": 5, "clipId": 6, "body": 7]
+        let aliases: [String: String] = [
+            "id": "id", "timecode": "timecode", "タイムコード": "timecode",
+            "time": "time", "time(秒)": "time", "秒": "time", "時刻(秒)": "time",
+            "endtime": "endTime", "endtime(秒)": "endTime", "終わり(秒)": "endTime",
+            "author": "author", "作成者": "author", "作成者名": "author", "作者": "author",
+            "resolved": "resolved", "解決済み": "resolved", "状態": "resolved",
+            "clipid": "clipId", "対象クリップ": "clipId", "クリップ": "clipId",
+            "body": "body", "本文": "body", "コメント": "body",
+        ]
+        if let head = rows.first {
+            let names = head.map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
+            let mapped = names.compactMap { aliases[$0] }
+            // 見出しらしい行(既知の列名が 2 つ以上、または body/id を含む)なら対応づけ直して行を落とす
+            if mapped.count >= 2 || mapped.contains("body") || mapped.contains("id") {
+                var m: [String: Int] = [:]
+                for (i, n) in names.enumerated() { if let key = aliases[n], m[key] == nil { m[key] = i } }
+                idx = m
+                rows.removeFirst()
+            }
+        }
+        guard let bodyIdx = idx["body"] else { return [] }
+        func cell(_ row: [String], _ key: String) -> String {
+            guard let i = idx[key], row.indices.contains(i) else { return "" }
+            return row[i].trimmingCharacters(in: .whitespaces)
+        }
+        var out: [ReviewComment] = []
+        for row in rows {
+            guard row.indices.contains(bodyIdx) else { continue }
+            let body = row[bodyIdx].trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !body.isEmpty else { continue }
+            var c = ReviewComment()
+            let id = cell(row, "id")
+            if !id.isEmpty { c.id = id }
+            c.time = Double(cell(row, "time")) ?? parseTimecode(cell(row, "timecode")) ?? parseTimecode(cell(row, "time")) ?? 0
+            if let e = Double(cell(row, "endTime")), e.isFinite, e > c.time { c.endTime = e }
+            c.body = String(body.prefix(ReviewComment.maxBodyLength))
+            c.author = String(cell(row, "author").prefix(ReviewComment.maxAuthorLength))
+            let clip = cell(row, "clipId")
+            c.clipId = clip.isEmpty ? nil : clip
+            let r = cell(row, "resolved").lowercased()
+            c.resolved = ["resolved", "true", "1", "yes", "済", "解決済み"].contains(r)
+            out.append(c)
+            if out.count >= ReviewComment.maxCount { break }
+        }
+        return out
     }
 
     /// 読み込んだコメントをプロジェクトへ反映する。
@@ -201,28 +322,21 @@ public enum ReviewCommentExchange {
         return MergeResult(project: p, added: added, updated: updated, unchanged: unchanged)
     }
 
-    /// CSV(閲覧・表計算用)。列: id, timecode, time(秒), endTime(秒), author, resolved, clipId, body。
-    /// 本文中の改行・引用符・カンマは RFC 4180 式に引用する。
+    /// CSV(読み書き両用)。列: id, timecode, time(秒), endTime(秒), author, resolved, clipId, body。
+    /// 既存の CSV 書き出し(使用クリップ一覧・注記一覧)と同じ作法: 先頭に UTF-8 の BOM、行末は CRLF、
+    /// 引用は RFC 4180 式(`ClipListingExport.csvCell`)。`timecode` は表示用(秒未満は切り捨て)で、
+    /// 正確な時刻は `time` 列が持つ。`createdAt` / `updatedAt` / 未知のキーは CSV には出ない。
     public static func csv(_ comments: [ReviewComment]) -> String {
-        var lines = ["id,timecode,time,endTime,author,resolved,clipId,body"]
-        for c in ReviewCommentEditing.sorted(comments) {
-            let row: [String] = [
-                c.id,
-                Chapters.timecode(c.time),
-                String(c.time),
-                c.endTime.map { String($0) } ?? "",
-                c.author,
-                c.resolved ? "resolved" : "open",
-                c.clipId ?? "",
-                c.body,
-            ]
-            lines.append(row.map(csvField).joined(separator: ","))
+        let rows = [["id", "timecode", "time", "endTime", "author", "resolved", "clipId", "body"]] + ReviewCommentEditing.sorted(comments).map { c in
+            [c.id,
+             Chapters.timecode(c.time),
+             String(c.time),
+             c.endTime.map { String($0) } ?? "",
+             c.author,
+             c.resolved ? "resolved" : "open",
+             c.clipId ?? "",
+             c.body]
         }
-        return lines.joined(separator: "\n") + "\n"
-    }
-
-    private static func csvField(_ s: String) -> String {
-        guard s.contains(",") || s.contains("\"") || s.contains("\n") else { return s }
-        return "\"" + s.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+        return "\u{FEFF}" + rows.map { row in row.map(ClipListingExport.csvCell).joined(separator: ",") }.joined(separator: "\r\n") + "\r\n"
     }
 }

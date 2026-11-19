@@ -1,9 +1,10 @@
+import Foundation
 import AppKit
 import UniformTypeIdentifiers
 import MovieCutCore
 
 /// レビューコメント(移動 ▸ レビューコメント)。追加・編集・解決済みの切り替え・位置への移動と、
-/// 交換用 JSON の書き出し/読み込み。すべて通常の編集と同じく Undo 1 回で戻せる。
+/// 交換ファイル(JSON が正、CSV も可)の書き出し/読み込み。すべて通常の編集と同じく Undo 1 回で戻せる。
 /// 外部サービスへの送信はしない(ファイルの受け渡しのみ)。
 extension ProjectModel {
     /// 作成者名の前回値(端末内にだけ残す。プロジェクトには書かない)。
@@ -67,13 +68,21 @@ extension ProjectModel {
         try? ReviewCommentExchange.encodeJSON(project.reviewComments, exportedAt: Self.isoNow())
     }
 
-    /// 交換ファイルの読み込みを 1 回の Undo で反映する。競合規則は ReviewCommentExchange.merge を参照。
+    /// 交換ファイルの読み込みを 1 回の Undo で反映する。形式は中身から判定する(JSON / CSV)。
+    /// 競合規則は ReviewCommentExchange.merge を参照。読めないファイルは理由をエラー表示し、プロジェクトは変えない。
     @discardableResult
     func importReviewComments(data: Data) -> ReviewCommentExchange.MergeResult? {
         guard !isLocked else { return nil }
-        guard let incoming = try? ReviewCommentExchange.decodeJSON(data) else {
+        let incoming: [ReviewComment]
+        do {
+            incoming = try ReviewCommentExchange.decodeExchange(data)
+        } catch let e as ReviewCommentExchange.ExchangeError {
             errorTitle = "レビューコメントを読み込めませんでした"
-            errorMessage = "レビューコメントの交換ファイル(JSON)として読み取れませんでした"
+            errorMessage = e.errorDescription
+            return nil
+        } catch {
+            errorTitle = "レビューコメントを読み込めませんでした"
+            errorMessage = "レビューコメントの交換ファイル(JSON / CSV)として読み取れませんでした"
             return nil
         }
         let r = ReviewCommentExchange.merge(into: project, incoming: incoming)
@@ -89,7 +98,7 @@ extension ProjectModel {
     func chooseAndExportReviewComments() {
         guard !project.reviewComments.isEmpty else { return }
         let panel = NSSavePanel()
-        panel.allowedContentTypes = [UTType.json, UTType.commaSeparatedText].compactMap { $0 }
+        panel.allowedContentTypes = [UTType.json, UTType.commaSeparatedText]
         panel.nameFieldStringValue = "review-comments.json"
         panel.title = "レビューコメントを書き出す"
         let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
@@ -114,13 +123,13 @@ extension ProjectModel {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
-        if let t = UTType(filenameExtension: "json") { panel.allowedContentTypes = [t] }
+        panel.allowedContentTypes = [UTType.json, UTType.commaSeparatedText]
         panel.title = "レビューコメントを読み込む"
         let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
             guard resp == .OK, let url = panel.url, let self else { return }
-            guard let data = try? Data(contentsOf: url) else {
+            guard let data = try? InputLimits.readFile(url, limit: ReviewCommentExchange.maxExchangeBytes, what: "レビューコメントの交換ファイル") else {
                 self.errorTitle = "レビューコメントを読み込めませんでした"
-                self.errorMessage = "\(url.lastPathComponent): ファイルを読めませんでした"
+                self.errorMessage = "\(url.lastPathComponent): ファイルを読めませんでした(大きさの上限は 8 MB です)"
                 return
             }
             _ = self.importReviewComments(data: data)
