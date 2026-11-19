@@ -203,57 +203,23 @@ public struct Renderer {
                             if pose.opacity <= 0 || (mask?.isEmpty ?? false) { continue }
                         }
                     }
-                    if let m = mask {
-                        ctx.saveGState()
-                        clip(ctx, mask: m, W: W, H: H)
-                    }
-                    // ブレンドモード: このクリップの描画全体に効かせる(終わりで必ず戻す)
-                    if let blendMode = c.blendMode {
-                        ctx.saveGState()
-                        ctx.setBlendMode(blendMode.cgBlendMode)
-                    }
-                    // 複合クリップで、キャンバスいっぱいに・効果なし・不透明度 100% なら、中身を親の画面に直接描く(中間の画像を作らない)。
-                    // 直接描くので、まとめる前のクリップを描いたときと画素が完全に一致する
-                    if (c.type == .compound || c.type == .scene), mask == nil, c.mask == nil, c.blendMode == nil, pose.isFullCanvasCompound, !c.hasActiveEffects, !c.hasActiveWarp, !c.hasActivePluginEffect(effectIDs: pluginEffectIDs), pose.pixelate < 2, pose.feather <= 0.01, let child = nestedRenderer(c) {
-                        ctx.saveGState()
-                        child.drawFrame(t: t - c.start + c.offset, into: ctx)
-                        ctx.restoreGState()
-                        continue
-                    }
-                    // エフェクトは、クリップ自身の画素(変形まで済み)にかけてから、不透明度・マスクで重ねる。無いクリップは従来の速い道
-                    var fx = resolvedEffects(c, atClipTime: t - c.start)
-                    // トランジションのモザイク解除: ブロックの大きさをエフェクトとして足す(クリップ自身の設定は変えない)
-                    if pose.pixelate >= 2 {
-                        fx.append(.builtin(ResolvedEffect(kind: .pixelate, values: ["size": pose.pixelate], color: "#000000")))
-                    }
-                    // 境界ぼかし: 先に全体をぼかして描き、その上から「縁だけ薄い」マスクで鮮明な絵を重ねる
-                    let featherActive = pose.feather > 0.01
-                    var drawPose = pose
-                    if featherActive {
-                        var blurredPose = pose
-                        blurredPose.blur = max(pose.blur, 45 * pose.feather)
-                        drawBlurredClip(c, pose: blurredPose, t: t, ctx: ctx, W: W, H: H)
-                        ctx.saveGState()
-                        // 帯はクリップの枠に対する割合(キャンバス全体ではない)
-                        let fb = contentBounds(c, pose: pose, t: t) ?? CGRect(x: 0, y: 0, width: W, height: H)
-                        if let fm = featherMaskImage(feather: pose.feather, rect: fb) {
-                            ctx.clip(to: fb, mask: fm)
-                        }
-                        drawPose.blur = 0
-                    }
-                    if !fx.isEmpty || c.mask != nil || c.hasActiveWarp {
-                        drawEffectedClip(c, pose: drawPose, effects: fx, t: t, ctx: ctx, W: W, H: H)
-                    } else if drawPose.blur > 0 {
-                        drawBlurredClip(c, pose: drawPose, t: t, ctx: ctx, W: W, H: H)
+                    // 減算だけは CGContext にモードが無いので、台紙を分けて画素合成する(他のモード・未設定は従来どおり)
+                    if c.blendMode == .subtract {
+                        drawSubtractClip(c, pose: pose, mask: mask, t: t, ctx: ctx, W: W, H: H)
                     } else {
-                        ctx.saveGState()
-                        ctx.setAlpha(CGFloat(drawPose.opacity))
-                        drawClipContent(c, pose: drawPose, t: t, ctx: ctx, W: W, H: H, fastFade: mask == nil && c.blendMode == nil && !featherActive, fadeAlpha: drawPose.opacity)
-                        ctx.restoreGState()
+                        if let m = mask {
+                            ctx.saveGState()
+                            clip(ctx, mask: m, W: W, H: H)
+                        }
+                        // ブレンドモード: このクリップの描画全体に効かせる(終わりで必ず戻す)
+                        if let blendMode = c.blendMode {
+                            ctx.saveGState()
+                            ctx.setBlendMode(blendMode.cgBlendMode)
+                        }
+                        drawClipStack(c, pose: pose, mask: mask, t: t, ctx: ctx, W: W, H: H, layerSourceOver: false)
+                        if c.blendMode != nil { ctx.restoreGState() }
+                        if mask != nil { ctx.restoreGState() }
                     }
-                    if featherActive { ctx.restoreGState() }
-                    if c.blendMode != nil { ctx.restoreGState() }
-                    if mask != nil { ctx.restoreGState() }
                 case .voice:
                     if let id = c.charId { speaking[id] = c }
                     if c.subtitle != false { subtitles.append(c) }
@@ -321,6 +287,130 @@ public struct Renderer {
             let ch = project.characters.first { $0.id == c.charId }
             drawSubtitle(c, t: t, outline: ch?.color ?? "#000000", ctx: ctx, W: W, H: H)
         }
+    }
+
+    /// クリップ 1 つの描画本体(トランジションのマスクとブレンドモードの包みは呼び出し側が付ける)。
+    /// `layerSourceOver` が true のときは透明な台紙へ通常合成で描く前提(減算のレイヤー分離用)で、
+    /// 不透明度の速い道(FastBlend)を使える。ブレンド付きでは複合の直接描画は従来どおり使わない
+    /// (中身を 1 枚にまとめてから合成するのがブレンドの意味なので、減算でも同じ作法)。
+    func drawClipStack(_ c: Clip, pose: ClipPose, mask: TransitionMask?, t: Double, ctx: CGContext, W: Double, H: Double, layerSourceOver: Bool) {
+        // 複合クリップで、キャンバスいっぱいに・効果なし・不透明度 100% なら、中身を親の画面に直接描く(中間の画像を作らない)。
+        // 直接描くので、まとめる前のクリップを描いたときと画素が完全に一致する
+        if (c.type == .compound || c.type == .scene), mask == nil, c.mask == nil, c.blendMode == nil, pose.isFullCanvasCompound, !c.hasActiveEffects, !c.hasActiveWarp, !c.hasActivePluginEffect(effectIDs: pluginEffectIDs), pose.pixelate < 2, pose.feather <= 0.01, let child = nestedRenderer(c) {
+            ctx.saveGState()
+            child.drawFrame(t: t - c.start + c.offset, into: ctx)
+            ctx.restoreGState()
+            return
+        }
+        // エフェクトは、クリップ自身の画素(変形まで済み)にかけてから、不透明度・マスクで重ねる。無いクリップは従来の速い道
+        var fx = resolvedEffects(c, atClipTime: t - c.start)
+        // トランジションのモザイク解除: ブロックの大きさをエフェクトとして足す(クリップ自身の設定は変えない)
+        if pose.pixelate >= 2 {
+            fx.append(.builtin(ResolvedEffect(kind: .pixelate, values: ["size": pose.pixelate], color: "#000000")))
+        }
+        // 境界ぼかし: 先に全体をぼかして描き、その上から「縁だけ薄い」マスクで鮮明な絵を重ねる
+        let featherActive = pose.feather > 0.01
+        var drawPose = pose
+        if featherActive {
+            var blurredPose = pose
+            blurredPose.blur = max(pose.blur, 45 * pose.feather)
+            drawBlurredClip(c, pose: blurredPose, t: t, ctx: ctx, W: W, H: H)
+            ctx.saveGState()
+            // 帯はクリップの枠に対する割合(キャンバス全体ではない)
+            let fb = contentBounds(c, pose: pose, t: t) ?? CGRect(x: 0, y: 0, width: W, height: H)
+            if let fm = featherMaskImage(feather: pose.feather, rect: fb) {
+                ctx.clip(to: fb, mask: fm)
+            }
+            drawPose.blur = 0
+        }
+        if !fx.isEmpty || c.mask != nil || c.hasActiveWarp {
+            drawEffectedClip(c, pose: drawPose, effects: fx, t: t, ctx: ctx, W: W, H: H)
+        } else if drawPose.blur > 0 {
+            drawBlurredClip(c, pose: drawPose, t: t, ctx: ctx, W: W, H: H)
+        } else {
+            ctx.saveGState()
+            ctx.setAlpha(CGFloat(drawPose.opacity))
+            drawClipContent(c, pose: drawPose, t: t, ctx: ctx, W: W, H: H, fastFade: mask == nil && (layerSourceOver || c.blendMode == nil) && !featherActive, fadeAlpha: drawPose.opacity)
+            ctx.restoreGState()
+        }
+        if featherActive { ctx.restoreGState() }
+    }
+
+    /// 減算ブレンド: CGContext に減算が無いため、(1) このクリップだけを透明な台紙へ通常合成で描き、
+    /// (2) いまキャンバスにある絵を下地として `SubtractBlend` で画素合成して書き戻す。
+    /// プレビュー(renderImage)も書き出し(ピクセルバッファへの render)も BGRA 事前乗算の
+    /// ビットマップ ctx でこの関数を通るため、結果は一致する。減算でないクリップは通らない。
+    /// 台紙は本物の ctx の CTM(上下反転・カメラ変換を含む)を引き継ぐので、位置・変形は他のモードと揃う。
+    /// トランジションのマスクは台紙側へ付ける(マスクの外は台紙が透明 = 合成結果は下地そのまま)。
+    func drawSubtractClip(_ c: Clip, pose: ClipPose, mask: TransitionMask?, t: Double, ctx: CGContext, W: Double, H: Double) {
+        guard pose.opacity > 0 else { return }
+        let cw = ctx.width, ch = ctx.height
+        guard cw > 0, ch > 0, let layer = Renderer.makeContext(width: cw, height: ch) else { return }
+        layer.concatenate(ctx.ctm)
+        layer.interpolationQuality = .high
+        if let m = mask {
+            layer.saveGState()
+            clip(layer, mask: m, W: W, H: H)
+        }
+        drawClipStack(c, pose: pose, mask: mask, t: t, ctx: layer, W: W, H: H, layerSourceOver: true)
+        if mask != nil { layer.restoreGState() }
+
+        // 合成してよい範囲: 呼び出し側にキャンバスより小さい切り抜き(複合の直接描画で親の
+        // トランジションマスクが付いている場合など)があれば、その範囲を CTM で写した画素範囲だけに絞る。
+        // 切り抜きの形そのものではなく外接する四角で絞るため、丸いマスク等の隅では近似になる。
+        // 通常(切り抜き無し)はキャンバス全体。
+        var xRange = 0..<cw, yRange = 0..<ch
+        let clipBox = ctx.boundingBoxOfClipPath
+        if !clipBox.isInfinite, !clipBox.isNull, clipBox.width < W || clipBox.height < H || clipBox.minX > 0 || clipBox.minY > 0 {
+            let corners = [CGPoint(x: clipBox.minX, y: clipBox.minY), CGPoint(x: clipBox.maxX, y: clipBox.minY),
+                           CGPoint(x: clipBox.minX, y: clipBox.maxY), CGPoint(x: clipBox.maxX, y: clipBox.maxY)]
+                .map { $0.applying(ctx.ctm) }
+            let xs = corners.map { $0.x }, ys = corners.map { $0.y }
+            xRange = max(0, Int(floor(xs.min() ?? 0)))..<min(cw, Int(ceil(xs.max() ?? 0)))
+            yRange = max(0, Int(floor(ys.min() ?? 0)))..<min(ch, Int(ceil(ys.max() ?? 0)))
+            guard xRange.count > 0, yRange.count > 0 else { return }
+        }
+
+        // 本道: 両方とも BGRA 事前乗算のビットマップなら、メモリへ直接合成する(FastBlend と同じ形式条件)
+        let compatible = ctx.bitsPerComponent == 8 && ctx.bitsPerPixel == 32
+            && ctx.alphaInfo == .premultipliedFirst && ctx.bitmapInfo.contains(.byteOrder32Little)
+        if compatible, let dst = ctx.data, let src = layer.data {
+            SubtractBlend.composite(target: dst.assumingMemoryBound(to: UInt8.self), targetStride: ctx.bytesPerRow,
+                                    source: src.assumingMemoryBound(to: UInt8.self), sourceStride: layer.bytesPerRow,
+                                    xRange: xRange, yRange: yRange)
+            return
+        }
+        // 予備道(ビットマップでない ctx 用): 下地と台紙をバイト列へ写して合成し、.copy で描き戻す
+        guard let backdropImage = ctx.makeImage(), let layerImage = layer.makeImage(),
+              let backdropBuf = Self.bitmapCopy(backdropImage), let layerBuf = Self.bitmapCopy(layerImage) else { return }
+        var result = backdropBuf.bytes
+        result.withUnsafeMutableBytes { raw in
+            layerBuf.bytes.withUnsafeBytes { sraw in
+                guard let tp = raw.baseAddress, let sp = sraw.baseAddress else { return }
+                SubtractBlend.composite(target: tp.assumingMemoryBound(to: UInt8.self), targetStride: backdropBuf.stride,
+                                        source: sp.assumingMemoryBound(to: UInt8.self), sourceStride: layerBuf.stride,
+                                        xRange: 0..<cw, yRange: 0..<ch)
+            }
+        }
+        guard let resultCtx = CGContext(data: &result, width: cw, height: ch, bitsPerComponent: 8, bytesPerRow: backdropBuf.stride,
+                                        space: sRGB, bitmapInfo: bitmapInfo),
+              let resultImage = resultCtx.makeImage() else { return }
+        ctx.saveGState()
+        ctx.setBlendMode(.copy)
+        drawCG(ctx, resultImage, CGRect(x: 0, y: 0, width: W, height: H))
+        ctx.restoreGState()
+    }
+
+    /// 画像を BGRA 事前乗算のバイト列へ写す(減算の予備道用)。
+    private static func bitmapCopy(_ image: CGImage) -> (bytes: [UInt8], stride: Int)? {
+        let w = image.width, h = image.height
+        guard w > 0, h > 0 else { return nil }
+        let stride = w * 4
+        var bytes = [UInt8](repeating: 0, count: stride * h)
+        guard let ctx = CGContext(data: &bytes, width: w, height: h, bitsPerComponent: 8, bytesPerRow: stride,
+                                  space: sRGB, bitmapInfo: bitmapInfo) else { return nil }
+        ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+        return (bytes, stride)
     }
 
     // MARK: トランジション
