@@ -49,6 +49,7 @@ struct AudioFxPanel: View {
     var body: some View {
         if let c = clip, AudioFxEditing.supports(c) {
             VStack(alignment: .leading, spacing: 8) {
+                EssentialSoundPanel(model: model, clipId: clipId)
                 fxSlider("パン", value: c.panOrDefault, range: -1...1, step: 0.01, format: Self.panText, undo: ProjectModel.panUndoName) {
                     _ = AudioFxEditing.setPan(&$0, $1)
                 }

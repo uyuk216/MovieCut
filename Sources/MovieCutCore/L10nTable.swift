@@ -622,6 +622,21 @@ enum L10nTable {
         "クロスフェード(秒)": "Crossfade (seconds)",
         "音声を解析しています…": "Analyzing audio…",
         "歌詞のある素材では、歌詞の連続性は保証されません。": "For material with lyrics, continuity of the lyrics is not guaranteed.",
-        "Remixを作成": "Create Remix"
+        "Remixを作成": "Create Remix",
+        "エッセンシャルサウンド": "Essential Sound",
+        "音の種類": "Audio Type",
+        "未分類": "Uncategorized",
+        "会話": "Dialogue",
+        "ミュージック": "Music",
+        "効果音（SFX）": "Sound Effects (SFX)",
+        "アンビエンス": "Ambience",
+        "整音を適用": "Apply Preset",
+        "音の種類の変更": "Change Audio Type",
+        "エッセンシャルサウンドの整音": "Apply Essential Sound Preset",
+        "ノイズ除去と声向けのEQ・コンプレッサーで聞き取りやすくし、ラウドネスをそろえます。声として扱う指定もオンにします。": "Reduces noise and shapes EQ and compression for speech to make it easier to hear, and evens out the loudness. Also turns on Treat as Voice.",
+        "声があるときに自動で下がるダッキングを設定し、ピークを整えます。": "Sets up ducking so it automatically lowers while speech plays, and evens out the peaks.",
+        "ピークとリミッターで音割れを防ぎます。ダッキングは設定しません。": "Prevents clipping with peak normalization and a limiter. Ducking is not applied.",
+        "控えめな音量にそろえ、緩やかなダッキングで会話の下に敷きます。": "Sets a quiet level and beds it under dialogue with gentle ducking.",
+        "種類を選ぶと、その種類向けの整音をまとめて適用できます。適用後も各エフェクトは個別に調整できます。": "Choose a type to apply that type's audio preset all at once. Each effect can still be adjusted individually afterwards."
     ]
 }
