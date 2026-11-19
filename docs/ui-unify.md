@@ -123,4 +123,93 @@
 
 ## 実施結果
 
-（実装時にファイルごとに追記する：変更内容／変更なしの理由／保留した点）
+### 集計（起点 27cd75b → 最終コミット）
+
+- 変更ファイル: 31（`Sources/MovieCut/` 配下）
+- `.system(size:)` 直書き: 101 件をトークン化（新規の直書きは 0）
+- `Color(nsColor:)` 直書き: 5 件をトークン化（`DockViews` 3、`InspectorRig` 2）
+- 空状態をガイドカード化: 19 箇所（下表の各ファイル参照）
+- 数値はファイル単位の diff から数えた。目視確認は未実施（後述の留保を参照）。
+
+### A. インスペクタ系
+
+- **AudioFxExtendedInspector.swift** — 変更あり。フォント 17 件（節見出し 12pt semibold → `calloutSemibold`、補足 11pt → `subheadline`）。色の直書き無し。
+- **AudioFxInspector.swift** — 変更あり。フォント 10 件（同じ対応）。
+- **TextStyleInspector.swift** — 変更あり。フォント 11 件（チェックボックス 12pt → `callout`、補足 11pt → `subheadline`）。
+- **InspectorRig.swift** — 変更あり。フォント 11 件、色 2 件（`.textBackgroundColor` → `fieldBackground`、`.separatorColor` → `divider`）。
+- **InspectorTachie.swift** — 変更あり。フォント 7 件（11pt → `subheadline`、12pt → `callout`）。「連動する声がありません」はボタンと同じ行の状態表示のためカード化の対象外。
+- **CameraInspector.swift** — 変更なし。既に `.caption` や `InspectorSection` など意味的スタイルのみで、直書き・空状態が無い。
+- **ClipNoteField.swift** — 変更あり。フォント 1 件（12pt → `callout`）。
+
+### B. シート／ダイアログ
+
+- **VoicevoxAccentSheet.swift** — 変更あり。フォント 8 件（12pt → `callout`、11pt → `subheadline`、13pt → `body`）。11pt の `.secondary` を `textSecondary` に。空状態無し。
+- **DiarizationSheet.swift** — 変更あり。フォント 5 件、空状態 1 件をカード化（`text.magnifyingglass`）。message は新規文言（留保参照）。
+- **DialogueSuggestionSheet.swift** — 変更あり。フォント 4 件、空状態「案はまだありません」をカード化（`text.bubble`）。message は新規文言。
+- **ReadingDictionarySheet.swift** — 変更あり。フォント 4 件。辞書が空のときだけカード（`book.closed`）を出し、それ以外は既存の `List` をそのまま残す（`if rows.isEmpty` の分岐のみ追加）。message は新規文言。
+- **ScriptTableSheet.swift** — 変更あり。フォント 4 件、「ボイスクリップがありません」をカード化（`waveform`）。heading は既存、message は新規。
+- **VoicePresetSheet.swift** — 変更あり。フォント 4 件。空状態無し（メッセージは結果通知なので残す）。
+- **AudioLibrarySheet.swift** — 変更あり。フォント 2 件（26pt → `largeTitle`、22pt → `title`）、見出し `.title3.bold()` は `MCDesign.Font.title3.bold()`。空状態 4 件をカード化：フォルダ未選択（`folder.badge.plus`、既存文言）、素材なし（`tray`、既存文言）、検索一致なし（`magnifyingglass`、グリッドとリスト両方、message は新規）。
+- **TachieSheets.swift** — 変更あり。フォント 11pt → `subheadline`、13pt 太字 → `headline`。立ち絵素材なしをカード化（`person.crop.rectangle`、既存文言）。取り込みメニューの「＋」を `Image(systemName: "plus")` に。**保留**：`TachieListSection` 内の `.system(size: 13)` は刷新済みの節のため触らず（`body` 相当）。
+- **FillerCutSheet.swift** — 変更あり。フォント 1 件。「フィラー語は見つかりませんでした」をカード化（`magnifyingglass`）。message は新規文言。
+- **FindReplaceSheet.swift** — 変更あり。フォント 1 件。
+- **ShortcutSheet.swift** — 変更あり。フォント 1 件（12pt semibold → `calloutSemibold`）。
+- **SubclipBatchSheet.swift** — 変更あり。フォント 1 件（等幅 13pt → `monospaced(13)`）、見出し `title3.bold()` → トークン。
+- **AIDialogs.swift** — 変更なし。NSAlert ベースの AppKit ダイアログ（`tv.font = .systemFont(ofSize: 12)` は NSTextView 用）のため SwiftUI トークンの対象外。
+- **CandidateSwapSheet.swift** — 変更なし。直書き・空状態無し。`.title3.bold()` と `.caption` は意味的スタイル。
+- **ClipListSheet.swift** — 変更あり。空状態「クリップがありません」をカード化（`film.stack`）。message は新規文言。
+- **LoudnessSheet.swift** — 変更あり。`.noAudio` の空状態をカード化（`waveform.slash`）。message は新規文言。測定中・エラーは空状態ではないので据え置き。
+- **MulticamSheets.swift** — 変更なし。直書きなし。`.red` / `.green` / `.orange` は状態の意味色で対応表に無いため残す。
+- **NoteListSheet.swift** — 変更あり。空状態を既存文言の「。」で heading / message に分割してカード化（`note.text`）。
+- **OutputSheets.swift** — 変更なし。直書き・空状態・絵文字ボタン無し。
+- **PitchLayoutSheets.swift** — 変更なし。「置ける位置がありません。」は計算結果の警告であり空状態ではない。
+- **RelinkResultSheet.swift** — 変更なし。「つながった素材はありません。」等は節ごとの結果表示。カードにすると節の見た目が崩れるため保留。
+- **RollSlipSheet.swift** — 変更なし。テキストスタイルのみ。空状態無し。
+- **SceneListSheet.swift** — 変更あり。空状態をカード化（`film.stack`）。既存文言を heading / message に分割。
+- **ScopeSheet.swift** — 変更なし。「このコマを読めませんでした。」は読み込み失敗のステータス文で対象外。`Color.black.opacity` は波形・ヒストグラムの機能色。
+- **ScreenRecordingSheet.swift** — 変更なし。直書き・空状態・絵文字ボタン無し。
+- **SubtitleQuickSheet.swift** — 変更なし。`Color.secondary.opacity(0.3)` の枠線は対応表に無いため残す。
+- **TakeCompareSheet.swift** — 変更あり。空状態をカード化（`waveform.badge.magnifyingglass`）。message は新規文言。`Color.green`（最短テイクの意味色）は残す。
+- **TranscriptEditSheet.swift** — 変更なし。「文は見つかりませんでした。」は文字起こし結果のステータス文で対象外。
+- **UnusedMediaSheet.swift** — 変更あり。空状態をカード化（`checkmark.circle`）。message は新規文言。
+- **ContentView.swift（SettingsSheet のみ）** — 変更あり。見出しを `headline`、補足 `caption`、色 `textSecondary`、余白を `Spacing`（8pt グリッド）へ。`SettingsSheet` 以外は触らない（hunk は全て 566〜828 行の範囲内）。
+
+### C. ウィンドウ／パネル／その他
+
+- **DockViews.swift** — 変更あり。フォント 3 件（タブ・ドロップゾーンラベル → `callout` / `calloutSemibold`）、色 3 件（`.underPageBackgroundColor` → `barBackground`、`.separatorColor` → `divider`、タブの primary/secondary → `label` / `textSecondary`）。「パネルがありません」をカード化（`rectangle.3.group`）。ボタンの spacing 10 → `Spacing.m`。`Color.accentColor` / `white` / `black` のドロップゾーン色は対応表に無いため残す。
+- **MediaThumbnail.swift** — 変更なし。`.system(size: min(width, height) * 0.4)` はサムネイルの大きさに比例するアイコンのため固定トークンに寄せられず保留。
+- **DependencyBanner.swift** — 変更あり。メッセージ 12pt → `callout`（1 件）。
+- **SettingsSheet（ContentView.swift 内）** — 変更あり（上記 B 参照）。
+- **WelcomeWindow.swift** — 変更あり。フォント・色・余白をトークンへ。「最近使ったプロジェクトはありません」をカード化（`clock.arrow.circlepath`、heading は既存、message は新規）。製品名表記は据え置き。`QuickStartHint` は残す。
+- **ExportPanel.swift** — 変更なし。AppKit（NSSavePanel のアクセサリ、NSPopUpButton 等）で構成され、SwiftUI のフォント・色・空状態が無い。
+- **ExportQueueController.swift** — 変更あり。見出しを `title3.bold()`、`caption2` → `caption`、色を `textTertiary` / `textSecondary`。空状態をカード化（`tray`、既存文を heading / message に分割）。
+- **DockWindows.swift** — 変更なし。フォント・色の直書きが無く、ボタンは標準の文言ボタン。
+- **PreviewView.swift** — 変更なし。SwiftUI の文言・フォントが無く（NSViewRepresentable と CALayer の描画のみ）、キャンバス色は機能色のため対象外。
+- **SoundLevelMeterView.swift** — 変更あり。ラベルのフォント 3 件（9pt semibold → `badge`、9pt monospacedDigit → `footnote.monospacedDigit()`、8pt → `caption`）。メーター色は機能色のため据え置き。
+- **VST3Panel.swift** — 変更あり。補足 3 箇所を `caption` / `textSecondary` に、節見出しを `calloutSemibold` ＋ `textSecondary` に。節は `DisclosureGroup` のまま（構造を変えない方針）。「VST3 プラグインが見つかりません」はメニュー内の Text のためカード化せず。
+- **AppCommands.swift** — 変更なし。メニュー項目のみで独立した画面ビューが無い。
+
+### 対象外として据え置いたもの（全体）
+
+- `InspectorView.swift` / `ContentView.swift`（SettingsSheet 以外）/ `TimelineView.swift` の本体、`TimelinePalette`：刷新済み・対象外。
+- `DesignSystem.swift` のトークン定義自体（`Color(nsColor:)` 7 件・`.system(size:)` 3 件はトークンの実体）。
+- `EaseCurveEditor.swift`（`.system(size:)` 4 件）：棚卸し表に含まれていないため未着手。必要なら次の対象として追加する。
+- `TextGenerationDialogs.swift` / AppMenu・AppCommands のメニュー本体：対象外（仕様どおり）。
+
+### 留保・保留した点
+
+- **新規の message 文言**：InspectorGuideCard の message は既存文言に振り分けられないものがあり、以下は新しく書いた日本語文。`L10nTable` に英訳が無いため英語表示では日本語のまま出る。文言の確認と英訳の要否はユーザーに確認が必要。
+  - DiarizationSheet、DialogueSuggestionSheet、ReadingDictionarySheet、ScriptTableSheet、AudioLibrarySheet（検索一致なし）、FillerCutSheet、ClipListSheet、LoudnessSheet、TakeCompareSheet、UnusedMediaSheet、WelcomeWindow。
+- **フォントの対応を寄せた箇所**：AudioFx の節見出しは 12pt semibold（`calloutSemibold`）のまま。InspectorView の節見出しが `headline`（13pt）なので約 1pt の差が残る。`headline` への変更は未実施。
+- **SettingsSheet の見出し**：`title3.bold()`（15pt 相当）→ `headline`（13pt）に縮小。元の大きさに戻す場合は見出しだけ差し替える。
+- **SoundLevelMeterView**：9pt / 8pt を 10pt 相当（`badge` / `footnote` / `caption`）に上げた。モノラルメーター幅 48pt で「LUFS」が `lineLimit(1)` に収まるかは目視が必要。
+- **VST3Panel**：節は `DisclosureGroup` のまま。`MCDisclosure` への置き換えは未実施。
+- **RelinkResultSheet**：節ごとの「ありません」表示をカードにしなかった（節の見た目を崩すため）。
+- **目視未確認**：ガイドカードの幅・はみ出し（特に List 行内に入れた AudioLibrarySheet の検索一致なし、ReadingDictionarySheet）は未確認。実機確認が必要。
+
+
+### テスト結果（最終）
+
+- `swift build`：成功（警告・エラー無し）
+- `swift test`：合計 3,398 件（アプリ `MovieCutTests` 853 件 ＋ Core `MovieCutCoreTests` 2,545 件）、スキップ 8、失敗 0。基準と一致。
+- テストの文言・定数・フォント期待値は変更していない。
