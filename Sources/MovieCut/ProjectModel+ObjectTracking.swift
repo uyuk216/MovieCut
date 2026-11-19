@@ -49,7 +49,11 @@ extension ProjectModel {
                 guard let loc = ClipEditing.locate(id, in: p) else { return }
                 _ = ObjectTracking.apply(track: track, to: &p.tracks[loc.track].clips[loc.index])
             }
-            self.statusText = "対象への追従を付けました"
+            if let lostAt = track.lostAt {
+                self.statusText = String(format: "対象への追従を付けました（%.1f 秒で対象を見失ったため、そこまでで打ち切りました）", lostAt)
+            } else {
+                self.statusText = "対象への追従を付けました"
+            }
         }
     }
 
@@ -67,7 +71,11 @@ extension ProjectModel {
             let newId = blur.id
             _ = self.edit("ぼかし範囲の追従を追加") { p in ClipEditing.appendToTopLayer(blur, in: &p) }
             self.selectedClipId = newId
-            self.statusText = "ぼかし範囲の追従を付けました"
+            if let lostAt = track.lostAt {
+                self.statusText = String(format: "ぼかし範囲の追従を付けました（%.1f 秒で対象を見失ったため、そこまでで打ち切りました）", lostAt)
+            } else {
+                self.statusText = "ぼかし範囲の追従を付けました"
+            }
         }
     }
 
@@ -80,9 +88,9 @@ extension ProjectModel {
         objectTrackingSession = session
         objectTrackingProgress = 0
         Task { @MainActor [weak self] in
-            let rects = await Task.detached(priority: .userInitiated) { () -> [CGRect?]? in
+            let run = await Task.detached(priority: .userInitiated) { () -> TrackingRun? in
                 let renderer = Renderer(project: project, assets: assets)
-                return ObjectTracking.collect(duration: duration, startRect: startRect, tracker: VisionRectTracker(),
+                return ObjectTracking.collectRun(duration: duration, startRect: startRect, tracker: VisionRectTracker(),
                                               frame: { t in renderer.trackingFrame(of: source, at: start + t) },
                                               progress: { p in
                                                   DispatchQueue.main.async { [weak self] in
@@ -98,7 +106,7 @@ extension ProjectModel {
                 self.statusText = "追跡を中止しました"
                 return
             }
-            guard let rects, let track = ObjectTracking.makeTrack(sourceClipId: source.id, startRect: startRect, rects: rects) else {
+            guard let run, let track = ObjectTracking.makeTrack(sourceClipId: source.id, startRect: startRect, rects: run.rects, lostAt: run.lostAt) else {
                 self.errorTitle = "対象を追えませんでした"
                 self.errorMessage = "映像の中央に、追いかけられる対象が見つかりませんでした。"
                 return

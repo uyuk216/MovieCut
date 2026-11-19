@@ -76,6 +76,11 @@ struct TrackingSection: View {
                     if let track = clip.tracking {
                         Text("追従中: \(track.samples.count) サンプル（元クリップ \(track.sourceClipId == clip.id ? "自身" : "下のレイヤー")）")
                             .font(.caption).foregroundStyle(.secondary)
+                        if let lostAt = track.lostAt {
+                            Text(String(format: "%.1f 秒で対象を見失ったため、追従はそこまでです", lostAt))
+                                .font(.caption).foregroundStyle(.orange)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                         Button("追従を消す") { model.clearObjectFollow(clipId: clip.id) }
                     } else if !canFollow && !isSource {
                         Text("追従には、このクリップより下のレイヤーに映像・画像が必要です。")
