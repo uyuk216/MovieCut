@@ -23,11 +23,12 @@ tresult PLUGIN_API MovieCutGain::initialize(FUnknown* context) {
     addAudioInput(STR16("Stereo In"), SpeakerArr::kStereo);
     addAudioOutput(STR16("Stereo Out"), SpeakerArr::kStereo);
     addEventInput(STR16("Event In"), 1);
-    parameters.addParameter(USTRING("Gain"), USTRING(""), kStepCountContinuous, 0.75,
+    // stepCount は SDK 3.8 の数値仕様(ParameterInfo.stepCount、ivsteditcontroller.h): 0=連続、1=トグル
+    parameters.addParameter(USTRING("Gain"), USTRING(""), 0, 0.75,
                             ParameterInfo::kCanAutomate, kGainId);
-    parameters.addParameter(USTRING("Bypass"), nullptr, kStepCountToggle, 0,
+    parameters.addParameter(USTRING("Bypass"), nullptr, 1, 0,
                             ParameterInfo::kCanAutomate | ParameterInfo::kIsBypass, kBypassId);
-    parameters.addParameter(USTRING("VuPPM"), nullptr, kStepCountContinuous, 0,
+    parameters.addParameter(USTRING("VuPPM"), nullptr, 0, 0,
                             ParameterInfo::kIsReadOnly, kVuId);
     return kResultOk;
 }
