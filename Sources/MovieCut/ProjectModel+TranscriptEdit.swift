@@ -16,7 +16,9 @@ extension ProjectModel {
     /// シートの読み込み: 認識して文の一覧を作る。キャンセルは `CancellationError`。
     func scanTranscriptSentences(transcriber: Transcriber = SpeechFrameworkTranscriber()) async throws -> [TranscriptSentence] {
         guard let id = transcriptEditClipId, let c = clip(id), TranscriptionSupport.supports(c) else { throw TranscriptionError.noAudio }
-        return try await TranscriptTextEdit.run(clip: c, transcriber: transcriber)
+        let sentences = try await TranscriptTextEdit.run(clip: c, transcriber: transcriber)
+        registerTranscript(for: c, segments: sentences.map { TranscriptSegment(text: $0.text, start: $0.start, end: $0.end) })
+        return sentences
     }
 
     /// 外した文を取り除く(全体で 1 回の Undo)。外した文が無い・切れないときは何もしない(false)。

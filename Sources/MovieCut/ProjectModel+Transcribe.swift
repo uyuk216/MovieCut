@@ -24,11 +24,13 @@ extension ProjectModel {
         let snapshot = project
         let style = TextStyleLibrary.builtins.first { $0.id == "builtin.classic" }?.look
         busyMessage = "音声を文字にしています…"
+        let recorder = mediaTranscriptRecorder(for: c)
         let job = Task { [weak self] in
             try await SubtitleTranscription.run(clip: c, project: snapshot, transcriber: transcriber, style: style,
                                                 onProgress: { [weak self] p in
                                                     Task { @MainActor in self?.busyMessage = "音声を文字にしています \(Int(p * 100))%" }
-                                                })
+                                                },
+                                                onSegments: recorder)
         }
         transcribeCancel = { job.cancel() }
         let outcome: Result<SubtitleGeneration.Result?, Error>

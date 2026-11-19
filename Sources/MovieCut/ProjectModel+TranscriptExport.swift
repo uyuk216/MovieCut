@@ -37,6 +37,7 @@ extension ProjectModel {
         switch outcome {
         case .success(let s):
             segments = s
+            registerTranscript(for: c, segments: s)
         case .failure(let error):
             if error is CancellationError {
                 statusText = "音声の認識をキャンセルしました"
