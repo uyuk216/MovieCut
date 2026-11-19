@@ -5,7 +5,7 @@ import MovieCutCore
 enum MenuCommand: Hashable {
     case about, settings, videoSettings
     case checkForUpdates
-    case addMedia, screenRecord, importPSD, importSVG, importMIDI, importImageSequence, importRigFolder, importRigPSD, export, exportPreset(ExportPreset), exportCustomPreset(String), saveCustomPreset
+    case addMedia, screenRecord, importPSD, importSVG, importMIDI, importImageSequence, importRigFolder, importRigPSD, export, exportPreset(ExportPreset), exportCustomPreset(String), saveCustomPreset, importFcpXml
     // 字幕(B3)とチャプター
     case importSubtitles, exportSubtitles, generateSubtitles, copyChapters, copyChaptersColor(MarkerColor)
     // 字幕を AI で翻訳して SRT に書き出す(ショートカットは持たない)
@@ -76,6 +76,8 @@ enum MenuCommand: Hashable {
     case exportYmmp, exportWebVideo
     // 出力 ▸ 連番PNG+WAVで書き出す… / exo形式(.exo)で書き出す…(ショートカットは持たない)
     case exportPngWav, exportExo
+    // 出力 ▸ FCP XML形式(.xml)で書き出す… / EDL形式(.edl)で書き出す…(ショートカットは持たない)
+    case exportFcpXml, exportEdl
     // 出力 ▸ プラグイン形式で書き出す ▸ 形式(形式識別子。F-1 配線。ショートカットは持たない)
     case exportPluginFormat(String)
     // 出力 ▸ 書き出しキュー(今の設定の MP4 を積む / キューを表示)と、ファイル ▸ 素材ブラウザ(ショートカットは持たない)
@@ -681,6 +683,7 @@ enum AppMenuSpec {
          MenuItemSpec(command: .importImageSequence, title: "連番画像を読み込む…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "APNGにまとめてアニメーション素材に"),
          MenuItemSpec(command: .importRigFolder, title: "立ち絵パーツのフォルダを読み込む…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "眉・目・口などを重ねて動かす"),
          MenuItemSpec(command: .importRigPSD, title: "PSDから立ち絵を作る…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "グループ名からパーツに分ける"),
+         MenuItemSpec(command: .importFcpXml, title: "FCP XMLを読み込む…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "Premiere 等のタイムラインを取り込む"),
          MenuItemSpec(command: .audioLibrary, title: "素材ブラウザを開く…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "BGM・効果音のフォルダ"),
          MenuItemSpec(command: .addFont, title: "フォントを追加…", shortcut: nil, enabled: true, checked: nil, hint: "テキストで使えるようにする")]
     }
@@ -871,6 +874,14 @@ enum AppMenuSpec {
 
     static func exoExport(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .exportExo, title: "exo形式(.exo)で書き出す…", shortcut: nil, enabled: s.canEdit && s.canExport, checked: nil, hint: "AviUtl 拡張編集用")
+    }
+
+    static func fcpXmlExport(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .exportFcpXml, title: "FCP XML形式(.xml)で書き出す…", shortcut: nil, enabled: s.canEdit && s.canExport, checked: nil, hint: "Premiere 等とタイムラインをやり取り")
+    }
+
+    static func edlExport(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .exportEdl, title: "EDL形式(.edl)で書き出す…", shortcut: nil, enabled: s.canEdit && s.canExport, checked: nil, hint: "CMX 3600 のカットリスト")
     }
 
     /// 出力 ▸ プラグイン形式で書き出す ▸ 各形式(F-1。登録済みプラグインが提供する形式だけが並ぶ)。
@@ -1564,7 +1575,7 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, checkForUpdates, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), textGenerationSettingsItem(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s), apngExport(s), ymmpExport(s), webVideoExport(s), pngWavExport(s), exoExport(s)] + pluginExportItems(s) + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), trackMixerItem(s), clipListItem(s), noteListItem(s)] + scriptStoryboardItems(s) + scriptCSVItems(s) + [makeProxies(s), manageProxiesItem(s)] + [] + clipMenu(s).flatMap { $0 } + multicamItems(s) + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + pluginEffectItems(s) + effectPresetItems(s) + effectActions(s) + faceBlurItems(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textVerticalItem(s), textPerCharItem(s), textCounterItem(s), dictionaryItem(s), scriptTableItem(s), dialogueSuggestionsItem(s), saveItemTemplateItem(s)] + itemTemplateApplyItems(s) + itemTemplateCreateItems(s) + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [sceneSplitItem(s), silenceCutItem(s)] + rangeDeleteItems(s) + [audioAutoSyncItem(s), beatMarkersItem(s), remixItem(s), scaleDuplicateItem(s), beatPlaceItem(s), fillerCutItem(s), transcriptEditItem(s), speakerDiarizationItem(s), lutLoadItem(s), colorTransferItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
+        [about, checkForUpdates, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), textGenerationSettingsItem(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s), apngExport(s), ymmpExport(s), webVideoExport(s), pngWavExport(s), exoExport(s), fcpXmlExport(s), edlExport(s)] + pluginExportItems(s) + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), trackMixerItem(s), clipListItem(s), noteListItem(s)] + scriptStoryboardItems(s) + scriptCSVItems(s) + [makeProxies(s), manageProxiesItem(s)] + [] + clipMenu(s).flatMap { $0 } + multicamItems(s) + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + pluginEffectItems(s) + effectPresetItems(s) + effectActions(s) + faceBlurItems(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textVerticalItem(s), textPerCharItem(s), textCounterItem(s), dictionaryItem(s), scriptTableItem(s), dialogueSuggestionsItem(s), saveItemTemplateItem(s)] + itemTemplateApplyItems(s) + itemTemplateCreateItems(s) + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [sceneSplitItem(s), silenceCutItem(s)] + rangeDeleteItems(s) + [audioAutoSyncItem(s), beatMarkersItem(s), remixItem(s), scaleDuplicateItem(s), beatPlaceItem(s), fillerCutItem(s), transcriptEditItem(s), speakerDiarizationItem(s), lutLoadItem(s), colorTransferItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerColorItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + previewTierItems(s) + guideItems(s) + [previewProxy(s), proxyAutoCreateItem(s), fullScreen(s)] + help.flatMap { $0 }
@@ -1615,6 +1626,7 @@ enum AppMenu {
             case .addMedia: m.chooseAndAddMedia()
             case .screenRecord: m.showScreenRecordingSheet = true
             case .importPSD: m.chooseAndImportPSD()
+            case .importFcpXml: m.chooseAndImportFcpXml()
             case .importSVG: m.chooseAndImportSVG()
             case .importMIDI: m.chooseAndImportMIDI()
             case .importImageSequence: m.chooseAndImportImageSequence()
@@ -1702,6 +1714,8 @@ enum AppMenu {
             case .exportWebVideo: m.chooseAndExportWebVideo()
             case .exportPngWav: m.chooseAndExportPngWav()
             case .exportExo: m.chooseAndExportExo()
+            case .exportFcpXml: m.chooseAndExportFcpXml()
+            case .exportEdl: m.chooseAndExportEdl()
             case .exportPluginFormat(let id): m.chooseAndExportPluginFormat(id)
             case .queueExport: m.chooseAndQueueExport()
             case .showExportQueue: m.showExportQueueSheet = true

@@ -3,6 +3,21 @@ import Foundation
 /// 英語の対訳表(日本語が原文。キーは日本語の文字列そのもの)。足すときは `L10nTests` が重複・空欄・日本語のままの訳を検査する。
 enum L10nTable {
     static let english: [String: String] = [
+        "FCP XML形式(.xml)で書き出す…": "Export as FCP XML (.xml)…",
+        "EDL形式(.edl)で書き出す…": "Export as EDL (.edl)…",
+        "FCP XMLを読み込む…": "Import FCP XML…",
+        "Premiere 等とタイムラインをやり取り": "Exchange timelines with Premiere and others",
+        "CMX 3600 のカットリスト": "CMX 3600 cut list",
+        "Premiere 等のタイムラインを取り込む": "Import a timeline from Premiere and others",
+        "FCP XML形式(.xml)で書き出す": "Export as FCP XML (.xml)",
+        "EDL形式(.edl)で書き出す": "Export as EDL (.edl)",
+        "FCP XMLを読み込む": "Import FCP XML",
+        "FCP XML形式で書き出しました": "Exported as FCP XML",
+        "EDL形式で書き出しました": "Exported as EDL",
+        "FCP XMLを読み込みました": "Imported FCP XML",
+        "Premiere Pro 等で開ける FCP XML(XMEML)として書き出します。対応できない要素は、書き出し後に一覧でお知らせします。": "Exports as FCP XML (XMEML) that Premiere Pro and others can open. Anything that cannot be converted is listed after export.",
+        "CMX 3600 形式のカットリストとして書き出します(映像 1 トラック + 音声最大 4 トラック)。対応できない要素は、書き出し後に一覧でお知らせします。": "Exports a CMX 3600 cut list (one video track plus up to four audio tracks). Anything that cannot be converted is listed after export.",
+        "FCP XML(XMEML)を読み込み、今のプロジェクトをその内容に置き換えます(取り消しで戻せます)。対応できない要素は、読み込み後に一覧でお知らせします。": "Imports FCP XML (XMEML) and replaces the current project with it (undoable). Anything that cannot be converted is listed after import.",
         "クリップをロック": "Lock Clips",
         "クリップを消音": "Mute Clips",
         "クリップの消音を解除": "Unmute Clips",

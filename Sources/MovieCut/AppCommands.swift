@@ -275,6 +275,8 @@ struct AppCommands: Commands {
                 MenuItemView(spec: AppMenuSpec.webVideoExport(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.pngWavExport(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.exoExport(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.fcpXmlExport(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.edlExport(s), perform: run)
                 Menu(L10n.t("プラグイン形式で書き出す")) {
                     if s.pluginExportFormats.isEmpty {
                         Text(L10n.t("プラグイン形式はありません"))
