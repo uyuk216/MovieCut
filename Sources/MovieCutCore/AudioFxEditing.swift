@@ -261,6 +261,18 @@ public enum AudioFxEditing {
         return edit(&c) { fx in fx.limiter = x }
     }
 
+    // MARK: 素材チャンネル
+
+    /// 素材チャンネルの使い方を変える。既定(ダウンミックス)は未設定に戻す。
+    @discardableResult
+    public static func setChannelMode(_ c: inout Clip, _ mode: SourceChannelMode) -> Bool {
+        guard supports(c) else { return false }
+        let new: SourceChannelMode? = mode == .downmix ? nil : mode
+        guard c.channelMode != new else { return false }
+        c.channelMode = new
+        return true
+    }
+
     // MARK: パン
 
     /// −1〜1(小数 2 桁)。0 は未設定に戻す。

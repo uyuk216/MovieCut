@@ -495,6 +495,8 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var audioFx: AudioFx? = nil
     /// 左右の振り分け(−1〜1、等パワー)。未設定 = 中央。
     public var pan: Double? = nil
+    /// 素材チャンネルの使い方(マルチチャンネル素材用。`SourceChannelMode`)。未設定 = ダウンミックス(ファイルには既定のときは書かない)。
+    public var channelMode: SourceChannelMode? = nil
     /// 文字(と字幕)の装飾: 影・箱・グラデーション・字間・行間・揃え・太字・斜体。無いときはファイルに書かない。
     public var textStyle: TextStyle? = nil
     /// 文字のアニメーション(タイプライター・ポップ・シェイク)。無いときはファイルに書かない。
@@ -567,7 +569,7 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var hslMask: HSLMask? = nil
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["id", "type", "voicevoxAccent", "subtitleText", "tachieId", "mouthDrive", "speakingOnly", "followsProjectEnd", "playsAnimation", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "bokehShape", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "frameFlow", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "valueRef", "duck", "visualizer", "stabilize", "stabilizeRoll", "tracks", "sceneId", "mask", "meshWarp", "puppetWarp", "blendMode", "group", "ruby", "figure", "note", "locked", "muted", "disabled", "treatAsVoice", "audioCategory", "tracking", "objectMask", "hslMask"]
+    static let knownKeys: Set<String> = ["id", "type", "voicevoxAccent", "subtitleText", "tachieId", "mouthDrive", "speakingOnly", "followsProjectEnd", "playsAnimation", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "bokehShape", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "frameFlow", "audioFx", "pan", "channelMode", "textStyle", "textAnim", "bubble", "counter", "valueRef", "duck", "visualizer", "stabilize", "stabilizeRoll", "tracks", "sceneId", "mask", "meshWarp", "puppetWarp", "blendMode", "group", "ruby", "figure", "note", "locked", "muted", "disabled", "treatAsVoice", "audioCategory", "tracking", "objectMask", "hslMask"]
 
     public init() {}
 
@@ -777,6 +779,10 @@ public struct Clip: Codable, Equatable, Identifiable {
         if let raw: JSONValue = l.value("audioCategory") {
             if let name: String = l.value("audioCategory"), let cat = AudioCategory(rawValue: name) { audioCategory = cat } else { extra["audioCategory"] = raw }
         }
+        // 素材チャンネルの使い方: 知らない値・型が違う値は捨てずに書き戻す(audioCategory と同じ作法)。既定(downmix)は未設定と同じ
+        if let raw: JSONValue = l.value("channelMode") {
+            if let name: String = l.value("channelMode"), let m = SourceChannelMode(rawValue: name) { channelMode = m == .downmix ? nil : m } else { extra["channelMode"] = raw }
+        }
         // アクセント編集: 読めない型は捨てずに書き戻す。空は未設定と同じ
         if let raw: JSONValue = l.value("voicevoxAccent") {
             if let v: [VoicevoxAccentPhrase] = l.value("voicevoxAccent") { voicevoxAccent = v.isEmpty ? nil : v } else { extra["voicevoxAccent"] = raw }
@@ -900,6 +906,7 @@ public struct Clip: Codable, Equatable, Identifiable {
         try c.encodeIfPresent(frameFlow == true ? true : nil, forKey: AnyKey("frameFlow"))
         if let fx = audioFx, !fx.isEmpty { try c.encode(fx, forKey: AnyKey("audioFx")) }
         try c.encodeIfPresent(pan, forKey: AnyKey("pan"))
+        if let m = channelMode, m != .downmix { try c.encode(m.rawValue, forKey: AnyKey("channelMode")) }
         try c.encodeIfPresent(textStyle, forKey: AnyKey("textStyle"))
         try c.encodeIfPresent(textAnim, forKey: AnyKey("textAnim"))
         try c.encodeIfPresent(bubble, forKey: AnyKey("bubble"))

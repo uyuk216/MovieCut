@@ -53,6 +53,17 @@ struct AudioFxPanel: View {
                 fxSlider("パン", value: c.panOrDefault, range: -1...1, step: 0.01, format: Self.panText, undo: ProjectModel.panUndoName) {
                     _ = AudioFxEditing.setPan(&$0, $1)
                 }
+                InspectorField(label: L10n.t("素材チャンネル")) {
+                    Picker("", selection: Binding(get: { c.channelModeOrDefault }, set: { v in
+                        model.setAudioFx({ _ = AudioFxEditing.setChannelMode(&$0, v) }, name: ProjectModel.channelModeUndoName, clipId: clipId)
+                    })) {
+                        ForEach(SourceChannelMode.allCases, id: \.self) { mode in Text(L10n.t(mode.label)).tag(mode) }
+                    }
+                    .labelsHidden()
+                }
+                Text(L10n.t("5.1chなどの素材はステレオにダウンミックスされます。センターやサラウンドだけを使いたいときは切り替えてください。"))
+                    .font(MCDesign.Font.caption).foregroundStyle(MCDesign.Color.secondaryLabel)
+                    .fixedSize(horizontal: false, vertical: true)
                 let pitchParts = AudioFx.splitPitch(c.audioFx?.pitchSemitones ?? 0)
                 fxSlider("音程（半音）", value: Double(pitchParts.semitones), range: AudioFx.pitchRange, step: 1,
                          format: Self.pitchText, undo: ProjectModel.pitchUndoName) {
