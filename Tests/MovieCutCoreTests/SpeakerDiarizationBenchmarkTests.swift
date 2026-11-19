@@ -5,6 +5,12 @@ import XCTest
 /// 特徴と正解ラベルが既知の合成シナリオで、クラスタリングの正しさを数値で測る。
 /// 指標: ペアワイズF1(同じ話者のペアを同じクラスタに入れられたか)、
 /// 最適対応づけ後の区間誤り率、話者数の誤差。決定的であることも確認する。
+private extension AcousticFeatures {
+    func withBands(_ bands: [Double]) -> AcousticFeatures {
+        var f = self; f.spectralBands = bands; return f
+    }
+}
+
 final class SpeakerDiarizationBenchmarkTests: XCTestCase {
 
     private func f(_ f0: Double, _ centroid: Double, spread: Double = 10, zcr: Double = 0.05,
@@ -36,6 +42,14 @@ final class SpeakerDiarizationBenchmarkTests: XCTestCase {
                 f(150, 900, spread: 8), f(152, 910, spread: 9), f(148, 895, spread: 7),
                 f(150, 1000, spread: 45), f(149, 990, spread: 50), f(151, 1010, spread: 42),
             ], truth: [0, 0, 0, 1, 1, 1]),
+            Scenario(name: "bands", feats: [
+                // 声の高さ・重心・抑揚が同じで、帯域配分(声質の形)だけが違う 2 人。
+                // 旧特徴空間には帯域配分が無く、距離 0 で同一話者に統合されていた。
+                f(150, 1000, spread: 15).withBands([0.72, 0.18, 0.07, 0.03]),
+                f(152, 1010, spread: 16).withBands([0.70, 0.19, 0.08, 0.03]),
+                f(150, 1000, spread: 15).withBands([0.28, 0.34, 0.24, 0.14]),
+                f(148, 990, spread: 14).withBands([0.26, 0.35, 0.25, 0.14]),
+            ], truth: [0, 0, 1, 1]),
             Scenario(name: "drift", feats: [
                 f(120, 800), f(128, 830), f(136, 860), f(145, 890), f(154, 920), f(164, 950),
                 f(260, 1600), f(258, 1590),
@@ -92,7 +106,7 @@ final class SpeakerDiarizationBenchmarkTests: XCTestCase {
 
     func testBenchmarkCoreScenariosArePerfect() {
         // 改善の対象シナリオ(基本・音量変化・無音・短い区間・抑揚差)は完全分離を目標にする
-        for s in scenarios() where ["basic", "volume", "silence", "shortBlip", "spread"].contains(s.name) {
+        for s in scenarios() where ["basic", "volume", "silence", "shortBlip", "spread", "bands"].contains(s.name) {
             let got = run(s)
             XCTAssertEqual(pairwiseF1(cluster: got, truth: s.truth), 1.0, accuracy: 1e-9,
                            "\(s.name): got=\(got) truth=\(s.truth)")

@@ -7,8 +7,14 @@ import AVFoundation
 //
 // 方式と限界(正直な明示):
 // - 実用的な話者埋め込みモデル(学習型)は同梱できないため、ここでの分離は
-//   音響特徴(基本周波数・スペクトル重心・ゼロ交差率・音量)の区間ごとの変化に
-//   基づくクラスタリングによる「簡易判定」である。学習型の本格分離ではない。
+//   音響特徴(基本周波数・そのばらつき・スペクトル重心・帯域ごとの配分・
+//   ゼロ交差率)の区間ごとの変化に基づくクラスタリングによる「簡易判定」
+//   である。学習型の本格分離ではない。
+// - R6-1 の精度改善: 音量は同一話者でも大きく変わるため同一性の判定からは
+//   外し(無音の判定だけに使う)、F0 のばらつきと帯域配分を判定に加えた。
+//   無音区間と短すぎる区間は新しい話者を作らず直前の話者に寄せ、重心の
+//   計算にも混ぜない。重心は区間の長さで重み付けし、最後に再割り当てと
+//   近いクラスタの統合で貪欲法の初期の誤りを正す。すべて決定的。
 // - そのため、同じ話者の声色の変化(叫ぶ・ささやく等)や、似た声の別人を
 //   取り違えることがある。ラベルは手動で直せる(UI / `SpeakerLabels`)。
 // - 本格的な埋め込み型分離は未達。将来差し替えられるよう、判定は
@@ -36,14 +42,27 @@ public struct AcousticFeatures: Equatable, Sendable {
     public var zeroCrossingRate: Double
     /// 区間の長さ(秒)。
     public var duration: Double
+    /// スペクトルの帯域ごとのエネルギー配分(0〜1、合計おおよそ 1)。
+    /// 帯域は `AcousticFeatureExtractor.spectralBandEdges` の区切りで 4 つ。
+    /// 重心だけでは分からない「声質の形」の目安。測れなかった区間は空。
+    public var spectralBands: [Double]
 
-    public init(meanF0: Double, f0Spread: Double, rms: Double, spectralCentroid: Double, zeroCrossingRate: Double, duration: Double) {
+    public init(meanF0: Double, f0Spread: Double, rms: Double, spectralCentroid: Double, zeroCrossingRate: Double, duration: Double, spectralBands: [Double] = []) {
         self.meanF0 = meanF0; self.f0Spread = f0Spread; self.rms = rms
         self.spectralCentroid = spectralCentroid; self.zeroCrossingRate = zeroCrossingRate; self.duration = duration
+        self.spectralBands = spectralBands
     }
 
     /// 声らしい区間か(基本周波数が取れている)。
     public var isVoiced: Bool { meanF0 > 0 }
+
+    /// 無音とみなす区間か(音量が小さく、基本周波数も取れていない)。
+    /// 話者の手がかりが無いので、分離では直前の話者に寄せる対象。
+    public var isSilent: Bool { !isVoiced && rms < AcousticFeatureExtractor.voicedRMSThreshold }
+
+    /// 短すぎる区間か。特徴が 1〜2 フレーム分しかなく不安定なので、
+    /// 新しい話者の根拠にはせず、重心の計算にも混ぜない。
+    public var isShort: Bool { duration > 0 && duration < 0.25 }
 }
 
 // MARK: - 音響特徴の抽出(サンプル列に対する純粋計算)
@@ -82,6 +101,7 @@ public enum AcousticFeatureExtractor {
         let hop = max(1, frameLen / 2)
         var f0s: [Double] = []
         var centroids: [Double] = []
+        var bandSets: [[Double]] = []
         var pos = 0
         while pos + frameLen <= slice.count {
             let frame = Array(slice[pos..<(pos + frameLen)])
@@ -89,22 +109,32 @@ public enum AcousticFeatureExtractor {
             if frms >= voicedRMSThreshold, let f0 = estimateF0(frame, sampleRate: sampleRate) {
                 f0s.append(f0)
             }
-            if frms >= voicedRMSThreshold, let c = spectralCentroid(frame, sampleRate: sampleRate) {
-                centroids.append(c)
+            if frms >= voicedRMSThreshold, let s = spectrum(frame, sampleRate: sampleRate) {
+                centroids.append(s.centroid)
+                bandSets.append(s.bands)
             }
             pos += hop
         }
         // 区間が 1 フレームに満たないときは全体で 1 回だけ測る
         if f0s.isEmpty, centroids.isEmpty, rms >= voicedRMSThreshold {
             if let f0 = estimateF0(slice, sampleRate: sampleRate) { f0s.append(f0) }
-            if let c = spectralCentroid(slice, sampleRate: sampleRate) { centroids.append(c) }
+            if let s = spectrum(slice, sampleRate: sampleRate) { centroids.append(s.centroid); bandSets.append(s.bands) }
         }
 
         let meanF0 = f0s.isEmpty ? 0 : f0s.reduce(0, +) / Double(f0s.count)
         let spread = f0s.count > 1 ? (f0s.reduce(0) { $0 + ($1 - meanF0) * ($1 - meanF0) } / Double(f0s.count)).squareRoot() : 0
         let centroid = centroids.isEmpty ? 0 : centroids.reduce(0, +) / Double(centroids.count)
+        var bands: [Double] = []
+        if let first = bandSets.first {
+            bands = [Double](repeating: 0, count: first.count)
+            for set in bandSets where set.count == bands.count {
+                for i in bands.indices { bands[i] += set[i] }
+            }
+            for i in bands.indices { bands[i] /= Double(bandSets.count) }
+        }
         return AcousticFeatures(meanF0: meanF0, f0Spread: spread, rms: rms,
-                                spectralCentroid: centroid, zeroCrossingRate: zcr, duration: duration)
+                                spectralCentroid: centroid, zeroCrossingRate: zcr, duration: duration,
+                                spectralBands: bands)
     }
 
     static func frameRMS(_ frame: [Float]) -> Double {
@@ -140,8 +170,16 @@ public enum AcousticFeatureExtractor {
         return sampleRate / Double(bestLag)
     }
 
+    /// 帯域の区切り(Hz)。この区切りで分けた 4 帯域のエネルギー配分を測る。
+    public static let spectralBandEdges = [500.0, 1500.0, 3000.0]
+
     /// スペクトル重心(Hz)。Hann 窓 + DFT の大きさの重み付き平均。測れなければ nil。
     static func spectralCentroid(_ frame: [Float], sampleRate: Double) -> Double? {
+        spectrum(frame, sampleRate: sampleRate)?.centroid
+    }
+
+    /// スペクトル重心と帯域ごとのエネルギー配分を 1 回の FFT で測る。測れなければ nil。
+    static func spectrum(_ frame: [Float], sampleRate: Double) -> (centroid: Double, bands: [Double])? {
         let n = 1024   // 先頭 1024 サンプルで測る(区間の音色の目安として十分)
         guard frame.count >= 256 else { return nil }
         let m = min(n, frame.count)
@@ -153,14 +191,18 @@ public enum AcousticFeatureExtractor {
         }
         fft(&re, &im)
         var weighted = 0.0, total = 0.0
+        var bandTotals = [Double](repeating: 0, count: spectralBandEdges.count + 1)
         for k in 1..<(n / 2) {
             let mag = (re[k] * re[k] + im[k] * im[k]).squareRoot()
             let freq = Double(k) * sampleRate / Double(n)
             weighted += freq * mag
             total += mag
+            var band = 0
+            while band < spectralBandEdges.count, freq >= spectralBandEdges[band] { band += 1 }
+            bandTotals[band] += mag
         }
         guard total > 1e-9 else { return nil }
-        return weighted / total
+        return (weighted / total, bandTotals.map { $0 / total })
     }
 
     /// 2 の冪サイズの反復 FFT(実部・虚部の配列を書き換える)。
@@ -291,18 +333,29 @@ public protocol DiarizationEngine: Sendable {
     func diarize(segments: [TranscriptSegment], features: [AcousticFeatures], options: DiarizationOptions) -> [DiarizedSegment]
 }
 
-/// 音響特徴のクラスタリングによる簡易分離(初期実装)。
+/// 音響特徴のクラスタリングによる簡易分離。
 /// 区間を時刻順に見て、既存の話者の重心に近ければ同じ話者、しきい値より遠く
-/// 上限に達していなければ新しい話者とする決定的な貪欲法。学習はしない。
+/// 上限に達していなければ新しい話者とする決定的な貪欲法を土台に、
+/// R6-1 で次の仕上げを足した(いずれも決定的・学習なし):
+/// - 無音区間と短すぎる区間は新しい話者を作らず直前の話者に寄せ、重心にも混ぜない
+/// - 重心は区間の長さで重み付けする(短い区間のノイズに引っ張られない)
+/// - 最後に、頼れる区間だけで重心を作り直して 1 回だけ付け替え直し、
+///   重心どうしがしきい値より近いクラスタは 1 つに統合する
 public struct AcousticClusterDiarizer: DiarizationEngine {
     public init() {}
 
     /// 特徴どうしの距離(0 に近いほど似ている)。声の高さを最も重く見る。
+    /// 音量(rms)は同一話者でもささやき〜大声で大きく変わり別人性の手がかりに
+    /// ならないため、同一性の判定には使わない(無音の判定だけに使う)。
     public static func distance(_ a: AcousticFeatures, _ b: AcousticFeatures) -> Double {
         var parts: [(value: Double, weight: Double)] = []
         // 声の高さ: 両方とも有声ならオクターブ差。有声/無声の食い違いは中程度の差として数える。
         if a.isVoiced, b.isVoiced {
             parts.append((min(abs(log2(a.meanF0 / b.meanF0)) / 0.35, 2), 1.0))
+            // 声の高さのばらつき(抑揚の目安)。両方とも測れているときだけ比べる。
+            if a.f0Spread > 1, b.f0Spread > 1 {
+                parts.append((min(abs(log2(a.f0Spread / b.f0Spread)) / 1.2, 2), 0.5))
+            }
         } else if a.isVoiced != b.isVoiced {
             parts.append((0.7, 1.0))
         }
@@ -310,73 +363,177 @@ public struct AcousticClusterDiarizer: DiarizationEngine {
         if a.spectralCentroid > 0, b.spectralCentroid > 0 {
             parts.append((min(abs(log2(a.spectralCentroid / b.spectralCentroid)) / 0.5, 2), 0.8))
         }
+        // 音色の形(帯域ごとのエネルギー配分)。両方に同じ帯域数があれば比べる。
+        if !a.spectralBands.isEmpty, a.spectralBands.count == b.spectralBands.count {
+            var sq = 0.0
+            for i in a.spectralBands.indices { let d = a.spectralBands[i] - b.spectralBands[i]; sq += d * d }
+            parts.append((min(sq.squareRoot() / 0.35, 2), 0.8))
+        }
         // ゼロ交差率(摩擦音の多さなどの目安)
         parts.append((min(abs(a.zeroCrossingRate - b.zeroCrossingRate) / 0.08, 2), 0.5))
-        // 音量は同じ話者でも変わるので軽く見る
-        if a.rms > 1e-4, b.rms > 1e-4 {
-            parts.append((min(abs(log10(a.rms / b.rms)) / 0.5, 2), 0.25))
-        }
         guard !parts.isEmpty else { return 0 }
         let num = parts.reduce(0) { $0 + $1.weight * $1.value * $1.value }
         let den = parts.reduce(0) { $0 + $1.weight }
         return (num / den).squareRoot()
     }
 
-    public func diarize(segments: [TranscriptSegment], features: [AcousticFeatures], options: DiarizationOptions) -> [DiarizedSegment] {
-        precondition(features.count == segments.count || features.isEmpty, "features は segments と同じ件数か空")
-        // 重心の累積(有声の平均は有声区間だけで取る)
-        struct Cluster {
-            var count = 0
-            var voicedCount = 0
-            var sumF0 = 0.0, sumSpread = 0.0, sumRMS = 0.0, sumCentroid = 0.0, sumZCR = 0.0, sumDuration = 0.0
-            mutating func add(_ f: AcousticFeatures) {
-                count += 1
-                sumRMS += f.rms; sumCentroid += f.spectralCentroid; sumZCR += f.zeroCrossingRate; sumDuration += f.duration
-                if f.isVoiced { voicedCount += 1; sumF0 += f.meanF0; sumSpread += f.f0Spread }
+    /// 重心の累積。区間の長さで重み付けし(0.25〜4 秒で頭打ち)、
+    /// 有声の平均(F0 と そのばらつき)は有声区間だけで取る。
+    private struct Cluster {
+        var totalWeight = 0.0
+        var voicedWeight = 0.0
+        var sumF0 = 0.0, sumSpread = 0.0, sumCentroid = 0.0, sumZCR = 0.0
+        var bandSums: [Double] = []
+        var bandWeight = 0.0
+
+        mutating func add(_ f: AcousticFeatures) {
+            let w = min(max(f.duration, 0.25), 4.0)
+            totalWeight += w
+            sumCentroid += f.spectralCentroid * w
+            sumZCR += f.zeroCrossingRate * w
+            if f.isVoiced {
+                voicedWeight += w
+                sumF0 += f.meanF0 * w
+                sumSpread += f.f0Spread * w
             }
-            var centroid: AcousticFeatures {
-                let n = max(1, count)
-                return AcousticFeatures(meanF0: voicedCount > 0 ? sumF0 / Double(voicedCount) : 0,
-                                        f0Spread: voicedCount > 0 ? sumSpread / Double(voicedCount) : 0,
-                                        rms: sumRMS / Double(n),
-                                        spectralCentroid: sumCentroid / Double(n),
-                                        zeroCrossingRate: sumZCR / Double(n),
-                                        duration: sumDuration / Double(n))
+            if !f.spectralBands.isEmpty {
+                if bandSums.isEmpty { bandSums = [Double](repeating: 0, count: f.spectralBands.count) }
+                if bandSums.count == f.spectralBands.count {
+                    for i in bandSums.indices { bandSums[i] += f.spectralBands[i] * w }
+                    bandWeight += w
+                }
             }
         }
+
+        var centroid: AcousticFeatures {
+            let n = max(totalWeight, 1e-9)
+            return AcousticFeatures(
+                meanF0: voicedWeight > 0 ? sumF0 / voicedWeight : 0,
+                f0Spread: voicedWeight > 0 ? sumSpread / voicedWeight : 0,
+                rms: 0,
+                spectralCentroid: sumCentroid / n,
+                zeroCrossingRate: sumZCR / n,
+                duration: 1,
+                spectralBands: bandWeight > 0 ? bandSums.map { $0 / bandWeight } : [])
+        }
+    }
+
+    public func diarize(segments: [TranscriptSegment], features: [AcousticFeatures], options: DiarizationOptions) -> [DiarizedSegment] {
+        precondition(features.count == segments.count || features.isEmpty, "features は segments と同じ件数か空")
+        let feats: [AcousticFeatures?] = segments.indices.map { features.indices.contains($0) ? features[$0] : nil }
+
+        // 第 1 段: 時刻順の貪欲割り当て
         var clusters: [Cluster] = []
-        var out: [DiarizedSegment] = []
-        out.reserveCapacity(segments.count)
-        for (i, segment) in segments.enumerated() {
-            let feature = features.indices.contains(i) ? features[i] : nil
-            guard let feature else {
+        var assignment: [Int] = []
+        assignment.reserveCapacity(segments.count)
+        var lastSpeaker = 0
+        for f in feats {
+            guard let f else {
                 // 特徴が無い区間は直前の話者に寄せる(無ければ話者1)
-                out.append(DiarizedSegment(segment: segment, speaker: out.last?.speaker ?? 0, feature: nil))
+                assignment.append(lastSpeaker)
                 continue
             }
-            var best: (index: Int, distance: Double)?
+            if f.isSilent {
+                // 無音は話者の手がかりが無い: 新しい話者は作らず、重心にも混ぜない
+                assignment.append(clusters.isEmpty ? 0 : lastSpeaker)
+                continue
+            }
+            if clusters.isEmpty {
+                clusters.append(Cluster())
+                clusters[0].add(f)
+                assignment.append(0)
+                lastSpeaker = 0
+                continue
+            }
+            var best = 0
+            var bestDistance = Double.greatestFiniteMagnitude
             for (ci, cluster) in clusters.enumerated() {
-                let d = Self.distance(feature, cluster.centroid)
-                if best == nil || d < best!.distance { best = (ci, d) }
+                let d = Self.distance(f, cluster.centroid)
+                if d < bestDistance { bestDistance = d; best = ci }
+            }
+            if f.isShort {
+                // 短すぎる区間は特徴が不安定: 新しい話者は作らず直前に寄せ、重心にも混ぜない
+                assignment.append(lastSpeaker)
+                continue
             }
             let speaker: Int
-            if let best, best.distance <= options.threshold {
-                speaker = best.index
+            if bestDistance <= options.threshold {
+                speaker = best
             } else if clusters.count < options.maxSpeakers {
                 // しきい値より遠い = 新しい話者(上限に達していないときだけ増やす)
                 speaker = clusters.count
                 clusters.append(Cluster())
-            } else if let best {
-                // 上限に達しているので、最も近い話者に寄せる
-                speaker = best.index
             } else {
-                speaker = 0
-                clusters.append(Cluster())
+                // 上限に達しているので、最も近い話者に寄せる
+                speaker = best
             }
-            if clusters.indices.contains(speaker) { clusters[speaker].add(feature) }
-            out.append(DiarizedSegment(segment: segment, speaker: speaker, feature: feature))
+            clusters[speaker].add(f)
+            assignment.append(speaker)
+            lastSpeaker = speaker
         }
-        return out
+
+        // 第 2 段: 仕上げ(再割り当て 1 回 + 近いクラスタの統合)。どちらも決定的。
+        if clusters.count > 1 {
+            assignment = Self.refined(assignment: assignment, feats: feats, greedy: clusters, options: options)
+        }
+
+        // ラベルを最初に現れた順に 0,1,2… へ振り直して返す
+        var order: [Int] = []
+        for a in assignment where !order.contains(a) { order.append(a) }
+        let remap = Dictionary(uniqueKeysWithValues: order.enumerated().map { ($0.element, $0.offset) })
+        return segments.enumerated().map { i, segment in
+            DiarizedSegment(segment: segment, speaker: remap[assignment[i]] ?? 0, feature: feats[i])
+        }
+    }
+
+    /// 割り当てから、頼れる区間(無音でも短くもない)だけで重心を作り直す。
+    /// 頼れる区間が無いクラスタは貪欲段の重心をそのまま使う。
+    private static func reliableCentroids(assignment: [Int], feats: [AcousticFeatures?], greedy: [Cluster]) -> [AcousticFeatures] {
+        var rebuilt = [Cluster](repeating: Cluster(), count: greedy.count)
+        for (i, a) in assignment.enumerated() {
+            guard let f = feats[i], !f.isSilent, !f.isShort, rebuilt.indices.contains(a) else { continue }
+            rebuilt[a].add(f)
+        }
+        return greedy.enumerated().map { ci, g in
+            rebuilt[ci].totalWeight > 0 ? rebuilt[ci].centroid : g.centroid
+        }
+    }
+
+    /// 再割り当てと統合。重心は付け替えの間は固定するので結果は決定的。
+    private static func refined(assignment: [Int], feats: [AcousticFeatures?], greedy: [Cluster], options: DiarizationOptions) -> [Int] {
+        var assignment = assignment
+        // 再割り当て: 頼れる区間を、作り直した重心のうち最も近く
+        // しきい値以内にある話者へ付け替える(新しい話者は作らない)
+        let centroids = reliableCentroids(assignment: assignment, feats: feats, greedy: greedy)
+        for i in assignment.indices {
+            guard let f = feats[i], !f.isSilent, !f.isShort else { continue }
+            var best = assignment[i]
+            var bestDistance = Double.greatestFiniteMagnitude
+            for (ci, c) in centroids.enumerated() {
+                let d = distance(f, c)
+                if d < bestDistance { bestDistance = d; best = ci }
+            }
+            if best != assignment[i], bestDistance <= options.threshold {
+                assignment[i] = best
+            }
+        }
+        // 統合: 重心どうしがしきい値より近い組があれば、最も近い組から 1 つにまとめる
+        while true {
+            let cs = reliableCentroids(assignment: assignment, feats: feats, greedy: greedy)
+            let used = Array(Set(assignment)).sorted()
+            guard used.count > 1 else { break }
+            var pair: (Int, Int)?
+            var pairDistance = Double.greatestFiniteMagnitude
+            for x in used.indices {
+                for y in used.indices where y > x {
+                    let d = distance(cs[used[x]], cs[used[y]])
+                    if d < pairDistance { pairDistance = d; pair = (used[x], used[y]) }
+                }
+            }
+            guard let pair, pairDistance < options.threshold else { break }
+            for i in assignment.indices where assignment[i] == pair.1 { assignment[i] = pair.0 }
+        }
+        return assignment
     }
 }
 

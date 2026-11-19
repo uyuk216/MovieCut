@@ -40,6 +40,40 @@ final class SpeakerDiarizationTests: XCTestCase {
         XCTAssertEqual(second.meanF0, 240, accuracy: 20)
     }
 
+    func testExtractorSpectralBands() {
+        // 低い純音は最下帯域に、高めの純音は 1500〜3000Hz の帯域にエネルギーが寄る
+        let low = AcousticFeatureExtractor.features(samples: sine(freq: 120, seconds: 0.5), sampleRate: sampleRate, start: 0, end: 0.5)
+        XCTAssertEqual(low.spectralBands.count, 4)
+        XCTAssertGreaterThan(low.spectralBands[0], 0.85)
+        XCTAssertEqual(low.spectralBands.reduce(0, +), 1.0, accuracy: 0.02)
+        let mid = AcousticFeatureExtractor.features(samples: sine(freq: 2000, seconds: 0.5), sampleRate: sampleRate, start: 0, end: 0.5)
+        XCTAssertGreaterThan(mid.spectralBands[2], 0.7)
+        // 無音は帯域が測れない(空)
+        let silent = AcousticFeatureExtractor.features(samples: [Float](repeating: 0, count: 8000), sampleRate: sampleRate, start: 0, end: 0.5)
+        XCTAssertTrue(silent.spectralBands.isEmpty)
+        XCTAssertTrue(silent.isSilent)
+    }
+
+    func testExtractorBandsSeparateSamePitchDifferentTimbre() {
+        // 同じ基本周波数(150Hz)でも倍音の配分が違えば帯域配分が大きく違う
+        func stack(_ harmonics: [(Double, Float)]) -> [Float] {
+            let n = Int(sampleRate * 0.5)
+            return (0..<n).map { i in
+                harmonics.reduce(Float(0)) { acc, h in acc + Float(sin(2 * Double.pi * h.0 * Double(i) / sampleRate)) * h.1 }
+            }
+        }
+        let dark = AcousticFeatureExtractor.features(samples: stack([(150, 0.6), (300, 0.15), (450, 0.08)]), sampleRate: sampleRate, start: 0, end: 0.5)
+        let bright = AcousticFeatureExtractor.features(samples: stack([(150, 0.25), (900, 0.3), (1800, 0.45), (2600, 0.35)]), sampleRate: sampleRate, start: 0, end: 0.5)
+        // 自己相関の F0 は倍音の強い合成音ではぶれることがある(既知の弱み)ため、
+        // ここでは「2 つの山で推定 F0 が近い(=同程度の声の高さ)」ことだけを見る
+        XCTAssertGreaterThan(dark.meanF0, 0)
+        XCTAssertGreaterThan(bright.meanF0, 0)
+        XCTAssertEqual(dark.meanF0, bright.meanF0, accuracy: 30)
+        var sq = 0.0
+        for i in dark.spectralBands.indices { let d = dark.spectralBands[i] - bright.spectralBands[i]; sq += d * d }
+        XCTAssertGreaterThan(sq.squareRoot(), 0.3, "帯域配分の差が声質の違いを捉える")
+    }
+
     func testExtractorCentroidOrdersByBrightness() {
         let bright = AcousticFeatureExtractor.features(samples: sine(freq: 2000, seconds: 0.5), sampleRate: sampleRate, start: 0, end: 0.5)
         let dark = AcousticFeatureExtractor.features(samples: sine(freq: 200, seconds: 0.5), sampleRate: sampleRate, start: 0, end: 0.5)
@@ -55,6 +89,23 @@ final class SpeakerDiarizationTests: XCTestCase {
         XCTAssertGreaterThan(AcousticClusterDiarizer.distance(a, b), DiarizationOptions().threshold)
         let near = features(126, centroid: 830)
         XCTAssertLessThan(AcousticClusterDiarizer.distance(a, near), DiarizationOptions().threshold)
+    }
+
+    func testDistanceIgnoresVolumeAndUsesSpreadAndBands() {
+        // 音量だけが大きく違う同一話者は近く、抑揚(F0のばらつき)が違う話者は遠い
+        let a = features(150, centroid: 950)
+        var loud = a; loud.rms = 0.5
+        var quiet = a; quiet.rms = 0.04
+        XCTAssertLessThan(AcousticClusterDiarizer.distance(loud, quiet), 0.1, "音量差は同一性の差にしない")
+        var expressive = a; expressive.f0Spread = 50
+        var monotone = a; monotone.f0Spread = 8
+        XCTAssertGreaterThan(AcousticClusterDiarizer.distance(expressive, monotone), DiarizationOptions().threshold)
+        var bandA = a; bandA.spectralBands = [0.72, 0.18, 0.07, 0.03]
+        var bandB = a; bandB.spectralBands = [0.28, 0.34, 0.24, 0.14]
+        XCTAssertGreaterThan(AcousticClusterDiarizer.distance(bandA, bandB), DiarizationOptions().threshold,
+                             "帯域配分だけが違う声質も分ける")
+        var bandA2 = a; bandA2.spectralBands = [0.70, 0.19, 0.08, 0.03]
+        XCTAssertLessThan(AcousticClusterDiarizer.distance(bandA, bandA2), DiarizationOptions().threshold)
     }
 
     func testClusteringGroupsSimilarAndSeparatesDifferent() {
