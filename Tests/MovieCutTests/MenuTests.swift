@@ -43,8 +43,8 @@ final class MenuTests: XCTestCase {
         XCTAssertEqual(add.map(\.title), ["キャラクターを追加", "台本から音声を作る"])
         XCTAssertEqual(add.map(\.shortcut), [sc("c", [.command, .shift]), sc(.return, .command)])
         let clipAdd = AppMenuSpec.clipAdd(s)
-        XCTAssertEqual(clipAdd.map(\.title), ["テキストを追加", "ぼかし範囲を追加", "調整レイヤーを追加", "音声ビジュアライザを追加", "QRコードを追加…", "AIで画像を作る…", "AIで画像を生成(API)…", "立ち絵を追加…"])
-        XCTAssertEqual(clipAdd.map(\.shortcut), [sc("t", [.command, .shift]), sc("b", [.command, .shift]), nil, nil, nil, nil, nil, nil])
+        XCTAssertEqual(clipAdd.map(\.title), ["テキストを追加", "ぼかし範囲を追加", "調整レイヤーを追加", "音声ビジュアライザを追加", "QRコードを追加…", "AIで画像を作る…", "AIで画像を生成(API)…", "AIで動画を生成(API)…", "AIで効果音を生成(API)…", "AIで音楽を生成(API)…", "AIでサウンドスケープを生成(API)…", "生成延長(API)…", "立ち絵を追加…"])
+        XCTAssertEqual(clipAdd.map(\.shortcut), [sc("t", [.command, .shift]), sc("b", [.command, .shift]), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil])
         XCTAssertEqual(AppMenuSpec.playback(s).map(\.title), ["再生 / 停止", "先頭へ戻る", "1コマ戻る", "1コマ進む", "範囲をループ再生", "トリム点を反復再生", "選択クリップを反復再生", "重なったクリップの音だけ試聴", "次の重なったクリップを試聴"])
         let zoom = AppMenuSpec.zoom(s)
         XCTAssertEqual(zoom.map(\.title), ["タイムラインを拡大", "タイムラインを縮小", "タイムラインを全体表示", "選択クリップにズーム"])
@@ -115,11 +115,21 @@ final class MenuTests: XCTestCase {
         XCTAssertFalse(item(AppMenuSpec.clipEdit(s), .split)!.enabled)
         XCTAssertFalse(item(AppMenuSpec.clipEdit(s), .delete)!.enabled)
         XCTAssertTrue(AppMenuSpec.editAdd(s).allSatisfy(\.enabled))
-        XCTAssertTrue(AppMenuSpec.clipAdd(s).filter { $0.command != .generateImageAPI }.allSatisfy(\.enabled))
-        XCTAssertFalse(item(AppMenuSpec.clipAdd(s), .generateImageAPI)!.enabled, "生成メディア(API)が未設定のあいだは無効表示")
+        let genCommands: [MenuCommand] = [.generateImageAPI, .generateVideoAPI, .generateAudioAPI, .generateMusicAPI, .generateSoundscapeAPI, .generativeExtend]
+        XCTAssertTrue(AppMenuSpec.clipAdd(s).filter { !genCommands.contains($0.command) }.allSatisfy(\.enabled))
+        for c in genCommands {
+            XCTAssertFalse(item(AppMenuSpec.clipAdd(s), c)!.enabled, "生成メディア(API)が未設定/対象外のあいだは無効表示: \(c)")
+        }
         var configured = s
         configured.imageGenerationConfigured = true
         XCTAssertTrue(item(AppMenuSpec.clipAdd(configured), .generateImageAPI)!.enabled, "設定済みなら有効")
+        configured.videoGenerationConfigured = true
+        configured.audioGenerationConfigured = true
+        configured.canGenerativeExtend = true
+        configured.generativeExtendConfigured = true
+        for c in genCommands {
+            XCTAssertTrue(item(AppMenuSpec.clipAdd(configured), c)!.enabled, "設定済みなら有効: \(c)")
+        }
         XCTAssertTrue(AppMenuSpec.playback(s).filter { $0.command != .toggleRangeLoop && $0.command != .toggleTrimLoop && $0.command != .toggleClipLoop && $0.command != .toggleAudition && $0.command != .cycleAudition }.allSatisfy(\.enabled))
         XCTAssertFalse(item(AppMenuSpec.playback(s), .toggleTrimLoop)!.enabled, "空のタイムラインでは反復再生できない")
         XCTAssertFalse(item(AppMenuSpec.playback(s), .toggleClipLoop)!.enabled)

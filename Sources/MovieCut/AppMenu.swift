@@ -52,6 +52,8 @@ enum MenuCommand: Hashable {
     case dialogueSuggestions, textGenerationSettings, speakerDiarization
     // 生成メディア(API): 画像生成の直接連携とその設定(ショートカットは持たない)
     case generateImageAPI, imageGenerationSettings
+    // 生成メディア(API) W5-4: 動画/効果音/音楽/サウンドスケープ生成と生成延長(ショートカットは持たない)
+    case generateVideoAPI, generateAudioAPI, generateMusicAPI, generateSoundscapeAPI, generativeExtend
     // 書き出し範囲(イン / アウト / 解除)と、静止画・連番画像の書き出し
     case rangeIn, rangeOut, rangeClear, exportStill, exportSequence
     // 書き出し範囲の中身を全レイヤーから削除(リップルは後ろを詰める)
@@ -259,6 +261,12 @@ struct MenuState: Equatable {
     var isLocked = false
     /// 生成メディア(API)の画像生成が設定済みか(未設定なら生成の項目は無効表示)。
     var imageGenerationConfigured = false
+    /// 生成メディア(API)の動画生成 / 音声・音楽生成が設定済みか(W5-4)。
+    var videoGenerationConfigured = false
+    var audioGenerationConfigured = false
+    /// 選択クリップが生成延長の対象か / 種類側の設定までそろっているか(W5-4)。
+    var canGenerativeExtend = false
+    var generativeExtendConfigured = false
     var canExport = false
     /// 書き出し範囲を指定できる / ルーラーに印がある
     var canMarkRange = false
@@ -476,6 +484,8 @@ struct MenuState: Equatable {
         recentItems = rc.recents.entries.map { RecentMenuItem(path: $0.path, name: $0.name, missing: rc.isMissing($0)) }
         welcomeAtLaunch = WelcomeSettings.showAtLaunch()
         imageGenerationConfigured = ImageGenerationSettings.load().isConfigured
+        videoGenerationConfigured = VideoGenerationSettings.load().isConfigured
+        audioGenerationConfigured = AudioGenerationSettings.load().isConfigured
         previewProxyEnabled = ProxySettings.enabled()
         proxyAutoCreateEnabled = ProxySettings.autoCreateEnabled()
         dockVisible = Set(DockPanel.allCases.filter { AppServices.panelDock.layout.isVisible($0) })
@@ -495,6 +505,8 @@ struct MenuState: Equatable {
         auditionActive = m.auditionOn
         auditionCandidateCount = m.auditionCandidates.count
         hasSelection = m.selectedClip != nil
+        canGenerativeExtend = m.canGenerativeExtendSelected
+        generativeExtendConfigured = m.generativeExtendConfigured
         hasTextTargets = m.project.allClips.contains { $0.type == .text || $0.type == .voice }
         hasTextClips = m.project.allClips.contains { $0.type == .text }
         canMakeProxies = !m.videoSourcePaths.isEmpty
@@ -980,6 +992,11 @@ enum AppMenuSpec {
          addQRCode(s),
          aiImage(s),
          generatedImageItem(s),
+         generatedVideoItem(s),
+         generatedAudioItem(s),
+         generatedMusicItem(s),
+         generatedSoundscapeItem(s),
+         generativeExtendItem(s),
          addTachie(s)]
     }
 
@@ -1007,6 +1024,41 @@ enum AppMenuSpec {
         MenuItemSpec(command: .generateImageAPI, title: "AIで画像を生成(API)…", shortcut: nil,
                      enabled: s.canEdit && s.imageGenerationConfigured, checked: nil,
                      hint: s.imageGenerationConfigured ? "クラウドの画像生成API" : "未設定のため使えません")
+    }
+
+    /// クリップ ▸ AIで動画を生成(API)…(W5-4。非同期ジョブをポーリング。未設定のあいだは無効表示)
+    static func generatedVideoItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .generateVideoAPI, title: "AIで動画を生成(API)…", shortcut: nil,
+                     enabled: s.canEdit && s.videoGenerationConfigured, checked: nil,
+                     hint: s.videoGenerationConfigured ? "クラウドの動画生成API" : "未設定のため使えません")
+    }
+
+    /// クリップ ▸ AIで効果音を生成(API)…(W5-4。音声生成の設定を使う)
+    static func generatedAudioItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .generateAudioAPI, title: "AIで効果音を生成(API)…", shortcut: nil,
+                     enabled: s.canEdit && s.audioGenerationConfigured, checked: nil,
+                     hint: s.audioGenerationConfigured ? "クラウドの音声生成API" : "未設定のため使えません")
+    }
+
+    /// クリップ ▸ AIで音楽を生成(API)…(W5-4。音声生成の設定を使う)
+    static func generatedMusicItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .generateMusicAPI, title: "AIで音楽を生成(API)…", shortcut: nil,
+                     enabled: s.canEdit && s.audioGenerationConfigured, checked: nil,
+                     hint: s.audioGenerationConfigured ? "クラウドの音声生成API" : "未設定のため使えません")
+    }
+
+    /// クリップ ▸ AIでサウンドスケープを生成(API)…(W5-4。音声生成の設定を使う)
+    static func generatedSoundscapeItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .generateSoundscapeAPI, title: "AIでサウンドスケープを生成(API)…", shortcut: nil,
+                     enabled: s.canEdit && s.audioGenerationConfigured, checked: nil,
+                     hint: s.audioGenerationConfigured ? "クラウドの音声生成API" : "未設定のため使えません")
+    }
+
+    /// クリップ ▸ 生成延長(API)…(W5-4。選択クリップが動画/音声で、その種類の設定が済んでいるときだけ有効)
+    static func generativeExtendItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .generativeExtend, title: "生成延長(API)…", shortcut: nil,
+                     enabled: s.canEdit && s.canGenerativeExtend && s.generativeExtendConfigured, checked: nil,
+                     hint: s.generativeExtendConfigured ? "選択クリップの前後に生成" : "未設定のため使えません")
     }
 
     /// ファイル ▸ 生成メディア(API)の設定…(エンドポイント・モデル・APIキー。ショートカットは持たない)
@@ -1766,6 +1818,11 @@ enum AppMenu {
             case .showScopes: m.showScopeSheet = true
             case .aiImage: m.openAIImage()
             case .generateImageAPI: m.openGenerateImageAPI()
+            case .generateVideoAPI: m.openGenerateVideoAPI()
+            case .generateAudioAPI: m.openGenerateAudioAPI(kind: .audio)
+            case .generateMusicAPI: m.openGenerateAudioAPI(kind: .music)
+            case .generateSoundscapeAPI: m.openGenerateAudioAPI(kind: .soundscape)
+            case .generativeExtend: m.openGenerativeExtend()
             case .audioLibrary: m.showAudioLibrary = true
             case .saveTemplate: m.saveAsTemplate()
             case .split: m.splitSelected()

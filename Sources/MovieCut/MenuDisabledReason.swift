@@ -124,6 +124,8 @@ extension AppMenuSpec {
         case .regenerateVoice, .makeVoices: return "ボイスのクリップを選んでください"
         case .makeProxies, .manageProxies: return "映像の素材がありません"
         case .duplicate, .delete, .rippleDelete, .nudgeEarlier, .nudgeLater: return "クリップを選んでから実行します"
+        case .generateImageAPI, .generateVideoAPI, .generateAudioAPI, .generateMusicAPI, .generateSoundscapeAPI: return "生成メディア(API)の設定で、その種類のエンドポイントとモデルを設定してください"
+        case .generativeExtend: return s.canGenerativeExtend ? "生成メディア(API)の設定で、その種類のエンドポイントとモデルを設定してください" : "動画か音声のクリップを選んでください"
         default: return "今の状態では使えません"
         }
     }

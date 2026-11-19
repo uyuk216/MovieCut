@@ -71,14 +71,18 @@ public struct GenerativeMediaRequest: Equatable, Sendable {
     public var targetStart: Double?
     public var targetDuration: Double?
     public var size: String?
+    /// 出力ファイルの形式(拡張子。例: 動画 "mp4"、音声 "mp3" / "wav")。
+    /// nil ならプロバイダ/設定の既定を使う。解釈はプロバイダ側。
+    public var outputFormat: String?
 
     public init(kind: GenerativeMediaKind, prompt: String, targetStart: Double? = nil,
-                targetDuration: Double? = nil, size: String? = nil) {
+                targetDuration: Double? = nil, size: String? = nil, outputFormat: String? = nil) {
         self.kind = kind
         self.prompt = prompt
         self.targetStart = targetStart
         self.targetDuration = targetDuration
         self.size = size
+        self.outputFormat = outputFormat
     }
 
     public var trimmedPrompt: String { prompt.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -129,6 +133,12 @@ public enum GenerativeMediaError: Error, LocalizedError, Equatable {
     case cancelled
     /// 返ってきたファイルが画像として読めなかった(画像生成用)。
     case notAnImage
+    /// 非同期ジョブがサービス側で失敗した(動画生成のポーリング用)。
+    case jobFailed(String)
+    /// 非同期ジョブが制限回数ポーリングしても終わらなかった。
+    case jobTimedOut
+    /// 生成延長の指定が不正(対象クリップ・秒数など)。
+    case invalidExtension(String)
 
     public var errorDescription: String? {
         switch self {
@@ -155,6 +165,13 @@ public enum GenerativeMediaError: Error, LocalizedError, Equatable {
             return "キャンセルしました。"
         case .notAnImage:
             return "生成サービスが返したファイルは、画像として読めませんでした。"
+        case .jobFailed(let detail):
+            let tail = detail.trimmingCharacters(in: .whitespacesAndNewlines)
+            return "生成ジョブが失敗しました。" + (tail.isEmpty ? "" : "\n" + String(tail.prefix(300)))
+        case .jobTimedOut:
+            return "生成ジョブが時間内に終わりませんでした。サービスの状態を確認して、もう一度お試しください。"
+        case .invalidExtension(let why):
+            return "生成延長の指定が正しくありません: \(why)"
         }
     }
 }
