@@ -108,11 +108,30 @@ v2 の合成は **POST /v1/synthesis への 1 リクエストで完結**し、WA
 - `CoeiroinkV2Provider`: キャラの話者(数値)をスタイル ID として合成する VoiceProvider。
   速さ・高さ・抑揚・間(pre/post)はキャラの値をそのまま渡す。音量は既定 1。
 - `CoeiroinkAutoProvider`: GET /v1/engine_info が応答すれば v2、しなければ従来の
-  v1 互換プロバイダへ委譲する自動判定。用意はしたが**アプリの標準配線は切り替えていない**
-  (下記「留保」参照)。
+  v1 互換プロバイダへ委譲する自動判定。R3-1 時点では用意のみで、**R3-2 でアプリの
+  標準配線へ切り替えた**(次節「アプリ配線の切替(R3-2)」)。
 - v2 で扱わないもの: 間の倍率(pauseLengthScale。/v1/synthesis に対応項目が無い)、
   アクセント句(VOICEVOX 形式)の取得・差し替え(v2 に相当 API が無い)、エンジン自動起動
   (v1 系と同じくしない)。
+
+## アプリ配線の切替(R3-2、2026-11-19)
+
+統括の作業決定により、アプリの標準配線を自動判定プロバイダへ切り替えた。これでアプリから
+COEIROINK v2 の合成が実際に使えるようになった。
+
+- `AppServices.makePluginHost`(Sources/MovieCut/ProjectModel.swift)の COEIROINK 生成を
+  `CoeiroinkPlugin.makeProvider()`(v1 互換)から `CoeiroinkPlugin.makeAutoProvider()`
+  (自動判定)へ変更した。SHAREVOX / VOICEVOX の配線は無変更。
+- v1 経路への影響は、合成の先頭に判定用の GET /v1/engine_info が 1 回増えるだけである
+  ことをテストで裏付けた(下記「テスト」の R3-2 分)。v1 のリクエスト列・合成ボディ・
+  生成音声は従来の v1 プロバイダと一致する。
+- エンジン未起動時の挙動は従来どおり: 判定が失敗して v1 へ委譲され、v1 側が従来の
+  案内文(「COEIROINK に接続できません。COEIROINK をインストールして起動するか…」)で
+  止まる。v2 専用プロバイダの案内文(「COEIROINK v2 に接続できません…」)にはならない。
+- アクセント句つき合成が配線切替で失われないよう、`CoeiroinkAutoProvider` を
+  `VoicevoxAccentProviding` に対応させた。v1 環境では従来どおり v1 の差し替え合成へ
+  委譲し、v2 環境では(v2 にアクセント句に相当する API が無いため)通常合成に落とす。
+- 実エンジンでの確認は未実施のまま(COEIROINK 本体がこの Mac に未導入。下記手順参照)。
 
 ## パラメータ対応(VOICEVOX プラグインとの比較)
 
@@ -135,11 +154,9 @@ v2 の合成は **POST /v1/synthesis への 1 リクエストで完結**し、WA
   COEIROINK / SHAREVOX 本体は未導入だった。検証はモックサーバ(URLProtocol)での
   疎通・リクエスト等価性・パラメータ変換まで(テスト参照)。
 - **COEIROINK v2 の合成は R3-1 で実装済み**(モック検証まで。実エンジン確認は未実施)。
-  ただしアプリの標準配線は従来どおり v1 互換プロバイダのままにしてある。理由:
-  エンジン ID(coeiroink)が v1 / v2 で共通で、自動判定に切り替えると v1 経路でも
-  判定用の GET /v1/engine_info が 1 回増え、「v1 の経路の挙動を変えない」条件に触れるため。
-  自動判定プロバイダ(`CoeiroinkPlugin.makeAutoProvider`)は実装・テスト済みで、
-  配線の切替は AppServices の 1 行で済む。切替の可否は統括・ユーザーの判断に委ねる。
+  アプリの標準配線は R3-2 で自動判定プロバイダ(`CoeiroinkPlugin.makeAutoProvider`)へ
+  切り替え済み(上記「アプリ配線の切替(R3-2)」)。v1 経路で増えるのは判定用の
+  GET /v1/engine_info の 1 回だけで、合成手順・結果は従来と一致することをテストで担保した。
   また v2 の話者 UUID はキャラに保存する項目が無いため、プロバイダ経路ではスタイル ID
   から都度解決する(UUID をキャラに保持する設計は未実施)。
 - 話者一覧 Picker は未対応: アプリの話者カタログ(`SpeakerCatalog`)は VOICEVOX の接続先
@@ -168,11 +185,28 @@ v2 の合成は **POST /v1/synthesis への 1 リクエストで完結**し、WA
    - `curl -X POST http://127.0.0.1:50032/v1/synthesis -H 'Content-Type: application/json'
      -d '{"speakerUuid":"<控えたUUID>","styleId":0,"text":"テストです","speedScale":1,"volumeScale":1,"pitchScale":0,"intonationScale":1,"prePhonemeLength":0.1,"postPhonemeLength":0.1,"outputSamplingRate":24000}'
      -o /tmp/coeiro-v2-test.wav` で WAV が返り、再生できることを確認する。
-   - アプリ配線を自動判定に切り替えた場合は、キャラの音声エンジン COEIROINK で
-     話者 ID に styleId を入れて「試しに読み上げる」で声が出ることも確認する。
+   - アプリ配線は R3-2 で自動判定に切り替え済みなので、キャラの音声エンジン COEIROINK で
+     話者 ID に styleId を入れて「試しに読み上げる」で声が出ることも確認する
+     (v1 エンジンだけの環境では従来どおり v1 で合成されることもあわせて確認する)。
    - 形式の最終確認は `http://127.0.0.1:50032/docs`(OpenAPI)でも行える。
 
 ## テスト
+
+R3-2 で追加: `Tests/MovieCutCoreTests/CoeiroinkAutoWiringTests.swift`(5 件)。
+内容: v1 委譲の等価性(直接の v1 プロバイダと比べ、リクエスト列は判定の 1 回が先行する
+だけで /synthesis のボディ・生成音声・長さが一致)、v2 環境での v2 経路、エンジン未起動時に
+従来の v1 案内文で止まること、アクセント句つき合成の v1 委譲(差し替えがそのまま届く)と
+v2 環境での通常合成へのフォールバック。モックの `FakeCoeiroinkV2Server` には
+/version のステータス差し替え(未起動環境の再現用)を足した。アプリ側は
+`CoeiroinkSharevoxAppTests` を自動判定プロバイダ前提に更新(COEIROINK は
+CoeiroinkAutoProvider として解決され、v1/v2 両プロバイダとアクセント対応を保持、
+SHAREVOX は従来どおり)。
+全テスト結果(R3-2 時点): Core 2,573 件(新規 5 件を含む)・スキップ 8・失敗 0。
+アプリ 860 件・失敗 4 件(アサーション数)は、土台由来の既存失敗
+(L10nAppTests のシーン作成メニュー英訳 1 件、MenuM7Tests のクリップメニュー構成 3 件。
+いずれも R2-3 統合由来で、R3-1 時点の記録と同一ケース)だけで、R3-2 の変更による
+新規失敗は無い。R3-1 時に記録された MenuTests のプレビュー背景既定値の失敗は
+ストア状態に依存するもので、今回の実行では再現しなかった。
 
 R3-1 で追加: `Tests/MovieCutCoreTests/CoeiroinkV2SynthesisTests.swift`(13 件)。
 モックサーバ(FakeCoeiroinkV2Server)は v2 の確定形式に忠実に作り、必須キーが欠けた
