@@ -64,11 +64,11 @@ public enum Storyboard {
 
     /// 絵コンテを `url` に書く(PNG)。長さは `project.endTime`。
     public static func write(project: Project, assets: RenderAssets = RenderAssets(), count: Int = defaultCount,
-                             columns: Int = defaultColumns, to url: URL) throws {
+                             columns: Int = defaultColumns, pluginEffectProviders: [any VideoEffectProviding] = [], to url: URL) throws {
         guard project.width > 0, project.height > 0 else { throw ExportError.noOutputSize(width: project.width, height: project.height) }
         let ts = times(duration: project.endTime, count: count)
         guard !ts.isEmpty else { throw Failure.noLength }
-        let renderer = Renderer(project: project, assets: assets)
+        let renderer = Renderer(project: project, assets: assets, pluginEffectProviders: pluginEffectProviders)
         var frames: [CGImage] = []
         frames.reserveCapacity(ts.count)
         for t in ts {

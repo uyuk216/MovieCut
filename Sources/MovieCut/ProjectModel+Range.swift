@@ -152,7 +152,7 @@ extension ProjectModel {
         guard canExport else { return false }
         let format = StillFormat(pathExtension: url.pathExtension) ?? .png
         do {
-            try StillExporter.write(project: project, at: stillTime, format: format, to: url)
+            try StillExporter.write(project: project, at: stillTime, format: format, to: url, pluginEffectProviders: AppServices.pluginEffectProviders)
             statusText = "\(url.lastPathComponent) に書き出しました"
             return true
         } catch {

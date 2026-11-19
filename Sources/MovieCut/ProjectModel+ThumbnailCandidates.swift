@@ -38,13 +38,13 @@ extension ProjectModel {
         guard canExport else { return false }
         let range = thumbnailCandidateRange
         let found = ThumbnailCandidateFinder.find(project: project, start: range.start, duration: range.duration,
-                                                  count: Self.thumbnailCandidateCount, detector: detector)
+                                                  count: Self.thumbnailCandidateCount, pluginEffectProviders: AppServices.pluginEffectProviders, detector: detector)
         guard !found.isEmpty else {
             statusText = "サムネイルの候補が見つかりませんでした"
             return false
         }
         do {
-            let urls = try ThumbnailCandidateFinder.write(found, project: project, baseName: documentName, to: folder)
+            let urls = try ThumbnailCandidateFinder.write(found, project: project, baseName: documentName, pluginEffectProviders: AppServices.pluginEffectProviders, to: folder)
             statusText = "サムネイル候補 \(urls.count) 枚を \(folder.lastPathComponent) に書き出しました"
             return true
         } catch {

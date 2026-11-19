@@ -27,7 +27,7 @@ extension ProjectModel {
         guard canExport else { return false }
         let format = StillFormat(pathExtension: url.pathExtension) ?? .png
         do {
-            try ThumbnailExporter.write(project: project, at: stillTime, format: format, to: url)
+            try ThumbnailExporter.write(project: project, at: stillTime, format: format, to: url, pluginEffectProviders: AppServices.pluginEffectProviders)
             statusText = "サムネイル（1280×720）を \(url.lastPathComponent) に書き出しました"
             return true
         } catch {
