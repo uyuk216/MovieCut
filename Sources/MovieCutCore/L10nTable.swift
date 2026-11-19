@@ -622,6 +622,10 @@ enum L10nTable {
         "クロスフェード(秒)": "Crossfade (seconds)",
         "音声を解析しています…": "Analyzing audio…",
         "歌詞のある素材では、歌詞の連続性は保証されません。": "For material with lyrics, continuity of the lyrics is not guaranteed.",
-        "Remixを作成": "Create Remix"
+        "Remixを作成": "Create Remix",
+        "AIで画像を生成(API)…": "Generate Image via API…",
+        "生成メディア(API)の設定…": "Generative Media (API) Settings…",
+        "クラウドの画像生成API": "Cloud Image Generation API",
+        "未設定のため使えません": "Not configured yet"
     ]
 }

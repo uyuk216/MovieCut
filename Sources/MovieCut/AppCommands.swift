@@ -93,6 +93,7 @@ struct AppCommands: Commands {
                 MenuItemView(spec: AppMenuSpec.aiScript(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.aiSettings(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.textGenerationSettingsItem(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.imageGenerationSettingsItem(s), perform: run)
             }
         }
 
