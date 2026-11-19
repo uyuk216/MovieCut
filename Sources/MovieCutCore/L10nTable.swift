@@ -669,6 +669,19 @@ enum L10nTable {
         "AIで画像を生成(API)…": "Generate Image via API…",
         "生成メディア(API)の設定…": "Generative Media (API) Settings…",
         "クラウドの画像生成API": "Cloud Image Generation API",
-        "未設定のため使えません": "Not configured yet"
+        "未設定のため使えません": "Not configured yet",
+        "ベベル（アルファ）": "Bevel (Alpha)",
+        "ベベル＆エンボス": "Bevel & Emboss",
+        "放射ブラー": "Radial Blur",
+        "厚み（px）": "Thickness (px)",
+        "光の角度（°）": "Light Angle (deg)",
+        "柔らかさ（px）": "Softness (px)",
+        "ハイライトの強さ": "Highlight Strength",
+        "シャドウの強さ": "Shadow Strength",
+        "深さ（px）": "Depth (px)",
+        "中心X": "Center X",
+        "中心Y": "Center Y",
+        "量": "Amount",
+        "方式": "Mode",
     ]
 }

@@ -4,7 +4,7 @@ import Foundation
 
 /// エフェクトの引数 1 つ分の仕様(範囲・既定値・インスペクタの刻み)。
 public struct EffectParamSpec: Equatable, Sendable {
-    public enum Unit: Sendable { case plain, percent, px, degrees, mode, toggle, aperture }
+    public enum Unit: Sendable { case plain, percent, px, degrees, mode, toggle, aperture, radialMode }
     public let key: String
     public let label: String
     public let range: ClosedRange<Double>
@@ -46,6 +46,10 @@ public enum EffectKind: String, CaseIterable, Sendable {
     case lensDistortion, halftone, kaleidoscope, tritone, solarize, spinBlur, edgeBlur, echo
     /// 映像ノイズ除去: CINoiseReduction による空間方向の平滑(学習型ではない。方式と限界は VideoDenoise / docs 参照)。
     case denoise
+    /// ベベル系(棚卸し残り候補): アルファの輪郭に斜面を付ける  と、輝度の傾きで浮き出させる 。基盤は  を共有する。
+    case bevelAlpha, bevelEmboss
+    /// 放射ブラー(棚卸し残り候補): 中心点からの放射(ズーム)方向のブラー。方式で回転も選べる。基盤は 。
+    case radialBlur
 
     public var label: String {
         switch self {
@@ -94,6 +98,9 @@ public enum EffectKind: String, CaseIterable, Sendable {
         case .edgeBlur: return "境界ぼかし"
         case .echo: return "残像"
         case .denoise: return "ノイズ除去"
+        case .bevelAlpha: return "ベベル（アルファ）"
+        case .bevelEmboss: return "ベベル＆エンボス"
+        case .radialBlur: return "放射ブラー"
         }
     }
 
@@ -179,6 +186,14 @@ public enum EffectKind: String, CaseIterable, Sendable {
         case .echo: return [Self.p("distance", "ずらし量（px）", 0, 200, 30, 1, .px), Self.p("angle", "向き（°）", -180, 180, 0, 1, .degrees),
                             Self.p("count", "重ねる数", 1, 8, 3, 1), Self.p("opacity", "残像の濃さ", 0, 1, 0.5, 0.01, .percent)]
         case .denoise: return [Self.p("strength", "強さ", 0, 1, 0.5, 0.01, .percent)]
+        // ベベル系は「厚み/深さ 0 = 何もしない」が既定(追加しただけでは絵は変わらない)。角度 135° は左上からの光。
+        case .bevelAlpha: return [Self.p("size", "厚み（px）", 0, 40, 0, 1, .px), Self.p("angle", "光の角度（°）", -180, 180, 135, 1, .degrees),
+                                  Self.p("softness", "柔らかさ（px）", 0, 40, 4, 1, .px),
+                                  Self.p("highlight", "ハイライトの強さ", 0, 1, 0.7, 0.01, .percent), Self.p("shadow", "シャドウの強さ", 0, 1, 0.7, 0.01, .percent)]
+        case .bevelEmboss: return [Self.p("depth", "深さ（px）", 0, 40, 0, 1, .px), Self.p("angle", "光の角度（°）", -180, 180, 135, 1, .degrees),
+                                   Self.p("softness", "柔らかさ（px）", 0, 40, 2, 1, .px), Self.p("strength", "強さ", 0, 1, 0.8, 0.01, .percent)]
+        case .radialBlur: return [Self.p("amount", "量", 0, 100, 0, 1), Self.p("centerX", "中心X", 0, 1, 0.5, 0.01),
+                                  Self.p("centerY", "中心Y", 0, 1, 0.5, 0.01), Self.p("mode", "方式", 0, 1, 0, 1, .radialMode)]
         }
     }
 

@@ -210,7 +210,7 @@ final class EffectAppTests: XCTestCase {
     func testMenuSpecTitlesCommandsAndEnabling() {
         let on = state { $0.canEffect = true; $0.hasEffects = true; $0.canPasteEffects = true }
         let kinds = AppMenuSpec.effectKindItems(on)
-        XCTAssertEqual(kinds.map(\.title), ["明るさ", "コントラスト", "彩度", "色相", "露出", "シャープ", "モノクロ", "セピア", "ビネット", "モザイク", "ガウスぼかし", "ズームぼかし", "モーションぼかし", "グロー", "ドロップシャドウ", "縁取り", "クロマキー", "LUT", "顔ぼかし", "色調転写", "ホワイトバランス", "カラーホイール", "カラーカーブ", "HSLセカンダリ", "光学ミスト", "ハイライト補正", "絞りぼかし", "フィルムグレイン", "反転", "ポスタリゼーション", "アンシャープマスク", "輪郭抽出", "結晶モザイク", "六角モザイク", "点描モザイク", "渦巻き", "レンズ歪み", "網点", "万華鏡", "トライトーン", "ソラリゼーション", "回転ブラー", "境界ぼかし", "残像", "ノイズ除去"])
+        XCTAssertEqual(kinds.map(\.title), ["明るさ", "コントラスト", "彩度", "色相", "露出", "シャープ", "モノクロ", "セピア", "ビネット", "モザイク", "ガウスぼかし", "ズームぼかし", "モーションぼかし", "グロー", "ドロップシャドウ", "縁取り", "クロマキー", "LUT", "顔ぼかし", "色調転写", "ホワイトバランス", "カラーホイール", "カラーカーブ", "HSLセカンダリ", "光学ミスト", "ハイライト補正", "絞りぼかし", "フィルムグレイン", "反転", "ポスタリゼーション", "アンシャープマスク", "輪郭抽出", "結晶モザイク", "六角モザイク", "点描モザイク", "渦巻き", "レンズ歪み", "網点", "万華鏡", "トライトーン", "ソラリゼーション", "回転ブラー", "境界ぼかし", "残像", "ノイズ除去", "ベベル（アルファ）", "ベベル＆エンボス", "放射ブラー"])
         XCTAssertEqual(kinds.map(\.command), EffectKind.allCases.map { MenuCommand.effectAdd($0) })
         XCTAssertTrue(kinds.allSatisfy { $0.enabled && $0.shortcut == nil })
         XCTAssertEqual(AppMenuSpec.effectPresetItems(on).map(\.title), ["ビンテージ", "白黒映画", "夢のような", "強調", "モザイク全体"])
