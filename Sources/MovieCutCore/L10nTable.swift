@@ -858,6 +858,16 @@ enum L10nTable {
         "音MAD": "OtoMAD",
         "このサイズは HEVC で書き出し": "This size will be exported as HEVC",
         "プレビューを軽く": "Lighten the preview",
-        "540p・背景で": "540p, in the background"
+        "540p・背景で": "540p, in the background",
+        "あいうえお（口の形）": "A-I-U-E-O (Mouth Shapes)",
+        "カメラ": "Camera",
+        "グループ": "Group",
+        "シーン": "Scene",
+        "トラッキング": "Tracking",
+        "パペット変形": "Puppet Warp",
+        "メッシュ変形": "Mesh Warp",
+        "素材を追加": "Add Media",
+        "ぼかし範囲": "Blur Area",
+        "分割": "Split"
     ]
 }
