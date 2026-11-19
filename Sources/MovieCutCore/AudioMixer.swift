@@ -29,6 +29,7 @@ protocol PCMSource: AnyObject {
 private let mixSampleRate = 48000.0
 
 /// AVAudioFile(WAV / MP3 / M4A / CAF など)から読む。サンプルレート違いは AVAudioConverter、チャンネル数はここで揃える(モノ → 左右同じ)。
+/// 3ch 以上は `MultichannelDownmix` の係数でステレオへ落とす(従来は ch0/ch1 だけを拾い、センター等を黙って捨てていた)。
 final class FilePCMSource: PCMSource {
     private static let chunk: AVAudioFrameCount = 16384
     private let file: AVAudioFile
@@ -39,10 +40,13 @@ final class FilePCMSource: PCMSource {
     private var outPos = 0
     private var inputEOF = false
     private var finished = false
+    /// チャンネルごとのステレオ係数(素材のチャンネル数分。1〜2ch は恒等/複製で従来と一致)。
+    private let weights: [(l: Float, r: Float)]
 
-    init(url: URL, offset: Double) throws {
+    init(url: URL, offset: Double, channelMode: SourceChannelMode = .downmix) throws {
         file = try AVAudioFile(forReading: url)
         let inFmt = file.processingFormat
+        weights = MultichannelDownmix.stereoWeights(channelCount: Int(inFmt.channelCount), mode: channelMode)
         let pos = AVAudioFramePosition(max(0, offset) * inFmt.sampleRate)
         if pos >= file.length { finished = true } else { file.framePosition = pos }
         guard let ib = AVAudioPCMBuffer(pcmFormat: inFmt, frameCapacity: Self.chunk) else {
@@ -92,39 +96,78 @@ final class FilePCMSource: PCMSource {
             guard let ch = outBuf.floatChannelData else { break }
             let nch = Int(outBuf.format.channelCount)
             let n = min(frames - done, outCount - outPos)
-            let l = ch[0] + outPos, r = nch >= 2 ? ch[1] + outPos : ch[0] + outPos
-            (left + done).update(from: l, count: n)
-            (right + done).update(from: r, count: n)
+            if nch <= 2 {
+                // モノラル/ステレオは従来とビット同一の速い道
+                let l = ch[0] + outPos, r = nch >= 2 ? ch[1] + outPos : ch[0] + outPos
+                (left + done).update(from: l, count: n)
+                (right + done).update(from: r, count: n)
+            } else {
+                // マルチチャンネル: 全チャンネルに係数を掛けて足す(LFE は係数 0)
+                for k in 0..<n { left[done + k] = 0; right[done + k] = 0 }
+                for c in 0..<min(nch, weights.count) {
+                    let (wl, wr) = (weights[c].l, weights[c].r)
+                    if wl == 0 && wr == 0 { continue }
+                    let src = ch[c] + outPos
+                    for k in 0..<n {
+                        left[done + k] += src[k] * wl
+                        right[done + k] += src[k] * wr
+                    }
+                }
+            }
             outPos += n; done += n
         }
         return done
     }
 }
 
-/// AVAssetReader から読む(動画の音声トラックなど)。出力側で 48 kHz / 2ch の Float32 インターリーブに変換させる。
+/// AVAssetReader から読む(動画の音声トラックなど)。
+/// 既定(ダウンミックス)は出力側で 48 kHz / 2ch の Float32 インターリーブに変換させる
+/// (チャンネルの並び・レイアウトを知っている AVFoundation 側に落としてもらう)。
+/// チャンネル選択(`channelMode != .downmix`)を指定したときだけ、素材のチャンネル数のまま読んで
+/// `MultichannelDownmix` の係数で自前で選ぶ(並びの前提は WAV 順。docs/マルチチャンネル音声.md)。
 final class AssetPCMSource: PCMSource {
     private let reader: AVAssetReader
     private let output: AVAssetReaderTrackOutput
     private let rangeStart: Double
-    private var pending: [Float] = []   // インターリーブ L R L R ...
+    private var pending: [Float] = []   // インターリーブ(チャンネル数分ずつ)
     private var pendingPos = 0          // フレーム単位
     private var leadFrames = 0          // 最初のバッファまでの無音(フレーム)
     private var started = false
     private var ended = false
+    /// 読み取るチャンネル数(既定の経路は 2、選択時は素材のチャンネル数)。
+    private let channels: Int
+    /// チャンネルごとのステレオ係数(`channels` 分。2ch 経路は恒等)。
+    private let weights: [(l: Float, r: Float)]
 
-    init?(url: URL, offset: Double, duration: Double) {
+    /// 素材トラックのチャンネル数(形式記述の ASBD から。分からなければ nil)。
+    private static func nativeChannelCount(of track: AVAssetTrack) -> Int? {
+        for fdAny in track.formatDescriptions {
+            let fd = fdAny as! CMAudioFormatDescription
+            if let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(fd) {
+                let n = Int(asbd.pointee.mChannelsPerFrame)
+                if n > 0 { return n }
+            }
+        }
+        return nil
+    }
+
+    init?(url: URL, offset: Double, duration: Double, channelMode: SourceChannelMode = .downmix) {
         let asset = AVURLAsset(url: url)
         guard let track = asset.tracks(withMediaType: .audio).first,
               let r = try? AVAssetReader(asset: asset) else { return nil }
-        let settings: [String: Any] = [
+        let native = channelMode == .downmix ? nil : Self.nativeChannelCount(of: track)
+        let outChannels = native ?? 2
+        channels = outChannels
+        weights = MultichannelDownmix.stereoWeights(channelCount: outChannels, mode: channelMode)
+        var settings: [String: Any] = [
             AVFormatIDKey: kAudioFormatLinearPCM,
             AVLinearPCMBitDepthKey: 32,
             AVLinearPCMIsFloatKey: true,
             AVLinearPCMIsBigEndianKey: false,
             AVLinearPCMIsNonInterleaved: false,
             AVSampleRateKey: mixSampleRate,
-            AVNumberOfChannelsKey: 2,
         ]
+        settings[AVNumberOfChannelsKey] = outChannels
         let o = AVAssetReaderTrackOutput(track: track, outputSettings: settings)
         guard r.canAdd(o) else { return nil }
         r.add(o)
@@ -149,7 +192,7 @@ final class AssetPCMSource: PCMSource {
         let floats = bytes / MemoryLayout<Float>.size
         if floats == 0 { return true }
         // 読み終えた分を捨ててから足す
-        if pendingPos > 0 { pending.removeFirst(pendingPos * 2); pendingPos = 0 }
+        if pendingPos > 0 { pending.removeFirst(pendingPos * channels); pendingPos = 0 }
         let old = pending.count
         pending.append(contentsOf: [Float](repeating: 0, count: floats))
         pending.withUnsafeMutableBytes { raw in
@@ -165,13 +208,26 @@ final class AssetPCMSource: PCMSource {
             left[done] = 0; right[done] = 0; done += 1; leadFrames -= 1
         }
         while done < frames {
-            if pendingPos * 2 >= pending.count, !fetch() { break }
-            let avail = (pending.count - pendingPos * 2) / 2
+            if pendingPos * channels >= pending.count, !fetch() { break }
+            let avail = (pending.count - pendingPos * channels) / channels
             if avail == 0 { continue }
             let n = min(frames - done, avail)
-            for k in 0..<n {
-                left[done + k] = pending[(pendingPos + k) * 2]
-                right[done + k] = pending[(pendingPos + k) * 2 + 1]
+            if channels == 2 {
+                for k in 0..<n {
+                    left[done + k] = pending[(pendingPos + k) * 2]
+                    right[done + k] = pending[(pendingPos + k) * 2 + 1]
+                }
+            } else {
+                for k in 0..<n {
+                    var lv: Float = 0, rv: Float = 0
+                    let base = (pendingPos + k) * channels
+                    for c in 0..<min(channels, weights.count) {
+                        lv += pending[base + c] * weights[c].l
+                        rv += pending[base + c] * weights[c].r
+                    }
+                    left[done + k] = lv
+                    right[done + k] = rv
+                }
             }
             pendingPos += n; done += n
         }
@@ -442,16 +498,19 @@ public enum AudioMixer {
     /// `span` は読む長さ(秒。動画の音声トラックを範囲で読むのに使う)。
     static func openSource(_ c: Clip, offset: Double, span: Double) throws -> PCMSource? {
         let url = URL(fileURLWithPath: c.src ?? "")
+        // 素材チャンネルの使い方はクリップの設定から(未設定 = ダウンミックス)。
+        // ここを通る経路(ミックス・速度変更・無音検出・スペクトログラム・文字起こし用読み出し)はすべて同じ扱いになる。
+        let mode = c.channelModeOrDefault
         if c.type == .video {
             guard FileManager.default.fileExists(atPath: url.path) else { return nil }
-            return AssetPCMSource(url: url, offset: offset, duration: span)
+            return AssetPCMSource(url: url, offset: offset, duration: span, channelMode: mode)
         }
         do {
-            return try FilePCMSource(url: url, offset: offset)
+            return try FilePCMSource(url: url, offset: offset, channelMode: mode)
         } catch {
             // mp4 の音声など AVAudioFile で開けないものは AVAssetReader で
             if FileManager.default.fileExists(atPath: url.path),
-               let s = AssetPCMSource(url: url, offset: offset, duration: span) { return s }
+               let s = AssetPCMSource(url: url, offset: offset, duration: span, channelMode: mode) { return s }
             throw AudioMixerError.cannotRead(path: url.path, underlying: error)
         }
     }
