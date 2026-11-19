@@ -12,7 +12,7 @@ struct ClipNoteField: View {
         TextField("作業メモ(書き出しには出ません)", text: $text, axis: .vertical)
             .lineLimit(1...3)
             .textFieldStyle(.roundedBorder)
-            .font(.system(size: 12))
+            .font(MCDesign.Font.callout)
             .focused($focused)
             .accessibilityIdentifier("clip-note-field")
             .onSubmit { commit() }

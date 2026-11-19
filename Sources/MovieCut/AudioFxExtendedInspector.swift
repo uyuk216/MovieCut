@@ -88,11 +88,11 @@ struct AudioFxExtendedPanel: View {
                     .opacity((f?.enabled ?? false) ? 1 : 0.6)
                 }
                 Text("ハイパス→ローパス→バンドパス→ノッチの順にかかります。")
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
             }
             .padding(.top, 4)
         } label: {
-            Text("フィルター").font(.system(size: 12, weight: .semibold)).foregroundStyle(anyActive ? Color.primary : Color.secondary)
+            Text("フィルター").font(MCDesign.Font.calloutSemibold).foregroundStyle(anyActive ? Color.primary : Color.secondary)
         }
     }
 
@@ -115,7 +115,7 @@ struct AudioFxExtendedPanel: View {
             }
             .padding(.top, 4)
         } label: {
-            Text("イコライザー（5バンド）").font(.system(size: 12, weight: .semibold)).foregroundStyle(eq.isActive ? Color.primary : Color.secondary)
+            Text("イコライザー（5バンド）").font(MCDesign.Font.calloutSemibold).foregroundStyle(eq.isActive ? Color.primary : Color.secondary)
         }
     }
 
@@ -141,7 +141,7 @@ struct AudioFxExtendedPanel: View {
             }
             .padding(.top, 4)
         } label: {
-            Text("ディストーション").font(.system(size: 12, weight: .semibold)).foregroundStyle(on ? Color.primary : Color.secondary)
+            Text("ディストーション").font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
         }
     }
 
@@ -162,12 +162,12 @@ struct AudioFxExtendedPanel: View {
                         _ = AudioFxEditing.setTube(&$0, .mix, $1)
                     }
                     Text("真空管風の柔らかい歪み（近似）です。")
-                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                        .font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
                 }.opacity((d?.enabled ?? false) ? 1 : 0.45)
             }
             .padding(.top, 4)
         } label: {
-            Text("チューブ").font(.system(size: 12, weight: .semibold)).foregroundStyle(on ? Color.primary : Color.secondary)
+            Text("チューブ").font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
         }
     }
 
@@ -193,7 +193,7 @@ struct AudioFxExtendedPanel: View {
             }
             .padding(.top, 4)
         } label: {
-            Text("コーラス").font(.system(size: 12, weight: .semibold)).foregroundStyle(on ? Color.primary : Color.secondary)
+            Text("コーラス").font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
         }
     }
 
@@ -217,7 +217,7 @@ struct AudioFxExtendedPanel: View {
             }
             .padding(.top, 4)
         } label: {
-            Text("フランジャー").font(.system(size: 12, weight: .semibold)).foregroundStyle(on ? Color.primary : Color.secondary)
+            Text("フランジャー").font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
         }
     }
 
@@ -241,7 +241,7 @@ struct AudioFxExtendedPanel: View {
             }
             .padding(.top, 4)
         } label: {
-            Text("フェイザー").font(.system(size: 12, weight: .semibold)).foregroundStyle(on ? Color.primary : Color.secondary)
+            Text("フェイザー").font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
         }
     }
 
@@ -265,7 +265,7 @@ struct AudioFxExtendedPanel: View {
             }
             .padding(.top, 4)
         } label: {
-            Text("トレモロ").font(.system(size: 12, weight: .semibold)).foregroundStyle(on ? Color.primary : Color.secondary)
+            Text("トレモロ").font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
         }
     }
 
@@ -289,7 +289,7 @@ struct AudioFxExtendedPanel: View {
             }
             .padding(.top, 4)
         } label: {
-            Text("ビブラート").font(.system(size: 12, weight: .semibold)).foregroundStyle(on ? Color.primary : Color.secondary)
+            Text("ビブラート").font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
         }
     }
 
@@ -320,7 +320,7 @@ struct AudioFxExtendedPanel: View {
             }
             .padding(.top, 4)
         } label: {
-            Text("ワウ / オートワウ").font(.system(size: 12, weight: .semibold)).foregroundStyle(on ? Color.primary : Color.secondary)
+            Text("ワウ / オートワウ").font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
         }
     }
 
@@ -343,12 +343,12 @@ struct AudioFxExtendedPanel: View {
                         }
                     }
                     Text("ディレイより柔らかく、繰り返すたびに高域が落ちます。")
-                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                        .font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
                 }.opacity((d?.enabled ?? false) ? 1 : 0.45)
             }
             .padding(.top, 4)
         } label: {
-            Text("エコー").font(.system(size: 12, weight: .semibold)).foregroundStyle(on ? Color.primary : Color.secondary)
+            Text("エコー").font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
         }
     }
 
@@ -374,7 +374,7 @@ struct AudioFxExtendedPanel: View {
             }
             .padding(.top, 4)
         } label: {
-            Text("低音質化").font(.system(size: 12, weight: .semibold)).foregroundStyle(on ? Color.primary : Color.secondary)
+            Text("低音質化").font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
         }
     }
 
@@ -395,12 +395,12 @@ struct AudioFxExtendedPanel: View {
                         }
                     }
                     Text("リング変調による近似です。声が金属的になります。")
-                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                        .font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
                 }.opacity((d?.enabled ?? false) ? 1 : 0.45)
             }
             .padding(.top, 4)
         } label: {
-            Text("ロボット化").font(.system(size: 12, weight: .semibold)).foregroundStyle(on ? Color.primary : Color.secondary)
+            Text("ロボット化").font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
         }
     }
 }
