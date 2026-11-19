@@ -107,6 +107,7 @@ extension AppMenuSpec {
         case .scaleDuplicate: return "音のあるクリップを1つ選んでください（ロックされたレイヤー・フリーズは対象外）"
         case .beatPlace: return s.canPitchLayout ? "クリップの位置以降にマーカーがありません（先に「ビートにマーカーを打つ」かマーカーを置いてください）" : "音のあるクリップを1つ選んでください（ロックされたレイヤー・フリーズは対象外）"
         case .beatMarkers: return "音のクリップを選んでください"
+        case .remix: return "音のクリップを選んでください"
         case .audioDuckToggle: return "ダッキングできる音のクリップを選んでください"
         case .stabilizeToggle: return "映像クリップを選んでください"
         case .autoReframe: return "映像か画像のクリップを選んでください"

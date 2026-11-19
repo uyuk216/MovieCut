@@ -304,6 +304,9 @@ final class ProjectModel: ObservableObject {
     var beatPlaceClipId: String?
     @Published var showFillerSheet = false
     var fillerClipId: String?
+    /// 「Remixツール…」のシートと、その対象のクリップ。
+    @Published var showRemixSheet = false
+    var remixClipId: String?
     @Published var showTranscriptEditSheet = false
     var transcriptEditClipId: String?
     /// 「検索と置換…」のシート(テロップとセリフの一括置換)。

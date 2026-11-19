@@ -140,6 +140,8 @@ enum MenuCommand: Hashable {
     case sceneSplit
     // ビートにマーカーを打つ(選んでいる音のクリップ。ショートカットは持たない)
     case beatMarkers, scaleDuplicate, beatPlace
+    // Remixツール(選んでいる音楽クリップを目標尺へつなぎ直す。ショートカットは持たない)
+    case remix
     // 手ぶれ補正の切り替え(映像クリップ。ショートカットは持たない)
     case stabilizeToggle
     // 縦動画に自動リフレーム(映像・画像。ショートカットは持たない)
@@ -417,6 +419,7 @@ struct MenuState: Equatable {
     var canPitchLayout = false       // 音程を変えて並べられるクリップ(音のある・ロックでない)を選んでいる
     var canBeatPlace = false         // 上に加えて、クリップの位置以降にマーカーがある
     var canBeatMarkers = false       // ビートを測れるクリップ(無音カットと同じ条件)を選んでいる
+    var canRemix = false             // Remixできるクリップ(ビート検出と同じ条件)を選んでいる
     var canDuck = false              // BGM(音声クリップ)を選んでいる
     var isDucking = false            // 選択クリップの自動ダッキングがオン
     var canStabilize = false         // 映像クリップを選んでいる(手ぶれ補正ができる)
@@ -578,6 +581,7 @@ struct MenuState: Equatable {
             canSilenceCut = SilenceDetector.supports(c)
             canSceneSplit = SceneDetector.supports(c)
             canBeatMarkers = BeatDetector.supports(c)
+            canRemix = Remix.supports(c)
             canPitchLayout = m.selectedClipIDs.count <= 1 && PitchLayout.supports(c, in: p)
             canBeatPlace = canPitchLayout && !PitchLayout.markerTimes(in: p, from: c.start, beatsOnly: false).isEmpty
             canTranscribe = TranscriptionSupport.supports(c)
@@ -1428,6 +1432,11 @@ enum AppMenuSpec {
         MenuItemSpec(command: .beatMarkers, title: "ビートにマーカーを打つ", shortcut: nil, enabled: s.canEdit && s.canBeatMarkers, checked: nil, hint: "テンポを測る")
     }
 
+    /// クリップ ▸ Remixツール…(音楽クリップを目標の尺へつなぎ直す。シートで目標尺を決める。ショートカットは持たない)。
+    static func remixItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .remix, title: "Remixツール…", shortcut: nil, enabled: s.canEdit && s.canRemix, checked: nil, hint: "目標の尺に音楽を合わせる")
+    }
+
     /// クリップ ▸ 選択クリップを音階で複製…(音MAD 用。シートで音階・移調・個数を選ぶ。1 回の Undo。ショートカットは持たない)。
     static func scaleDuplicateItem(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .scaleDuplicate, title: "選択クリップを音階で複製…", shortcut: nil, enabled: s.canEdit && s.canPitchLayout, checked: nil, hint: "音MAD")
@@ -1548,7 +1557,7 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, checkForUpdates, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), textGenerationSettingsItem(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s), apngExport(s), ymmpExport(s), webVideoExport(s), pngWavExport(s), exoExport(s)] + pluginExportItems(s) + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), trackMixerItem(s), clipListItem(s), noteListItem(s)] + scriptStoryboardItems(s) + scriptCSVItems(s) + [makeProxies(s), manageProxiesItem(s)] + [] + clipMenu(s).flatMap { $0 } + multicamItems(s) + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + pluginEffectItems(s) + effectPresetItems(s) + effectActions(s) + faceBlurItems(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textVerticalItem(s), textPerCharItem(s), textCounterItem(s), dictionaryItem(s), scriptTableItem(s), dialogueSuggestionsItem(s), saveItemTemplateItem(s)] + itemTemplateApplyItems(s) + itemTemplateCreateItems(s) + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [sceneSplitItem(s), silenceCutItem(s)] + rangeDeleteItems(s) + [audioAutoSyncItem(s), beatMarkersItem(s), scaleDuplicateItem(s), beatPlaceItem(s), fillerCutItem(s), transcriptEditItem(s), speakerDiarizationItem(s), lutLoadItem(s), colorTransferItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
+        [about, checkForUpdates, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), textGenerationSettingsItem(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s), apngExport(s), ymmpExport(s), webVideoExport(s), pngWavExport(s), exoExport(s)] + pluginExportItems(s) + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), trackMixerItem(s), clipListItem(s), noteListItem(s)] + scriptStoryboardItems(s) + scriptCSVItems(s) + [makeProxies(s), manageProxiesItem(s)] + [] + clipMenu(s).flatMap { $0 } + multicamItems(s) + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + pluginEffectItems(s) + effectPresetItems(s) + effectActions(s) + faceBlurItems(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textVerticalItem(s), textPerCharItem(s), textCounterItem(s), dictionaryItem(s), scriptTableItem(s), dialogueSuggestionsItem(s), saveItemTemplateItem(s)] + itemTemplateApplyItems(s) + itemTemplateCreateItems(s) + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [sceneSplitItem(s), silenceCutItem(s)] + rangeDeleteItems(s) + [audioAutoSyncItem(s), beatMarkersItem(s), remixItem(s), scaleDuplicateItem(s), beatPlaceItem(s), fillerCutItem(s), transcriptEditItem(s), speakerDiarizationItem(s), lutLoadItem(s), colorTransferItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerColorItems(s) + markerList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + previewTierItems(s) + guideItems(s) + [previewProxy(s), proxyAutoCreateItem(s), fullScreen(s)] + help.flatMap { $0 }
@@ -1797,6 +1806,7 @@ enum AppMenu {
             case .sceneSplit: m.openSceneSheet()
             case .audioAutoSync: m.autoSyncSelectedClips()
             case .beatMarkers: m.addBeatMarkersToSelectedClip()
+            case .remix: m.openRemixSheet()
             case .scaleDuplicate: m.openScaleSheet()
             case .beatPlace: m.openBeatPlaceSheet()
             case .fillerCut: m.openFillerSheet()

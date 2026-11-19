@@ -584,6 +584,15 @@ enum L10nTable {
         "トーンカーブ(マスター)": "Tone Curve (Master)",
         "トーンカーブ(赤)": "Tone Curve (Red)",
         "トーンカーブ(緑)": "Tone Curve (Green)",
-        "トーンカーブ(青)": "Tone Curve (Blue)"
+        "トーンカーブ(青)": "Tone Curve (Blue)",
+        "Remixツール…": "Remix Tool…",
+        "Remixツール": "Remix Tool",
+        "目標の尺に音楽を合わせる": "Fit the music to a target duration",
+        "元のクリップは変更せず、同じレイヤーの末尾に新しいクリップ列を作ります。": "Creates a new sequence of clips at the end of the same layer, without changing the original clip.",
+        "目標の尺(秒)": "Target Duration (seconds)",
+        "クロスフェード(秒)": "Crossfade (seconds)",
+        "音声を解析しています…": "Analyzing audio…",
+        "歌詞のある素材では、歌詞の連続性は保証されません。": "For material with lyrics, continuity of the lyrics is not guaranteed.",
+        "Remixを作成": "Create Remix"
     ]
 }
