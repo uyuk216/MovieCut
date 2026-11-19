@@ -543,9 +543,11 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var tracking: ObjectTrack? = nil
     /// オブジェクトマスク(対象の輪郭マスク+追跡伝播。Premiere の AI オブジェクトマスク等価)。無いときはファイルに書かない。形のマスク(`mask`)とは別に、両方あれば両方かかる。
     public var objectMask: ObjectMask? = nil
+    /// HSL マスク(色相・彩度・輝度で選んだ範囲だけ残すマスク。Premiere 27.0「HSL マスキング」等価)。無いときはファイルに書かない。形のマスク(`mask`)・オブジェクトマスクとは別に、全部あれば全部かかる。
+    public var hslMask: HSLMask? = nil
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["id", "type", "voicevoxAccent", "subtitleText", "tachieId", "mouthDrive", "speakingOnly", "followsProjectEnd", "playsAnimation", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "bokehShape", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "frameFlow", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "valueRef", "duck", "visualizer", "stabilize", "stabilizeRoll", "tracks", "sceneId", "mask", "meshWarp", "puppetWarp", "blendMode", "group", "ruby", "figure", "note", "locked", "muted", "disabled", "treatAsVoice", "tracking", "objectMask"]
+    static let knownKeys: Set<String> = ["id", "type", "voicevoxAccent", "subtitleText", "tachieId", "mouthDrive", "speakingOnly", "followsProjectEnd", "playsAnimation", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "bokehShape", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "frameFlow", "audioFx", "pan", "textStyle", "textAnim", "bubble", "counter", "valueRef", "duck", "visualizer", "stabilize", "stabilizeRoll", "tracks", "sceneId", "mask", "meshWarp", "puppetWarp", "blendMode", "group", "ruby", "figure", "note", "locked", "muted", "disabled", "treatAsVoice", "tracking", "objectMask", "hslMask"]
 
     public init() {}
 
@@ -761,6 +763,10 @@ public struct Clip: Codable, Equatable, Identifiable {
         if let raw: JSONValue = l.value("objectMask") {
             if let v: ObjectMask = l.value("objectMask") { objectMask = v.hasValidSamples ? v.normalized : nil } else { extra["objectMask"] = raw }
         }
+        // HSL マスク: 読めない型は捨てずに書き戻す
+        if let raw: JSONValue = l.value("hslMask") {
+            if let v: HSLMask = l.value("hslMask") { hslMask = v } else { extra["hslMask"] = raw }
+        }
         if let raw: JSONValue = l.value("figure") {
             if let v: Figure = l.value("figure") { figure = v } else { extra["figure"] = raw }
         }
@@ -884,6 +890,7 @@ public struct Clip: Codable, Equatable, Identifiable {
         if let a = voicevoxAccent, !a.isEmpty { try c.encode(a, forKey: AnyKey("voicevoxAccent")) }
         if let tr = tracking, tr.hasValidSamples { try c.encode(tr, forKey: AnyKey("tracking")) }
         if let om = objectMask, om.hasValidSamples { try c.encode(om, forKey: AnyKey("objectMask")) }
+        try c.encodeIfPresent(hslMask, forKey: AnyKey("hslMask"))
         try c.encodeIfPresent(subtitleText, forKey: AnyKey("subtitleText"))
         try c.encodeIfPresent(tachieId, forKey: AnyKey("tachieId"))
         if let d = mouthDrive, d != .all { try c.encode(d.raw, forKey: AnyKey("mouthDrive")) }
