@@ -1,7 +1,10 @@
 import SwiftUI
 import MovieCutCore
 
-/// クリップ ▸ 文字起こしで編集…: 音声を文字にして文の一覧を出す。チェックを外した文を取り除く(全部チェック = 何も変えない)。
+/// クリップ ▸ 文字起こしで編集…: 音声を文字にして文の一覧を出す。使い方は 2 つ:
+/// - 取り除く(従来): チェックを外した文を取り除く(全部チェック = 何も変えない)。
+/// - Paper Edit: 行を押した順に組み立て列へ入れ、選んだ文の区間だけを並べたクリップ列を
+///   元のレイヤーの末尾または新しいシーンへ配置する(元クリップは変えない)。
 /// 閉じると認識は止まる(`.task` のキャンセル)。
 struct TranscriptEditSheet: View {
     @ObservedObject var model: ProjectModel
@@ -9,6 +12,14 @@ struct TranscriptEditSheet: View {
     @State private var kept: Set<Int> = []
     @State private var failure: String?
     @State private var ripple = true
+    // Paper Edit 用の状態(取り除く側の状態とは混ぜない)
+    @State private var mode: Mode = .remove
+    @State private var paperOrder: [Int] = []
+    @State private var paperDestination: PaperDestination = .timeline
+    @State private var paperSceneName = "Paper Edit"
+
+    enum Mode { case remove, paper }
+    enum PaperDestination { case timeline, scene }
 
     private var clipId: String? { model.transcriptEditClipId }
     private var clipStart: Double { clipId.flatMap { model.clip($0)?.start } ?? 0 }
@@ -17,26 +28,54 @@ struct TranscriptEditSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("文字起こしで編集").font(.headline)
+            Picker("", selection: $mode) {
+                Text(L10n.t("文を取り除く")).tag(Mode.remove)
+                Text(L10n.t("選んだ文で組み立てる")).tag(Mode.paper)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
             Group {
                 if let f = found {
                     if f.isEmpty {
                         Text("文は見つかりませんでした。")
                     } else {
-                        Text("\(f.count) 文あります。残す文にチェックを入れたまま、外した文は取り除かれます。")
+                        if mode == .remove {
+                            Text("\(f.count) 文あります。残す文にチェックを入れたまま、外した文は取り除かれます。")
+                        } else {
+                            Text(L10n.t("行を押すと組み立てに追加されます。同じ行をもう一度押すと繰り返し追加されます。"))
+                        }
                         ScrollView {
                             VStack(alignment: .leading, spacing: 4) {
                                 ForEach(Array(f.enumerated()), id: \.offset) { i, s in
-                                    Toggle(isOn: Binding(get: { kept.contains(i) }, set: { on in
-                                        if on { kept.insert(i) } else { kept.remove(i) }
-                                    })) {
-                                        Text("\(String(format: "%.2f", clipStart + s.start)) 秒  \(s.text)")
-                                            .monospacedDigit()
+                                    if mode == .remove {
+                                        Toggle(isOn: Binding(get: { kept.contains(i) }, set: { on in
+                                            if on { kept.insert(i) } else { kept.remove(i) }
+                                        })) {
+                                            Text("\(String(format: "%.2f", clipStart + s.start)) 秒  \(s.text)")
+                                                .monospacedDigit()
+                                        }
+                                        .toggleStyle(.checkbox)
+                                    } else {
+                                        Button { paperOrder.append(i) } label: {
+                                            HStack {
+                                                Text("\(String(format: "%.2f", clipStart + s.start)) 秒  \(s.text)")
+                                                    .monospacedDigit()
+                                                Spacer()
+                                                if let badge = paperBadge(for: i) {
+                                                    Text(badge).foregroundStyle(.secondary)
+                                                }
+                                            }
+                                            .contentShape(Rectangle())
+                                        }
+                                        .buttonStyle(.plain)
                                     }
-                                    .toggleStyle(.checkbox)
                                 }
                             }
                         }
                         .frame(maxHeight: 260)
+                        if mode == .paper {
+                            paperOrderList(f)
+                        }
                     }
                 } else if let e = failure {
                     Text(e).foregroundStyle(.red)
@@ -45,20 +84,84 @@ struct TranscriptEditSheet: View {
                 }
             }
             .font(.callout)
-            Toggle("後ろを詰める", isOn: $ripple).toggleStyle(.checkbox)
+            if mode == .remove {
+                Toggle("後ろを詰める", isOn: $ripple).toggleStyle(.checkbox)
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    Picker(L10n.t("配置先"), selection: $paperDestination) {
+                        Text(L10n.t("タイムラインに追加")).tag(PaperDestination.timeline)
+                        Text(L10n.t("新しいシーンとして作成")).tag(PaperDestination.scene)
+                    }
+                    .pickerStyle(.segmented)
+                    if paperDestination == .scene {
+                        HStack {
+                            Text(L10n.t("シーン名"))
+                            TextField(L10n.t("シーン名"), text: $paperSceneName)
+                        }
+                    } else {
+                        Text(L10n.t("元のレイヤーの末尾に足します")).foregroundStyle(.secondary).font(.callout)
+                    }
+                }
+            }
             HStack {
                 Spacer()
                 Button("キャンセル") { model.showTranscriptEditSheet = false }
                     .keyboardShortcut(.cancelAction)
-                Button(removedCount > 0 ? "\(removedCount) 文を取り除く" : "取り除く") { commit() }
-                    .buttonStyle(.borderedProminent)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(found == nil || removedCount <= 0)
+                if mode == .remove {
+                    Button(removedCount > 0 ? "\(removedCount) 文を取り除く" : "取り除く") { commit() }
+                        .buttonStyle(.borderedProminent)
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(found == nil || removedCount <= 0)
+                } else {
+                    Button(paperOrder.isEmpty ? L10n.t("組み立てる") : "\(paperOrder.count) 文で組み立てる") { commitPaper() }
+                        .buttonStyle(.borderedProminent)
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(found == nil || paperOrder.isEmpty || (paperDestination == .scene && paperSceneName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
+                }
             }
         }
         .padding(20)
         .frame(width: 520)
         .task { await scan() }
+    }
+
+    /// Paper Edit: その行が組み立て列の何番目に入っているか(例: "#1, #3")。入っていなければ nil。
+    private func paperBadge(for index: Int) -> String? {
+        let positions = paperOrder.enumerated().filter { $0.element == index }.map { "#\($0.offset + 1)" }
+        return positions.isEmpty ? nil : positions.joined(separator: ", ")
+    }
+
+    /// Paper Edit: 組み立て列(並び順)の確認と並べ替え・取り消し。
+    @ViewBuilder
+    private func paperOrderList(_ f: [TranscriptSentence]) -> some View {
+        if paperOrder.isEmpty {
+            Text(L10n.t("組み立ての並びはまだ空です")).foregroundStyle(.secondary)
+        } else {
+            Text(L10n.t("組み立ての並び"))
+            ScrollView {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(Array(paperOrder.enumerated()), id: \.offset) { pos, idx in
+                        HStack {
+                            Text("\(pos + 1). \(f[idx].text)")
+                                .lineLimit(1)
+                            Spacer()
+                            Button(L10n.t("上へ")) { movePaperEntry(from: pos, by: -1) }
+                                .disabled(pos == 0)
+                            Button(L10n.t("下へ")) { movePaperEntry(from: pos, by: 1) }
+                                .disabled(pos == paperOrder.count - 1)
+                            Button(L10n.t("外す")) { paperOrder.remove(at: pos) }
+                        }
+                    }
+                }
+            }
+            .frame(maxHeight: 110)
+        }
+    }
+
+    private func movePaperEntry(from pos: Int, by delta: Int) {
+        let next = pos + delta
+        guard paperOrder.indices.contains(pos), paperOrder.indices.contains(next) else { return }
+        paperOrder.swapAt(pos, next)
     }
 
     private func scan() async {
@@ -77,5 +180,20 @@ struct TranscriptEditSheet: View {
         guard let id = clipId, let f = found else { return }
         let removed = f.indices.filter { !kept.contains($0) }.map { f[$0] }
         if model.cutTranscriptSentences(clipId: id, removed: removed, ripple: ripple) { model.showTranscriptEditSheet = false }
+    }
+
+    private func commitPaper() {
+        guard let id = clipId, let f = found, !paperOrder.isEmpty else { return }
+        let destination: PaperEdit.Destination
+        switch paperDestination {
+        case .timeline:
+            guard let track = ClipEditing.locate(id, in: model.project)?.track else { return }
+            destination = .appendToTrack(track)
+        case .scene:
+            destination = .newScene(name: paperSceneName)
+        }
+        if model.assemblePaperEdit(clipId: id, sentences: f, order: paperOrder, destination: destination) {
+            model.showTranscriptEditSheet = false
+        }
     }
 }
