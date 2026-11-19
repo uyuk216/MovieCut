@@ -37,3 +37,29 @@
 ## 検証
 
 - Core テスト `PngWavExoExportTests`(8 件): 連番の計画・命名・桁数、実書き出しの枚数・画素サイズ・背景色、無音 WAV の長さ、音声つき WAV の長さと正規化の有無による出力差(実測 LUFS)、キャンセル時の後片付け、exo のフレーム換算・テキスト 16 進往復・構造パース往復(Shift_JIS バイト列含む)・非対応要素のレポート、WebVideo のラウドネス引き継ぎ(ffmpeg がある環境で実書き出し→音声を戻して実測)。
+
+
+## 実機検証 R4-1(2026-11-19、検証ブランチ feat/verification-r4、起点 feat/muse-access 05f762b)
+
+検証用クローンで CLI(`moviecut-cli`)と Core API の両経路から書き出し→再取り込みの往復を確認した。コードは変更していない。
+
+### ymmp 往復
+
+- フィクスチャ `ymmp-basic.ymmp`(1920×1080 / 60fps / キャラ 2)を取り込み → 書き出し → 再取り込み:
+  - 取り込み: 変換 7 件、スキップ 3 件(TachieItem・ShapeItem・Serif の無い VoiceItem)、落ちたエフェクト 1 件。いずれもレポートに理由つきで残る。
+  - 書き出し: 2,853 バイト、変換 7 件、unsupported 0、dropped 0。構造は Timelines 1 件・Items 7 件で、全アイテムに Frame / Length / Layer / $type があり、$type は `YukkuriMovieMaker.Project.Items.*`(アセンブリ名 YukkuriMovieMaker)形式。VideoInfo・Characters(2 件)も保持。
+  - 再取り込み: 7 クリップで、種類・開始・長さ・本文・字幕文・素材パスの集合が往復前と**完全一致**。解像度・fps・キャラ数も一致。
+- MovieCut ネイティブの `rich.ymproj`(1920×1080 / 30fps / 8 クリップ)を CLI `export-ymmp` で書き出し → 再取り込み:
+  - 変換 5 件、unsupported 3 件(ぼかし×2、hologram)はレポートに理由つき。再取り込みは 5 件で、差分は「レポート済みの unsupported が落ちる」以外では、ボイスクリップの素材パス(`/a/v.wav`)が戻らない 1 点のみ。これは VoiceItem にファイル項目が無い YMM4 側の仕様(音声は TTS で再生成される)によるもので、書き出し注記にもあるとおり音量も再取り込みでは引き継がれない。
+  - CLI と Core API の書き出し結果は同一サイズ(ymmp 2,427 バイト)で、二重実装の乖離は無かった。
+- 単体テスト: `YmmpExportTests` 9 件・`YmmpImportTests` 10 件、全て成功。
+- **実 YMM4 での読み込みは未検証**(従来どおり)。理由: 到達可能な Windows 環境が winlinux のみで、Smart App Control 強制モードのため YMM4 を起動できない(判明済み。SAC の変更はしていない)。未検証範囲: YMM4 実機での表示・再生、キャラ音声設定の細部の解釈。
+
+### exo 往復
+
+- `rich.ymproj` を CLI `export-exo` で書き出し(変換 5 件、unsupported 3 件=ぼかし×2・hologram、レポートに理由つき):
+  - バイト列は Shift_JIS で復号でき、CRLF 改行。[exedit] ヘッダは width=1920 / height=1080 / rate=30 / scale=1 / length=60 / audio_rate=48000 / audio_ch=2。
+  - 自前 `ExoParser` での再パース: オブジェクト 5 件全てで start / end(1 始まりフレーム換算)・layer が期待値と一致(5/5)。テキスト本文の UTF-16LE 16 進は「こんにちは」に正しく復号できた。種類ごとのエフェクト構成(画像ファイル+標準描画、動画ファイル+標準描画、音声ファイル+標準再生、テキスト+標準描画)も仕様どおり。
+  - CLI と Core API の出力は同一サイズ(1,044 バイト)。
+- 単体テスト: `PngWavExoExportTests` 8 件、全て成功。
+- **実 AviUtl での読み込みは未検証**(従来どおり)。理由: YMM4 と同じく、到達可能な Windows 環境(winlinux)では Smart App Control 強制モードのため AviUtl を起動できず、他に到達可能な Windows 環境が無い。座標の Y 方向の符号やエフェクト項目の細部は引き続き近似を含む。
