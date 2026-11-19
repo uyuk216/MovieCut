@@ -579,6 +579,16 @@ public struct Clip: Codable, Equatable, Identifiable {
         case "strength": return strengthOrDefault
         case "volume": return volumeOrDefault
         default:
+            if let (kind, axis) = WarpKey.parse(key) {
+                switch kind {
+                case .mesh(let i):
+                    guard let m = meshWarp, m.points.indices.contains(i) else { return 0 }
+                    return axis == .x ? m.points[i].x : m.points[i].y
+                case .pin(let i):
+                    guard let p = puppetWarp, p.pins.indices.contains(i) else { return 0 }
+                    return axis == .x ? p.pins[i].x : p.pins[i].y
+                }
+            }
             if let (i, p) = EffectKey.parse(key), effects.indices.contains(i) { return effects[i].value(p) }
             return 0
         }
@@ -598,7 +608,20 @@ public struct Clip: Codable, Equatable, Identifiable {
         case "strength": strength = v
         case "volume": volume = v
         default:
-            if let (i, p) = EffectKey.parse(key), effects.indices.contains(i) { effects[i].params[p] = v }
+            if let (kind, axis) = WarpKey.parse(key) {
+                switch kind {
+                case .mesh(let i):
+                    if let m = meshWarp, m.points.indices.contains(i) {
+                        let p = m.points[i]
+                        _ = WarpEditing.setMeshPoint(&self, index: i, x: axis == .x ? v : p.x, y: axis == .y ? v : p.y)
+                    }
+                case .pin(let i):
+                    if let pw = puppetWarp, pw.pins.indices.contains(i) {
+                        let pin = pw.pins[i]
+                        _ = WarpEditing.movePin(&self, index: i, x: axis == .x ? v : pin.x, y: axis == .y ? v : pin.y)
+                    }
+                }
+            } else if let (i, p) = EffectKey.parse(key), effects.indices.contains(i) { effects[i].params[p] = v }
         }
     }
 

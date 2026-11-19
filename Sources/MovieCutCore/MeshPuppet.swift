@@ -317,6 +317,8 @@ public enum WarpEditing {
             pts.append(WarpPoint(x: MeshWarp.clampPos(h.x + d.x), y: MeshWarp.clampPos(h.y + d.y)))
         }
         c.meshWarp = MeshWarp(cols: nc, rows: nr, points: pts)
+        // 格子の番号の意味が変わるので、メッシュのキーは引き継がない(形は上の再標本化で引き継ぐ)
+        dropKeys(&c) { if case .mesh = $0 { return true }; return false }
         return true
     }
 
@@ -335,7 +337,11 @@ public enum WarpEditing {
     @discardableResult
     public static func resetMeshPoint(_ c: inout Clip, index: Int) -> Bool {
         guard let m = c.meshWarp, m.points.indices.contains(index) else { return false }
-        return setMeshPoint(&c, index: index, x: m.home(index: index).x, y: m.home(index: index).y)
+        // その点のキーがあると静的な位置を戻しても見た目が戻らないので、キーも外す
+        let hadKeys = c.keyframes[WarpKey.mesh(index, .x)] != nil || c.keyframes[WarpKey.mesh(index, .y)] != nil
+        let moved = setMeshPoint(&c, index: index, x: m.home(index: index).x, y: m.home(index: index).y)
+        if hadKeys { dropKeys(&c) { $0 == .mesh(index) } }
+        return moved || hadKeys
     }
 
     /// メッシュ変形を外す(設定そのものを消す)。
@@ -343,7 +349,22 @@ public enum WarpEditing {
     public static func clearMesh(_ c: inout Clip) -> Bool {
         guard c.meshWarp != nil else { return false }
         c.meshWarp = nil
+        dropKeys(&c) { if case .mesh = $0 { return true }; return false }
         return true
+    }
+
+    /// 条件に合う種類の変形キーを全部外す(空になった項目は消す)。
+    static func dropKeys(_ c: inout Clip, _ match: (WarpKey.Kind) -> Bool) {
+        guard c.hasWarpKeyframes else { return }
+        c.keyframes = c.keyframes.filter { k, v in
+            guard let parsed = WarpKey.parse(k) else { return true }
+            return !match(parsed.kind) && !v.isEmpty
+        }
+    }
+
+    /// 1 本のピンのキーを全部外す。
+    static func dropPinKeys(_ c: inout Clip, index: Int) {
+        dropKeys(&c) { $0 == .pin(index) }
     }
 
     // パペット
@@ -385,6 +406,8 @@ public enum WarpEditing {
         let old = p.pins[index]
         p.pins[index] = PuppetPin(hx: old.hx, hy: old.hy, x: old.x, y: old.y, fixed: fixed)
         c.puppetWarp = p
+        // 固定ピンは位置が元の位置に固定されるので、そのピンのキーは意味を失う
+        if fixed { dropPinKeys(&c, index: index) }
         return true
     }
 
@@ -393,6 +416,16 @@ public enum WarpEditing {
         guard var p = c.puppetWarp, p.pins.indices.contains(index) else { return false }
         p.pins.remove(at: index)
         c.puppetWarp = p
+        // ピンの番号がずれるので、キーも詰める(消したピンのキーは捨てる)
+        if c.hasWarpKeyframes {
+            var out: [String: [Keyframe]] = [:]
+            for (k, v) in c.keyframes {
+                guard let parsed = WarpKey.parse(k), case .pin(let i) = parsed.kind else { out[k] = v; continue }
+                if i == index { continue }
+                out[WarpKey.pin(i > index ? i - 1 : i, parsed.axis)] = v
+            }
+            c.keyframes = out
+        }
         return true
     }
 
@@ -412,7 +445,56 @@ public enum WarpEditing {
     public static func clearPuppet(_ c: inout Clip) -> Bool {
         guard c.puppetWarp != nil else { return false }
         c.puppetWarp = nil
+        dropKeys(&c) { if case .pin = $0 { return true }; return false }
         return true
+    }
+
+    // MARK: キーフレーム対応の書き込み(キーがあれば時刻 t のキー、無ければ静的な値)
+
+    /// 制御点 1 つの 1 座標を書く。その座標にキーがあれば時刻 `t` のキーを更新・追加し、無ければ静的な位置を動かす。
+    @discardableResult
+    public static func setMeshAxisKeyed(_ c: inout Clip, index: Int, axis: WarpKey.Axis, _ v: Double, at t: Double, tolerance tol: Double) -> Bool {
+        guard supports(c), let m = c.meshWarp, m.points.indices.contains(index) else { return false }
+        let key = WarpKey.mesh(index, axis)
+        let before = c
+        if Animation.isAnimated(key, in: c) {
+            KeyframeEditing.setValue(&c, key: key, v, at: t, tolerance: tol)
+        } else {
+            let p = m.points[index]
+            _ = setMeshPoint(&c, index: index, x: axis == .x ? v : p.x, y: axis == .y ? v : p.y)
+        }
+        return c != before
+    }
+
+    /// 制御点 1 つを位置 (x, y) へ動かす(キー対応。座標ごとにキーの有無で書き先が分かれる)。
+    @discardableResult
+    public static func setMeshPointKeyed(_ c: inout Clip, index: Int, x: Double, y: Double, at t: Double, tolerance tol: Double) -> Bool {
+        let a = setMeshAxisKeyed(&c, index: index, axis: .x, x, at: t, tolerance: tol)
+        let b = setMeshAxisKeyed(&c, index: index, axis: .y, y, at: t, tolerance: tol)
+        return a || b
+    }
+
+    /// ピン 1 つの 1 座標を書く(キー対応)。固定ピンは動かせない。
+    @discardableResult
+    public static func movePinAxisKeyed(_ c: inout Clip, index: Int, axis: WarpKey.Axis, _ v: Double, at t: Double, tolerance tol: Double) -> Bool {
+        guard supports(c), let p = c.puppetWarp, p.pins.indices.contains(index), !p.pins[index].fixed else { return false }
+        let key = WarpKey.pin(index, axis)
+        let before = c
+        if Animation.isAnimated(key, in: c) {
+            KeyframeEditing.setValue(&c, key: key, v, at: t, tolerance: tol)
+        } else {
+            let pin = p.pins[index]
+            _ = movePin(&c, index: index, x: axis == .x ? v : pin.x, y: axis == .y ? v : pin.y)
+        }
+        return c != before
+    }
+
+    /// ピン 1 つを位置 (x, y) へ動かす(キー対応)。
+    @discardableResult
+    public static func movePinKeyed(_ c: inout Clip, index: Int, x: Double, y: Double, at t: Double, tolerance tol: Double) -> Bool {
+        let a = movePinAxisKeyed(&c, index: index, axis: .x, x, at: t, tolerance: tol)
+        let b = movePinAxisKeyed(&c, index: index, axis: .y, y, at: t, tolerance: tol)
+        return a || b
     }
 }
 
@@ -476,5 +558,183 @@ public enum WarpRenderer {
             let bot = Double(src[(y1 * w + x0) * 4 + ch]) * (1 - fx) + Double(src[(y1 * w + x1) * 4 + ch]) * fx
             dst[di + ch] = UInt8(min(max((top * (1 - fy) + bot * fy).rounded(), 0), 255))
         }
+    }
+}
+// MARK: - キーフレーム項目名(格子点・ピン)
+
+/// 変形のキーフレーム項目名: `mesh.<番号>.x` / `mesh.<番号>.y` / `pin.<番号>.x` / `pin.<番号>.y`。
+/// 値は制御点・ピンの「現在の位置」の座標(割合・左上原点)で、範囲は `MeshWarp.positionRange`。
+/// 静的な値は `Clip.meshWarp` / `Clip.puppetWarp` が持ち、キーが無い時刻はそちらへ落ちる
+/// (`Clip.staticValue(of:)` / `setStaticValue(_:of:)` がこの名前を解釈する)ので、
+/// キーフレームの無いプロジェクトは従来と完全に同じ保存・描画になる。
+public enum WarpKey {
+    public enum Axis: String, Sendable { case x, y }
+    public enum Kind: Equatable, Sendable { case mesh(Int), pin(Int) }
+
+    public static func mesh(_ index: Int, _ axis: Axis) -> String { "mesh.\(index).\(axis.rawValue)" }
+    public static func pin(_ index: Int, _ axis: Axis) -> String { "pin.\(index).\(axis.rawValue)" }
+    public static func make(_ kind: Kind, _ axis: Axis) -> String {
+        switch kind { case .mesh(let i): return mesh(i, axis); case .pin(let i): return pin(i, axis) }
+    }
+
+    /// 項目名から。変形の項目名でなければ nil。
+    public static func parse(_ key: String) -> (kind: Kind, axis: Axis)? {
+        let parts = key.split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count == 3, let i = Int(parts[1]), i >= 0, let axis = Axis(rawValue: String(parts[2])) else { return nil }
+        switch parts[0] {
+        case "mesh": return (.mesh(i), axis)
+        case "pin": return (.pin(i), axis)
+        default: return nil
+        }
+    }
+
+    public static func isWarpKey(_ key: String) -> Bool { parse(key) != nil }
+}
+
+extension Clip {
+    /// このクリップでキーフレームに載せられる変形の項目名(メッシュの点・パペットのピンの順)。
+    /// 変形が無いクリップでは空(従来の項目名の一覧は変わらない)。
+    public var warpAnimatableKeys: [String] {
+        guard Clip.supportsWarp(type) else { return [] }
+        var out: [String] = []
+        if let m = meshWarp { for i in m.points.indices { out.append(WarpKey.mesh(i, .x)); out.append(WarpKey.mesh(i, .y)) } }
+        if let p = puppetWarp { for i in p.pins.indices { out.append(WarpKey.pin(i, .x)); out.append(WarpKey.pin(i, .y)) } }
+        return out
+    }
+
+    /// 変形の項目名にキーが 1 つでもあるか。
+    public var hasWarpKeyframes: Bool {
+        !keyframes.isEmpty && keyframes.keys.contains { WarpKey.isWarpKey($0) }
+    }
+
+    /// クリップ内の時刻 `t`(頭からの秒)でのメッシュ変形。キーがある座標は補間した値、無い座標は静的な値。
+    public func meshWarp(at t: Double) -> MeshWarp? {
+        guard let m = meshWarp else { return nil }
+        guard hasWarpKeyframes else { return m }
+        var r = m
+        for i in r.points.indices {
+            r.points[i] = WarpPoint(x: Animation.value(of: WarpKey.mesh(i, .x), in: self, at: t),
+                                    y: Animation.value(of: WarpKey.mesh(i, .y), in: self, at: t))
+        }
+        return r.normalized
+    }
+
+    /// クリップ内の時刻 `t` でのパペット変形。固定ピンはキーに関係なく元の位置のまま。
+    public func puppetWarp(at t: Double) -> PuppetWarp? {
+        guard let p = puppetWarp else { return nil }
+        guard hasWarpKeyframes else { return p }
+        var r = p
+        for i in r.pins.indices where !r.pins[i].fixed {
+            r.pins[i] = PuppetPin(hx: r.pins[i].hx, hy: r.pins[i].hy,
+                                  x: Animation.value(of: WarpKey.pin(i, .x), in: self, at: t),
+                                  y: Animation.value(of: WarpKey.pin(i, .y), in: self, at: t),
+                                  fixed: false)
+        }
+        return r.normalized
+    }
+
+    /// 時刻 `t` での変形が効いているか。キーが無いクリップでは `hasActiveWarp` と同じ。
+    public func hasActiveWarp(at t: Double) -> Bool {
+        guard hasWarpKeyframes else { return hasActiveWarp }
+        return (meshWarp(at: t).map { !$0.isIdentity } ?? false) || (puppetWarp(at: t).map { !$0.isIdentity } ?? false)
+    }
+
+    /// 時刻 `t` での合成変位(割合)。キーが無いクリップでは `warpDisplacement(u:v:)` と同じ。
+    public func warpDisplacement(u: Double, v: Double, at t: Double) -> WarpPoint {
+        guard hasWarpKeyframes else { return warpDisplacement(u: u, v: v) }
+        var d = WarpPoint(x: 0, y: 0)
+        if let m = meshWarp(at: t), !m.isIdentity { d = d + m.displacement(u: u, v: v) }
+        if let p = puppetWarp(at: t), !p.isIdentity { d = d + p.displacement(u: u, v: v) }
+        return WarpPoint(x: min(max(d.x, -1.5), 1.5), y: min(max(d.y, -1.5), 1.5))
+    }
+
+    /// 時刻 `t` での一番大きな合成変位(割合)。描画の作業範囲の余白の目安。
+    public func warpMaxDisplacement(at t: Double) -> Double {
+        guard hasWarpKeyframes else { return warpMaxDisplacement }
+        return max(meshWarp(at: t)?.maxDisplacement ?? 0, puppetWarp(at: t)?.maxDisplacement ?? 0)
+    }
+
+    /// 時刻 `t` の変形を静的な値へ焼き込んだ複製(変形のキーは外してある)。
+    /// `WarpRenderer` のような静的な入り口へ渡すためのもの。キーが無ければ自分自身。
+    public func warpResolved(at t: Double) -> Clip {
+        guard hasWarpKeyframes else { return self }
+        var c = self
+        c.meshWarp = meshWarp(at: t)
+        c.puppetWarp = puppetWarp(at: t)
+        c.keyframes = c.keyframes.filter { !WarpKey.isWarpKey($0.key) }
+        return c
+    }
+}
+
+// MARK: - プレビューのドラッグ編集(当たり判定と座標変換)
+
+/// プレビューに出す変形の取っ手 1 つ。`position` は時刻 `t` で評価した現在の位置、`home` は元の位置。
+public struct WarpHandle: Equatable, Sendable {
+    public var kind: WarpKey.Kind
+    public var position: WarpPoint
+    public var home: WarpPoint
+    public var fixed: Bool
+    public init(kind: WarpKey.Kind, position: WarpPoint, home: WarpPoint, fixed: Bool) {
+        self.kind = kind; self.position = position; self.home = home; self.fixed = fixed
+    }
+}
+
+extension Clip {
+    /// 時刻 `t` での取っ手の一覧(メッシュの制御点 → パペットのピンの順)。変形が無ければ空。
+    public func warpHandles(at t: Double) -> [WarpHandle] {
+        var out: [WarpHandle] = []
+        if let m = meshWarp(at: t) {
+            for (i, p) in m.points.enumerated() { out.append(WarpHandle(kind: .mesh(i), position: p, home: m.home(index: i), fixed: false)) }
+        }
+        if let pw = puppetWarp(at: t) {
+            for (i, pin) in pw.pins.enumerated() { out.append(WarpHandle(kind: .pin(i), position: pin.current, home: pin.home, fixed: pin.fixed)) }
+        }
+        return out
+    }
+}
+
+/// プレビュー上の変形ドラッグの純粋な計算(`DirectManipulation` と同じ流儀)。
+/// 座標変換は選択枠(`TransformBox`: 回転を含むクリップの矩形)を基準にする。回転したクリップでは
+/// 描画側の基準矩形(回転後の外接矩形)とのずれが残る(既知の留保。docs 参照)。
+public enum WarpDrag {
+    /// 変形の割合座標 → キャンバスの画素(選択枠の中での位置)。
+    public static func canvasPoint(_ p: WarpPoint, box: TransformBox) -> CGPoint {
+        let dx = (p.x - 0.5) * box.width, dy = (p.y - 0.5) * box.height
+        let a = box.rotation * .pi / 180
+        return CGPoint(x: box.center.x + dx * cos(a) - dy * sin(a),
+                       y: box.center.y + dx * sin(a) + dy * cos(a))
+    }
+
+    /// キャンバスの画素 → 変形の割合座標(選択枠の中での位置)。範囲外もそのまま返す(抑えるのは書き込み側)。
+    public static func warpPoint(canvas p: CGPoint, box: TransformBox) -> WarpPoint {
+        guard box.width > 0, box.height > 0 else { return WarpPoint(x: 0.5, y: 0.5) }
+        let a = -box.rotation * .pi / 180
+        let dx = p.x - box.center.x, dy = p.y - box.center.y
+        let lx = dx * cos(a) - dy * sin(a), ly = dx * sin(a) + dy * cos(a)
+        return WarpPoint(x: lx / box.width + 0.5, y: ly / box.height + 0.5)
+    }
+
+    /// 点 `p`(キャンバスの画素)に一番近い動かせる取っ手。固定ピンには当たらない。`radius` はキャンバスの画素。
+    public static func hitTest(_ p: CGPoint, handles: [WarpHandle], box: TransformBox, radius: Double) -> WarpHandle? {
+        var best: WarpHandle?
+        var bestD = Double.infinity
+        for h in handles where !h.fixed {
+            let c = canvasPoint(h.position, box: box)
+            let d = hypot(p.x - c.x, p.y - c.y)
+            if d <= radius, d < bestD { best = h; bestD = d }
+        }
+        return best
+    }
+
+    /// ドラッグ開始時のクリップ `base` に、取っ手をキャンバスの画素 `p` まで動かした変形を当てる。
+    /// その座標にキーがあれば時刻 `t` のキーを書き、無ければ静的な値を書く(`DirectManipulation.apply` と同じ約束)。
+    public static func apply(_ kind: WarpKey.Kind, to base: Clip, at t: Double, tolerance tol: Double, canvas p: CGPoint, box: TransformBox) -> Clip {
+        var c = base
+        let wp = warpPoint(canvas: p, box: box)
+        switch kind {
+        case .mesh(let i): _ = WarpEditing.setMeshPointKeyed(&c, index: i, x: wp.x, y: wp.y, at: t, tolerance: tol)
+        case .pin(let i): _ = WarpEditing.movePinKeyed(&c, index: i, x: wp.x, y: wp.y, at: t, tolerance: tol)
+        }
+        return c
     }
 }

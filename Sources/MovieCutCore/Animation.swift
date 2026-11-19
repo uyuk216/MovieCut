@@ -219,17 +219,24 @@ public enum Animation {
     public static let volumeKey = "volume"
 
     /// そのクリップの種類で動かせる項目(クリップごとのぼかし "blur" を持つ画像・動画・文字は blur も)。
+    /// メッシュ/パペット変形があるクリップは、格子点・ピンの項目(`WarpKey`)も含む(音量の前に入れる)。
     public static func keys(for clip: Clip) -> [String] {
+        var base: [String]
         switch clip.type {
-        case .blur: return blurRegionKeys
-        case .visualizer: return ["x", "y", "w", "h"]
-        case .shape: return ["x", "y", "w", "h", "rotation", "opacity"]
-        case .adjustment: return ["opacity"] + clip.effectKeys
-        case .video: return transformKeys + ["blur"] + clip.effectKeys + [volumeKey]
-        case .image, .text, .compound, .tachie: return transformKeys + ["blur"] + clip.effectKeys
-        case .audio, .voice: return clip.isFreeze ? [] : [volumeKey]
-        default: return []
+        case .blur: base = blurRegionKeys
+        case .visualizer: base = ["x", "y", "w", "h"]
+        case .shape: base = ["x", "y", "w", "h", "rotation", "opacity"]
+        case .adjustment: base = ["opacity"] + clip.effectKeys
+        case .video: base = transformKeys + ["blur"] + clip.effectKeys + [volumeKey]
+        case .image, .text, .compound, .tachie: base = transformKeys + ["blur"] + clip.effectKeys
+        case .audio, .voice: base = clip.isFreeze ? [] : [volumeKey]
+        default: base = []
         }
+        let wk = clip.warpAnimatableKeys
+        if !wk.isEmpty {
+            if let vi = base.firstIndex(of: volumeKey) { base.insert(contentsOf: wk, at: vi) } else { base.append(contentsOf: wk) }
+        }
+        return base
     }
 
     /// キー列を時刻順にし、同じ時刻(1e-9 以内)は後のものを残す。
@@ -279,6 +286,7 @@ public enum Animation {
 
     /// 項目ごとの値の範囲(キーの値・直接操作で使う。x, y は画面の外へ出す動きのため広い)。
     public static func range(of key: String, type: ClipType) -> ClosedRange<Double> {
+        if WarpKey.parse(key) != nil { return MeshWarp.positionRange }
         switch key {
         case "x", "y": return type == .blur ? 0...1 : -2...3
         case "w", "h": return 0...1
@@ -313,6 +321,13 @@ public enum Animation {
 
     /// 画面に出す名前。
     public static func label(of key: String) -> String {
+        if let (kind, axis) = WarpKey.parse(key) {
+            let a = axis == .x ? "横" : "縦"
+            switch kind {
+            case .mesh(let i): return "メッシュ点\(i + 1) \(a)"
+            case .pin(let i): return "ピン\(i + 1) \(a)"
+            }
+        }
         switch key {
         case "x": return "横位置"
         case "y": return "縦位置"
