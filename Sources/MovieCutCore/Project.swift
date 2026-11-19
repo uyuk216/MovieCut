@@ -41,6 +41,12 @@ public struct Project: Codable, Equatable {
     public var proxyLinks: [String: String] = [:]
     /// 取り込んだ素材のパス(順番どおり)。クリップを消しても残り、「未使用の素材」で整理する。空のときは書かない。
     public var mediaPool: [String] = []
+    /// 素材のメタデータ(キーは素材の参照文字列 Clip.src / mediaPool の値)。キーワード・評価・メモ・ラベル色を持つ。
+    /// 空のとき・中身がすべて空のときは書かない(使っていないプロジェクトは従来と完全一致)。定義は MediaMetadata.swift。
+    public var mediaMetadata: [String: MediaMetadata] = [:]
+    /// スマートコレクション(名前付きの絞り込み条件)。条件に合う素材を自動で集めるビューで、素材そのものは持たない。
+    /// 空のときは書かない(使っていないプロジェクトは従来と完全一致)。
+    public var smartCollections: [SmartCollection] = []
     /// トラックターゲット: 新しく足すクリップの行き先のレイヤー(`Track.id`)。1 つだけ。設定したときだけファイルに書く。
     public var targetTrackId: String? = nil
     /// マルチカメラのグループ(使ったときだけ。空のときはファイルに書かない)。切り替えた結果は普通のクリップで、ここには角度と同期のずれだけを持つ。
@@ -72,7 +78,7 @@ public struct Project: Codable, Equatable {
     /// 知らないキー(保持して書き戻す)
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["formatVersion", "scriptText", "width", "height", "fps", "bg", "codec", "voicevoxUrl", "aquestalkCommand", "characters", "tracks", "markers", "rangeIn", "rangeOut", "mediaHints", "mediaFingerprints", "proxyLinks", "mediaPool", "targetTrackId", "multicams", "tachies", "readingDictionary", "subtitleY", "scenes", "camera"]
+    static let knownKeys: Set<String> = ["formatVersion", "scriptText", "width", "height", "fps", "bg", "codec", "voicevoxUrl", "aquestalkCommand", "characters", "tracks", "markers", "rangeIn", "rangeOut", "mediaHints", "mediaFingerprints", "proxyLinks", "mediaPool", "mediaMetadata", "smartCollections", "targetTrackId", "multicams", "tachies", "readingDictionary", "subtitleY", "scenes", "camera"]
 
     public init() {}
 
@@ -97,6 +103,8 @@ public struct Project: Codable, Equatable {
         mediaFingerprints = l.value("mediaFingerprints") ?? [:]
         proxyLinks = l.value("proxyLinks") ?? [:]
         mediaPool = l.value("mediaPool") ?? []
+        mediaMetadata = (l.value("mediaMetadata") ?? [:]).filter { !$0.value.isEmpty }
+        smartCollections = l.value("smartCollections") ?? []
         targetTrackId = l.string("targetTrackId")
         multicams = l.value("multicams") ?? []
         tachies = l.value("tachies") ?? []
@@ -112,6 +120,8 @@ public struct Project: Codable, Equatable {
         if multicams.isEmpty, let raw: JSONValue = l.value("multicams"), raw != .array([]) { extra["multicams"] = raw }
         if tachies.isEmpty, let raw: JSONValue = l.value("tachies"), raw != .array([]) { extra["tachies"] = raw }
         if camera == nil, let raw: JSONValue = l.value("camera") { extra["camera"] = raw }
+        if mediaMetadata.isEmpty, let raw: JSONValue = l.value("mediaMetadata"), raw != .object([:]) { extra["mediaMetadata"] = raw }
+        if smartCollections.isEmpty, let raw: JSONValue = l.value("smartCollections"), raw != .array([]) { extra["smartCollections"] = raw }
         if readingDictionary.isEmpty, let raw: JSONValue = l.value("readingDictionary"), raw != .array([]) { extra["readingDictionary"] = raw }
         if scenes.isEmpty, let raw: JSONValue = l.value("scenes"), raw != .array([]) { extra["scenes"] = raw }
         if scriptText.isEmpty, let raw: JSONValue = l.value("scriptText"), raw != .string("") { extra["scriptText"] = raw }
@@ -139,6 +149,9 @@ public struct Project: Codable, Equatable {
         if !mediaFingerprints.isEmpty { try c.encode(mediaFingerprints, forKey: AnyKey("mediaFingerprints")) }
         if !proxyLinks.isEmpty { try c.encode(proxyLinks, forKey: AnyKey("proxyLinks")) }
         if !mediaPool.isEmpty { try c.encode(mediaPool, forKey: AnyKey("mediaPool")) }
+        let effectiveMediaMetadata = mediaMetadata.filter { !$0.value.isEmpty }
+        if !effectiveMediaMetadata.isEmpty { try c.encode(effectiveMediaMetadata, forKey: AnyKey("mediaMetadata")) }
+        if !smartCollections.isEmpty { try c.encode(smartCollections, forKey: AnyKey("smartCollections")) }
         try c.encodeIfPresent(targetTrackId, forKey: AnyKey("targetTrackId"))
         if !multicams.isEmpty { try c.encode(multicams, forKey: AnyKey("multicams")) }
         if !tachies.isEmpty { try c.encode(tachies, forKey: AnyKey("tachies")) }

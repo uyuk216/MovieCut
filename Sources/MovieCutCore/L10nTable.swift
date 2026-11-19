@@ -669,6 +669,16 @@ enum L10nTable {
         "AIで画像を生成(API)…": "Generate Image via API…",
         "生成メディア(API)の設定…": "Generative Media (API) Settings…",
         "クラウドの画像生成API": "Cloud Image Generation API",
-        "未設定のため使えません": "Not configured yet"
+        "未設定のため使えません": "Not configured yet",
+        "素材のメタデータ": "Media Metadata",
+        "キーワード": "Keywords",
+        "評価": "Rating",
+        "ラベル": "Label",
+        "コレクション": "Collection",
+        "今の条件でコレクションを追加": "Add Collection with Current Filters",
+        "コレクションを削除": "Delete Collection",
+        "メタデータを保存": "Save Metadata",
+        "メタデータを消去": "Clear Metadata",
+        "メモ": "Note",
     ]
 }
