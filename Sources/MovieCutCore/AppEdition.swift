@@ -65,6 +65,8 @@ public struct DataLocations: Sendable {
     public var recovery: URL { root.appendingPathComponent("Recovery", isDirectory: true) }
     public var qrCodes: URL { root.appendingPathComponent("QRCodes", isDirectory: true) }
     public var aiImages: URL { root.appendingPathComponent("AIImages", isDirectory: true) }
+    /// 生成メディア(API)で作った動画・音声・音楽の置き場所(画像は従来どおり `aiImages`)。
+    public var generatedMedia: URL { root.appendingPathComponent("GeneratedMedia", isDirectory: true) }
     public var psdCache: URL { root.appendingPathComponent("PSDCache", isDirectory: true) }
     /// 入力形式の拡充(SVG の PNG 化・MIDI の WAV 化・連番画像の APNG 化)のキャッシュ。
     public var inputCache: URL { root.appendingPathComponent("InputCache", isDirectory: true) }
@@ -78,7 +80,7 @@ public struct DataLocations: Sendable {
 
     /// 版が持つフォルダ・ファイルの全部(重なり検査・説明用)。
     public var allPaths: [URL] {
-        [fonts, proxies, voices, templates, exportPresets, recovery, qrCodes, aiImages, psdCache, cutouts, versions, builtinMedia, inputCache, transcriptCache]
+        [fonts, proxies, voices, templates, exportPresets, recovery, qrCodes, aiImages, generatedMedia, psdCache, cutouts, versions, builtinMedia, inputCache, transcriptCache]
     }
 
     /// 設定(UserDefaults)の置き場。personal は従来の `.standard`。
