@@ -402,6 +402,22 @@ enum L10nTable {
         "同じセリフのテイクが複数あると、ここで聞き比べられます。": "When there are multiple takes of the same line, you can compare them here.",
         "未使用の素材はありません": "No unused media",
         "すべての素材がクリップで使われています。": "All media is used in clips.",
-        "新規で作るか、「開く…」で既存のプロジェクトを選べます。": "Create a new project, or choose an existing one with \"Open…\"."
+        "新規で作るか、「開く…」で既存のプロジェクトを選べます。": "Create a new project, or choose an existing one with \"Open…\".",
+        "シーンがありません": "No scenes",
+        "下の欄から作成できます。シーンは名前付きの独立タイムラインで、タイムラインへ何箇所でも配置して再利用できます。": "Create one from the field below. A scene is a named, independent timeline that you can place on the timeline in multiple places and reuse.",
+        "キューは空です": "The queue is empty",
+        "出力 ▸ 書き出しキューに追加… で、今の設定の MP4 を積めます。": "Add an MP4 with the current settings via Output ▸ Add to Export Queue…",
+        "クリップが選ばれていません": "No clip selected",
+        "クリップを選ぶと設定が出ます。": "Select a clip to see its settings.",
+        "パネルがありません": "No panels",
+        "別ウインドウに出しているか、閉じています。表示メニューの「パネル」から開けます。": "Panels are in separate windows or closed. Open them from \"Panels\" in the View menu.",
+        "注記はありません": "No notes",
+        "インスペクタの「注記」に書くと、ここに出ます。": "Notes written in \"Note\" in the inspector appear here.",
+        "立ち絵素材がありません": "No character assets",
+        "パーツのフォルダか PSD を取り込んでください。": "Import a parts folder or a PSD.",
+        "フォルダが選ばれていません": "No folder selected",
+        "動画・音声・画像を入れたフォルダを選ぶと、中の素材がここに並びます。": "Choose a folder containing video, audio, and images, and its media will appear here.",
+        "素材がありません": "No media",
+        "このフォルダに対象の素材(動画・音声・画像)はありません。": "This folder has no supported media (video, audio, or images)."
     ]
 }
