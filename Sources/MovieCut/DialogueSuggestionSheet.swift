@@ -26,7 +26,7 @@ struct DialogueSuggestionSheet: View {
                         .foregroundStyle(.orange)
                     Button("AIテキスト生成の設定…") { TextGenerationDialogs.editSettings() }
                 }
-                .font(.system(size: 11))
+                .font(MCDesign.Font.subheadline)
                 .fixedSize(horizontal: false, vertical: true)
             }
             HStack(spacing: 8) {
@@ -52,17 +52,17 @@ struct DialogueSuggestionSheet: View {
             }
             if let list = suggestions {
                 if list.isEmpty {
-                    Text("案はまだありません").foregroundStyle(.secondary)
+                    InspectorGuideCard(symbol: "text.bubble", heading: "案はまだありません", message: "テーマを変えて「セリフ案を作る」を押してください。")
                 } else {
                     Text("取り込む案にチェックを入れてください(\(selected.count) 件選択中)")
-                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                        .font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary)
                     List {
                         ForEach(Array(list.enumerated()), id: \.offset) { i, s in
                             Toggle(isOn: Binding(get: { selected.contains(i) }, set: { on in
                                 if on { selected.insert(i) } else { selected.remove(i) }
                             })) {
                                 HStack(spacing: 8) {
-                                    Text(s.characterName ?? "—").font(.system(size: 11)).foregroundStyle(.secondary).frame(width: 80, alignment: .leading)
+                                    Text(s.characterName ?? "—").font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary).frame(width: 80, alignment: .leading)
                                     Text(s.text)
                                 }
                             }
@@ -73,7 +73,7 @@ struct DialogueSuggestionSheet: View {
                 }
             } else {
                 Text("テーマを入れて「セリフ案を作る」を押すと、設定した生成サービスに問い合わせて案を出します。今の台本の末尾も、続きの参考として一緒に送ります。")
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
             }

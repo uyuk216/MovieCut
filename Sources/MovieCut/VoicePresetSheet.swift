@@ -46,18 +46,18 @@ struct VoicePresetSheet: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("おすすめ音声設定").font(.headline)
             Text("声の設定(エンジン・話者・速さ・高さ・抑揚)だけを、選んだキャラに入れます。名前や字幕の色は変わりません。この画面を開くと、一覧をネット(HTTPS)から一度だけ取得します。送るのは取得のリクエストだけです。")
-                .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                .font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary).fixedSize(horizontal: false, vertical: true)
             HStack {
                 Button { Task { await loadFromNet() } } label: { Text("ネットから取得") }.disabled(loading)
                 Button("ファイルから読み込み…") { loadFromFile() }.disabled(loading)
-                if loading { ProgressView().controlSize(.small); Text(L10n.t("取得中…")).font(.system(size: 11)).foregroundStyle(.secondary) }
+                if loading { ProgressView().controlSize(.small); Text(L10n.t("取得中…")).font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary) }
             }
-            if let m = message { Text(m).font(.system(size: 12)).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true) }
+            if let m = message { Text(m).font(MCDesign.Font.callout).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true) }
             List(presets) { p in
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(p.name)
-                        if let n = p.note { Text(n).font(.system(size: 11)).foregroundStyle(.secondary) }
+                        if let n = p.note { Text(n).font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary) }
                     }
                     Spacer()
                     Button("適用") { model.applyVoicePreset(p, charId: charId); dismiss() }.disabled(model.isLocked)

@@ -41,7 +41,7 @@ struct FindReplaceSheet: View {
                 .font(.callout)
                 .foregroundStyle(count == 0 ? .secondary : .primary)
             Text("読み上げ文が変わったセリフは、音声を作り直します(字幕文と台本は作り直しません)。すべて元に戻すのは 1 回です。")
-                .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                .font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary).fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()
                 Button("閉じる") { model.showFindSheet = false }

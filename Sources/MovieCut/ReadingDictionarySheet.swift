@@ -21,32 +21,37 @@ struct ReadingDictionarySheet: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("読み辞書").font(.headline)
             Text("台本から声を作るとき、表記を読み(かな)に置き換えて読み上げます。字幕は元の表記のままです。あとから辞書を変えても、作り済みの音声は変わりません。")
-                .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            List {
-                ForEach($rows) { $row in
-                    HStack(spacing: 8) {
-                        TextField("表記(例: 相棒)", text: $row.word).frame(width: 150)
-                        Text("→").foregroundStyle(.secondary)
-                        TextField("読み(例: あいぼう)", text: $row.reading)
-                        Button {
-                            rows.removeAll { $0.id == row.id }
-                        } label: { Image(systemName: "minus.circle") }
-                        .buttonStyle(.plain).foregroundStyle(.secondary)
-                        .help("この行を消す")
+                .font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary).fixedSize(horizontal: false, vertical: true)
+            if rows.isEmpty {
+                InspectorGuideCard(symbol: "book.closed", heading: "辞書に登録された語はありません", message: "「行を追加」か、下のテキスト取り込みで読みを登録します。")
+                    .frame(minHeight: 160)
+            } else {
+                List {
+                    ForEach($rows) { $row in
+                        HStack(spacing: 8) {
+                            TextField("表記(例: 相棒)", text: $row.word).frame(width: 150)
+                            Text("→").foregroundStyle(MCDesign.Color.textSecondary)
+                            TextField("読み(例: あいぼう)", text: $row.reading)
+                            Button {
+                                rows.removeAll { $0.id == row.id }
+                            } label: { Image(systemName: "minus.circle") }
+                            .buttonStyle(.plain).foregroundStyle(.secondary)
+                            .help("この行を消す")
+                        }
                     }
                 }
+                .frame(minHeight: 160)
             }
-            .frame(minHeight: 160)
             HStack(spacing: 8) {
                 Button("行を追加") { rows.append(Row()) }
                 Spacer()
                 Text("\(rows.filter { !$0.word.isEmpty && !$0.reading.isEmpty }.count) 件")
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary)
             }
             GroupBox {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("テキストから取り込む(1 行 1 件:「表記,読み」「表記=読み」)").font(.system(size: 11)).foregroundStyle(.secondary)
-                    TextEditor(text: $importText).font(.system(size: 12, design: .monospaced)).frame(height: 54)
+                    Text("テキストから取り込む(1 行 1 件:「表記,読み」「表記=読み」)").font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary)
+                    TextEditor(text: $importText).font(MCDesign.Font.monospaced(12)).frame(height: 54)
                     HStack {
                         Spacer()
                         Button("取り込む") { importFromText() }.disabled(importText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)

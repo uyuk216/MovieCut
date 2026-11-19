@@ -94,7 +94,7 @@ struct ShortcutSheetView: View {
             if let t = captureTarget {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
-                    Text("「\(t.title)」のキーを押してください…").font(.system(size: 12, weight: .semibold))
+                    Text("「\(t.title)」のキーを押してください…").font(MCDesign.Font.calloutSemibold)
                     Spacer()
                     Button("やめる") { endCapture() }
                 }

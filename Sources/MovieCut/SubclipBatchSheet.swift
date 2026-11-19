@@ -11,11 +11,11 @@ struct SubclipBatchSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("サブクリップを一括作成").font(.title3.bold())
+            Text("サブクリップを一括作成").font(MCDesign.Font.title3.bold())
             Text("1 行に「素材 範囲」を書きます。例: intro.mov 0:05-0:12, 0:30-0:41。範囲だけの行は直前の素材の続き。# で始まる行は注釈。")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             TextEditor(text: $text)
-                .font(.system(size: 13, design: .monospaced))
+                .font(MCDesign.Font.monospaced(13))
                 .frame(minHeight: 160)
                 .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.secondary.opacity(0.4)))
             summary

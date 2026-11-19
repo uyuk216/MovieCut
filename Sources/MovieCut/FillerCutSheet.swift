@@ -19,7 +19,7 @@ struct FillerCutSheet: View {
             Group {
                 if let f = found {
                     if f.isEmpty {
-                        Text("フィラー語は見つかりませんでした。")
+                        InspectorGuideCard(symbol: "magnifyingglass", heading: "フィラー語は見つかりませんでした", message: "カットできる語はありません。")
                     } else {
                         Text("\(f.count) 件見つかりました。カットするものにチェックを入れてください。")
                         ScrollView {
@@ -46,7 +46,7 @@ struct FillerCutSheet: View {
             .font(.callout)
             Toggle("後ろを詰める", isOn: $ripple).toggleStyle(.checkbox)
             Text("「あの」「その」は普通の言葉としても使うので、チェックを確かめてからカットしてください。")
-                .font(.system(size: 11)).foregroundStyle(.secondary)
+                .font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary)
             HStack {
                 Spacer()
                 Button("キャンセル") { model.showFillerSheet = false }

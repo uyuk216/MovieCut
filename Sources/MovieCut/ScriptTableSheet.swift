@@ -47,16 +47,16 @@ struct ScriptTableSheet: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("台本を編集").font(.headline)
             Text("ボイスクリップのセリフ一覧です。キャラ・セリフ・字幕・表情を直して「保存」でまとめて反映します(1 回の Undo)。セリフの文字を変えても音声は作り直されません。「音声の作り直し」で新しいセリフの声になります。")
-                .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                .font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary).fixedSize(horizontal: false, vertical: true)
             if rows.isEmpty {
-                Text("ボイスクリップがありません").foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, minHeight: 160)
+                InspectorGuideCard(symbol: "waveform", heading: "ボイスクリップがありません", message: "台本から声を作ると、ここにセリフの一覧が出ます。")
+                    .frame(minHeight: 160)
             } else {
                 List {
                     ForEach($rows) { $row in
                         HStack(spacing: 8) {
-                            Text(Self.time(row.start)).font(.system(size: 11, design: .monospaced))
-                                .foregroundStyle(.secondary).frame(width: 44, alignment: .trailing)
+                            Text(Self.time(row.start)).font(MCDesign.Font.monospaced(11))
+                                .foregroundStyle(MCDesign.Color.textSecondary).frame(width: 44, alignment: .trailing)
                             Picker("", selection: $row.characterId) {
                                 Text("キャラなし").tag(String?.none)
                                 ForEach(model.project.characters) { ch in
@@ -68,7 +68,7 @@ struct ScriptTableSheet: View {
                             TextField("字幕(空 = セリフと同じ)", text: $row.subtitle).frame(width: 170)
                                 .disabled(row.noSubtitle)
                             Toggle("字幕なし", isOn: $row.noSubtitle).toggleStyle(.checkbox)
-                                .font(.system(size: 11)).frame(width: 76)
+                                .font(MCDesign.Font.subheadline).frame(width: 76)
                             TextField("表情", text: $row.expression).frame(width: 76)
                         }
                     }
@@ -76,7 +76,7 @@ struct ScriptTableSheet: View {
                 .frame(minHeight: 260)
             }
             HStack {
-                Text("\(rows.count) 行").font(.system(size: 11)).foregroundStyle(.secondary)
+                Text("\(rows.count) 行").font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary)
                 Button("AIでセリフ案…") { model.openDialogueSuggestionsFromScriptTable() }
                 Spacer()
                 Button("キャンセル") { dismiss() }.keyboardShortcut(.cancelAction)

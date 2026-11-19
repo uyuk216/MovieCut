@@ -11,8 +11,7 @@ struct TachieAddSheet: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("立ち絵を追加").font(.headline)
             if model.project.tachies.isEmpty {
-                Text("立ち絵素材がありません。パーツのフォルダか PSD を取り込んでください。")
-                    .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                InspectorGuideCard(symbol: "person.crop.rectangle", heading: "立ち絵素材がありません", message: "パーツのフォルダか PSD を取り込んでください。")
             } else {
                 Text("置く立ち絵素材を選びます。クリップは再生位置（\(timecode(model.currentTime))）に、トラックターゲットか空いているレイヤーへ置かれます。")
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
@@ -60,7 +59,7 @@ struct TachieListSection: View {
                 Menu {
                     Button("フォルダから取り込む…") { model.chooseAndImportRigFolder() }
                     Button("PSDから取り込む…") { model.chooseAndImportRigPSD() }
-                } label: { Text("＋") }
+                } label: { Image(systemName: "plus") }
                     .menuStyle(.borderlessButton).fixedSize()
                     .disabled(model.isLocked)
                     .help("立ち絵素材を追加（パーツのフォルダ・PSD）")
@@ -108,9 +107,9 @@ struct RigGroupSheet: View {
                         if on { model.rigGroupPlan?.selected.insert(i) } else { model.rigGroupPlan?.selected.remove(i) }
                     })) {
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(g.name).font(.system(size: 13, weight: .semibold))
+                            Text(g.name).font(MCDesign.Font.headline)
                             Text("\(g.width)×\(g.height) ・ 画像 \(g.imageCount) 枚 ・ " + g.report.rig.slots.map { "\($0.name) \($0.parts.count)" }.joined(separator: "・"))
-                                .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                                .font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary).fixedSize(horizontal: false, vertical: true)
                         }
                     }
                 }

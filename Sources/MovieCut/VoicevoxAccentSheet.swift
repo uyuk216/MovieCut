@@ -19,17 +19,17 @@ struct VoicevoxAccentSheet: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("アクセント編集").font(.headline)
             Text("読み上げ文: \(bodyText)")
-                .font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(2)
+                .font(MCDesign.Font.callout).foregroundStyle(MCDesign.Color.textSecondary).lineLimit(2)
             Text("モーラ(かな)を押すと、そこで音が下がる位置(核)になります。もう一度押すと平板に戻ります。")
-                .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                .font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary).fixedSize(horizontal: false, vertical: true)
             if loading {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small)
-                    Text("VOICEVOX から取得しています…").font(.system(size: 11)).foregroundStyle(.secondary)
+                    Text("VOICEVOX から取得しています…").font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary)
                 }
             }
             if let errorText {
-                Text(errorText).font(.system(size: 11)).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
+                Text(errorText).font(MCDesign.Font.subheadline).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
             }
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
@@ -43,7 +43,7 @@ struct VoicevoxAccentSheet: View {
                 Button("再取得") { Task { await fetch() } }
                     .disabled(loading || model.isLocked)
                 Spacer()
-                Text("\(phrases.count) 句").font(.system(size: 11)).foregroundStyle(.secondary)
+                Text("\(phrases.count) 句").font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary)
             }
             HStack {
                 if clip?.voicevoxAccent != nil {
@@ -78,7 +78,7 @@ struct VoicevoxAccentSheet: View {
                         setAccent(p.accent == m + 1 ? 0 : m + 1, at: i)
                     } label: {
                         Text(p.moras[m].text)
-                            .font(.system(size: 13))
+                            .font(MCDesign.Font.body)
                             .padding(.horizontal, 6).padding(.vertical, 3)
                             .background(RoundedRectangle(cornerRadius: 4)
                                 .fill(p.accent == m + 1 ? Color.accentColor.opacity(0.35) : Color.secondary.opacity(0.12)))
@@ -88,11 +88,11 @@ struct VoicevoxAccentSheet: View {
                 }
             }
             HStack(spacing: 8) {
-                Text("核位置 \(p.accent)").font(.system(size: 11)).foregroundStyle(.secondary).monospacedDigit()
+                Text("核位置 \(p.accent)").font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary).monospacedDigit()
                 Stepper("", value: Binding(get: { p.accent }, set: { setAccent($0, at: i) }), in: 0...max(p.moras.count, 0))
                     .labelsHidden()
                 if p.accent == 0 {
-                    Text("平板").font(.system(size: 11)).foregroundStyle(.secondary)
+                    Text("平板").font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary)
                 }
             }
         }
