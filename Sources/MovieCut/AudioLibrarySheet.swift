@@ -63,13 +63,45 @@ struct AudioLibrarySheet: View {
     @State private var gridMode = false
     @State private var sort: MediaBrowser.SortKey = .name
     @State private var selectedId: String?
+    /// 素材メタデータの絞り込み(キーワード・評価の下限・ラベル)。
+    @State private var filterKeyword = ""
+    @State private var filterMinRating: Int = 0
+    @State private var filterLabel: String = ""
+    /// 選択中のスマートコレクションの id(空は手入力の条件)。
+    @State private var collectionId: String = ""
+    @State private var newCollectionName = ""
+    /// メタデータ編集欄の作業コピー(「保存」で Undo 1 回にまとめて反映する)。評価は -1 が未評価。
+    @State private var editKeywords = ""
+    @State private var editRating: Int = -1
+    @State private var editNote = ""
+    @State private var editLabel: String = ""
     /// 起点フォルダからの相対パス("" は起点そのもの)。サブフォルダ移動用(X-2)。
     @State private var subpath: String = ""
     @State private var subfolders: [MediaBrowser.FolderInfo] = []
     @State private var probeTask: Task<Void, Never>?
     @StateObject private var preview = AudioPreviewPlayer()
 
-    private var shown: [MediaBrowser.Item] { MediaBrowser.filter(items, kind: kind, query: query, sort: sort) }
+    /// 絞り込み条件。検索語は自由文として、名前だけでなくキーワード・メモにも当てる。
+    /// スマートコレクションを選んでいるときは、その条件に検索語を AND で重ねる。
+    private var criteria: MediaFilterCriteria {
+        var c: MediaFilterCriteria
+        if let saved = model.project.smartCollections.first(where: { $0.id == collectionId }) {
+            c = saved.criteria
+        } else {
+            c = MediaFilterCriteria()
+            let kw = filterKeyword.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !kw.isEmpty { c.keywords = [kw] }
+            if filterMinRating > 0 { c.minRating = filterMinRating }
+            if !filterLabel.isEmpty { c.label = filterLabel }
+        }
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !q.isEmpty { c.text = (c.text + " " + q).trimmingCharacters(in: .whitespaces) }
+        return c
+    }
+
+    private var shown: [MediaBrowser.Item] {
+        MediaBrowser.filter(items, kind: kind, query: "", sort: sort, metadata: model.project.mediaMetadata, criteria: criteria)
+    }
 
     /// いま開いているフォルダ(起点 + subpath)。
     private var currentFolder: URL? {
@@ -127,6 +159,9 @@ struct AudioLibrarySheet: View {
                     }
                     .pickerStyle(.segmented).labelsHidden().frame(width: 80)
                 }
+            }
+            if folder != nil && !items.isEmpty {
+                metadataFilterBar
             }
             if folder == nil {
                 VStack(spacing: 10) {
@@ -199,6 +234,67 @@ struct AudioLibrarySheet: View {
             }
             .accessibilityIdentifier("audio-library-list")
         }
+    }
+
+    /// キーワード・評価・ラベルでの絞り込みと、スマートコレクションの選択・追加・削除。
+    @ViewBuilder
+    private var metadataFilterBar: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                TextField("キーワードで絞り込み", text: $filterKeyword)
+                    .textFieldStyle(.roundedBorder).frame(maxWidth: 170)
+                    .accessibilityIdentifier("media-browser-keyword-filter")
+                Picker(L10n.t("評価"), selection: $filterMinRating) {
+                    Text("評価で絞らない").tag(0)
+                    ForEach(1...5, id: \.self) { Text("★\($0)以上").tag($0) }
+                }
+                .labelsHidden().frame(width: 120)
+                .accessibilityIdentifier("media-browser-rating-filter")
+                Picker(L10n.t("ラベル"), selection: $filterLabel) {
+                    Text("ラベルで絞らない").tag("")
+                    ForEach(MediaLabelColor.allCases, id: \.rawValue) { Text($0.title).tag($0.rawValue) }
+                }
+                .labelsHidden().frame(width: 110)
+                .accessibilityIdentifier("media-browser-label-filter")
+                Spacer(minLength: 8)
+                Picker(L10n.t("コレクション"), selection: $collectionId) {
+                    Text("コレクションなし").tag("")
+                    ForEach(model.project.smartCollections) { Text($0.name).tag($0.id) }
+                }
+                .labelsHidden().frame(width: 170)
+                .accessibilityIdentifier("media-browser-collection-picker")
+            }
+            HStack(spacing: 8) {
+                TextField("コレクション名", text: $newCollectionName)
+                    .textFieldStyle(.roundedBorder).frame(maxWidth: 170)
+                    .accessibilityIdentifier("media-browser-collection-name")
+                Button(L10n.t("今の条件でコレクションを追加")) { addCollectionFromCurrentCriteria() }
+                    .disabled(newCollectionName.trimmingCharacters(in: .whitespaces).isEmpty || model.isLocked)
+                if !collectionId.isEmpty {
+                    Button(L10n.t("コレクションを削除")) { deleteSelectedCollection() }
+                        .disabled(model.isLocked)
+                }
+                Spacer(minLength: 8)
+            }
+        }
+    }
+
+    /// 今の絞り込み条件(検索語は除く)をスマートコレクションとして保存する(Undo 1 回)。
+    private func addCollectionFromCurrentCriteria() {
+        let name = newCollectionName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        var c = criteria
+        c.text = ""
+        if let made = model.addSmartCollection(name: name, criteria: c) {
+            collectionId = made.id
+            newCollectionName = ""
+        }
+    }
+
+    /// 選択中のスマートコレクションを消す(Undo 1 回)。素材そのものは消えない。
+    private func deleteSelectedCollection() {
+        guard model.removeSmartCollection(id: collectionId) else { return }
+        collectionId = ""
     }
 
     /// パンくず(起点 → サブフォルダ…)。段を押すとそのフォルダへ戻る。
@@ -303,6 +399,9 @@ struct AudioLibrarySheet: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(e.name).lineLimit(1).truncationMode(.middle)
                 Text(Self.infoText(e)).font(.caption).foregroundStyle(e.unreadable ? .red : .secondary)
+                if let m = model.mediaMetadata(for: e.url.path), !m.isEmpty {
+                    Text(Self.metadataSummary(m)).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
+                }
             }
             Spacer(minLength: 0)
         }
@@ -316,6 +415,9 @@ struct AudioLibrarySheet: View {
         VStack(spacing: 4) {
             MediaThumbnailView(item: e, width: 88, height: 60)
             Text(e.name).font(.caption).lineLimit(1).truncationMode(.middle)
+            if let m = model.mediaMetadata(for: e.url.path), !m.isEmpty {
+                Text(Self.metadataSummary(m)).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+            }
         }
         .padding(4)
         .frame(width: 96)
@@ -347,6 +449,8 @@ struct AudioLibrarySheet: View {
                 }
                 Button(L10n.t("タイムラインに追加")) { add(s) }
                     .disabled(model.isLocked || s.unreadable)
+                Divider()
+                metadataEditor(for: s)
             } else {
                 Text(L10n.t("素材を選ぶと、ここにプレビューが出ます。")).font(.caption).foregroundStyle(.secondary)
             }
@@ -358,6 +462,67 @@ struct AudioLibrarySheet: View {
             add(s)
             return .handled
         }
+    }
+
+    /// 選択素材のメタデータ編集欄。「保存」でまとめて反映する(Undo 1 回)。
+    @ViewBuilder
+    private func metadataEditor(for s: MediaBrowser.Item) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(L10n.t("素材のメタデータ")).font(.headline)
+            TextField("キーワード(カンマ区切り)", text: $editKeywords)
+                .textFieldStyle(.roundedBorder)
+                .accessibilityIdentifier("media-metadata-keywords")
+            HStack(spacing: 6) {
+                Text(L10n.t("評価"))
+                Picker(L10n.t("評価"), selection: $editRating) {
+                    Text("未評価").tag(-1)
+                    ForEach(0...5, id: \.self) { Text("★\($0)").tag($0) }
+                }
+                .labelsHidden().frame(width: 100)
+                .accessibilityIdentifier("media-metadata-rating")
+            }
+            HStack(spacing: 6) {
+                Text(L10n.t("ラベル"))
+                Picker(L10n.t("ラベル"), selection: $editLabel) {
+                    Text("なし").tag("")
+                    ForEach(MediaLabelColor.allCases, id: \.rawValue) { Text($0.title).tag($0.rawValue) }
+                }
+                .labelsHidden().frame(width: 110)
+                .accessibilityIdentifier("media-metadata-label")
+            }
+            TextField("メモ", text: $editNote, axis: .vertical)
+                .textFieldStyle(.roundedBorder).lineLimit(2...4)
+                .accessibilityIdentifier("media-metadata-note")
+            HStack(spacing: 8) {
+                Button(L10n.t("メタデータを保存")) { saveMetadata(for: s) }
+                    .disabled(model.isLocked)
+                Button(L10n.t("メタデータを消去")) { clearMetadata(for: s) }
+                    .disabled(model.isLocked)
+            }
+        }
+        .onAppear { loadMetadataEditor(for: s) }
+        .onChange(of: s.id) { _, _ in loadMetadataEditor(for: s) }
+    }
+
+    private func loadMetadataEditor(for s: MediaBrowser.Item) {
+        let m = model.mediaMetadata(for: s.url.path)
+        editKeywords = (m?.keywords ?? []).joined(separator: ", ")
+        editRating = m?.rating ?? -1
+        editNote = m?.note ?? ""
+        editLabel = m?.label ?? ""
+    }
+
+    private func saveMetadata(for s: MediaBrowser.Item) {
+        let kws = editKeywords.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        let note = editNote.trimmingCharacters(in: .whitespacesAndNewlines)
+        model.updateMediaMetadata(for: s.url.path, keywords: kws,
+                                  rating: editRating < 0 ? nil : editRating,
+                                  note: note.isEmpty ? nil : editNote,
+                                  label: editLabel.isEmpty ? nil : editLabel)
+    }
+
+    private func clearMetadata(for s: MediaBrowser.Item) {
+        if model.clearMediaMetadata(for: s.url.path) { loadMetadataEditor(for: s) }
     }
 
     private func chooseFolder() {
@@ -433,6 +598,15 @@ struct AudioLibrarySheet: View {
     static func durationText(_ s: Double) -> String {
         let total = Int((s).rounded())
         return String(format: "%d:%02d", total / 60, total % 60)
+    }
+
+    /// 行に出すメタデータの要約(評価・ラベル・キーワード)。
+    static func metadataSummary(_ m: MediaMetadata) -> String {
+        var parts: [String] = []
+        if let r = m.rating { parts.append("★\(r)") }
+        if let l = m.label, let c = MediaLabelColor.resolved(l) { parts.append(c.title) }
+        if !m.keywords.isEmpty { parts.append(m.keywords.map { "#\($0)" }.joined(separator: " ")) }
+        return parts.joined(separator: " ・ ")
     }
 
     /// 行の副題: 種類・長さ(分かったとき)・読めないときはその旨。

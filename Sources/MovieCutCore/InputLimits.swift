@@ -95,6 +95,10 @@ extension Project {
         for i in markers.indices { markers[i].time = InputLimits.clamp(markers[i].time, -InputLimits.maxSeconds...InputLimits.maxSeconds) }
         rangeIn = InputLimits.clampOpt(rangeIn, -InputLimits.maxSeconds...InputLimits.maxSeconds)
         rangeOut = InputLimits.clampOpt(rangeOut, -InputLimits.maxSeconds...InputLimits.maxSeconds)
+        // 素材メタデータとスマートコレクション: 値を安全な形に整え、空の項目は落とす(正常な値は変えない)
+        mediaMetadata = mediaMetadata.mapValues { $0.normalized }.filter { !$0.value.isEmpty }
+        if smartCollections.count > 200 { smartCollections = Array(smartCollections.prefix(200)) }
+        smartCollections = smartCollections.map { var c = $0; c.criteria = c.criteria.normalized; return c }
     }
 
     private static func sanitize(_ t: inout Track, depth: Int) {
