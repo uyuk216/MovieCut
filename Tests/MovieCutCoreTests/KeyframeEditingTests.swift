@@ -365,3 +365,91 @@ final class DirectManipulationApplyTests: XCTestCase {
         XCTAssertEqual(b.rotation, 30); XCTAssertEqual(b.width, 100)
     }
 }
+
+/// 回転ドラッグの累積角度(±180° 折り返しを跨いでも連続する)。
+final class RotationAccumulatorTests: XCTestCase {
+    let tol = KeyframeEditing.tolerance(fps: 60)
+    let center = CGPoint(x: 100, y: 100)
+
+    private func pt(_ deg: Double) -> CGPoint {
+        let r = deg * .pi / 180
+        return CGPoint(x: 100 + 50 * cos(r), y: 100 + 50 * sin(r))
+    }
+
+    private func run(from a: Double, to b: Double, step: Double, _ acc: inout RotationAccumulator, checkpoint: (Double, Double)? = nil) {
+        var deg = a
+        while abs(deg - a) < abs(b - a) - 1e-9 {
+            deg += step
+            acc.add(point: pt(deg), center: center)
+            if let cp = checkpoint, abs(deg - cp.0) < 1e-9 { XCTAssertEqual(acc.totalDegrees, cp.1, accuracy: 1e-6) }
+        }
+    }
+
+    func testClockwisePastHalfTurnStaysContinuous() {
+        var acc = RotationAccumulator()
+        XCTAssertEqual(acc.add(point: pt(0), center: center), 0, accuracy: 1e-9)
+        run(from: 0, to: 190, step: 10, &acc, checkpoint: (170, 170))
+        XCTAssertEqual(acc.totalDegrees, 190, accuracy: 1e-6)   // -170 に折り返されない
+    }
+
+    func testCounterClockwisePastHalfTurnStaysContinuous() {
+        var acc = RotationAccumulator()
+        acc.add(point: pt(0), center: center)
+        run(from: 0, to: -190, step: -10, &acc)
+        XCTAssertEqual(acc.totalDegrees, -190, accuracy: 1e-6)
+    }
+
+    func testMoreThanOneFullTurnAccumulates() {
+        var acc = RotationAccumulator()
+        acc.add(point: pt(0), center: center)
+        run(from: 0, to: 720, step: 10, &acc)
+        XCTAssertEqual(acc.totalDegrees, 720, accuracy: 1e-6)   // accumulator 自体はクランプしない
+    }
+
+    func testSmallStepsMatchRotationDeltaNinetyDegrees() {
+        let a = CGPoint(x: 100, y: 50), b = CGPoint(x: 150, y: 100)   // 上 → 右 = +90°
+        var acc = RotationAccumulator()
+        acc.add(point: a, center: center)
+        for i in 1...10 {
+            let deg = -90 + 9 * Double(i)
+            acc.add(point: pt(deg), center: center)
+        }
+        XCTAssertEqual(acc.totalDegrees, TransformBox.rotationDelta(center: center, from: a, to: b), accuracy: 1e-6)
+        XCTAssertEqual(acc.totalDegrees, 90, accuracy: 1e-6)
+    }
+
+    func testSmallRotationMatchesRotationDelta() {
+        let a = pt(20), b = pt(55)
+        var acc = RotationAccumulator()
+        acc.add(point: a, center: center)
+        acc.add(point: pt(35), center: center)
+        acc.add(point: b, center: center)
+        XCTAssertEqual(acc.totalDegrees, TransformBox.rotationDelta(center: center, from: a, to: b), accuracy: 1e-6)
+    }
+
+    func testResetClearsState() {
+        var acc = RotationAccumulator()
+        acc.add(angleDegrees: 10); acc.add(angleDegrees: 50)
+        acc.reset()
+        XCTAssertEqual(acc, RotationAccumulator())
+        XCTAssertEqual(acc.add(angleDegrees: 170), 0)
+    }
+
+    func testApplyRotationDeltaPastHalfTurn() {
+        var c = Clip(); c.id = "c"; c.type = .image; c.src = "/a.png"; c.duration = 4; c.rotation = 170
+        XCTAssertEqual(DirectManipulation.applyRotationDelta(20, to: c, at: 0, tolerance: tol).rotation!, 190, accuracy: 1e-9)
+    }
+
+    func testApplyRotationDeltaSnapsToFifteen() {
+        var c = Clip(); c.id = "c"; c.type = .image; c.src = "/a.png"; c.duration = 4; c.rotation = 170
+        XCTAssertEqual(DirectManipulation.applyRotationDelta(18, to: c, at: 0, tolerance: tol, snapRotation: true).rotation!, 195, accuracy: 1e-9)
+    }
+
+    func testApplyRotationDeltaUpdatesKeyframe() {
+        var c = Clip(); c.id = "c"; c.type = .image; c.src = "/a.png"; c.duration = 4; c.rotation = 0
+        c.keyframes["rotation"] = [Keyframe(t: 0, v: 170), Keyframe(t: 2, v: 0)]
+        let r = DirectManipulation.applyRotationDelta(20, to: c, at: 0, tolerance: tol)
+        XCTAssertEqual(r.keyframes["rotation"]?.first(where: { $0.t == 0 })?.v ?? .nan, 190, accuracy: 1e-9)
+        XCTAssertEqual(r.rotation, 0)   // 設定値は触らない
+    }
+}

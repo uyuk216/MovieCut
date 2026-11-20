@@ -147,6 +147,8 @@ final class PreviewCanvasView: NSView {
         var warp: WarpKey.Kind? = nil
         /// ペンマスクの取っ手のドラッグのとき、どの点のどの部分か(それ以外では nil)。
         var pen: PenRef? = nil
+        /// 回転ドラッグのときの累積角度(半周を超えても連続させる)。回転以外では nil。
+        var rotationAccumulator: RotationAccumulator? = nil
     }
     /// ペンマスクの取っ手: 点の番号と、アンカー/入るハンドル/出るハンドルの区別。
     struct PenRef: Equatable {
@@ -610,7 +612,9 @@ final class PreviewCanvasView: NSView {
         case .none: return false
         }
         m.beginGesture()           // 再生を止め、元の状態を覚える
-        manipulation = ManipulationDrag(kind: kind, clipId: c.id, start: p, base: c, relTime: min(max(m.currentTime - c.start, 0), c.duration), name: name)
+        var acc: RotationAccumulator? = nil
+        if kind == .rotate { var a = RotationAccumulator(); a.add(point: p, center: o.box.center); acc = a }
+        manipulation = ManipulationDrag(kind: kind, clipId: c.id, start: p, base: c, relTime: min(max(m.currentTime - c.start, 0), c.duration), name: name, rotationAccumulator: acc)
         // スナップ先はドラッグ開始時に一度だけ集めて固定する(移動・拡縮のみ。回転は従来の Shift 15 度刻みだけ)
         if kind == .move || kind == .scale {
             snapTargets = collectSnapTargets(excluding: c.id, canvas: o.canvas)
@@ -690,7 +694,14 @@ final class PreviewCanvasView: NSView {
             }
             snappedVertical = vLine; snappedHorizontal = hLine
             redrawSnapLines()
-            c = DirectManipulation.apply(d.kind, to: d.base, at: d.relTime, tolerance: m.keyTolerance, from: d.start, to: p, canvas: o.canvas, snapRotation: snapRotation)
+            if d.kind == .rotate, var acc = d.rotationAccumulator {
+                // 回転の中心はドラッグ中に動かないので o.box.center(開始時と同じ値)を使う。累積は本体へ書き戻す。
+                acc.add(point: p, center: o.box.center)
+                manipulation?.rotationAccumulator = acc
+                c = DirectManipulation.applyRotationDelta(acc.totalDegrees, to: d.base, at: d.relTime, tolerance: m.keyTolerance, snapRotation: snapRotation)
+            } else {
+                c = DirectManipulation.apply(d.kind, to: d.base, at: d.relTime, tolerance: m.keyTolerance, from: d.start, to: p, canvas: o.canvas, snapRotation: snapRotation)
+            }
         }
         var pr = base
         pr.tracks[loc.track].clips[loc.index] = c

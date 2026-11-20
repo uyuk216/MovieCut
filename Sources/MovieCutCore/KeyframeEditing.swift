@@ -337,6 +337,37 @@ public struct TransformBox: Equatable, Sendable {
     }
 }
 
+/// 回転ドラッグ中のポインタ角度を順に受け取り、±180° 折り返しを跨いでも連続する累積回転(度)を返す。
+public struct RotationAccumulator: Equatable, Sendable {
+    /// ここまでの累積回転(度、時計回りが正)。初回の角度登録では 0。
+    public private(set) var totalDegrees: Double
+    /// 前回のポインタ角度(未登録なら nil)。
+    private var lastAngle: Double?
+    public init() { totalDegrees = 0; lastAngle = nil }
+
+    /// ポインタ角度(度)を順に与える。初回は基準として記録するだけで totalDegrees は 0 のまま。
+    /// 2回目以降は前回角度との差を -180...180 に折り返してから加算し、累積を返す。
+    @discardableResult
+    public mutating func add(angleDegrees: Double) -> Double {
+        if let last = lastAngle {
+            var d = angleDegrees - last
+            while d > 180 { d -= 360 }
+            while d < -180 { d += 360 }
+            totalDegrees += d
+        }
+        lastAngle = angleDegrees
+        return totalDegrees
+    }
+
+    /// center から point への角度(atan2、画面は y 下向き＝時計回りが正)を計算して add(angleDegrees:) に渡す。
+    @discardableResult
+    public mutating func add(point: CGPoint, center: CGPoint) -> Double {
+        add(angleDegrees: atan2(point.y - center.y, point.x - center.x) * 180 / .pi)
+    }
+
+    public mutating func reset() { totalDegrees = 0; lastAngle = nil }
+}
+
 /// 直接操作で変わる値(キーに書く / 設定値に書く先は呼び出し側)。
 public enum DirectManipulation {
     /// 本体のドラッグ: 画素の移動量を、キャンバスに対する割合の位置に直す。
@@ -390,6 +421,14 @@ extension DirectManipulation {
             let d = TransformBox.rotationDelta(center: center, from: p0, to: p)
             KeyframeEditing.setValue(&c, key: "rotation", rotated(Animation.value(of: "rotation", in: base, at: t), delta: d, snap: snapRotation), at: t, tolerance: tol)
         }
+        return c
+    }
+
+    /// 回転ドラッグ用: ドラッグ開始時の回転値に累積デルタを足して書き込む。
+    /// 書き込み経路は従来どおり KeyframeEditing.setValue、スナップ(15度刻み)とクランプは DirectManipulation.rotated を使う。
+    public static func applyRotationDelta(_ delta: Double, to base: Clip, at t: Double, tolerance tol: Double, snapRotation: Bool = false) -> Clip {
+        var c = base
+        KeyframeEditing.setValue(&c, key: "rotation", rotated(Animation.value(of: "rotation", in: base, at: t), delta: delta, snap: snapRotation), at: t, tolerance: tol)
         return c
     }
 }
