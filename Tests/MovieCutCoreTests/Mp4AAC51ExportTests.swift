@@ -162,12 +162,15 @@ final class Mp4AAC51ExportTests: XCTestCase {
 
     // MARK: Asset 経路用素材(5.1ch AAC 入り mp4 を AVAssetWriter で作る)
 
-    /// MPEG 5.1 A レイアウト(L R C LFE Ls Rs = WAV 順)で 6ch AAC + 映像入りの mp4 を作る。
+    /// AAC 5.1 レイアウト(= MPEG 5.1 D: C L R Ls Rs LFE。AAC エンコーダが受けるのはこのタグ)で
+    /// 6ch AAC + 映像入りの mp4 を作る。給餌するサンプルの並びもこのレイアウト順にする。
+    /// 並びと周波数の対応: C=880, L=440, R=660, Ls=1320, Rs=1760, LFE=110。
+    static let aac51Freqs: [Double] = [880, 440, 660, 1320, 1760, 110]
     private func writeTone51MP4(_ name: String) async throws -> URL {
         let url = tmp.appendingPathComponent(name)
         try? FileManager.default.removeItem(at: url)
         var layout = AudioChannelLayout()
-        layout.mChannelLayoutTag = kAudioChannelLayoutTag_MPEG_5_1_A
+        layout.mChannelLayoutTag = kAudioChannelLayoutTag_AAC_5_1
         layout.mNumberChannelDescriptions = 0
         let layoutData = withUnsafeBytes(of: &layout) { Data($0) }
 
@@ -230,7 +233,7 @@ final class Mp4AAC51ExportTests: XCTestCase {
             let n = min(4096, total - frame)
             var samples = [Float](repeating: 0, count: n * 6)
             for c in 0..<6 {
-                let f = Self.freqs[c]
+                let f = Self.aac51Freqs[c]
                 for i in 0..<n {
                     samples[i * 6 + c] = Self.amp * Float(sin(2 * Double.pi * f * Double(frame + i) / Self.sampleRate))
                 }
