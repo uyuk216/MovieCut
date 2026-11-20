@@ -824,7 +824,7 @@ struct SettingsSheet: View {
                         .font(MCDesign.Font.caption).foregroundStyle(MCDesign.Color.textSecondary).fixedSize(horizontal: false, vertical: true)
                     Text("\(DataLocations.current.supportFolderName)/Whisper/")
                         .font(MCDesign.Font.caption).foregroundStyle(MCDesign.Color.textSecondary).textSelection(.enabled)
-                    Text(L10n.t("モデルはアプリに入っていません。初回に自分で ggml-base.bin などをダウンロードしてください(日本語は base 以上がおすすめ)。認識は端末内で行い、音声は外に送りません。"))
+                    Text(L10n.t("モデルはアプリに入っていません。初回に自分でダウンロードしてください(精度を重視するなら ggml-large-v3.bin・約3.1GB がおすすめ)。認識は端末内で行い、音声は外に送りません。"))
                         .font(MCDesign.Font.caption).foregroundStyle(MCDesign.Color.textSecondary).fixedSize(horizontal: false, vertical: true)
                 }.padding(MCDesign.Spacing.s)
             }
