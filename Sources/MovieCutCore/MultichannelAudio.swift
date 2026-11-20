@@ -271,7 +271,7 @@ public enum MultichannelDownmix {
                 return p
             }
         }
-        if n == 1 { return mode == .firstPair ? fromStereo([(1, 1)]) : [[(ch51C, 1.0)]] }
+        if n == 1 { return mode == .firstPair ? fromStereo([(1, 1)]) : [[(ch51C, Float(1))]] }
         switch mode {
         case .downmix:
             return roles.enumerated().map { (i, r) -> [(channel: Int, gain: Float)] in surround51Placement(for: r, extraIndex: r == .unknown ? i : nil) }
@@ -279,7 +279,7 @@ public enum MultichannelDownmix {
             return fromStereo(stereoWeights(roles: roles, mode: .firstPair))
         case .center:
             guard roles.contains(.center) else { return fromStereo(stereoWeights(roles: roles, mode: .downmix)) }
-            return roles.map { (r: AudioChannelRole) -> [(channel: Int, gain: Float)] in r == .center ? [(ch51C, 1.0)] : [] }
+            return roles.map { (r: AudioChannelRole) -> [(channel: Int, gain: Float)] in r == .center ? [(ch51C, Float(1))] : [] }
         }
     }
 
