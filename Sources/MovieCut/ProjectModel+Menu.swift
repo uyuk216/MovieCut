@@ -36,8 +36,8 @@ extension ProjectModel {
     /// 書き出せる状態か(編集中でなく、中身がある)。
     var canExport: Bool { !isLocked && project.endTime > 0 }
 
-    /// 設定シート(動画設定)を開く。
-    func openSettings() { if !isLocked { showSettings = true } }
+    /// 設定ウィンドウ(アプリ全体の設定+前面プロジェクトの動画設定)を開く。独立ウィンドウなのでロック中でも開ける。
+    func openSettings() { SettingsWindowController.show() }
 
     /// 「現在の設定で書き出す…」/ 書き出しプリセット: 保存パネルで場所を選び、書き出し、終わったら Finder で見せる。
     /// プリセットはプロジェクトの写しに当てるので、ドキュメントは変わらない。保存パネルの提案名は `<書類名>-<プリセット>.mp4|.m4a`。

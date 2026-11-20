@@ -672,7 +672,7 @@ enum AppMenuSpec {
     static let checkForUpdates = MenuItemSpec(command: .checkForUpdates, title: "アップデートを確認…", shortcut: nil, enabled: true, checked: nil)
 
     static func settings(_ s: MenuState) -> MenuItemSpec {
-        MenuItemSpec(command: .settings, title: "設定…", shortcut: cmd(","), enabled: s.canEdit, checked: nil)
+        MenuItemSpec(command: .settings, title: "設定…", shortcut: cmd(","), enabled: true, checked: nil)
     }
 
     /// 出力 ▸ 動画の設定…(設定シート。⌘, の「設定…」と同じ操作でショートカットは持たない)。
@@ -1712,6 +1712,7 @@ enum AppMenu {
         case .helpVoicevox: openURL(DependencyStatus.voicevoxURL)
         case .helpAquestalk: openURL(DependencyStatus.aquestalkURL)
         case .helpLicense: HelpDocs.open(.license)
+        case .settings, .videoSettings: SettingsWindowController.show()
         case .helpThirdParty: HelpDocs.open(.thirdParty)
         case .dockPanel(let p): AppServices.panelDock.toggle(p)
         case .dockLayout(let pr): AppServices.panelDock.apply(pr)
@@ -1739,7 +1740,6 @@ enum AppMenu {
         default:
             guard let m = model else { return }
             switch c {
-            case .settings, .videoSettings: m.openSettings()
             case .addMedia: m.chooseAndAddMedia()
             case .screenRecord: m.showScreenRecordingSheet = true
             case .importPSD: m.chooseAndImportPSD()

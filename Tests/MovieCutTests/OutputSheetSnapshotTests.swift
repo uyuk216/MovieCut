@@ -38,6 +38,8 @@ final class OutputSheetSnapshotTests: XCTestCase {
         XCTAssertGreaterThan(try snapshot(ResolutionSheet(model: m), name: "resolution.png", size: NSSize(width: 480, height: 420)), 5_000)
         m.project.fps = 29.97
         XCTAssertGreaterThan(try snapshot(FrameRateSheet(model: m), name: "fps.png", size: NSSize(width: 480, height: 300)), 5_000)
-        XCTAssertGreaterThan(try snapshot(SettingsSheet(model: m), name: "settings.png", size: NSSize(width: 560, height: 900)), 5_000)
+        let docs = ActiveDocument()
+        docs.activate(m)
+        XCTAssertGreaterThan(try snapshot(SettingsView(documents: docs), name: "settings.png", size: NSSize(width: 560, height: 900)), 5_000)
     }
 }

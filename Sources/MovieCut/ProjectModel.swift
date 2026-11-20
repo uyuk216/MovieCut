@@ -268,7 +268,6 @@ final class ProjectModel: ObservableObject {
     @Published var busyMessage: String?
     @Published var errorMessage: String?
     @Published var errorTitle = "エラー"
-    @Published var showSettings = false
     /// 「解像度を入力」「フレームレートを入力」のシート。
     @Published var showResolutionSheet = false
     @Published var showFpsSheet = false

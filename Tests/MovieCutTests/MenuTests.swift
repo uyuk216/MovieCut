@@ -6,6 +6,11 @@ import MovieCutCore
 /// M5: メニューバーの構成・有効/無効・ラジオ、依存バナー、Dock、ヘルプ文書、About。
 @MainActor
 final class MenuTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        SettingsWindowController.suppressWindow = true   // 実ウィンドウは出さない(要求の回数だけ数える)
+    }
+
     private func makeModel() -> ProjectModel {
         let m = ProjectModel(project: .new())
         m.voiceProviderFactory = { _ in ToneVoiceProvider() }
@@ -273,15 +278,24 @@ final class MenuTests: XCTestCase {
         XCTAssertEqual(m.project.fps, 60)
     }
 
-    func testVideoSettingsItemOpensTheSheetLikeSettings() {
+    func testSettingsItemIsAlwaysEnabledAndOpensTheWindow() {
+        XCTAssertTrue(AppMenuSpec.settings(MenuState()).enabled, "プロジェクト無しでも開ける")
+        XCTAssertTrue(AppMenuSpec.settings(state { $0.isLocked = true }).enabled, "ロック中でも開ける(アプリ設定のため)")
+        let n = SettingsWindowController.showRequestCount
+        AppMenu.perform(.settings, model: nil)
+        XCTAssertEqual(SettingsWindowController.showRequestCount, n + 1, "モデルが無くても設定ウィンドウを開く")
+    }
+
+    func testVideoSettingsItemOpensTheWindowLikeSettings() {
         let s = state()
         XCTAssertEqual(AppMenuSpec.videoSettings(s).title, "動画の設定…")
         XCTAssertNil(AppMenuSpec.videoSettings(s).shortcut, "⌘, は設定…が持つ")
         XCTAssertFalse(AppMenuSpec.videoSettings(MenuState()).enabled)
         XCTAssertFalse(AppMenuSpec.videoSettings(state { $0.isLocked = true }).enabled)
         let m = makeModel()
+        let n = SettingsWindowController.showRequestCount
         AppMenu.perform(.videoSettings, model: m)
-        XCTAssertTrue(m.showSettings)
+        XCTAssertEqual(SettingsWindowController.showRequestCount, n + 1)
     }
 
     func testOutputMenuOrderIsBetweenGoAndView() {
@@ -318,8 +332,9 @@ final class MenuTests: XCTestCase {
         AppMenu.perform(.resolution(ResolutionPresets.customKey), model: m)
         XCTAssertTrue(m.showResolutionSheet)
         m.showResolutionSheet = false
+        let n = SettingsWindowController.showRequestCount
         AppMenu.perform(.settings, model: m)
-        XCTAssertTrue(m.showSettings)
+        XCTAssertEqual(SettingsWindowController.showRequestCount, n + 1)
         AppMenu.perform(.addText, model: nil)
     }
 
@@ -342,11 +357,12 @@ final class MenuTests: XCTestCase {
         AppMenu.perform(.addText, model: m)
         AppMenu.perform(.background("#ffffff"), model: m)
         AppMenu.perform(.codec("hevc"), model: m)
-        AppMenu.perform(.settings, model: m)
+        let n = SettingsWindowController.showRequestCount
+        AppMenu.perform(.settings, model: m)   // 設定ウィンドウはロック中でも開ける(アプリ設定のため)
+        XCTAssertEqual(SettingsWindowController.showRequestCount, n + 1)
         XCTAssertTrue(m.project.allClips.isEmpty)
         XCTAssertEqual(m.project.bg, "#000000")
         XCTAssertEqual(m.project.codec, "h264")
-        XCTAssertFalse(m.showSettings)
     }
 
     func testSplitAndDeleteThroughMenu() {

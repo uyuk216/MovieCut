@@ -237,7 +237,7 @@ final class DebugHooks {
             await model.generateVoices(from: s.replacingOccurrences(of: "\\n", with: "\n"))
             Self.out("script: \(model.statusText)\(model.errorMessage.map { " ERROR: \($0)" } ?? "")")
         }
-        if env["MC_DEBUG_SHEET"] == "settings" { model.showSettings = true }
+        if env["MC_DEBUG_SHEET"] == "settings" { SettingsWindowController.show(present: !DebugHooks.isQuiet) }
         if env["MC_DEBUG_SHEET"] == "jump" { model.showJumpSheet = true }
         if env["MC_DEBUG_SHEET"] == "resolution" { model.showResolutionSheet = true }
         if env["MC_DEBUG_SHEET"] == "fps" { model.showFpsSheet = true }
@@ -668,7 +668,8 @@ final class DebugHooks {
             let ign = key == "return" ? "\r" : key
             guard let win = model.window,
                   let ev = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: win.windowNumber, context: nil, characters: chars, charactersIgnoringModifiers: ign, isARepeat: false, keyCode: code) else { continue }
-            let pps0 = model.pps, clips0 = model.project.allClips.count, sets0 = model.showSettings
+            let sets0 = SettingsWindowController.showRequestCount
+            let pps0 = model.pps, clips0 = model.project.allClips.count
             Self.updateAll(NSApp.mainMenu!)
             let fileURL = model.fileURL
             func mt() -> String { fileURL.flatMap { (try? FileManager.default.attributesOfItem(atPath: $0.path)[.modificationDate] as? Date)?.map { String($0.timeIntervalSince1970) } } ?? "-" }
@@ -677,7 +678,7 @@ final class DebugHooks {
             let handled = NSApp.mainMenu?.performKeyEquivalent(with: ev) ?? false
             try? await Task.sleep(nanoseconds: 1_500_000_000)
             if key == "s" { Self.out("menu-key: save → file mtime changed=\(mt() != m0) docEdited=\(model.window.flatMap { NSDocumentController.shared.document(for: $0) }?.isDocumentEdited ?? false)") }
-            Self.out(String(format: "menu-key: %@ → handled=%@ pps %.1f→%.1f clips %d→%d settingsSheet %@→%@", raw, handled ? "true" : "false", pps0, model.pps, clips0, model.project.allClips.count, sets0 ? "on" : "off", model.showSettings ? "on" : "off"))
+            Self.out(String(format: "menu-key: %@ → handled=%@ pps %.1f→%.1f clips %d→%d settingsWindowRequests %d→%d", raw, handled ? "true" : "false", pps0, model.pps, clips0, model.project.allClips.count, sets0, SettingsWindowController.showRequestCount))
         }
     }
 
