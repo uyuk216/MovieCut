@@ -916,7 +916,7 @@ enum L10nTable {
         "VST3 プラグイン": "VST3 Plug-ins",
         "パラメータ": "Parameter",
         "プラグイン状態データあり": "Plug-in state data saved",
-        "VST3 パラメータの変更": "Change VST3 Parameter"
+        "VST3 パラメータの変更": "Change VST3 Parameter",
         "%.0f 半音": "%.0f semitones",
         "%.1f 秒": "%.1f s",
         "%.1f 秒で対象を見失ったため、追従はそこまでです": "The target was lost at %.1f seconds, so tracking stops there",
