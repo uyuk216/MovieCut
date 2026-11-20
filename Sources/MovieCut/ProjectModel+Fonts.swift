@@ -17,7 +17,7 @@ extension ProjectModel {
             guard resp == .OK, let self else { return }
             self.addFonts(urls: panel.urls)
         }
-        if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
+        FilePanelPresenter.shared.present(panel, window: window, completion: run)
     }
 
     /// フォントのファイルを `Application Support/MovieCut/Fonts` へ取り込み、登録し直して一覧を更新する。

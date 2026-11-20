@@ -27,6 +27,6 @@ extension ProjectModel {
             queue.enqueue(project: snapshot, range: range, to: url)
             self.statusText = "\(url.lastPathComponent) を書き出しキューに追加しました"
         }
-        if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
+        FilePanelPresenter.shared.present(panel, window: window, completion: run)
     }
 }

@@ -107,7 +107,7 @@ extension ProjectModel {
                 await self.exportTranscriptOfSelectedClip(transcriber: makeTranscriber(), to: url, format: format, addToTimeline: addToTimeline)
             }
         }
-        if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
+        FilePanelPresenter.shared.present(panel, window: window, completion: run)
     }
 
     /// 字幕レイヤーにも載せるかを聞く。「載せて書き出す」→ true、「ファイルだけ書き出す」→ false、キャンセル → nil。

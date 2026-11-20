@@ -71,7 +71,7 @@ extension ProjectModel {
             guard resp == .OK, let url = panel.url, let self else { return }
             self.relinkMedia(in: url)
         }
-        if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
+        FilePanelPresenter.shared.present(panel, window: window, completion: run)
     }
 
     /// フォルダの中を再帰的に探し、欠けた素材を差し替える(ロジックは Core の `MediaRelinker`)。
@@ -140,7 +140,7 @@ extension ProjectModel {
                 self.errorMessage = error.localizedDescription
             }
         }
-        if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
+        FilePanelPresenter.shared.present(panel, window: window, completion: run)
     }
 }
 

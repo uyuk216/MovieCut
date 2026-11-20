@@ -41,7 +41,7 @@ extension ProjectModel {
                 }
             }
         }
-        if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
+        FilePanelPresenter.shared.present(panel, window: window, completion: run)
     }
 
     /// 書き出しシートを出して連番 PNG + WAV を書く(MP4 と同じ進み具合・キャンセル・失敗の扱い)。
@@ -91,6 +91,6 @@ extension ProjectModel {
                 if let w = self.window { alert.beginSheetModal(for: w) } else { alert.runModal() }
             }
         }
-        if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
+        FilePanelPresenter.shared.present(panel, window: window, completion: run)
     }
 }

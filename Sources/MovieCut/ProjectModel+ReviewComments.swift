@@ -115,7 +115,7 @@ extension ProjectModel {
                 self.errorMessage = error.localizedDescription
             }
         }
-        if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
+        FilePanelPresenter.shared.present(panel, window: window, completion: run)
     }
 
     func chooseAndImportReviewComments() {
@@ -134,6 +134,6 @@ extension ProjectModel {
             }
             _ = self.importReviewComments(data: data)
         }
-        if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
+        FilePanelPresenter.shared.present(panel, window: window, completion: run)
     }
 }

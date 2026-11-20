@@ -32,7 +32,7 @@ extension ProjectModel {
                 if let w = self.window { alert.beginSheetModal(for: w) } else { alert.runModal() }
             }
         }
-        if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
+        FilePanelPresenter.shared.present(panel, window: window, completion: run)
     }
 
     // MARK: EDL 書き出し
@@ -59,7 +59,7 @@ extension ProjectModel {
                 if let w = self.window { alert.beginSheetModal(for: w) } else { alert.runModal() }
             }
         }
-        if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
+        FilePanelPresenter.shared.present(panel, window: window, completion: run)
     }
 
     // MARK: FCP XML 読み込み
@@ -86,7 +86,7 @@ extension ProjectModel {
                 if let w = self.window { alert.beginSheetModal(for: w) } else { alert.runModal() }
             }
         }
-        if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
+        FilePanelPresenter.shared.present(panel, window: window, completion: run)
     }
 
     // MARK: Premiere Pro プロジェクト(.prproj)読み込み
@@ -113,7 +113,7 @@ extension ProjectModel {
                 if let w = self.window { alert.beginSheetModal(for: w) } else { alert.runModal() }
             }
         }
-        if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
+        FilePanelPresenter.shared.present(panel, window: window, completion: run)
     }
 
     // MARK: レポート表示(共通)

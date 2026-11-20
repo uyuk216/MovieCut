@@ -27,7 +27,7 @@ extension ProjectModel {
                 self.errorMessage = error.localizedDescription
             }
         }
-        if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
+        FilePanelPresenter.shared.present(panel, window: window, completion: run)
     }
 
     /// 全体を 12 等分した各区間の中央のコマを、格子の PNG 1 枚にする(プレビューと同じ描画経路)。
@@ -51,6 +51,6 @@ extension ProjectModel {
                 self.errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             }
         }
-        if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
+        FilePanelPresenter.shared.present(panel, window: window, completion: run)
     }
 }

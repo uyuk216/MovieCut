@@ -22,7 +22,7 @@ extension ProjectModel {
             let urls = panel.urls
             Task { @MainActor in _ = await self?.importPSDFiles(urls: urls) }
         }
-        if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
+        FilePanelPresenter.shared.present(panel, window: window, completion: run)
     }
 
     /// 選択肢のシートを出して取り込む(ファイルごと)。置いたクリップの id を返す。

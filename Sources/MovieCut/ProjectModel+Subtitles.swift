@@ -18,7 +18,7 @@ extension ProjectModel {
             guard resp == .OK, let url = panel.url, let self else { return }
             self.writeSubtitles(to: url)
         }
-        if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
+        FilePanelPresenter.shared.present(panel, window: window, completion: run)
     }
 
     /// 拡張子で形式を決めて書く(.vtt 以外は SRT)。
@@ -66,7 +66,7 @@ extension ProjectModel {
                 self.importSubtitles(from: url, offset: offset)
             }
         }
-        if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
+        FilePanelPresenter.shared.present(panel, window: window, completion: run)
     }
 
     /// 「全体を何秒ずらすか」を聞く小さな確認(キャンセルは nil)。

@@ -18,7 +18,7 @@ extension ProjectModel {
                 if self.exportThumbnail(to: url) { NSWorkspace.shared.activateFileViewerSelecting([url]) }
             }
         }
-        if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
+        FilePanelPresenter.shared.present(panel, window: window, completion: run)
     }
 
     /// 今の再生位置のコマを 1280×720 で `url` に書く(形式は拡張子。.jpg / .jpeg 以外は PNG)。

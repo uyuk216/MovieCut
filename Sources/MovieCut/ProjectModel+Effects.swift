@@ -119,7 +119,7 @@ extension ProjectModel {
             guard resp == .OK, let url = panel.url, let self else { return }
             Task { @MainActor in self.loadLUT(from: url, clipId: target) }
         }
-        if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
+        FilePanelPresenter.shared.present(panel, window: window, completion: run)
     }
 
     /// .cube を読めると確かめてから、クリップの LUT のファイルにする(Undo は 1 回。同じファイルなら何もしない)。
@@ -152,7 +152,7 @@ extension ProjectModel {
             guard resp == .OK, let url = panel.url, let self else { return }
             Task { @MainActor in self.loadColorTransferReference(from: url, clipId: target) }
         }
-        if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
+        FilePanelPresenter.shared.present(panel, window: window, completion: run)
     }
 
     /// 画像として読めると確かめてから、クリップの色調転写の参照にする(Undo は 1 回。同じファイルなら何もしない)。

@@ -313,7 +313,7 @@ extension ProjectModel {
             guard resp == .OK, let url = panel.url else { return }
             Task { @MainActor in self?.setPortrait(charId: charId, closed: closed, url: url) }
         }
-        if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
+        FilePanelPresenter.shared.present(panel, window: window, completion: run)
     }
 
     /// まばたき(目を閉じた画像)を設定する(url が nil なら外す)。
@@ -398,7 +398,7 @@ extension ProjectModel {
             guard resp == .OK, let url = panel.url else { return }
             Task { @MainActor in apply(url) }
         }
-        if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
+        FilePanelPresenter.shared.present(panel, window: window, completion: run)
     }
 
     /// 「このキャラを消す」の確認を出す。最後の 1 人なら理由を出して何もしない。

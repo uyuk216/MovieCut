@@ -77,7 +77,7 @@ extension ProjectModel {
                 }
             }
         }
-        if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
+        FilePanelPresenter.shared.present(panel, window: window, completion: run)
     }
 
     /// 現在の設定(解像度・コーデック・fps)を名前を付けて保存したプリセットにする。同じ名前は置き換える。

@@ -95,7 +95,7 @@ struct VoicePresetSheet: View {
         panel.allowedContentTypes = [.json]
         panel.allowsMultipleSelection = false
         panel.title = "おすすめ音声設定のファイルを選ぶ"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard FilePanelPresenter.shared.runModal(panel) == .OK, let url = panel.url else { return }
         do {
             let data = try InputLimits.readFile(url, limit: VoicePresetCatalog.maxBytes, what: "おすすめ音声設定のファイル")
             show(try VoicePresetCatalog.decode(data))

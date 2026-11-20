@@ -61,7 +61,7 @@ extension ProjectModel {
                 }
             }
         }
-        if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
+        FilePanelPresenter.shared.present(panel, window: window, completion: run)
     }
 
     /// プラグイン形式で書き出す(進み具合・キャンセル・失敗の扱いは MP4 と同じ書き出しシート)。

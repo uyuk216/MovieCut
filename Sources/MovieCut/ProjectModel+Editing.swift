@@ -200,7 +200,7 @@ extension ProjectModel {
             let urls = panel.urls
             Task { @MainActor in await self?.addMedia(urls: urls) }
         }
-        if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
+        FilePanelPresenter.shared.present(panel, window: window, completion: run)
     }
 
     // MARK: ドラッグ中の編集(Undo は離したときに 1 回だけ)

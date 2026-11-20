@@ -585,7 +585,7 @@ struct SettingsSheet: View {
         panel.treatsFilePackagesAsDirectories = true
         panel.message = "AquesTalkPlayer の実行ファイルを選んでください"
         panel.prompt = "選ぶ"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard FilePanelPresenter.shared.runModal(panel) == .OK, let url = panel.url else { return }
         switch ExecutableTrust.validate(path: url.path) {
         case .success:
             aquesPath = url.path; aquesMessage = ""
@@ -603,7 +603,7 @@ struct SettingsSheet: View {
         panel.treatsFilePackagesAsDirectories = true
         panel.message = "whisper.cpp の実行ファイル(whisper-cli)を選んでください"
         panel.prompt = "選ぶ"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard FilePanelPresenter.shared.runModal(panel) == .OK, let url = panel.url else { return }
         // シンボリックリンク(Homebrew など)は実体に直してから検証する(Core の WhisperLocator と同じ)。
         let real = url.resolvingSymlinksInPath().standardizedFileURL.path
         switch ExecutableTrust.validate(path: real) {
@@ -623,7 +623,7 @@ struct SettingsSheet: View {
         panel.allowedContentTypes = [.init(filenameExtension: "bin") ?? .data]
         panel.message = "Whisper のモデル(ggml-base.bin など)を選んでください"
         panel.prompt = "選ぶ"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard FilePanelPresenter.shared.runModal(panel) == .OK, let url = panel.url else { return }
         guard WhisperLocator.validateModel(path: url.path) != nil else {
             whisperMessage = L10n.t("モデルは .bin のファイルを選んでください。")
             return

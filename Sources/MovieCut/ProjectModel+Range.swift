@@ -138,7 +138,7 @@ extension ProjectModel {
                 if self.exportStill(to: url) { NSWorkspace.shared.activateFileViewerSelecting([url]) }
             }
         }
-        if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
+        FilePanelPresenter.shared.present(panel, window: window, completion: run)
     }
 
     /// 静止画・サムネイルに使う時刻(再生位置をコマに合わせ、終わりの外に出ないようにする)。
@@ -195,6 +195,6 @@ extension ProjectModel {
                 }
             }
         }
-        if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
+        FilePanelPresenter.shared.present(panel, window: window, completion: run)
     }
 }

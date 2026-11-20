@@ -84,7 +84,7 @@ extension ProjectModel {
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
         panel.title = "候補にする素材を選ぶ"
-        guard panel.runModal() == .OK else { return }
+        guard FilePanelPresenter.shared.runModal(panel) == .OK else { return }
         let n = addCandidateFiles(panel.urls)
         if n == 0 { statusText = "同じ種類の新しい素材がありません" }
     }

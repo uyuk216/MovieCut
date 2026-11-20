@@ -192,7 +192,7 @@ struct ScreenRecordingSheet: View {
         panel.canCreateDirectories = true
         panel.directoryURL = controller.outputDirectory
         panel.prompt = "選択"
-        if panel.runModal() == .OK, let url = panel.url {
+        if FilePanelPresenter.shared.runModal(panel) == .OK, let url = panel.url {
             controller.outputDirectory = url
         }
     }

@@ -48,7 +48,7 @@ extension ProjectModel {
                 self.errorMessage = error.localizedDescription
             }
         }
-        if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
+        FilePanelPresenter.shared.present(panel, window: window, completion: run)
     }
 
     // MARK: 台本 CSV の読み込み
@@ -73,7 +73,7 @@ extension ProjectModel {
                 self.errorMessage = error.localizedDescription
             }
         }
-        if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
+        FilePanelPresenter.shared.present(panel, window: window, completion: run)
     }
 
     /// CSV ファイルの文字コードを推定して読む。UTF-16 は BOM があるときだけ先に試す

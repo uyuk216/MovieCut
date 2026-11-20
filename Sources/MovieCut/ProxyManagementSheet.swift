@@ -114,7 +114,7 @@ struct ProxyManagementSheet: View {
         panel.allowsMultipleSelection = false
         panel.allowedContentTypes = [.movie]
         panel.message = L10n.t("プレビューに使う映像を選んでください。書き出しは元の素材を使います。")
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard FilePanelPresenter.shared.runModal(panel) == .OK, let url = panel.url else { return }
         model.attachProxyLink(source: source, proxyPath: url.path)
     }
 }

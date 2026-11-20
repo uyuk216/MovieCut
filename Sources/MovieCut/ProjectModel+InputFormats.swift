@@ -24,7 +24,7 @@ extension ProjectModel {
             let urls = panel.urls
             Task { @MainActor in _ = await self?.importSVGFiles(urls: urls) }
         }
-        if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
+        FilePanelPresenter.shared.present(panel, window: window, completion: run)
     }
 
     @discardableResult
@@ -94,7 +94,7 @@ extension ProjectModel {
             let soundFontPath = soundFontAccessory.soundFontPath
             Task { @MainActor in _ = await self?.importMIDIFiles(urls: urls, soundFontPath: soundFontPath) }
         }
-        if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
+        FilePanelPresenter.shared.present(panel, window: window, completion: run)
     }
 
     @discardableResult
@@ -177,7 +177,7 @@ extension ProjectModel {
                 }
             }
         }
-        if let w = window { panel.beginSheetModal(for: w, completionHandler: run) } else { panel.begin(completionHandler: run) }
+        FilePanelPresenter.shared.present(panel, window: window, completion: run)
     }
 
     /// フレームレートを選ぶシート(12 / 24 / 30 / 60、既定 24)。キャンセルは nil。
@@ -274,7 +274,7 @@ final class SoundFontAccessoryView: NSObject {
         panel.canChooseDirectories = false
         if let t = UTType(filenameExtension: "sf2") { panel.allowedContentTypes = [t] }
         panel.title = "SoundFontを選ぶ"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard FilePanelPresenter.shared.runModal(panel) == .OK, let url = panel.url else { return }
         soundFontPath = url.path
         label.stringValue = "SoundFont: \(url.lastPathComponent)"
     }

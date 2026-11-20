@@ -532,13 +532,13 @@ struct AudioLibrarySheet: View {
         panel.allowsMultipleSelection = false
         panel.title = "素材のフォルダを選ぶ"
         // 素材ブラウザは別ウインドウ(非モーダル)なので、フォルダ選びも独立したパネルで出す
-        panel.begin { resp in
+        FilePanelPresenter.shared.present(panel, window: nil, completion: { resp in
             guard resp == .OK, let url = panel.url else { return }
             AudioLibraryStore.setFolder(url)
             folder = url
             subpath = ""
             reload()
-        }
+        })
     }
 
     /// 同梱素材を一覧にする(初回は作る)。選んだフォルダの記憶は変えない。
