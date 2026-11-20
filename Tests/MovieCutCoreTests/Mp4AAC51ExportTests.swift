@@ -198,7 +198,7 @@ final class Mp4AAC51ExportTests: XCTestCase {
         let lsize = MemoryLayout<AudioChannelLayout>.size
         let st = withUnsafePointer(to: &layout) { lp in
             CMAudioFormatDescriptionCreate(allocator: kCFAllocatorDefault, asbd: &asbd, layoutSize: lsize, layout: lp,
-                                           magicCookie: nil, magicCookieSize: 0, extensions: nil, formatDescriptionOut: &fmtOut)
+                                           magicCookieSize: 0, magicCookie: nil, extensions: nil, formatDescriptionOut: &fmtOut)
         }
         guard st == noErr, let audioFmt = fmtOut else { throw ExportError.audioReadFailed(nil) }
 
