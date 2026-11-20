@@ -110,6 +110,27 @@ final class TachieFollowEndTests: XCTestCase {
         XCTAssertEqual(TachieMigration.migrated(m), m)
     }
 
+    func testLockedLayerFollowClipIsNotSynced() {
+        // ロックされたレイヤーの印クリップは、合わせ直しでも触らない(長さも印もそのまま)。
+        // 合わせ直すと呼び出し側のロック判定で、関係ない編集全体が断られてしまう。
+        var p = project(tachieDuration: 5, voices: [(0, 5)])
+        p.tracks[0].locked = true
+        p.tracks[1].clips.append(clip("v9", .voice, start: 6, duration: 4))   // 終わり 10 秒まで伸びる素材
+        let q = TachieEditing.syncProjectEnd(p)
+        XCTAssertEqual(q, p, "ロック中のレイヤーは合わせ直さない")
+        XCTAssertEqual(dur(q), 5, accuracy: 1e-9)
+        XCTAssertEqual(q.allClips.first { $0.id == "t1" }!.followsProjectEnd, true, "印も外さない")
+    }
+
+    func testClipLockedFollowClipIsNotSynced() {
+        var p = project(tachieDuration: 5, voices: [(0, 5)])
+        p.tracks[0].clips[0].locked = true
+        p.tracks[1].clips.append(clip("v9", .voice, start: 6, duration: 4))
+        let q = TachieEditing.syncProjectEnd(p)
+        XCTAssertEqual(q, p, "クリップロック中は合わせ直さない")
+        XCTAssertEqual(dur(q), 5, accuracy: 1e-9)
+    }
+
     func testMakeClipOnlyMarksWhenAsked() throws {
         var p = Project(); p.tachies = [Tachie(name: "a")]
         let id = p.tachies[0].id

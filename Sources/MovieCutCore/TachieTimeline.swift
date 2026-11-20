@@ -53,6 +53,7 @@ public extension TachieEditing {
     /// 「プロジェクトの長さに合わせる」立ち絵クリップ(`followsProjectEnd`)の長さを、プロジェクトの終わりに合わせ直す。
     /// 終わり = それらのクリップを除いた全クリップの終わりの最大。同じレイヤーの次のクリップの頭は越えない。
     /// `old` は編集前のプロジェクト: 編集でこのクリップの頭・長さが(自動ではなく)変わっていたら、ユーザーが長さを決めたので合わせ続けるのをやめる(印を外す)。
+    /// ロックされたレイヤー・クリップの印はそのままにし、長さも印も触らない。
     /// 印のあるクリップが無ければ入力と同じ値。何度かけても同じ。
     static func syncProjectEnd(_ project: Project, old: Project? = nil) -> Project {
         guard project.tracks.contains(where: { $0.clips.contains { $0.followsProjectEnd == true } }) else { return project }
@@ -62,6 +63,10 @@ public extension TachieEditing {
         let eps = ClipEditing.timeEpsilon
         for ti in p.tracks.indices {
             for ci in p.tracks[ti].clips.indices where p.tracks[ti].clips[ci].followsProjectEnd == true {
+                // ロックされたレイヤー・クリップは合わせ直さない(ロック = 変えない)。
+                // 合わせ直してしまうと、呼び出し側(`ProjectModel.edit`)のロック判定が「ロック中のクリップが変わった」と
+                // みなして、その編集全体(関係ないスライダーのドラッグなど)を断ってしまう。
+                if p.tracks[ti].isLocked || p.tracks[ti].clips[ci].isClipLocked { continue }
                 let c = p.tracks[ti].clips[ci]
                 if let o = old.flatMap({ ClipEditing.locate(c.id, in: $0) }).map({ old!.tracks[$0.track].clips[$0.index] }),
                    abs(o.start - c.start) > eps || abs(o.duration - c.duration) > eps, o.followsProjectEnd == true {

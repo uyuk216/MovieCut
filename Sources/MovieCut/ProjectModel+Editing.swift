@@ -215,6 +215,9 @@ extension ProjectModel {
     func updateGesture(_ p: Project) {
         guard let base = gestureBase, p != project else { return }
         if LayerEditing.violatesLock(old: base, new: p) { return }   // ロックされたレイヤーのクリップは動かさない
+        // 入れ子の複合クリップ(またはそのレイヤー)がロックされていると、離したときの `edit` が中の編集を断り、
+        // ドラッグ全体が元の値へ戻ってしまう。`edit` と同じ条件で、ドラッグ中から動かさない。
+        if !compoundPath.isEmpty, let r = scopeRoot, CompoundScope.ancestorLocked(r, path: compoundPath) { return }
         project = p
         playback.projectDidChange()
     }
