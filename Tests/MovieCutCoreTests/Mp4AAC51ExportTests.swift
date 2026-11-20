@@ -137,6 +137,7 @@ final class Mp4AAC51ExportTests: XCTestCase {
         print("[mp451] output format codec=\(fmt.codec) channels=\(fmt.channels) sr=\(fmt.sampleRate) layout=\(String(describing: fmt.layoutTag))")
         XCTAssertEqual(fmt.codec, kAudioFormatMPEG4AAC, "音声は AAC で書かれる")
         XCTAssertEqual(fmt.channels, 2, "出力は仕様どおりステレオ(5.1 書き出しは設計上しない)")
+        XCTAssertEqual(fmt.layoutTag, kAudioChannelLayoutTag_Stereo, "レイアウトタグはステレオ")
         XCTAssertEqual(fmt.sampleRate, 48000, accuracy: 1)
 
         let ch = try decodeChannels(out, channels: 2)
@@ -266,16 +267,27 @@ final class Mp4AAC51ExportTests: XCTestCase {
         let sfmt = try audioFormat(of: src)
         print("[mp451] source format codec=\(sfmt.codec) channels=\(sfmt.channels) sr=\(sfmt.sampleRate) layout=\(String(describing: sfmt.layoutTag))")
         XCTAssertEqual(sfmt.channels, 6, "素材は 5.1(6ch)で作れている")
+        XCTAssertEqual(sfmt.layoutTag, kAudioChannelLayoutTag_AAC_5_1, "素材のレイアウトタグは AAC 5.1")
 
-        // 素材を素材チャンネル数のまま読んだときの並び(自前ダウンミックスへ切り替える場合の前提確認)
+        // 素材を素材チャンネル数のまま読んだときの並び: レイアウト順(C L R Ls Rs LFE)のまま返り、
+        // 入れ替わり・欠落は無い(実測 2026-11-20)。
         let native = try decodeChannels(src, channels: 6)
         XCTAssertEqual(native.count, 6)
         for c in 0..<6 { print("[mp451] native ch\(c) " + describe("", toneAmplitudes(native[c]))) }
+        for (c, f) in Self.aac51Freqs.enumerated() {
+            let amps = toneAmplitudes(native[c])
+            let idx = Self.freqs.firstIndex(of: f)!
+            XCTAssertEqual(amps[idx], Double(Self.amp), accuracy: 0.02, "素材 ch\(c) は \(f)Hz のまま読める")
+            for (j, a) in amps.enumerated() where j != idx { XCTAssertLessThan(a, 0.03, "素材 ch\(c) に \(Self.names[j]) は混ざらない") }
+        }
 
-        // AVFoundation に 2ch 変換させた素の結果(AssetPCMSource 既定経路の実体)
+        // AVFoundation に 2ch 変換させた素の結果(AssetPCMSource 既定経路の実体):
+        // 実測では BS.775 Lo/Ro そのもの(C/サラウンドは 0.7071 倍、LFE は含まない)だった。
         let av2 = try decodeChannels(src, channels: 2)
         print("[mp451] " + describe("AV2ch L", toneAmplitudes(av2[0])))
         print("[mp451] " + describe("AV2ch R", toneAmplitudes(av2[1])))
+        XCTAssertEqual(toneAmplitudes(av2[0])[2], Double(Self.amp) * g, accuracy: 0.06, "AVFoundation 変換でもセンターは落ちない")
+        XCTAssertEqual(toneAmplitudes(av2[1])[5], Double(Self.amp) * g, accuracy: 0.06, "AVFoundation 変換でも右サラウンドは落ちない")
 
         // MovieCut の書き出し(動画クリップ = Asset 経路でミックス → AAC)
         var p = Project.new(); p.width = 320; p.height = 180; p.fps = 30
@@ -291,13 +303,41 @@ final class Mp4AAC51ExportTests: XCTestCase {
         let la = toneAmplitudes(ch[0]), ra = toneAmplitudes(ch[1])
         print("[mp451] " + describe("asset-out Lch", la))
         print("[mp451] " + describe("asset-out Rch", ra))
-        // センター・サラウンドが黙って落ちていないこと(係数の厳密値は AVFoundation 依存なので存在を固定する)
-        XCTAssertGreaterThan(la[2], 0.08, "センター(880) が左に含まれている")
-        XCTAssertGreaterThan(ra[2], 0.08, "センター(880) が右に含まれている")
-        XCTAssertGreaterThan(la[4], 0.08, "左サラウンド(1320) が左に含まれている")
-        XCTAssertGreaterThan(ra[5], 0.08, "右サラウンド(1760) が右に含まれている")
-        XCTAssertGreaterThan(la[0], 0.15, "L(440) が左に含まれている")
-        XCTAssertGreaterThan(ra[1], 0.15, "R(660) が右に含まれている")
+        // 書き出し後の AAC でも、AVFoundation 変換の値(BS.775)がそのまま保たれる(実測 2026-11-20)。
+        XCTAssertEqual(la[0], Double(Self.amp), accuracy: 0.06, "左に L(440)")
+        XCTAssertEqual(la[2], Double(Self.amp) * g, accuracy: 0.06, "左にセンター(880): 無音化していない")
+        XCTAssertEqual(la[4], Double(Self.amp) * g, accuracy: 0.06, "左に左サラウンド(1320)")
+        XCTAssertLessThan(la[1], 0.03); XCTAssertLessThan(la[5], 0.03)
+        XCTAssertLessThan(la[3], 0.03, "LFE は BS.775 どおり含めない")
+        XCTAssertEqual(ra[1], Double(Self.amp), accuracy: 0.06, "右に R(660)")
+        XCTAssertEqual(ra[2], Double(Self.amp) * g, accuracy: 0.06, "右にセンター(880)")
+        XCTAssertEqual(ra[5], Double(Self.amp) * g, accuracy: 0.06, "右に右サラウンド(1760)")
+        XCTAssertLessThan(ra[0], 0.03); XCTAssertLessThan(ra[4], 0.03)
+        XCTAssertLessThan(ra[3], 0.03, "LFE は含めない")
+    }
+
+    /// 音声のみ書き出し(.m4a / AudioExporter)も同じミックス→AAC 経路で、5.1 の成分が保たれること。
+    func testExport51WavToM4aAACContainsAllChannelsDownmixed() async throws {
+        let wav = try writeToneWAV("tones51-m4a.wav")
+        var p = Project.new(); p.width = 320; p.height = 180; p.fps = 30
+        var c = Clip(); c.type = .audio; c.src = wav.path; c.start = 0; c.duration = Self.duration
+        p.tracks[0].clips = [c]
+        let out = tmp.appendingPathComponent("out51.m4a")
+        try await AudioExporter.export(project: p, to: out)
+        let fmt = try audioFormat(of: out)
+        XCTAssertEqual(fmt.codec, kAudioFormatMPEG4AAC)
+        XCTAssertEqual(fmt.channels, 2)
+        let ch = try decodeChannels(out, channels: 2)
+        let la = toneAmplitudes(ch[0]), ra = toneAmplitudes(ch[1])
+        print("[mp451] " + describe("m4a Lch", la))
+        print("[mp451] " + describe("m4a Rch", ra))
+        XCTAssertEqual(la[0], Double(Self.amp), accuracy: 0.06)
+        XCTAssertEqual(la[2], Double(Self.amp) * g, accuracy: 0.06, "m4a でもセンターが落ちない")
+        XCTAssertEqual(la[4], Double(Self.amp) * g, accuracy: 0.06)
+        XCTAssertEqual(ra[1], Double(Self.amp), accuracy: 0.06)
+        XCTAssertEqual(ra[2], Double(Self.amp) * g, accuracy: 0.06)
+        XCTAssertEqual(ra[5], Double(Self.amp) * g, accuracy: 0.06)
+        XCTAssertLessThan(la[3], 0.03); XCTAssertLessThan(ra[3], 0.03)
     }
 
     /// ステレオ素材の mp4 書き出しが従来どおり壊れていないこと(回帰)。
