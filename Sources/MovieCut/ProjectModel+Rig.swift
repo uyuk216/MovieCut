@@ -26,7 +26,7 @@ extension ProjectModel {
 
     /// スロットを体の後ろ(一番下)に置くか、前に重ねるか。
     func rigSetSlotBehind(tachieId: String, slot: String, behind: Bool) {
-        editRig(tachieId: tachieId, name: behind ? "\(slot)を体の後ろへ" : "\(slot)を体の前へ") { RigEditing.setSlotBehind($0, slot: slot, behind: behind) }
+        editRig(tachieId: tachieId, name: behind ? String(format: L10n.t("%@を体の後ろへ"), slot) : String(format: L10n.t("%@を体の前へ"), slot)) { RigEditing.setSlotBehind($0, slot: slot, behind: behind) }
     }
 
     func rigAssignBlink(tachieId: String) {
