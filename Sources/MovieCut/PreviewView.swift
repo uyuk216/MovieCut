@@ -27,11 +27,11 @@ struct PreviewView: NSViewRepresentable {
         nsView.model = model; nsView.updateOverlay(Self.overlayTarget(model: model, project: project, time: time, assets: assets))
     }
 
-    /// 選択クリップの枠(直接操作の取っ手)。画像・動画・文字を選んでいて、再生ヘッドがその中にあり、止まっているときだけ。
+    /// 選択クリップの枠(直接操作の取っ手)。枠で選べる種類(画像・動画・文字・複合・立ち絵)を選んでいて、再生ヘッドがその中にあり、止まっているときだけ。
     @MainActor
     static func overlayTarget(model: ProjectModel, project: Project, time: Double, assets: RenderAssets) -> PreviewOverlayTarget? {
         guard !model.isPlaying, !model.isLocked, let c = model.selectedClip,
-              [ClipType.image, .video, .text, .tachie].contains(c.type), time >= c.start, time < c.start + c.duration,
+              PreviewPicking.isPickable(c.type), time >= c.start, time < c.start + c.duration,
               let size = Renderer(project: project, assets: assets).objectSize(of: c, at: time) else { return nil }
         let canvas = CGSize(width: project.width, height: project.height)
         var target = PreviewOverlayTarget(clipId: c.id, box: TransformBox.make(clip: c, objectSize: size, at: time - c.start, canvas: canvas), canvas: canvas)
@@ -157,6 +157,22 @@ final class PreviewCanvasView: NSView {
     private(set) var manipulation: ManipulationDrag?
     /// ガイド線(表示 ▸ ガイド線)。プレビューの上に重ねるだけで、書き出しには入らない。
     private let guideLayer = CAShapeLayer()
+    /// 分割グリッドのガイド線(点線・控えめな濃さで、実線のガイドとは別レイヤー)。
+    private let gridGuideLayer = CAShapeLayer()
+    /// スナップ(吸着)した線をドラッグ中だけ出す専用レイヤー。
+    private let snapLineLayer = CAShapeLayer()
+    /// ドラッグ開始時に集めたスナップ先(ドラッグ中は固定し、再計算しない)。
+    private var snapTargets: PreviewSnap.Targets?
+    /// ドラッグ開始時の枠(スナップの移動計算の基準)。
+    private var snapBaseBox: TransformBox?
+    /// いま吸着している線(キャンバスの画素。縦線は x、横線は y)。
+    private var snappedVertical: Double?
+    private var snappedHorizontal: Double?
+    /// 吸着の閾値(画面の pt)。キャンバス画素へはビューの縮尺で換算する。
+    static let snapThresholdPoints: CGFloat = 8
+
+    /// テスト用: いま吸着している線(キャンバスの画素)。
+    var snappedLinesForTest: (vertical: Double?, horizontal: Double?) { (snappedVertical, snappedHorizontal) }
     /// 取っ手に反応する半径(ビューの pt)。
     static let handleRadius: CGFloat = 9
 
@@ -193,6 +209,15 @@ final class PreviewCanvasView: NSView {
         guideLayer.strokeColor = NSColor(white: 1, alpha: 0.6).cgColor
         guideLayer.lineWidth = 1
         guideLayer.isHidden = true
+        gridGuideLayer.fillColor = nil
+        gridGuideLayer.strokeColor = NSColor(white: 1, alpha: 0.35).cgColor
+        gridGuideLayer.lineWidth = 1
+        gridGuideLayer.lineDashPattern = [4, 4]
+        gridGuideLayer.isHidden = true
+        snapLineLayer.fillColor = nil
+        snapLineLayer.strokeColor = NSColor(srgbRed: 1, green: 0.6, blue: 0.2, alpha: 1).cgColor
+        snapLineLayer.lineWidth = 1
+        snapLineLayer.isHidden = true
         warpLineLayer.fillColor = nil
         warpLineLayer.strokeColor = NSColor(srgbRed: 0.35, green: 0.8, blue: 1, alpha: 0.9).cgColor
         warpLineLayer.lineWidth = 1
@@ -210,6 +235,8 @@ final class PreviewCanvasView: NSView {
         penHandleLayer.lineWidth = 1.25
         penHandleLayer.isHidden = true
         root.addSublayer(guideLayer)
+        root.addSublayer(gridGuideLayer)
+        root.addSublayer(snapLineLayer)
         root.addSublayer(outlineLayer)
         root.addSublayer(handleLayer)
         root.addSublayer(warpLineLayer)
@@ -240,27 +267,59 @@ final class PreviewCanvasView: NSView {
     @objc private func guidesChanged() { redrawGuides() }
 
     /// ガイド線を描き直す(枠の位置・大きさ・設定が変わったとき)。ガイドが無ければ隠す。
+    /// セーフ領域と中心線は実線(guideLayer)、分割グリッド線だけ点線・控えめな濃さの別レイヤー(gridGuideLayer)。
     private func redrawGuides() {
         let guides = PreviewGuideStore.current
         let canvas = aspect
-        let path = CGMutablePath()
         guard !guides.isEmpty, frameLayer.frame.width > 0 else {
             CATransaction.begin(); CATransaction.setDisableActions(true)
             guideLayer.isHidden = true
+            gridGuideLayer.isHidden = true
             CATransaction.commit()
             return
         }
+        let solid = CGMutablePath()
         for r in GuideGeometry.safeRects(guides, canvas: canvas) {
             let a = viewPoint(CGPoint(x: r.minX, y: r.minY), canvas: canvas), b = viewPoint(CGPoint(x: r.maxX, y: r.maxY), canvas: canvas)
-            path.addRect(CGRect(x: min(a.x, b.x), y: min(a.y, b.y), width: abs(b.x - a.x), height: abs(b.y - a.y)))
+            solid.addRect(CGRect(x: min(a.x, b.x), y: min(a.y, b.y), width: abs(b.x - a.x), height: abs(b.y - a.y)))
         }
-        for l in GuideGeometry.lines(guides, canvas: canvas) {
-            path.move(to: viewPoint(l.from, canvas: canvas))
-            path.addLine(to: viewPoint(l.to, canvas: canvas))
+        for l in GuideGeometry.lines(guides.intersection([.center]), canvas: canvas) {
+            solid.move(to: viewPoint(l.from, canvas: canvas))
+            solid.addLine(to: viewPoint(l.to, canvas: canvas))
+        }
+        let grid = CGMutablePath()
+        for l in GuideGeometry.gridLines(guides, canvas: canvas) {
+            grid.move(to: viewPoint(l.from, canvas: canvas))
+            grid.addLine(to: viewPoint(l.to, canvas: canvas))
         }
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        guideLayer.path = path
-        guideLayer.isHidden = false
+        guideLayer.path = solid
+        guideLayer.isHidden = solid.isEmpty
+        gridGuideLayer.path = grid
+        gridGuideLayer.isHidden = grid.isEmpty
+        CATransaction.commit()
+    }
+
+    /// 吸着した線を描き直す(ドラッグ中だけ。吸着が無ければ隠す)。
+    private func redrawSnapLines() {
+        guard let o = overlay, snappedVertical != nil || snappedHorizontal != nil else {
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            snapLineLayer.isHidden = true
+            CATransaction.commit()
+            return
+        }
+        let path = CGMutablePath()
+        if let x = snappedVertical {
+            path.move(to: viewPoint(CGPoint(x: x, y: 0), canvas: o.canvas))
+            path.addLine(to: viewPoint(CGPoint(x: x, y: o.canvas.height), canvas: o.canvas))
+        }
+        if let y = snappedHorizontal {
+            path.move(to: viewPoint(CGPoint(x: 0, y: y), canvas: o.canvas))
+            path.addLine(to: viewPoint(CGPoint(x: o.canvas.width, y: y), canvas: o.canvas))
+        }
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        snapLineLayer.path = path
+        snapLineLayer.isHidden = false
         CATransaction.commit()
     }
 
@@ -481,20 +540,19 @@ final class PreviewCanvasView: NSView {
         if event.clickCount == 2, addPuppetPinAt(atViewPoint: v, fixed: event.modifierFlags.contains(.shift)) { return }
         // ⌥ クリック: その場所に重なったクリップを手前から奥へ巡回して選ぶ(ドラッグは始めない)
         if event.modifierFlags.contains(.option), pickOverlapping(atViewPoint: v) { return }
-        // 選んでいる枠の上なら、そのままドラッグ(移動・拡大・回転)。外なら、押した場所のいちばん手前が立ち絵(絵のある所)のとき、それを選び、続けてドラッグできる
+        // 選んでいる枠の上なら、そのままドラッグ(移動・拡大・回転)。外なら、押した場所のいちばん手前(枠で選べる種類)を選び、続けてドラッグできる
         if beginManipulation(atViewPoint: v) { return }
         selectTopmost(atViewPoint: v)
     }
 
-    /// 押した場所のいちばん手前が立ち絵なら、それを選び、その枠でドラッグを始める。何も無ければ選択は変えない。
+    /// 押した場所のいちばん手前(枠で選べる種類: 画像・動画・文字・複合・立ち絵)を選び、その枠でドラッグを始める。
+    /// 立ち絵の透明な所は当たらない(奥のクリップを選べる。当たり判定は PreviewPicking.hits が担保する)。何も無ければ選択は変えない。
     @discardableResult
     func selectTopmost(atViewPoint v: CGPoint) -> Bool {
         guard let m = model, !m.isLocked, frameLayer.frame.contains(v) else { return false }
         let canvas = CGSize(width: m.project.width, height: m.project.height)
-        // 押しただけで選ぶのは立ち絵だけ(画像・動画・文字は従来どおり、選んだ枠の上か ⌥ クリックで操作する)。いちばん手前が立ち絵のときに限る
         guard canvas.width > 0, canvas.height > 0,
-              let id = PreviewPicking.hits(in: m.project, at: canvasPoint(v, canvas: canvas), time: m.currentTime, assets: m.assets).first,
-              m.clip(id)?.type == .tachie else { return false }
+              let id = PreviewPicking.hits(in: m.project, at: canvasPoint(v, canvas: canvas), time: m.currentTime, assets: m.assets).first else { return false }
         if m.selectedClipId != id || m.selectedClipIDs.count > 1 { m.selectOnly(id) }
         overlay = PreviewView.overlayTarget(model: m, project: m.project, time: m.currentTime, assets: m.assets)
         redrawOverlay()
@@ -522,7 +580,7 @@ final class PreviewCanvasView: NSView {
         return m.clip(c.id)?.puppetWarp != nil
     }
 
-    override func mouseDragged(with event: NSEvent) { dragManipulation(toViewPoint: convert(event.locationInWindow, from: nil), snapRotation: event.modifierFlags.contains(.shift)) }
+    override func mouseDragged(with event: NSEvent) { dragManipulation(toViewPoint: convert(event.locationInWindow, from: nil), snapRotation: event.modifierFlags.contains(.shift), snapDisabled: event.modifierFlags.contains(.command)) }
     override func mouseUp(with event: NSEvent) { endManipulation() }
 
     /// 押した: 枠の本体・角・回転の取っ手に当たれば、ドラッグを始める(元のクリップを覚える)。当たらなければ false。
@@ -551,13 +609,44 @@ final class PreviewCanvasView: NSView {
         }
         m.beginGesture()           // 再生を止め、元の状態を覚える
         manipulation = ManipulationDrag(kind: kind, clipId: c.id, start: p, base: c, relTime: min(max(m.currentTime - c.start, 0), c.duration), name: name)
+        // スナップ先はドラッグ開始時に一度だけ集めて固定する(移動・拡縮のみ。回転は従来の Shift 15 度刻みだけ)
+        if kind == .move || kind == .scale {
+            snapTargets = collectSnapTargets(excluding: c.id, canvas: o.canvas)
+            snapBaseBox = o.box
+        } else {
+            snapTargets = nil; snapBaseBox = nil
+        }
+        snappedVertical = nil; snappedHorizontal = nil; redrawSnapLines()
         return true
     }
 
-    func dragManipulation(toViewPoint v: CGPoint, snapRotation: Bool = false) {
+    /// スナップ先を集める(ドラッグ開始時に一度だけ): キャンバスの端・中心、表示中のガイド線、
+    /// 同じ時刻に見えている他のクリップ(枠で選べる種類で、不透明なもの)の枠。集める計算は Core の PreviewSnap。
+    private func collectSnapTargets(excluding clipId: String, canvas: CGSize) -> PreviewSnap.Targets {
+        guard let m = model else { return PreviewSnap.targets(canvas: canvas, guides: PreviewGuideStore.current) }
+        let renderer = Renderer(project: m.project, assets: m.assets)
+        var boxes: [TransformBox] = []
+        for id in PreviewPicking.stack(in: m.project, at: m.currentTime) where id != clipId {
+            guard let loc = ClipEditing.locate(id, in: m.project) else { continue }
+            let c = m.project.tracks[loc.track].clips[loc.index]
+            guard PreviewPicking.isPickable(c.type),
+                  Animation.value(of: "opacity", in: c, at: m.currentTime - c.start) > 0.001,
+                  let size = renderer.objectSize(of: c, at: m.currentTime) else { continue }
+            boxes.append(TransformBox.make(clip: c, objectSize: size, at: m.currentTime - c.start, canvas: canvas))
+        }
+        return PreviewSnap.targets(canvas: canvas, guides: PreviewGuideStore.current, otherBoxes: boxes)
+    }
+
+    /// 吸着の閾値をキャンバスの画素に直したもの(画面の 8pt 相当)。
+    private func snapThreshold(canvas: CGSize) -> Double {
+        let f = frameLayer.frame
+        return f.width > 0 ? Double(Self.snapThresholdPoints) * canvas.width / f.width : Double(Self.snapThresholdPoints)
+    }
+
+    func dragManipulation(toViewPoint v: CGPoint, snapRotation: Bool = false, snapDisabled: Bool = false) {
         guard let d = manipulation, let o = overlay, let m = model, let base = m.gestureBase,
               let loc = ClipEditing.locate(d.clipId, in: base) else { return }
-        let p = canvasPoint(v, canvas: o.canvas)
+        var p = canvasPoint(v, canvas: o.canvas)
         let c: Clip
         if let pref = d.pen {
             // ドラッグ開始時のクリップから毎回計算する(アンカーはハンドルごと、ハンドルは単独で動く)
@@ -580,6 +669,25 @@ final class PreviewCanvasView: NSView {
         } else if let wk = d.warp {
             c = WarpDrag.apply(wk, to: d.base, at: d.relTime, tolerance: m.keyTolerance, canvas: p, box: o.box)
         } else {
+            // スナップ: ポインタ位置を補正してから DirectManipulation.apply に渡す(設定 ON のときだけ。⌘ 押下中は一時無効)
+            var vLine: Double?, hLine: Double?
+            if PreviewSnapStore.current, !snapDisabled, let targets = snapTargets, let baseBox = snapBaseBox {
+                let threshold = snapThreshold(canvas: o.canvas)
+                switch d.kind {
+                case .move:
+                    let r = PreviewSnap.snapMove(box: baseBox, delta: CGPoint(x: p.x - d.start.x, y: p.y - d.start.y), targets: targets, threshold: threshold)
+                    p = CGPoint(x: d.start.x + r.delta.x, y: d.start.y + r.delta.y)
+                    vLine = r.verticalLine; hLine = r.horizontalLine
+                case .scale:
+                    let r = PreviewSnap.snapPoint(p, targets: targets, threshold: threshold)
+                    p = r.point
+                    vLine = r.verticalLine; hLine = r.horizontalLine
+                case .rotate:
+                    break   // 回転は吸着しない(Shift の 15 度刻みだけ)
+                }
+            }
+            snappedVertical = vLine; snappedHorizontal = hLine
+            redrawSnapLines()
             c = DirectManipulation.apply(d.kind, to: d.base, at: d.relTime, tolerance: m.keyTolerance, from: d.start, to: p, canvas: o.canvas, snapRotation: snapRotation)
         }
         var pr = base
@@ -590,6 +698,8 @@ final class PreviewCanvasView: NSView {
     func endManipulation() {
         guard let d = manipulation else { return }
         manipulation = nil
+        snapTargets = nil; snapBaseBox = nil
+        snappedVertical = nil; snappedHorizontal = nil; redrawSnapLines()   // 吸着の線はドラッグ終了で消す
         model?.commitGesture(d.name)       // 変わっていれば 1 回の Undo
     }
 

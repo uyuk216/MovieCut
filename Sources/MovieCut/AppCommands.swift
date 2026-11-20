@@ -328,6 +328,7 @@ struct AppCommands: Commands {
                 Menu(L10n.t("プレビューの背景")) { items(AppMenuSpec.previewBackgroundItems(s), run) }
                 Menu(L10n.t("プレビュー画質")) { items(AppMenuSpec.previewTierItems(s), run) }
                 Menu(L10n.t("ガイド線")) { items(AppMenuSpec.guideItems(s), run) }
+                MenuItemView(spec: AppMenuSpec.previewSnapItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.previewProxy(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.proxyAutoCreateItem(s), perform: run)
                 Divider()
