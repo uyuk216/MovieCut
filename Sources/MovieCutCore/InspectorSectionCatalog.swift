@@ -39,7 +39,7 @@ public enum InspectorSectionCatalog {
         let words = rest.split(separator: ".", omittingEmptySubsequences: false)
         return words.allSatisfy { w in
             guard let f = w.unicodeScalars.first, f.properties.isAlphabetic, f.isASCII else { return false }
-            return w.unicodeScalars.allSatisfy { $0.isASCII && ($0.properties.isAlphabetic || ("0"..."9").contains(Character($0)) || $0 == "_") }
+            return w.unicodeScalars.allSatisfy { $0.isASCII && ($0.properties.isAlphabetic || (48...57).contains($0.value) || $0 == "_") }
         }
     }
 
