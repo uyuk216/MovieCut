@@ -865,7 +865,7 @@ case "export-web" where args.count >= 3:
         }
         var nextMark = 0.1
         let t0 = Date()
-        try await FFmpegVideoExporter.export(project: p, range: range, format: format, crf: crf, to: URL(fileURLWithPath: args[2]), loudness: loudness) { v in
+        try await FFmpegVideoExporter.export(project: p, range: range, format: format, crf: crf, to: URL(fileURLWithPath: args[2]), loudness: loudness, vst3Provider: VST3EffectProvider.standard()) { v in
             if v >= nextMark - 1e-9 {
                 FileHandle.standardError.write(Data(String(format: "  %3.0f%%\n", v * 100).utf8))
                 nextMark = (v * 10 + 1e-9).rounded(.down) / 10 + 0.1

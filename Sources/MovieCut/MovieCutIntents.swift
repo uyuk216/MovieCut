@@ -65,7 +65,7 @@ struct ExportProjectIntent: AppIntent {
     func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog {
         let projectURL = try IntentFileConversion.fileURL(from: projectFile)
         let request = AutomationExportRequest(projectPath: projectURL.path, presetName: preset.corePresetName)
-        let output = try await AutomationExport.run(request)
+        let output = try await AutomationExport.run(request, vst3Provider: AppServices.vst3EffectProvider)
         return .result(value: output.path,
                        dialog: "書き出しました: \(output.lastPathComponent)")
     }

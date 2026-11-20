@@ -124,6 +124,19 @@ final class VST3WiringTests: XCTestCase {
         XCTAssertEqual(try AudioFixture.peak(wet.wavURL, from: 0.05, to: 0.95), 0.15, accuracy: 0.02, "連番PNG+WAV の WAV にも効く")
     }
 
+    // MARK: 自動化(Shortcuts / AppleScript)の書き出し
+
+    func testAutomationExportAppliesVST3() async throws {
+        let p = try project()
+        let projURL = tmp.appendingPathComponent("auto.\(ProjectFileExtension.current)")
+        try p.save(to: projURL)
+        let dry = tmp.appendingPathComponent("auto-dry.m4a"); let wet = tmp.appendingPathComponent("auto-wet.m4a")
+        _ = try await AutomationExport.run(.init(projectPath: projURL.path, outputPath: dry.path, presetName: ExportPreset.audio.rawValue))
+        _ = try await AutomationExport.run(.init(projectPath: projURL.path, outputPath: wet.path, presetName: ExportPreset.audio.rawValue), vst3Provider: gainProvider)
+        XCTAssertEqual(try AudioFixture.peak(dry, from: 0.05, to: 0.95), 0.3, accuracy: 0.04)
+        XCTAssertEqual(try AudioFixture.peak(wet, from: 0.05, to: 0.95), 0.15, accuracy: 0.04, "自動化の書き出しにも VST3 が効く")
+    }
+
     // MARK: 測定経路(Loudness は書き出しと同じミックスを測る)
 
     func testLoudnessMeasureReflectsVST3() throws {

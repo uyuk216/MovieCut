@@ -55,7 +55,7 @@ final class ExportProjectScriptCommand: NSScriptCommand {
         suspendExecution()
         Task.detached { [self] in
             do {
-                let output = try await AutomationExport.run(request)
+                let output = try await AutomationExport.run(request, vst3Provider: AppServices.vst3EffectProvider)
                 resumeExecution(withResult: NSURL(fileURLWithPath: output.path))
             } catch {
                 scriptErrorNumber = -1

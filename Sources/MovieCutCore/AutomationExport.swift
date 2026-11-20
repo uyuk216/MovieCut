@@ -118,9 +118,9 @@ public enum AutomationExport {
 
     /// 計画どおりに書き出す(既存の `ExportJob.run` に委譲)。出力先の URL を返す。
     @discardableResult
-    public static func run(_ request: AutomationExportRequest, progress: ((Double) -> Void)? = nil) async throws -> URL {
+    public static func run(_ request: AutomationExportRequest, vst3Provider: (any AudioEffectProviding)? = nil, progress: ((Double) -> Void)? = nil) async throws -> URL {
         let plan = try plan(request)
-        try await ExportJob.run(project: plan.project, preset: plan.preset, spec: plan.spec, range: plan.range, to: plan.outputURL, progress: progress)
+        try await ExportJob.run(project: plan.project, preset: plan.preset, spec: plan.spec, range: plan.range, to: plan.outputURL, vst3Provider: vst3Provider, progress: progress)
         return plan.outputURL
     }
 
