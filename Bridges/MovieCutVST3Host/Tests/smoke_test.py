@@ -32,6 +32,10 @@ class ClassInfo(ctypes.Structure):
                 ("cidHex", ctypes.c_char * 33)]
 
 
+class EditorSize(ctypes.Structure):
+    _fields_ = [("width", ctypes.c_int32), ("height", ctypes.c_int32)]
+
+
 class Change(ctypes.Structure):
     _fields_ = [("id", ctypes.c_uint32), ("offset", ctypes.c_int32), ("value", ctypes.c_double)]
 
@@ -90,6 +94,32 @@ def main():
     check(ci.category == b"Audio Module Class", "audio module class")
 
     check(create(inst, None) == OK, "create_processor (first audio class)")
+
+    # --- エディタ(純正 GUI)系の存在確認(R5 キュー3) ---
+    # macOS での実 attach はスモークでは親 NSView を用意できないため対象外。
+    #  - Linux(非 macOS): 5 関数すべて NOT_IMPLEMENTED(3) を返すこと
+    #  - macOS: 親 NULL は INVALID_ARGUMENT(2)、destroy は冪等で OK(0)、callback 登録/解除は OK(0)
+    NOT_IMPLEMENTED, INVALID_ARGUMENT = 3, 2
+    ed_create = fn("mcvst3_create_editor_view", ctypes.c_int32, P, P, ctypes.POINTER(P))
+    ed_get = fn("mcvst3_get_editor_size", ctypes.c_int32, P, ctypes.POINTER(EditorSize))
+    ed_set = fn("mcvst3_set_editor_size", ctypes.c_int32, P, ctypes.POINTER(EditorSize))
+    ed_destroy = fn("mcvst3_destroy_editor_view", ctypes.c_int32, P)
+    ResizeCb = ctypes.CFUNCTYPE(ctypes.c_int32, P, ctypes.c_int32, ctypes.c_int32)
+    ed_cb = fn("mcvst3_set_editor_resize_callback", ctypes.c_int32, P, ResizeCb, P)
+    check(ctypes.sizeof(EditorSize) == 8, "MCVST3EditorSize is 8 bytes")
+    out_view = P()
+    esz = EditorSize(0, 0)
+    if sys.platform == "darwin":
+        check(ed_create(inst, None, ctypes.byref(out_view)) == INVALID_ARGUMENT, "editor create with NULL parent -> INVALID_ARGUMENT")
+        check(ed_get(inst, ctypes.byref(esz)) == 6, "editor get_size without view -> WRONG_STATE")
+        check(ed_destroy(inst) == OK, "editor destroy is idempotent")
+        check(ed_cb(inst, ResizeCb(0), None) == OK and ed_cb(inst, ResizeCb(0), None) == OK, "editor resize callback set/clear")
+    else:
+        check(ed_create(inst, ctypes.c_void_p(1), ctypes.byref(out_view)) == NOT_IMPLEMENTED, "editor create -> NOT_IMPLEMENTED (non-macOS)")
+        check(ed_get(inst, ctypes.byref(esz)) == NOT_IMPLEMENTED, "editor get_size -> NOT_IMPLEMENTED (non-macOS)")
+        check(ed_set(inst, ctypes.byref(EditorSize(10, 10))) == NOT_IMPLEMENTED, "editor set_size -> NOT_IMPLEMENTED (non-macOS)")
+        check(ed_destroy(inst) == NOT_IMPLEMENTED, "editor destroy -> NOT_IMPLEMENTED (non-macOS)")
+        check(ed_cb(inst, ResizeCb(0), None) == NOT_IMPLEMENTED, "editor resize callback -> NOT_IMPLEMENTED (non-macOS)")
 
     pc = ctypes.c_int32(0)
     check(param_count(inst, ctypes.byref(pc)) == OK and pc.value == 3, f"parameter count={pc.value}")

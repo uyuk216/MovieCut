@@ -213,10 +213,12 @@ final class VST3NextTests: XCTestCase {
 
     func testBridgeDefinitionsAreStable() {
         XCTAssertEqual(VST3Bridge.protocolVersion, 1)
-        // opcode は C ヘッダと同順・同値(並びを変えたら両方変える約束の固定)
-        XCTAssertEqual(VST3BridgeOpcode.allCases.map { $0.rawValue }, Array(0..<10))
+        // opcode は C ヘッダと同順・同値(並びを変えたら両方変える約束の固定)。
+        // 10〜14 は R5 キュー3(純正 GUI の土台)で末尾追加したエディタ系。既存 0〜9 は不変。
+        XCTAssertEqual(VST3BridgeOpcode.allCases.map { $0.rawValue }, Array(0..<15))
         XCTAssertEqual(VST3BridgeOpcode.processBlock.rawValue, 5)
-        XCTAssertEqual(VST3BridgeStatus.allCases.map { $0.rawValue }, Array(0..<7))
+        // 7 = noEditor は R5 キュー3 で末尾追加(エディタを持たないプラグイン専用)。0〜6 は不変。
+        XCTAssertEqual(VST3BridgeStatus.allCases.map { $0.rawValue }, Array(0..<8))
         XCTAssertFalse(VST3BridgeStatus.ok.shouldBypass)
         XCTAssertTrue(VST3BridgeStatus.notImplemented.shouldBypass)
         XCTAssertTrue(VST3BridgeStatus.wrongState.shouldBypass)

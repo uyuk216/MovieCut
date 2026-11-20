@@ -119,6 +119,17 @@ public enum VST3HostAvailability: Equatable, Sendable {
         case .bridgeAvailable: return "VST3 プラグインを読み込めなかったためバイパス"
         }
     }
+
+    // MARK: 純正 GUI(エディタ)の到達状態(R5 キュー3)。上の既存プロパティは変えない。
+
+    /// 純正 GUI(エディタ)の土台が実装済みか。土台=ブリッジ ABI・セッション・導線までで、実プラグインでの表示確認は含まない。
+    public var hasEditorFoundation: Bool { true }
+    /// 純正 GUI の実プラグイン表示が検証済みか(現状は未検証)。
+    public var editorDisplayVerified: Bool { false }
+    /// 純正 GUI についての正直な説明。
+    public var editorUserFacingNote: String {
+        "VST3 プラグインの純正 GUI は土台のみ実装済みです。実プラグインでの表示確認は未実施のため、開けない場合があります。"
+    }
 }
 
 /// 検出した VST3 バンドルを音声エフェクトとして並べるプロバイダ。

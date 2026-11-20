@@ -42,6 +42,17 @@ public enum VST3BridgeOpcode: Int32, Equatable, Sendable, CaseIterable {
     case setState = 8
     /// 後片付け(生成の逆順)。
     case dispose = 9
+    // --- 末尾追加(W6-2 / R5 キュー3: 純正 GUI の土台。既存の番号・並びは変えない) ---
+    /// エディタビューを生成して親ビューへ取り付ける(親は不透明ハンドル)。
+    case createEditorView = 10
+    /// エディタの現在サイズを取得する(サイズ交渉の初回取得・リサイズ後の再取得)。
+    case getEditorSize = 11
+    /// ホスト側のウィンドウサイズ変更をエディタへ伝える。
+    case setEditorSize = 12
+    /// エディタビューを親から外して解放する(冪等)。
+    case destroyEditorView = 13
+    /// プラグインからのリサイズ要求をホストへ伝えるコールバックの登録/解除。
+    case setEditorResizeCallback = 14
 }
 
 /// ブリッジの結果コード(C ヘッダの `MCVST3Status` と同順・同値。VST3 の tresult の考え方に寄せる)。
@@ -56,6 +67,8 @@ public enum VST3BridgeStatus: Int32, Equatable, Sendable, CaseIterable {
     case notFound = 5
     /// 呼び出し順序が契約違反(setup 前の process 等)。
     case wrongState = 6
+    /// 末尾追加(R5 キュー3): プラグインがエディタ(純正 GUI)を持たない。一般の失敗とは区別する。
+    case noEditor = 7
 
     /// 呼び出し側がバイパスに落とすべき失敗か(`ok` 以外はすべて落とす、が原則)。
     public var shouldBypass: Bool { self != .ok }
@@ -85,6 +98,10 @@ public enum VST3BridgeSession {
         case .getState: return state == .created || state == .configured || state == .active
         case .setState: return state == .created || state == .configured
         case .dispose: return state != .closed
+        // エディタ系(R5 キュー3): プロセッサ(コントローラ)が生成済みの間だけ。状態は変えない。
+        case .createEditorView, .getEditorSize, .setEditorSize, .setEditorResizeCallback:
+            return state == .created || state == .configured || state == .active
+        case .destroyEditorView: return state != .closed
         }
     }
 

@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import MovieCutCore
 
 /// インスペクタ「音声」の VST3 節。
@@ -16,6 +17,8 @@ struct VST3Panel: View {
 
     @State private var open: Bool?
     @State private var scanResult: VST3ScanResult?
+    /// 純正 GUI を開けなかったとき/持たないときの穏やかな通知(パラメータ一覧など従来表示は壊さない)。
+    @State private var editorNote: String?
 
     private var clip: Clip? { model.clip(clipId) }
     private var slots: [AudioFx.VST3Slot] { clip?.audioFx?.vst3Slots ?? [] }
@@ -31,8 +34,20 @@ struct VST3Panel: View {
                         .foregroundStyle(MCDesign.Color.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
 
+                    // 純正 GUI は土台のみ。実プラグインでの表示確認が未実施であることを明示する
+                    Text(VST3HostAvailability.current.editorUserFacingNote)
+                        .font(MCDesign.Font.caption)
+                        .foregroundStyle(MCDesign.Color.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
                     ForEach(Array(slots.enumerated()), id: \.offset) { index, slot in
                         slotRow(index: index, slot: slot)
+                    }
+                    if let editorNote {
+                        Text(editorNote)
+                            .font(MCDesign.Font.caption)
+                            .foregroundStyle(MCDesign.Color.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
 
                     HStack {
@@ -112,6 +127,11 @@ struct VST3Panel: View {
                 }
             }
             Spacer()
+            Button(L10n.t("純正 GUI を開く")) { openEditor(slot: slot, detected: detected) }
+                .disabled(!VST3HostAvailability.current.canProcessAudio)
+                .help(VST3HostAvailability.current.canProcessAudio
+                      ? L10n.t("プラグイン純正の画面を別ウィンドウで開く")
+                      : L10n.t("VST3 ブリッジが無い環境では使えません"))
             Button(role: .destructive) {
                 model.setAudioFx({ _ = AudioFxEditing.removeVST3Slot(&$0, at: index) },
                                  name: ProjectModel.vst3UndoName, clipId: clipId)
@@ -151,5 +171,137 @@ struct VST3Panel: View {
 
     private func rescan() {
         scanResult = VST3Scanner.scanStandard()
+    }
+
+    /// 純正 GUI を専用ウィンドウで開く。失敗は例外にせず、穏やかな文言にして出す。
+    private func openEditor(slot: AudioFx.VST3Slot, detected: VST3BundleInfo?) {
+        editorNote = nil
+        guard let detected else {
+            editorNote = L10n.t("このプラグインはこの Mac で検出できないため、純正 GUI を開けません。")
+            return
+        }
+        guard let backend = VST3NativeBridgeBackend() else {
+            editorNote = L10n.t("VST3 ブリッジが使えないため、純正 GUI を開けません。")
+            return
+        }
+        let cid = detected.moduleClasses.first { $0.isAudioModule }?.cid
+        let name = slot.displayName
+        VST3EditorWindowManager.shared.open(title: name, backend: backend,
+                                            bundlePath: detected.bundleURL.path, cid: cid) { message in
+            editorNote = message
+        }
+    }
+}
+
+// MARK: - 純正 GUI の専用ウィンドウ(R5 キュー3)
+
+/// エディタの初期コンテンツサイズ(取得できなければ 480×320)。純ロジックとしてテストする。
+func vst3EditorInitialContentSize(_ size: VST3EditorSize?) -> CGSize {
+    guard let size, size.isValid else { return CGSize(width: 480, height: 320) }
+    return CGSize(width: CGFloat(size.width), height: CGFloat(size.height))
+}
+
+/// プラグインの IPlugView が取り付く親ビュー。`VST3EditorSession` を所有する。
+/// 自分のポインタを不透明な UInt64 親ハンドルとして Core に渡す(Core は AppKit を知らない)。
+final class VST3EditorHostView: NSView {
+    private(set) var session: VST3EditorSession?
+    /// 開けなかったとき(エディタ無しを含む)の通知。
+    var onOpenFailed: ((String) -> Void)?
+
+    /// ウィンドウ生成側が明示的に呼ぶ。viewDidMoveToWindow 等の暗黙のタイミングには頼らない。
+    @discardableResult
+    func openEditor(backend: any VST3BridgeBackend, bundlePath: String, cid: String?) -> VST3EditorSize? {
+        let session = VST3EditorSession(backend: backend, bundlePath: bundlePath, cid: cid)
+        let handle = UInt64(UInt(bitPattern: Unmanaged.passUnretained(self).toOpaque()))
+        switch session.open(parentHandle: handle) {
+        case .success(let size):
+            self.session = session
+            return size
+        case .failure(let error):
+            onOpenFailed?(Self.message(for: error))
+            return nil
+        }
+    }
+
+    func closeEditor() {
+        session?.close()
+        session = nil
+    }
+
+    static func message(for error: VST3EditorSessionError) -> String {
+        switch error {
+        case .noEditor: return L10n.t("このプラグインには純正 GUI がありません。パラメータ一覧をご利用ください。")
+        case .bridgeFailure: return L10n.t("純正 GUI を開けませんでした(プラグインが画面の表示に対応していない可能性があります)。")
+        case .wrongState, .invalidSize: return L10n.t("純正 GUI を開けませんでした。")
+        }
+    }
+}
+
+/// 開いたエディタウィンドウを閉じるまで保持するレジストリ(Panel の State が外れても生き続ける)。
+@MainActor
+final class VST3EditorWindowManager {
+    static let shared = VST3EditorWindowManager()
+    private var controllers: [ObjectIdentifier: VST3EditorWindowController] = [:]
+
+    func open(title: String, backend: any VST3BridgeBackend, bundlePath: String, cid: String?,
+              onFailure: @escaping (String) -> Void) {
+        let host = VST3EditorHostView(frame: .zero)
+        host.onOpenFailed = onFailure
+        // 親ビューは先に用意しておく(取り付けはウィンドウ生成より前に行い、失敗ならウィンドウを出さない)
+        guard let size = host.openEditor(backend: backend, bundlePath: bundlePath, cid: cid) else { return }
+        let controller = VST3EditorWindowController(host: host, title: title,
+                                                    contentSize: vst3EditorInitialContentSize(size))
+        let key = ObjectIdentifier(controller)
+        controllers[key] = controller
+        controller.onClosed = { [weak self] in self?.controllers[key] = nil }
+        controller.showWindow(nil)
+        controller.window?.makeKeyAndOrderFront(nil)
+    }
+}
+
+final class VST3EditorWindowController: NSWindowController, NSWindowDelegate {
+    private let host: VST3EditorHostView
+    var onClosed: (() -> Void)?
+    /// プラグイン要求でウィンドウを動かしている間は、windowDidEndLiveResize 経由の再通知を避ける。
+    private var applyingPluginResize = false
+
+    init(host: VST3EditorHostView, title: String, contentSize: CGSize) {
+        self.host = host
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: contentSize),
+                              styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                              backing: .buffered, defer: false)
+        window.title = title + "(" + L10n.t("純正 GUI") + ")"
+        window.isReleasedWhenClosed = false
+        host.frame = NSRect(origin: .zero, size: contentSize)
+        host.autoresizingMask = [.width, .height]
+        window.contentView = host
+        super.init(window: window)
+        window.delegate = self
+        window.center()
+        // プラグイン → ホストのリサイズ要求: ウィンドウのコンテンツサイズを合わせて受理する
+        host.session?.onResizeRequested = { [weak self] size in
+            guard let self, let window = self.window, size.isValid else { return false }
+            let target = CGSize(width: CGFloat(size.width), height: CGFloat(size.height))
+            if window.contentView?.frame.size == target { return true }
+            self.applyingPluginResize = true
+            window.setContentSize(target)
+            self.applyingPluginResize = false
+            return true
+        }
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) は使わない") }
+
+    /// ライブリサイズの終了時に 1 回だけ伝える(windowDidResize だとドラッグ中に毎フレーム
+    /// プラグインへ onSize が飛び、重い GUI で固まりやすいため)。
+    func windowDidEndLiveResize(_ notification: Notification) {
+        guard !applyingPluginResize, let content = window?.contentView else { return }
+        let size = VST3EditorSize(width: Int32(content.frame.width.rounded()), height: Int32(content.frame.height.rounded()))
+        host.session?.resize(to: size)
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        host.closeEditor()   // 確実に destroyEditorView → dispose の順で畳む
+        onClosed?()
     }
 }

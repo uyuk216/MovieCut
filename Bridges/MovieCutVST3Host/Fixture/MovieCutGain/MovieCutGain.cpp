@@ -4,8 +4,10 @@
 #include "pluginterfaces/base/ibstream.h"
 #include "pluginterfaces/base/ustring.h"
 #include "pluginterfaces/vst/ivstparameterchanges.h"
+#include "pluginterfaces/vst/ivstplugview.h"
 
 #include <cmath>
+#include <cstring>
 
 namespace MovieCutFixture {
 
@@ -16,6 +18,15 @@ using namespace Steinberg::Vst;
 const FUID kMovieCutGainUID(0x4D434749, 0x4E000100, 0x46495854, 0x00010000);
 
 MovieCutGain::MovieCutGain() = default;
+
+MovieCutGainEditorView::MovieCutGainEditorView() : CPluginView(nullptr) {
+    rect = ViewRect(0, 0, 320, 200);  // 固定の初期サイズ
+}
+
+IPlugView* PLUGIN_API MovieCutGain::createView(FIDString name) {
+    if (name && std::strcmp(name, ViewType::kEditor) == 0) return new MovieCutGainEditorView;
+    return SingleComponentEffect::createView(name);
+}
 
 tresult PLUGIN_API MovieCutGain::initialize(FUnknown* context) {
     tresult r = SingleComponentEffect::initialize(context);

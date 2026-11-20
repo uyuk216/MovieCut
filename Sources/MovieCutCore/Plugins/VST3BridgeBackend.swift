@@ -62,6 +62,36 @@ public protocol VST3BridgeBackend: AnyObject {
     func setState(_ data: Data) -> VST3BridgeStatus
     /// 後片付け(冪等。複数回呼んでもよい)。
     func dispose()
+
+    // --- エディタ(純正 GUI。R5 キュー3)。既定実装は全て .notImplemented ---
+    /// エディタビューを生成して親ハンドルへ取り付ける。親/ビューは不透明な UInt64(Core は GUI を触らない)。
+    /// エディタを持たないプラグインは `.noEditor`。
+    func createEditorView(parentHandle: UInt64) -> (status: VST3BridgeStatus, viewHandle: UInt64?)
+    /// エディタの現在サイズ。
+    func getEditorSize() -> (status: VST3BridgeStatus, size: VST3EditorSize?)
+    /// ホスト側のサイズ変更を伝える(確定サイズは getEditorSize で再取得する)。
+    func setEditorSize(_ size: VST3EditorSize) -> VST3BridgeStatus
+    /// エディタビューを畳む(冪等)。
+    func destroyEditorView() -> VST3BridgeStatus
+    /// プラグインからのリサイズ要求の受け口。クロージャは要求サイズを受け取り、受理するなら true。nil で解除。
+    func setEditorResizeCallback(_ callback: ((VST3EditorSize) -> Bool)?) -> VST3BridgeStatus
+}
+
+/// エディタのサイズ(C ABI の `MCVST3EditorSize` の Swift 版。8 バイト: width=0, height=4)。
+public struct VST3EditorSize: Equatable, Sendable {
+    public var width: Int32
+    public var height: Int32
+    public init(width: Int32, height: Int32) { self.width = width; self.height = height }
+    public var isValid: Bool { width > 0 && height > 0 }
+}
+
+/// エディタ系の既定実装。既存のフェイク/他バックエンドは無変更で適合し続ける。
+public extension VST3BridgeBackend {
+    func createEditorView(parentHandle: UInt64) -> (status: VST3BridgeStatus, viewHandle: UInt64?) { (.notImplemented, nil) }
+    func getEditorSize() -> (status: VST3BridgeStatus, size: VST3EditorSize?) { (.notImplemented, nil) }
+    func setEditorSize(_ size: VST3EditorSize) -> VST3BridgeStatus { .notImplemented }
+    func destroyEditorView() -> VST3BridgeStatus { .notImplemented }
+    func setEditorResizeCallback(_ callback: ((VST3EditorSize) -> Bool)?) -> VST3BridgeStatus { .notImplemented }
 }
 
 /// ブリッジが無いときのバックエンド。全操作が `.notImplemented`。

@@ -5,6 +5,7 @@
 //             Bypass(id=1, トグル)、VuPPM(id=2, 読み取り専用)
 #pragma once
 
+#include "public.sdk/source/common/pluginview.h"
 #include "public.sdk/source/vst/vstsinglecomponenteffect.h"
 
 namespace MovieCutFixture {
@@ -12,6 +13,17 @@ namespace MovieCutFixture {
 enum ParamIDs { kGainId = 0, kBypassId = 1, kVuId = 2 };
 
 extern const Steinberg::FUID kMovieCutGainUID;
+
+/// 最小の IPlugView。サイズ保持・canResize・プラットフォーム判定は SDK の CPluginView に任せる
+/// (getSize/onSize は内部の rect を読み書きするので、onSize で受けたサイズが getSize に反映される。
+/// canResize は kResultTrue、isPlatformTypeSupported は macOS では NSView のみ true)。
+/// attached では子の NSView を作らず、親を保持するだけにしている: NSView の生成には
+/// Objective-C++(.mm)が要り、フィクスチャの目的(ブリッジの attach/size/destroy の配線検証)には
+/// 親ビューの受け渡しが確認できれば足りるため。実描画の確認は実プラグインで行う。
+class MovieCutGainEditorView : public Steinberg::CPluginView {
+public:
+    MovieCutGainEditorView();
+};
 
 class MovieCutGain : public Steinberg::Vst::SingleComponentEffect {
 public:
@@ -31,6 +43,8 @@ public:
     Steinberg::tresult PLUGIN_API getState(Steinberg::IBStream* state) SMTG_OVERRIDE;
     Steinberg::tresult PLUGIN_API setEditorState(Steinberg::IBStream* state) SMTG_OVERRIDE;
     Steinberg::tresult PLUGIN_API getEditorState(Steinberg::IBStream* state) SMTG_OVERRIDE;
+    // 最小エディタ(R5 キュー3): "editor" のときだけ固定 320x200 のビューを返す。それ以外は基底へ。
+    Steinberg::IPlugView* PLUGIN_API createView(Steinberg::FIDString name) SMTG_OVERRIDE;
 
 private:
     double gain = 0.75;

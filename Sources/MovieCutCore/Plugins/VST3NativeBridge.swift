@@ -47,6 +47,11 @@ public enum VST3CABI {
     public static let classInfoVersionOffset = 24
     public static let classInfoCIDHexOffset = 32
 
+    /// MCVST3EditorSize(R5 キュー3)。
+    public static let editorSizeSize = 8
+    public static let editorSizeWidthOffset = 0
+    public static let editorSizeHeightOffset = 4
+
     /// スピーカー配置 → C ABI の `MCVST3SpeakerArrangement` 値(チャンネル数で表す)。
     public static func speakerValue(_ arrangement: VST3SpeakerArrangement) -> Int32 {
         Int32(arrangement.channelCount)
@@ -128,6 +133,12 @@ public final class VST3BridgeLibrary {
     typealias GetStateFn = @convention(c) (UnsafeMutableRawPointer?, UnsafeMutablePointer<UInt8>?, UnsafeMutablePointer<Int32>) -> Int32
     typealias SetStateFn = @convention(c) (UnsafeMutableRawPointer?, UnsafePointer<UInt8>, Int32) -> Int32
     typealias DisposeFn = @convention(c) (UnsafeMutableRawPointer?) -> Void
+    /// リサイズ要求コールバックの C 型(1 = 受理, 0 = 拒否)。
+    public typealias EditorResizeCallbackC = @convention(c) (UnsafeMutableRawPointer?, Int32, Int32) -> Int32
+    typealias CreateEditorFn = @convention(c) (UnsafeMutableRawPointer?, UnsafeMutableRawPointer?, UnsafeMutablePointer<UnsafeMutableRawPointer?>?) -> Int32
+    typealias EditorSizeFn = @convention(c) (UnsafeMutableRawPointer?, UnsafeMutableRawPointer?) -> Int32
+    typealias DestroyEditorFn = @convention(c) (UnsafeMutableRawPointer?) -> Int32
+    typealias SetEditorCallbackFn = @convention(c) (UnsafeMutableRawPointer?, EditorResizeCallbackC?, UnsafeMutableRawPointer?) -> Int32
 
     let handshakeFn: HandshakeFn
     let openFn: OpenFn
@@ -146,6 +157,12 @@ public final class VST3BridgeLibrary {
     let getStateFn: GetStateFn
     let setStateFn: SetStateFn
     let disposeFn: DisposeFn
+    // エディタ系は任意(旧ブリッジとの互換): 見つからなければ nil で、エディタ操作だけ .notImplemented。
+    let createEditorFn: CreateEditorFn?
+    let getEditorSizeFn: EditorSizeFn?
+    let setEditorSizeFn: EditorSizeFn?
+    let destroyEditorFn: DestroyEditorFn?
+    let setEditorCallbackFn: SetEditorCallbackFn?
 
     init?(loadFrom path: String) {
         guard let handle = dlopen(path, RTLD_NOW | RTLD_LOCAL) else { return nil }
@@ -185,6 +202,11 @@ public final class VST3BridgeLibrary {
         self.getParamFn = getParam; self.setParamFn = setParam
         self.latencyFn = latency; self.tailFn = tail
         self.getStateFn = getState; self.setStateFn = setState; self.disposeFn = dispose
+        self.createEditorFn = sym("mcvst3_create_editor_view", as: CreateEditorFn.self)
+        self.getEditorSizeFn = sym("mcvst3_get_editor_size", as: EditorSizeFn.self)
+        self.setEditorSizeFn = sym("mcvst3_set_editor_size", as: EditorSizeFn.self)
+        self.destroyEditorFn = sym("mcvst3_destroy_editor_view", as: DestroyEditorFn.self)
+        self.setEditorCallbackFn = sym("mcvst3_set_editor_resize_callback", as: SetEditorCallbackFn.self)
     }
 }
 
@@ -209,6 +231,15 @@ private func loadCString(_ base: UnsafeRawPointer, _ offset: Int) -> String? {
 }
 private func status(_ raw: Int32) -> VST3BridgeStatus { VST3BridgeStatus(rawValue: raw) ?? .internalError }
 
+/// リサイズ要求の C コールバック(ファイルスコープ。context はバックエンドの unretained ポインタ)。
+/// クロージャが無ければ拒否(0)。
+private let editorResizeTrampoline: VST3BridgeLibrary.EditorResizeCallbackC = { context, width, height in
+    guard let context else { return 0 }
+    let backend = Unmanaged<VST3NativeBridgeBackend>.fromOpaque(context).takeUnretainedValue()
+    guard let handler = backend.editorResizeHandler else { return 0 }
+    return handler(VST3EditorSize(width: width, height: height)) ? 1 : 0
+}
+
 // MARK: - ネイティブバックエンド
 
 /// dlopen した C++ ブリッジを直接呼ぶバックエンド。
@@ -216,6 +247,8 @@ private func status(_ raw: Int32) -> VST3BridgeStatus { VST3BridgeStatus(rawValu
 public final class VST3NativeBridgeBackend: VST3BridgeBackend {
     private let library: VST3BridgeLibrary
     private var instance: UnsafeMutableRawPointer?
+    /// プラグイン→ホストのリサイズ要求クロージャ(C コールバックから参照される)。
+    fileprivate var editorResizeHandler: ((VST3EditorSize) -> Bool)?
 
     public init?() {
         guard let lib = VST3BridgeRuntime.shared else { return nil }
@@ -402,7 +435,81 @@ public final class VST3NativeBridgeBackend: VST3BridgeBackend {
     }
 
     public func dispose() {
+        // 解放後にコールバックが呼ばれないよう、先に C 側の登録を外す
+        detachEditorCallback()
         if let instance { library.disposeFn(instance) }
         instance = nil
+    }
+
+    // MARK: エディタ(R5 キュー3)
+
+    /// UInt64 ↔ ポインタ(0 は nil)。
+    private func pointer(from handle: UInt64) -> UnsafeMutableRawPointer? {
+        handle == 0 ? nil : UnsafeMutableRawPointer(bitPattern: UInt(handle))
+    }
+
+    /// C 側のコールバック登録を解除し、Swift 側のクロージャも手放す。
+    private func detachEditorCallback() {
+        if let instance, let fn = library.setEditorCallbackFn { _ = fn(instance, nil, nil) }
+        editorResizeHandler = nil
+    }
+
+    public func createEditorView(parentHandle: UInt64) -> (status: VST3BridgeStatus, viewHandle: UInt64?) {
+        guard let instance else { return (.wrongState, nil) }
+        guard let fn = library.createEditorFn else { return (.notImplemented, nil) }
+        guard let parent = pointer(from: parentHandle) else { return (.invalidArgument, nil) }
+        var out: UnsafeMutableRawPointer?
+        let s = status(fn(instance, parent, &out))
+        guard s == .ok else { return (s, nil) }
+        return (.ok, out.map { UInt64(UInt(bitPattern: $0)) })
+    }
+
+    public func getEditorSize() -> (status: VST3BridgeStatus, size: VST3EditorSize?) {
+        guard let instance else { return (.wrongState, nil) }
+        guard let fn = library.getEditorSizeFn else { return (.notImplemented, nil) }
+        var buf = [UInt8](repeating: 0, count: VST3CABI.editorSizeSize)
+        let s = buf.withUnsafeMutableBytes { raw in status(fn(instance, raw.baseAddress)) }
+        guard s == .ok else { return (s, nil) }
+        let size = buf.withUnsafeBytes { raw -> VST3EditorSize in
+            let base = raw.baseAddress!
+            return VST3EditorSize(width: loadInt32(base, VST3CABI.editorSizeWidthOffset),
+                                  height: loadInt32(base, VST3CABI.editorSizeHeightOffset))
+        }
+        return (.ok, size)
+    }
+
+    public func setEditorSize(_ size: VST3EditorSize) -> VST3BridgeStatus {
+        guard let instance else { return .wrongState }
+        guard let fn = library.setEditorSizeFn else { return .notImplemented }
+        var buf = [UInt8](repeating: 0, count: VST3CABI.editorSizeSize)
+        return buf.withUnsafeMutableBytes { raw in
+            guard let base = raw.baseAddress else { return .internalError }
+            store(base, VST3CABI.editorSizeWidthOffset, size.width)
+            store(base, VST3CABI.editorSizeHeightOffset, size.height)
+            return status(fn(instance, base))
+        }
+    }
+
+    public func destroyEditorView() -> VST3BridgeStatus {
+        guard let instance else { return .wrongState }
+        // C 側の view を畳む前にコールバックを外す(畳み中の resizeView がホストへ戻らないように)
+        detachEditorCallback()
+        guard let fn = library.destroyEditorFn else { return .notImplemented }
+        return status(fn(instance))
+    }
+
+    public func setEditorResizeCallback(_ callback: ((VST3EditorSize) -> Bool)?) -> VST3BridgeStatus {
+        guard let instance else { return .wrongState }
+        guard let fn = library.setEditorCallbackFn else { return .notImplemented }
+        if let callback {
+            editorResizeHandler = callback
+            let ctx = Unmanaged.passUnretained(self).toOpaque()
+            let s = status(fn(instance, editorResizeTrampoline, ctx))
+            if s != .ok { editorResizeHandler = nil }
+            return s
+        }
+        let s = status(fn(instance, nil, nil))
+        editorResizeHandler = nil
+        return s
     }
 }

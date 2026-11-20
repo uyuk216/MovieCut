@@ -86,4 +86,32 @@ final class VST3AppTests: XCTestCase {
         XCTAssertFalse(VST3HostAvailability.current.canProcessAudio)
         XCTAssertTrue(VST3HostAvailability.current.userFacingNote.contains("未対応"))
     }
+
+    // MARK: 純正 GUI(R5 キュー3)
+
+    /// 純正 GUI ボタンを含むパネルが、スロット無し/有りの両方で生成できる。
+    func testVST3PanelWithEditorButtonInstantiates() {
+        let m = makeModel()
+        _ = VST3Panel(model: m, clipId: "m", forceExpanded: true).body
+        m.setAudioFx({ _ = AudioFxEditing.addVST3Slot(&$0, bundleID: "com.example.testverb", name: "TestVerb") },
+                     name: ProjectModel.vst3UndoName, clipId: "m")
+        _ = VST3Panel(model: m, clipId: "m", forceExpanded: true).body
+    }
+
+    func testEditorInitialContentSize() {
+        XCTAssertEqual(vst3EditorInitialContentSize(nil), CGSize(width: 480, height: 320), "取得できなければ既定")
+        XCTAssertEqual(vst3EditorInitialContentSize(VST3EditorSize(width: 0, height: 10)), CGSize(width: 480, height: 320))
+        XCTAssertEqual(vst3EditorInitialContentSize(VST3EditorSize(width: 320, height: 200)), CGSize(width: 320, height: 200))
+    }
+
+    func testEditorFailureMessagesDistinguishNoEditor() {
+        let noEditor = VST3EditorHostView.message(for: .noEditor)
+        XCTAssertTrue(noEditor.contains("純正 GUI がありません"))
+        XCTAssertNotEqual(noEditor, VST3EditorHostView.message(for: .bridgeFailure(.internalError)))
+    }
+
+    func testEditorAvailabilityNoteIsHonestInApp() {
+        XCTAssertFalse(VST3HostAvailability.current.editorDisplayVerified)
+        XCTAssertTrue(VST3HostAvailability.current.editorUserFacingNote.contains("未実施"))
+    }
 }

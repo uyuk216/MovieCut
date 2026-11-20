@@ -8,8 +8,9 @@
  * Swift 側の対応定義(Sources/MovieCutCore/Plugins/VST3Bridge.swift /
  * VST3NativeBridge.swift)と番号・並び・構造体レイアウトを一致させ続けること
  * (単体テストが Swift 側の対応を固定し、C++ 側は static_assert でレイアウトを固定する)。
- * 既存の opcode / status / 構造体の番号・並びは変更しない。追加は末尾の
- * 「追加関数(W6-1)」だけ(opcode 表には載せない直接呼び出し)。
+ * 既存の opcode / status / 構造体の番号・並びは変更しない。追加は末尾だけ:
+ * 「追加関数(W6-1)」(opcode 表には載せない直接呼び出し)と、
+ * 「エディタ(純正 GUI)関数(W6-2 / R5 キュー3)」(opcode 10〜14 と status 7 を末尾追加)。
  *
  * 方針:
  * - プラグインの生成・破棄はすべてブリッジ側。Swift 側は不透明ハンドルだけを持つ。
@@ -40,7 +41,13 @@ typedef enum MCVST3Opcode {
     MCVST3_OP_GET_PARAMETER_INFOS = 6,
     MCVST3_OP_GET_STATE = 7,
     MCVST3_OP_SET_STATE = 8,
-    MCVST3_OP_DISPOSE = 9
+    MCVST3_OP_DISPOSE = 9,
+    /* --- 末尾追加(W6-2 / R5 キュー3: 純正 GUI の土台) --- */
+    MCVST3_OP_CREATE_EDITOR_VIEW = 10,
+    MCVST3_OP_GET_EDITOR_SIZE = 11,
+    MCVST3_OP_SET_EDITOR_SIZE = 12,
+    MCVST3_OP_DESTROY_EDITOR_VIEW = 13,
+    MCVST3_OP_SET_EDITOR_RESIZE_CALLBACK = 14
 } MCVST3Opcode;
 
 /* 結果コード。Swift 側 VST3BridgeStatus と同順・同値。0 以外は呼び出し側がバイパスに落とす。 */
@@ -51,7 +58,9 @@ typedef enum MCVST3Status {
     MCVST3_NOT_IMPLEMENTED = 3,
     MCVST3_INTERNAL_ERROR = 4,
     MCVST3_NOT_FOUND = 5,
-    MCVST3_WRONG_STATE = 6
+    MCVST3_WRONG_STATE = 6,
+    /* 末尾追加(R5 キュー3): プラグインがエディタ(純正 GUI)を持たない。一般の失敗と区別する。 */
+    MCVST3_NO_EDITOR = 7
 } MCVST3Status;
 
 /* スピーカー配置。Swift 側 VST3SpeakerArrangement のチャンネル数と対応する。 */
@@ -160,6 +169,35 @@ MCVST3Status mcvst3_set_parameter_normalized(MCVST3Instance *instance, uint32_t 
 /* プラグイン申告のレイテンシ/テール(フレーム)。setup_processing の後で有効。 */
 MCVST3Status mcvst3_get_latency_samples(MCVST3Instance *instance, int32_t *outLatency);
 MCVST3Status mcvst3_get_tail_samples(MCVST3Instance *instance, int32_t *outTail);
+
+/* --- エディタ(純正 GUI)関数(W6-2 / R5 キュー3。末尾追加) ---
+ * macOS の NSView 親だけを想定する。macOS 以外のブリッジはすべて MCVST3_NOT_IMPLEMENTED。
+ * GUI ライブラリはブリッジが呼ぶのではなく、親ビューはホスト(アプリ)が用意して渡す。 */
+
+/* エディタのサイズ(ピクセル相当)。8 バイト: width=0, height=4。 */
+typedef struct MCVST3EditorSize {
+    int32_t width;
+    int32_t height;
+} MCVST3EditorSize;
+
+/* プラグインからのリサイズ要求(IPlugFrame::resizeView)をホストへ伝えるコールバック。
+ * 戻り値 1 = 要求を受理(kResultTrue 相当)、0 = 拒否。未登録時は要求を kResultFalse で断る。 */
+typedef int32_t (*MCVST3EditorResizeCallback)(void *context, int32_t width, int32_t height);
+
+/* エディタビューを生成して親へ取り付ける。parentView は macOS では NSView*。
+ * outViewHandle には生成した IPlugView を不透明ハンドルとして返す(不要なら NULL 可)。
+ * プラグインがエディタを持たなければ MCVST3_NO_EDITOR。create_processor の後で有効。 */
+MCVST3Status mcvst3_create_editor_view(MCVST3Instance *instance, void *parentView, void **outViewHandle);
+
+/* エディタの現在サイズ/サイズ変更要求(ホスト→プラグイン。確定サイズは get で再取得する)。 */
+MCVST3Status mcvst3_get_editor_size(MCVST3Instance *instance, MCVST3EditorSize *outSize);
+MCVST3Status mcvst3_set_editor_size(MCVST3Instance *instance, const MCVST3EditorSize *size);
+
+/* エディタビューを親から外して解放する。冪等(NULL/未生成でも MCVST3_OK)。 */
+MCVST3Status mcvst3_destroy_editor_view(MCVST3Instance *instance);
+
+/* リサイズ要求コールバックの登録。callback=NULL で解除。 */
+MCVST3Status mcvst3_set_editor_resize_callback(MCVST3Instance *instance, MCVST3EditorResizeCallback callback, void *context);
 
 #ifdef __cplusplus
 }

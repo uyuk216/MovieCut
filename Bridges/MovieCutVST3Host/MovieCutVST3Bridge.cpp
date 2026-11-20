@@ -24,12 +24,14 @@
 #include "pluginterfaces/base/funknownimpl.h"
 #include "pluginterfaces/base/ipluginbase.h"
 #include "pluginterfaces/base/ibstream.h"
+#include "pluginterfaces/gui/iplugview.h"   // IPlugView / IPlugFrame / ViewRect / kPlatformTypeNSView
 #include "pluginterfaces/vst/ivstaudioprocessor.h"
 #include "pluginterfaces/vst/ivstcomponent.h"
 #include "pluginterfaces/vst/ivsteditcontroller.h"
 #include "pluginterfaces/vst/ivstevents.h"
 #include "pluginterfaces/vst/ivsthostapplication.h"
 #include "pluginterfaces/vst/ivstparameterchanges.h"
+#include "pluginterfaces/vst/ivstplugview.h"   // ViewType::kEditor
 #include "pluginterfaces/vst/vstspeaker.h"
 
 #include "public.sdk/source/common/memorystream.h"
@@ -73,6 +75,9 @@ static_assert(offsetof(MCVST3ProcessRequest, inputs) == 8, "MCVST3ProcessRequest
 static_assert(offsetof(MCVST3ProcessRequest, outLatencySamples) == 40, "MCVST3ProcessRequest.latency offset drift");
 static_assert(sizeof(MCVST3ClassInfo) == 72, "MCVST3ClassInfo layout drift");
 static_assert(offsetof(MCVST3ClassInfo, cidHex) == 32, "MCVST3ClassInfo.cidHex offset drift");
+static_assert(sizeof(MCVST3EditorSize) == 8, "MCVST3EditorSize layout drift");
+static_assert(offsetof(MCVST3EditorSize, width) == 0, "MCVST3EditorSize.width offset drift");
+static_assert(offsetof(MCVST3EditorSize, height) == 4, "MCVST3EditorSize.height offset drift");
 
 namespace {
 
@@ -167,6 +172,22 @@ public:
     DECLARE_FUNKNOWN_METHODS
 };
 IMPLEMENT_FUNKNOWN_METHODS(ComponentHandler, IComponentHandler, IComponentHandler::iid)
+
+// MARK: - IPlugFrame(エディタのリサイズ要求の受け口。インスタンスごとに 1 個)
+//
+// プラグインの resizeView をホストのコールバックへ橋渡しする。判定に必要な状態
+// (editorView / コールバック)は MCVST3Instance 側にあるため、resizeView の本体は
+// インスタンス定義の後ろで定義する。
+
+class PlugFrameImpl final : public IPlugFrame {
+public:
+    explicit PlugFrameImpl(MCVST3Instance* o) : owner(o) { FUNKNOWN_CTOR }
+    ~PlugFrameImpl() { FUNKNOWN_DTOR }
+    tresult PLUGIN_API resizeView(IPlugView* view, ViewRect* newSize) override;
+    DECLARE_FUNKNOWN_METHODS
+    MCVST3Instance* owner;
+};
+IMPLEMENT_FUNKNOWN_METHODS(PlugFrameImpl, IPlugFrame, IPlugFrame::iid)
 
 // MARK: - モジュール(バイナリ)のロード
 
@@ -323,12 +344,41 @@ struct MCVST3Instance {
     ParameterChanges paramChanges {64};
     EventList inputEvents {64}, outputEvents {64};
     ProcessContext context {};
+
+    // エディタ(純正 GUI)状態(R5 キュー3)
+    IPtr<IPlugView> editorView;
+    void* editorParent = nullptr;                          // 親ビュー(NSView*。所有しない)
+    MCVST3EditorResizeCallback resizeCallback = nullptr;   // ホストへのリサイズ橋渡し
+    void* resizeContext = nullptr;
+    PlugFrameImpl frame {this};
 };
 
 namespace {
 
+// エディタを畳む。順序は removedFromParent → setFrame(nullptr) → 解放(controller terminate より前に呼ぶこと)。
+void destroyEditorInternal(MCVST3Instance* inst) {
+    if (!inst) return;
+    if (inst->editorView) {
+        inst->editorView->removedFromParent();
+        inst->editorView->setFrame(nullptr);
+        inst->editorView = nullptr;
+    }
+    inst->editorParent = nullptr;
+    inst->resizeCallback = nullptr;
+    inst->resizeContext = nullptr;
+}
+
+tresult PLUGIN_API PlugFrameImpl::resizeView(IPlugView* view, ViewRect* newSize) {
+    // 自分の view 以外・コールバック未登録・サイズ不明は断る(黙って受理しない)
+    if (!owner || !newSize || !view || view != owner->editorView.get() || !owner->resizeCallback)
+        return kResultFalse;
+    int32_t accepted = owner->resizeCallback(owner->resizeContext, newSize->getWidth(), newSize->getHeight());
+    return accepted == 1 ? kResultTrue : kResultFalse;
+}
+
 void teardownProcessor(MCVST3Instance* inst) {
     if (!inst) return;
+    destroyEditorInternal(inst);  // view が残っていれば controller terminate より前に畳む
     if (inst->processing && inst->processor) inst->processor->setProcessing(false);
     inst->processing = false;
     if (inst->active && inst->component) inst->component->setActive(false);
@@ -728,6 +778,99 @@ MCVST3Status mcvst3_set_state(MCVST3Instance* instance, const uint8_t* buffer, i
     } catch (...) {
         return MCVST3_INTERNAL_ERROR;
     }
+}
+
+// MARK: - エディタ(純正 GUI。R5 キュー3)
+//
+// macOS の NSView 親だけを実装する。それ以外は NOT_IMPLEMENTED(Linux スモークを壊さない)。
+// NSView の生成・ウィンドウ管理はホスト(アプリ)側。ここは IPlugView の橋渡しだけ。
+
+#ifdef __APPLE__
+
+MCVST3Status mcvst3_create_editor_view(MCVST3Instance* instance, void* parentView, void** outViewHandle) {
+    if (outViewHandle) *outViewHandle = nullptr;
+    if (!instance || !instance->controller || !parentView) return MCVST3_INVALID_ARGUMENT;
+    if (instance->editorView) return MCVST3_WRONG_STATE;
+    try {
+        IPlugView* raw = instance->controller->createView(ViewType::kEditor);
+        if (!raw) return MCVST3_NO_EDITOR;  // エディタを持たない(一般の失敗と区別)
+        IPtr<IPlugView> view = owned(raw);
+        if (view->isPlatformTypeSupported(kPlatformTypeNSView) != kResultTrue) return MCVST3_NOT_IMPLEMENTED;
+        view->setFrame(&instance->frame);
+        tresult r = view->attachedToParent(parentView, kPlatformTypeNSView);
+        if (r != kResultOk && r != kResultTrue) {
+            view->setFrame(nullptr);
+            return mapResult(r);
+        }
+        instance->editorView = view;
+        instance->editorParent = parentView;
+        if (outViewHandle) *outViewHandle = static_cast<void*>(view.get());
+        return MCVST3_OK;
+    } catch (...) {
+        return MCVST3_INTERNAL_ERROR;
+    }
+}
+
+MCVST3Status mcvst3_get_editor_size(MCVST3Instance* instance, MCVST3EditorSize* outSize) {
+    if (!instance || !outSize) return MCVST3_INVALID_ARGUMENT;
+    if (!instance->editorView) return MCVST3_WRONG_STATE;
+    try {
+        ViewRect rect {};
+        tresult r = instance->editorView->getSize(&rect);
+        if (r != kResultOk && r != kResultTrue) return mapResult(r);
+        outSize->width = rect.getWidth();
+        outSize->height = rect.getHeight();
+        return MCVST3_OK;
+    } catch (...) {
+        return MCVST3_INTERNAL_ERROR;
+    }
+}
+
+MCVST3Status mcvst3_set_editor_size(MCVST3Instance* instance, const MCVST3EditorSize* size) {
+    if (!instance || !size) return MCVST3_INVALID_ARGUMENT;
+    if (!instance->editorView) return MCVST3_WRONG_STATE;
+    if (size->width <= 0 || size->height <= 0) return MCVST3_INVALID_ARGUMENT;
+    try {
+        ViewRect rect(0, 0, size->width, size->height);
+        // 確定サイズが丸められることがあるため、再取得は呼び出し側(get_editor_size)に委ねる
+        return mapResult(instance->editorView->onSize(&rect));
+    } catch (...) {
+        return MCVST3_INTERNAL_ERROR;
+    }
+}
+
+MCVST3Status mcvst3_destroy_editor_view(MCVST3Instance* instance) {
+    if (!instance) return MCVST3_OK;  // 冪等
+    try {
+        destroyEditorInternal(instance);
+        return MCVST3_OK;
+    } catch (...) {
+        return MCVST3_INTERNAL_ERROR;
+    }
+}
+
+#else  // !__APPLE__
+
+MCVST3Status mcvst3_create_editor_view(MCVST3Instance*, void*, void** outViewHandle) {
+    if (outViewHandle) *outViewHandle = nullptr;
+    return MCVST3_NOT_IMPLEMENTED;
+}
+MCVST3Status mcvst3_get_editor_size(MCVST3Instance*, MCVST3EditorSize*) { return MCVST3_NOT_IMPLEMENTED; }
+MCVST3Status mcvst3_set_editor_size(MCVST3Instance*, const MCVST3EditorSize*) { return MCVST3_NOT_IMPLEMENTED; }
+MCVST3Status mcvst3_destroy_editor_view(MCVST3Instance*) { return MCVST3_NOT_IMPLEMENTED; }
+
+#endif
+
+MCVST3Status mcvst3_set_editor_resize_callback(MCVST3Instance* instance, MCVST3EditorResizeCallback callback, void* context) {
+#ifdef __APPLE__
+    if (!instance) return MCVST3_INVALID_ARGUMENT;
+    instance->resizeCallback = callback;
+    instance->resizeContext = callback ? context : nullptr;
+    return MCVST3_OK;
+#else
+    (void)instance; (void)callback; (void)context;
+    return MCVST3_NOT_IMPLEMENTED;
+#endif
 }
 
 void mcvst3_dispose(MCVST3Instance* instance) {
