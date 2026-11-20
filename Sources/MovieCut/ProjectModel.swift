@@ -594,7 +594,7 @@ final class ProjectModel: ObservableObject {
         um.registerUndo(withTarget: self) { m in
             MainActor.assumeIsolated { m.applyRoot(oldRoot, name: name) }
         }
-        um.setActionName(name)
+        um.setActionName(L10n.t(name))
         um.endUndoGrouping()
         noteDocumentChanged(undoing: um.isUndoing, redoing: um.isRedoing)
     }

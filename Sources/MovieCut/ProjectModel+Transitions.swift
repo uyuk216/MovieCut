@@ -6,74 +6,74 @@ import MovieCutCore
 /// 計算は MovieCutCore の TransitionEditing に任せ、ここは Undo・選択・状態表示だけ。
 /// 映像のトランジションの長さを変える編集は、音声が「同じ長さ」に連動しているときは音声も合わせる(1 回の Undo)。
 extension ProjectModel {
-    static func undoName(forTransition edge: TransitionEdge) -> String { "\(edge.label)トランジションの変更" }
+    static func undoName(forTransition edge: TransitionEdge) -> String { String(format: L10n.t("%@トランジションの変更"), L10n.t(edge.label)) }
 
     /// 種類を選ぶ(nil で外す)。
     func setTransitionKind(_ kind: TransitionKind?, edge: TransitionEdge, clipId: String? = nil) {
         guard !isLocked else { return }
         setClipProperty({ c in TransitionEditing.edit(&c) { _ = TransitionEditing.setKind(&$0, edge: edge, kind: kind) } },
-                        name: kind == nil ? "\(edge.label)トランジションを外す" : Self.undoName(forTransition: edge), clipId: clipId)
+                        name: kind == nil ? String(format: L10n.t("%@トランジションを外す"), L10n.t(edge.label)) : Self.undoName(forTransition: edge), clipId: clipId)
     }
 
     /// 長さ(秒)を入力欄で確定。
     func setTransitionDuration(_ d: Double, edge: TransitionEdge, clipId: String? = nil) {
         guard !isLocked else { return }
         setClipProperty({ c in TransitionEditing.edit(&c) { _ = TransitionEditing.setDuration(&$0, edge: edge, d) } },
-                        name: "\(edge.label)トランジションの長さの変更", clipId: clipId)
+                        name: String(format: L10n.t("%@トランジションの長さの変更"), L10n.t(edge.label)), clipId: clipId)
     }
 
     /// ステッパーなどの連続編集。
     func coalescedTransitionDuration(_ d: Double, edge: TransitionEdge, clipId: String? = nil) {
         guard !isLocked else { return }
         coalescedClipProperty({ c in TransitionEditing.edit(&c) { _ = TransitionEditing.setDuration(&$0, edge: edge, d) } },
-                              name: "\(edge.label)トランジションの長さの変更", clipId: clipId)
+                              name: String(format: L10n.t("%@トランジションの長さの変更"), L10n.t(edge.label)), clipId: clipId)
     }
 
     /// タイムラインの三角のドラッグ中(`beginGesture` 〜 `commitGesture` の間)。
     func liveTransitionDuration(_ d: Double, edge: TransitionEdge, clipId: String) {
         liveClipProperty({ c in TransitionEditing.edit(&c) { _ = TransitionEditing.setDuration(&$0, edge: edge, d) } },
-                         name: "\(edge.label)トランジションの長さの変更", clipId: clipId)
+                         name: String(format: L10n.t("%@トランジションの長さの変更"), L10n.t(edge.label)), clipId: clipId)
     }
 
     func setTransitionEase(_ e: Ease, edge: TransitionEdge, clipId: String? = nil) {
         guard !isLocked else { return }
-        setClipProperty({ _ = TransitionEditing.setEase(&$0, edge: edge, e) }, name: "\(edge.label)トランジションの進み方の変更", clipId: clipId)
+        setClipProperty({ _ = TransitionEditing.setEase(&$0, edge: edge, e) }, name: String(format: L10n.t("%@トランジションの進み方の変更"), L10n.t(edge.label)), clipId: clipId)
     }
 
     /// ルールワイプの「やわらかさ」。
     func setTransitionRuleSoftness(_ v: Double, edge: TransitionEdge, clipId: String? = nil) {
         guard !isLocked else { return }
-        setClipProperty({ _ = TransitionEditing.setRuleSoftness(&$0, edge: edge, v) }, name: "\(edge.label)トランジションのやわらかさの変更", clipId: clipId)
+        setClipProperty({ _ = TransitionEditing.setRuleSoftness(&$0, edge: edge, v) }, name: String(format: L10n.t("%@トランジションのやわらかさの変更"), L10n.t(edge.label)), clipId: clipId)
     }
 
     /// ルールワイプの「やわらかさ」(ステッパーなどの連続編集)。
     func coalescedTransitionRuleSoftness(_ v: Double, edge: TransitionEdge, clipId: String? = nil) {
         guard !isLocked else { return }
-        coalescedClipProperty({ _ = TransitionEditing.setRuleSoftness(&$0, edge: edge, v) }, name: "\(edge.label)トランジションのやわらかさの変更", clipId: clipId)
+        coalescedClipProperty({ _ = TransitionEditing.setRuleSoftness(&$0, edge: edge, v) }, name: String(format: L10n.t("%@トランジションのやわらかさの変更"), L10n.t(edge.label)), clipId: clipId)
     }
 
     /// カスタムルール画像の素材の場所。
     func setTransitionRuleSource(_ src: String?, edge: TransitionEdge, clipId: String? = nil) {
         guard !isLocked else { return }
-        setClipProperty({ _ = TransitionEditing.setRuleSource(&$0, edge: edge, src) }, name: "\(edge.label)トランジションのルール画像の変更", clipId: clipId)
+        setClipProperty({ _ = TransitionEditing.setRuleSource(&$0, edge: edge, src) }, name: String(format: L10n.t("%@トランジションのルール画像の変更"), L10n.t(edge.label)), clipId: clipId)
     }
 
     /// モーフカットの「強さ」。
     func setTransitionMorphStrength(_ v: Double, edge: TransitionEdge, clipId: String? = nil) {
         guard !isLocked else { return }
-        setClipProperty({ _ = TransitionEditing.setMorphStrength(&$0, edge: edge, v) }, name: "\(edge.label)トランジションのモーフの強さの変更", clipId: clipId)
+        setClipProperty({ _ = TransitionEditing.setMorphStrength(&$0, edge: edge, v) }, name: String(format: L10n.t("%@トランジションのモーフの強さの変更"), L10n.t(edge.label)), clipId: clipId)
     }
 
     /// モーフカットの「強さ」(ステッパーなどの連続編集)。
     func coalescedTransitionMorphStrength(_ v: Double, edge: TransitionEdge, clipId: String? = nil) {
         guard !isLocked else { return }
-        coalescedClipProperty({ _ = TransitionEditing.setMorphStrength(&$0, edge: edge, v) }, name: "\(edge.label)トランジションのモーフの強さの変更", clipId: clipId)
+        coalescedClipProperty({ _ = TransitionEditing.setMorphStrength(&$0, edge: edge, v) }, name: String(format: L10n.t("%@トランジションのモーフの強さの変更"), L10n.t(edge.label)), clipId: clipId)
     }
 
     /// モーフカットの「顔の位置合わせを優先」。
     func setTransitionMorphFacePriority(_ on: Bool, edge: TransitionEdge, clipId: String? = nil) {
         guard !isLocked else { return }
-        setClipProperty({ _ = TransitionEditing.setMorphFacePriority(&$0, edge: edge, on) }, name: "\(edge.label)トランジションの顔の位置合わせの変更", clipId: clipId)
+        setClipProperty({ _ = TransitionEditing.setMorphFacePriority(&$0, edge: edge, on) }, name: String(format: L10n.t("%@トランジションの顔の位置合わせの変更"), L10n.t(edge.label)), clipId: clipId)
     }
 
     // MARK: 音声フェード

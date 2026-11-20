@@ -151,7 +151,7 @@ extension ProjectModel {
         let rows = TimelineQuery.speechShare(in: project)
         statusText = rows.isEmpty
             ? "セリフ(声のクリップ)がありません"
-            : "発話時間: " + rows.map { "\($0.name) \(Int(($0.ratio * 100).rounded()))%(\(String(format: "%.1f", $0.seconds)) 秒)" }.joined(separator: "、")
+            : String(format: L10n.t("発話時間: %@"), rows.map { String(format: L10n.t("%@ %d%%(%.1f 秒)"), $0.name, Int(($0.ratio * 100).rounded()), $0.seconds) }.joined(separator: "、"))
     }
 
     /// 前後のセリフ(ボイスクリップの頭)へ。

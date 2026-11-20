@@ -43,7 +43,7 @@ extension ProjectModel {
                 try SubtitleFile.format(cues, as: fmt).write(to: url, atomically: true, encoding: .utf8)
                 warnings = []
             }
-            statusText = "字幕 \(cues.count) 件を書き出しました: \(url.lastPathComponent)" + (warnings.isEmpty ? "" : "。注意: " + warnings.joined(separator: " / "))
+            statusText = String(format: L10n.t("字幕 %d 件を書き出しました: %@"), cues.count, url.lastPathComponent) + (warnings.isEmpty ? "" : String(format: L10n.t("。注意: %@"), warnings.joined(separator: " / ")))
             return true
         } catch {
             statusText = "字幕を書き出せませんでした: \(error.localizedDescription)"
@@ -132,7 +132,7 @@ extension ProjectModel {
         guard r.count > 0 else { statusText = r.warnings.first ?? "マーカーがありません"; return false }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(r.text, forType: .string)
-        statusText = (color.map { "\($0.title)のマーカーから " } ?? "") + "チャプター \(r.count) 件をコピーしました" + (r.warnings.isEmpty ? "" : "。注意: " + r.warnings.joined(separator: " / "))
+        statusText = (color.map { String(format: L10n.t("%@のマーカーから "), L10n.t($0.title)) } ?? "") + String(format: L10n.t("チャプター %d 件をコピーしました"), r.count) + (r.warnings.isEmpty ? "" : String(format: L10n.t("。注意: %@"), r.warnings.joined(separator: " / ")))
         return true
     }
 }

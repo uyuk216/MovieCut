@@ -142,7 +142,7 @@ extension ProjectModel {
         }
         let t = max(0, time ?? currentTime)
         var ids: [String] = []
-        guard edit("生成メディア(API)で作った\(request.kind.title)の追加", { pr in
+        guard edit(String(format: L10n.t("生成メディア(API)で作った%@の追加"), L10n.t(request.kind.title)), { pr in
             ids = GenerativeMediaPlacement.place(result, at: t, in: &pr)
         }) else { return nil }
         selectedClipId = ids.last

@@ -186,7 +186,7 @@ public enum AnimationPreset: String, CaseIterable, Sendable {
     }
 
     /// 編集履歴の名前。
-    public var undoName: String { "アニメーション: " + title }
+    public var undoName: String { String(format: L10n.t("アニメーション: %@"), L10n.t(title)) }
 
     /// 登場系の長さ(秒)の上限。
     public static let entranceSeconds = 1.0

@@ -224,8 +224,8 @@ extension ProjectModel {
         }
         guard !ids.isEmpty else { return [] }
         selectedClipId = ids.last
-        var s = "連番画像を読み込みました(\(sequence.frameCount) コマ、\(Int(ImageSequence.validFPS(fps))) fps)"
-        if !sequence.missingNumbers.isEmpty { s += "。抜けている番号: \(sequence.missingNumbers.map(String.init).joined(separator: ", "))" }
+        var s = String(format: L10n.t("連番画像を読み込みました(%d コマ、%d fps)"), sequence.frameCount, Int(ImageSequence.validFPS(fps)))
+        if !sequence.missingNumbers.isEmpty { s += String(format: L10n.t("。抜けている番号: %@"), sequence.missingNumbers.map(String.init).joined(separator: ", ")) }
         statusText = s
         return ids
     }
