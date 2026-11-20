@@ -80,7 +80,7 @@ extension ProjectModel {
     /// (BOM の無い Shift_JIS のバイト列が UTF-16 として化けて読めてしまうため)。
     /// それ以外は UTF-8 → Shift_JIS → UTF-16 の順。
     static func readCSVText(from url: URL) throws -> String {
-        let data = try Data(contentsOf: url)
+        let data = try InputLimits.readFile(url, limit: InputLimits.maxScriptCSVBytes, what: "台本の CSV")
         let hasUTF16BOM = data.starts(with: [0xFF, 0xFE]) || data.starts(with: [0xFE, 0xFF])
         let order: [String.Encoding] = hasUTF16BOM ? [.utf16, .utf8, .shiftJIS] : [.utf8, .shiftJIS, .utf16]
         for enc in order {

@@ -126,14 +126,14 @@ public enum PrprojImporter {
 
     /// ファイルから読み込む。
     public static func read(from url: URL) throws -> Output {
-        let data = try Data(contentsOf: url)
+        let data = try InputLimits.readFile(url, limit: InputLimits.maxPrprojBytes, what: "Premiere プロジェクト")
         return try parse(data: data)
     }
 
     // MARK: gzip 展開
 
-    /// 展開後の上限(1GiB)。gzip 爆弾でメモリを使い切らないための上限。
-    static let maxXMLBytes = 1 << 30
+    /// 展開後の上限(256MiB)。gzip 爆弾でメモリを使い切らないための上限。
+    static let maxXMLBytes = 256 << 20
 
     /// gzip(RFC 1952)を展開する。ヘッダを解析して生の DEFLATE 部分を取り出し、
     /// Compression の COMPRESSION_ZLIB(生 DEFLATE、RFC 1951)で展開する。

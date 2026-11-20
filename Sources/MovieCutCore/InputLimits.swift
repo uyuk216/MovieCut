@@ -7,6 +7,11 @@ public enum InputLimits {
     public static let maxRecoveryBytes = 96 * 1024 * 1024
     public static let maxSubtitleBytes = 8 * 1024 * 1024
     public static let maxFontBytes = 64 * 1024 * 1024
+    /// 取り込み(他ソフトのファイル)の上限。
+    public static let maxPrprojBytes = 256 * 1024 * 1024
+    public static let maxFcpXmlBytes = 256 * 1024 * 1024
+    public static let maxYmmpBytes = 128 * 1024 * 1024
+    public static let maxScriptCSVBytes = 16 * 1024 * 1024
     public static let maxPSDBytes = 2 * 1024 * 1024 * 1024
     /// JSON の入れ子の深さ(複合クリップの入れ子を含めて十分余裕のある値)。
     public static let maxJSONDepth = 64

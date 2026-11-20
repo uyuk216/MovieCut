@@ -157,7 +157,7 @@ public enum YmmpImporter {
 
     /// `.ymmp` ファイルを読んで変換する(読み取り専用。ファイルは変更しない)。
     public static func load(fileAt url: URL) throws -> Output {
-        try convert(data: Data(contentsOf: url))
+        try convert(data: InputLimits.readFile(url, limit: InputLimits.maxYmmpBytes, what: ".ymmp ファイル"))
     }
 
     /// 変換元ファイル名から、変換後の保存先 URL を作る。拡張子は `ProjectFileExtension.current` を使う(1 箇所で管理)。

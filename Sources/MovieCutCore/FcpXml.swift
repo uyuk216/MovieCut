@@ -712,7 +712,7 @@ public enum FcpXmlImporter {
 
     /// ファイルから読み込む。
     public static func read(from url: URL) throws -> Output {
-        let data = try Data(contentsOf: url)
+        let data = try InputLimits.readFile(url, limit: InputLimits.maxFcpXmlBytes, what: "FCPXML")
         return try parse(data: data)
     }
 
