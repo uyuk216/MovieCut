@@ -49,8 +49,9 @@ final class SheetStepperAppTests: XCTestCase {
         XCTAssertEqual(m.selectedClip?.meshWarp?.cols, 6, "セッション中も値はすぐ反映される")
         m.commitStepperSession(ProjectModel.warpUndoName)
 
-        XCTAssertEqual(undoAll(m), 2, "用意が 1 回 + 長押しセッション全体が 1 回")
+        m.effectiveUndoManager.undo()
         XCTAssertEqual(m.selectedClip?.meshWarp?.cols, 3, "セッションは 1 回の Undo で丸ごと戻る")
+        XCTAssertEqual(undoAll(m), 1, "残りは用意の 1 回だけ(用意 1 回 + セッション 1 回で合計 2 回)")
     }
 
     func testMeshGridShortPressIsOneUndoStep() {
