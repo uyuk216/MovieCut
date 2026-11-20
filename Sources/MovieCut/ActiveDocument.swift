@@ -18,6 +18,7 @@ final class ActiveDocument: ObservableObject {
     /// このドキュメントのウィンドウが前面(メイン)になった。
     func activate(_ m: ProjectModel) {
         guard model !== m else { refresh(); return }
+        objectWillChange.send()   // 設定ウィンドウが前面のモデルの替わりに追随する
         model = m
         cancellable = m.objectWillChange.sink { [weak self] _ in
             // 変更が済んでから読む
@@ -29,6 +30,7 @@ final class ActiveDocument: ObservableObject {
     /// このドキュメントが閉じられた(前面だったら外す)。
     func deactivate(_ m: ProjectModel) {
         guard model === m else { return }
+        objectWillChange.send()
         model = nil
         cancellable = nil
         refresh()
