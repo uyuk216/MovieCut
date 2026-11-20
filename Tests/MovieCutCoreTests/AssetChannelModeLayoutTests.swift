@@ -360,12 +360,16 @@ final class AssetChannelModeLayoutTests: XCTestCase {
             AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: Self.sampleRate, AVNumberOfChannelsKey: 8,
             AVLinearPCMBitDepthKey: 32, AVLinearPCMIsFloatKey: true, AVLinearPCMIsBigEndianKey: false, AVLinearPCMIsNonInterleaved: false,
         ]
-        let file = try AVAudioFile(forWriting: url, settings: settings, commonFormat: .pcmFormatFloat32, interleaved: false)
-        let total = Int(0.5 * Self.sampleRate)
-        let buf = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(total))!
-        buf.frameLength = AVAudioFrameCount(total)
-        for c in 0..<8 { for i in 0..<total { buf.floatChannelData![c][i] = values[c] } }
-        try file.write(from: buf)
+        // 書き込みは do ブロック内で終える: AVAudioFile は解放時にヘッダ(長さ)を確定させるので、
+        // 生かしたまま読み側を開くと length=0 の素材になってしまう(実測で切り分け済み)。
+        do {
+            let file = try AVAudioFile(forWriting: url, settings: settings, commonFormat: .pcmFormatFloat32, interleaved: false)
+            let total = Int(0.5 * Self.sampleRate)
+            let buf = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(total))!
+            buf.frameLength = AVAudioFrameCount(total)
+            for c in 0..<8 { for i in 0..<total { buf.floatChannelData![c][i] = values[c] } }
+            try file.write(from: buf)
+        }
 
         var c = Clip(); c.type = .audio; c.src = url.path; c.start = 0; c.duration = 0.5
         var p = Project.new(); p.tracks[0].clips = [c]

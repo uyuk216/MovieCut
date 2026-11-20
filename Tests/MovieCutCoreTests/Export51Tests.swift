@@ -253,7 +253,7 @@ final class Export51Tests: XCTestCase {
         c.audioFx = AudioFx(eq: AudioFx.EQ(low: 6))   // 効くエフェクト → ステレオ寄与(L/R へ)
         XCTAssertTrue(c.hasAudioFx)
         p.tracks[0].clips = [c]
-        let out = tmp.appendingPathComponent("fx51.wav")
+        let out = tmp.appendingPathComponent("fx51-out.wav")   // 素材と同名にすると mixdownSurround51 の出力削除で素材まで消える
         _ = try AudioMixer.mixdownSurround51(project: p, to: out)
         let ch = try readChannels(out)
         // 5.1 がステレオにダウンミックスされて L/R に入る(C は 0.7071 で左右へ)。C/LFE/Ls/Rs は無音。
