@@ -355,11 +355,11 @@ struct MCVST3Instance {
 
 namespace {
 
-// エディタを畳む。順序は removedFromParent → setFrame(nullptr) → 解放(controller terminate より前に呼ぶこと)。
+// エディタを畳む。順序は removed() → setFrame(nullptr) → 解放(controller terminate より前に呼ぶこと)。
 void destroyEditorInternal(MCVST3Instance* inst) {
     if (!inst) return;
     if (inst->editorView) {
-        inst->editorView->removedFromParent();
+        inst->editorView->removed();
         inst->editorView->setFrame(nullptr);
         inst->editorView = nullptr;
     }
@@ -797,7 +797,7 @@ MCVST3Status mcvst3_create_editor_view(MCVST3Instance* instance, void* parentVie
         IPtr<IPlugView> view = owned(raw);
         if (view->isPlatformTypeSupported(kPlatformTypeNSView) != kResultTrue) return MCVST3_NOT_IMPLEMENTED;
         view->setFrame(&instance->frame);
-        tresult r = view->attachedToParent(parentView, kPlatformTypeNSView);
+        tresult r = view->attached(parentView, kPlatformTypeNSView);
         if (r != kResultOk && r != kResultTrue) {
             view->setFrame(nullptr);
             return mapResult(r);
