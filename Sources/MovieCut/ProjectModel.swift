@@ -799,9 +799,9 @@ final class ProjectModel: ObservableObject {
             if let h = OutputPlan.heavyWarning(width: plan.width, height: plan.height, fps: exporting.fps) { notices.append(h) }
         }
         let snapshot = project
-        let title = (chosen.map { $0.audioOnly ? "音声を書き出しています" : "\($0.name) で書き出しています" } ?? (plan.isProRes ? "\(OutputPlan.codecLabel(plan.codec)) の .mov を書き出しています" : "MP4 を書き出しています"))
+        let title = (chosen.map { $0.audioOnly ? L10n.t("音声を書き出しています") : String(format: L10n.t("%@ で書き出しています"), $0.name) } ?? (plan.isProRes ? String(format: L10n.t("%@ の .mov を書き出しています"), OutputPlan.codecLabel(plan.codec)) : L10n.t("MP4 を書き出しています")))
         return await runJob(title: title, fileName: url.lastPathComponent, notices: notices,
-                            success: "\(url.lastPathComponent) に書き出しました" + (plan.usesFallbackCodec && isVideo ? "(HEVC)" : ""), result: url) { progress in
+                            success: String(format: L10n.t("%@ に書き出しました"), url.lastPathComponent) + (plan.usesFallbackCodec && isVideo ? "(HEVC)" : ""), result: url) { progress in
             try await ExportJob.run(project: snapshot, preset: preset, spec: spec, bitrateMbps: bitrateMbps, range: range, to: url, loudness: loudness, pluginEffectProviders: AppServices.pluginEffectProviders, subtitleEmbed: subtitleEmbed, progress: progress)
         }
     }
@@ -811,8 +811,8 @@ final class ProjectModel: ObservableObject {
         guard !directExportBlocked() else { return .failure(ExportError.writerFailed(nil)) }
         let snapshot = project
         let n = ImageSequenceExporter.plan(project: snapshot, range: range, base: base, format: format).frames
-        return await runJob(title: "連番画像(\(format.title))を書き出しています", fileName: directory.lastPathComponent, notices: [],
-                            success: "\(directory.lastPathComponent) に \(n) 枚書き出しました", result: directory) { progress in
+        return await runJob(title: String(format: L10n.t("連番画像(%@)を書き出しています"), format.title), fileName: directory.lastPathComponent, notices: [],
+                            success: String(format: L10n.t("%@ に %d 枚書き出しました"), directory.lastPathComponent, n), result: directory) { progress in
             try await ImageSequenceExporter.export(project: snapshot, range: range, to: directory, base: base, format: format, pluginEffectProviders: AppServices.pluginEffectProviders, progress: progress)
         }
     }

@@ -55,7 +55,7 @@ extension ProjectModel {
             guard edit(Self.remixUndoName, { $0 = r.project }) else { return false }
             selectedClipId = r.clipIds.first
             let diff = r.plan.totalDuration - params.targetDuration
-            statusText = String(format: "Remix: %d 区間で %.1f 秒のクリップ列を作りました(目標 %.1f 秒、差 %+.1f 秒)%@",
+            statusText = String(format: L10n.t("Remix: %d 区間で %.1f 秒のクリップ列を作りました(目標 %.1f 秒、差 %+.1f 秒)%@"),
                                 r.plan.segments.count, r.plan.totalDuration, params.targetDuration, diff,
                                 r.plan.usedFallback ? "。ビートが取れなかったため、音の切り替わり点で区切りました" : "")
             return true

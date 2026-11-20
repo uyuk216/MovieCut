@@ -17,11 +17,11 @@ extension ProjectModel {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
-        panel.title = "連番PNG+WAVで書き出す"
-        panel.message = "選んだフォルダの中に \(documentName)_000001.png … と \(documentName).wav が入ります(fps はプロジェクト設定どおり)。"
-        panel.prompt = "ここに書き出す"
+        panel.title = L10n.t("連番PNG+WAVで書き出す")
+        panel.message = String(format: L10n.t("選んだフォルダの中に %@_000001.png … と %@.wav が入ります(fps はプロジェクト設定どおり)。"), documentName, documentName)
+        panel.prompt = L10n.t("ここに書き出す")
         let range = project.exportRange
-        let rangeBox = NSButton(checkboxWithTitle: range.map { String(format: "範囲だけ書き出す(%.2f〜%.2f 秒)", $0.start, $0.end) } ?? "範囲だけ書き出す(範囲なし)",
+        let rangeBox = NSButton(checkboxWithTitle: range.map { String(format: L10n.t("範囲だけ書き出す(%.2f〜%.2f 秒)"), $0.start, $0.end) } ?? L10n.t("範囲だけ書き出す(範囲なし)"),
                                 target: nil, action: nil)
         rangeBox.state = range == nil ? .off : .on
         rangeBox.isEnabled = range != nil
@@ -53,7 +53,7 @@ extension ProjectModel {
         let options = PngWavOptions(base: base, loudness: loudness)
         let plan = PngWavExporter.plan(project: snapshot, range: range, options: options)
         return await runJob(title: "連番PNG+WAV を書き出しています", fileName: directory.lastPathComponent, notices: [],
-                            success: "\(directory.lastPathComponent) に \(plan.frameCount) 枚の PNG と WAV を書き出しました", result: directory) { progress in
+                            success: String(format: L10n.t("%@ に %d 枚の PNG と WAV を書き出しました"), directory.lastPathComponent, plan.frameCount), result: directory) { progress in
             try await PngWavExporter.export(project: snapshot, range: range, options: options, to: directory, pluginEffectProviders: AppServices.pluginEffectProviders, progress: progress)
         }
     }
@@ -67,8 +67,8 @@ extension ProjectModel {
         panel.allowedContentTypes = [UTType(filenameExtension: "exo") ?? .data]
         panel.nameFieldStringValue = documentName + ".exo"
         panel.canCreateDirectories = true
-        panel.title = "exo 形式(.exo)で書き出す"
-        panel.message = "AviUtl の拡張編集プラグインで開けるプロジェクトファイルとして書き出します。対応できない要素は、書き出し後に一覧でお知らせします(実 AviUtl での読み込みは未検証です)。"
+        panel.title = L10n.t("exo 形式(.exo)で書き出す")
+        panel.message = L10n.t("AviUtl の拡張編集プラグインで開けるプロジェクトファイルとして書き出します。対応できない要素は、書き出し後に一覧でお知らせします(実 AviUtl での読み込みは未検証です)。")
 
         let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
             guard resp == .OK, let picked = panel.url, let self else { return }
@@ -77,12 +77,12 @@ extension ProjectModel {
                 let report = try ExoExporter.write(project: self.project, to: url)
                 NSWorkspace.shared.activateFileViewerSelecting([url])
                 let alert = NSAlert()
-                alert.messageText = "exo 形式で書き出しました"
+                alert.messageText = L10n.t("exo 形式で書き出しました")
                 if report.hasLoss {
                     alert.alertStyle = .warning
                     alert.informativeText = report.summaryLines.joined(separator: "\n")
                 } else {
-                    alert.informativeText = "書き出し: \(report.convertedCount) 件\n" + report.notes.map { "注記: \($0)" }.joined(separator: "\n")
+                    alert.informativeText = String(format: L10n.t("書き出し: %d 件\n"), report.convertedCount) + report.notes.map { L10n.t("注記: ") + $0 }.joined(separator: "\n")
                 }
                 alert.addButton(withTitle: "OK")
                 if let w = self.window { alert.beginSheetModal(for: w) } else { alert.runModal() }

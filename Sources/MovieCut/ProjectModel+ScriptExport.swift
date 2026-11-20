@@ -13,8 +13,8 @@ extension ProjectModel {
         panel.allowedContentTypes = [.plainText]
         panel.nameFieldStringValue = documentName + "_台本.txt"
         panel.canCreateDirectories = true
-        panel.title = "台本を書き出す(テキスト)"
-        panel.message = "「キャラ名: セリフ」の行で書きます。台本欄に貼ると、同じキャラで読み上げられます"
+        panel.title = L10n.t("台本を書き出す(テキスト)")
+        panel.message = L10n.t("「キャラ名: セリフ」の行で書きます。台本欄に貼ると、同じキャラで読み上げられます")
         let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
             guard resp == .OK, let url = panel.url, let self else { return }
             do {
@@ -37,8 +37,8 @@ extension ProjectModel {
         panel.allowedContentTypes = [.png]
         panel.nameFieldStringValue = documentName + "_絵コンテ.png"
         panel.canCreateDirectories = true
-        panel.title = "絵コンテを書き出す(PNG)"
-        panel.message = "全体を \(Storyboard.defaultCount) 枚に区切った代表フレームを、\(Storyboard.defaultColumns) 列で並べます"
+        panel.title = L10n.t("絵コンテを書き出す(PNG)")
+        panel.message = String(format: L10n.t("全体を %d 枚に区切った代表フレームを、%d 列で並べます"), Storyboard.defaultCount, Storyboard.defaultColumns)
         let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
             guard resp == .OK, let url = panel.url, let self else { return }
             do {

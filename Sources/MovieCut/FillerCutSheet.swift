@@ -15,13 +15,13 @@ struct FillerCutSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("フィラー語をカット").font(.headline)
+            Text(L10n.t("フィラー語をカット")).font(.headline)
             Group {
                 if let f = found {
                     if f.isEmpty {
                         InspectorGuideCard(symbol: "magnifyingglass", heading: "フィラー語は見つかりませんでした", message: "カットできる語はありません。")
                     } else {
-                        Text("\(f.count) 件見つかりました。カットするものにチェックを入れてください。")
+                        Text(String(format: L10n.t("%d 件見つかりました。カットするものにチェックを入れてください。"), f.count))
                         ScrollView {
                             VStack(alignment: .leading, spacing: 4) {
                                 ForEach(Array(f.enumerated()), id: \.offset) { i, r in
@@ -40,18 +40,18 @@ struct FillerCutSheet: View {
                 } else if let e = failure {
                     Text(e).foregroundStyle(.red)
                 } else {
-                    HStack(spacing: 6) { ProgressView().controlSize(.small); Text("音声を文字にしています…") }
+                    HStack(spacing: 6) { ProgressView().controlSize(.small); Text(L10n.t("音声を文字にしています…")) }
                 }
             }
             .font(.callout)
-            Toggle("後ろを詰める", isOn: $ripple).toggleStyle(.checkbox)
-            Text("「あの」「その」は普通の言葉としても使うので、チェックを確かめてからカットしてください。")
+            Toggle(L10n.t("後ろを詰める"), isOn: $ripple).toggleStyle(.checkbox)
+            Text(L10n.t("「あの」「その」は普通の言葉としても使うので、チェックを確かめてからカットしてください。"))
                 .font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary)
             HStack {
                 Spacer()
-                Button("キャンセル") { model.showFillerSheet = false }
+                Button(L10n.t("キャンセル")) { model.showFillerSheet = false }
                     .keyboardShortcut(.cancelAction)
-                Button("カット") { commit() }
+                Button(L10n.t("カット")) { commit() }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
                     .disabled(found == nil || picked.isEmpty)

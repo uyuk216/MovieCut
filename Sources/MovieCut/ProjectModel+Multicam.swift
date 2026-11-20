@@ -87,7 +87,7 @@ extension ProjectModel {
         switch Multicam.cut(in: project, groupId: g.id, angle: angle, at: t) {
         case .cut(let p):
             let ok = edit("アングル\(angle + 1)に切り替え") { $0 = p }
-            if ok { statusText = String(format: "%.2f 秒から %@ に切り替えました", t, g.angles[angle].name) }
+            if ok { statusText = String(format: L10n.t("%.2f 秒から %@ に切り替えました"), t, g.angles[angle].name) }
             return ok
         case .unchanged: statusText = "すでにその角度です"
         case .locked: statusText = Self.lockedNotice

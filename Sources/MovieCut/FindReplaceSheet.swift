@@ -22,31 +22,31 @@ struct FindReplaceSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("検索と置換").font(.headline)
-            Text("テロップとセリフの読み上げ文・字幕文、台本を対象にします(選んでいるクリップだけのときは台本を除きます)。")
+            Text(L10n.t("検索と置換")).font(.headline)
+            Text(L10n.t("テロップとセリフの読み上げ文・字幕文、台本を対象にします(選んでいるクリップだけのときは台本を除きます)。"))
                 .font(.callout).foregroundStyle(.secondary)
             Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
                 GridRow {
-                    Text("検索")
+                    Text(L10n.t("検索"))
                     TextField("", text: $query).textFieldStyle(.roundedBorder).frame(width: 260)
                 }
                 GridRow {
-                    Text("置換")
+                    Text(L10n.t("置換"))
                     TextField("", text: $replacement).textFieldStyle(.roundedBorder).frame(width: 260)
                 }
             }
-            Toggle("大文字と小文字を区別する", isOn: $caseSensitive).toggleStyle(.checkbox)
-            Toggle("選んでいるクリップだけ", isOn: $selectionOnly).toggleStyle(.checkbox).disabled(!hasSelection)
+            Toggle(L10n.t("大文字と小文字を区別する"), isOn: $caseSensitive).toggleStyle(.checkbox)
+            Toggle(L10n.t("選んでいるクリップだけ"), isOn: $selectionOnly).toggleStyle(.checkbox).disabled(!hasSelection)
             Text(countText)
                 .font(.callout)
                 .foregroundStyle(count == 0 ? .secondary : .primary)
-            Text("読み上げ文が変わったセリフは、音声を作り直します(字幕文と台本は作り直しません)。すべて元に戻すのは 1 回です。")
+            Text(L10n.t("読み上げ文が変わったセリフは、音声を作り直します(字幕文と台本は作り直しません)。すべて元に戻すのは 1 回です。"))
                 .font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary).fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()
-                Button("閉じる") { model.showFindSheet = false }
+                Button(L10n.t("閉じる")) { model.showFindSheet = false }
                     .keyboardShortcut(.cancelAction)
-                Button("すべて置換") { replaceAll() }
+                Button(L10n.t("すべて置換")) { replaceAll() }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
                     .disabled(count == 0 || working || model.isLocked)

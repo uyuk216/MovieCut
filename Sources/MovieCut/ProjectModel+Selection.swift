@@ -229,15 +229,15 @@ extension ProjectModel {
     /// 削除の確認(クリップがあるとき、またはロックされているときだけ聞く)。true なら消す。テストでは差し替える。
     static var confirmLayerDelete: @MainActor (_ name: String, _ clipCount: Int, _ locked: Bool) -> Bool = { name, count, locked in
         let a = NSAlert()
-        a.messageText = "レイヤー「\(name)」を削除しますか?"
+        a.messageText = String(format: L10n.t("レイヤー「%@」を削除しますか?"), name)
         var lines: [String] = []
         if locked { lines.append("このレイヤーはロックされています。") }
         if count > 0 { lines.append("中の \(count) 個のクリップもいっしょに消えます。") }
         lines.append("「編集 ▸ 取り消し」で元に戻せます。")
         a.informativeText = lines.joined(separator: "\n")
         a.alertStyle = .warning
-        a.addButton(withTitle: "削除")
-        a.addButton(withTitle: "キャンセル")
+        a.addButton(withTitle: L10n.t("削除"))
+        a.addButton(withTitle: L10n.t("キャンセル"))
         return a.runModal() == .alertFirstButtonReturn
     }
 

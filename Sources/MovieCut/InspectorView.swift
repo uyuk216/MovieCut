@@ -119,8 +119,8 @@ struct KeyframeDiamond: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(state == .onKey ? "ここのキーフレームを消す" : "ここにキーフレームを足す")
-        .accessibilityLabel(state == .onKey ? "キーフレームを消す" : "キーフレームを追加")
+        .help(L10n.t(state == .onKey ? "ここのキーフレームを消す" : "ここにキーフレームを足す"))
+        .accessibilityLabel(L10n.t(state == .onKey ? "キーフレームを消す" : "キーフレームを追加"))
     }
 }
 
@@ -133,12 +133,12 @@ struct InspectorField<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 2) {
-                Text(label).font(MCDesign.Font.callout).foregroundStyle(.secondary)
+                Text(L10n.t(label)).font(MCDesign.Font.callout).foregroundStyle(.secondary)
                 if let key, key.state != .none {
                     Button(action: key.prev) { Image(systemName: "chevron.left").font(MCDesign.Font.badge).frame(width: 16, height: 16).contentShape(Rectangle()) }
-                        .buttonStyle(.plain).disabled(!key.canPrev).help("前のキーフレームへ")
+                        .buttonStyle(.plain).disabled(!key.canPrev).help(L10n.t("前のキーフレームへ"))
                     Button(action: key.next) { Image(systemName: "chevron.right").font(MCDesign.Font.badge).frame(width: 16, height: 16).contentShape(Rectangle()) }
-                        .buttonStyle(.plain).disabled(!key.canNext).help("次のキーフレームへ")
+                        .buttonStyle(.plain).disabled(!key.canNext).help(L10n.t("次のキーフレームへ"))
                 }
                 Spacer(minLength: 4)
                 if let trailing { Text(trailing).font(.system(size: 12).monospacedDigit()).foregroundStyle(.primary) }
@@ -336,7 +336,7 @@ struct InspectorView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("プロパティ").font(.headline).padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
+            Text(L10n.t("プロパティ")).font(.headline).padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
             Divider()
             ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 6) {
@@ -395,8 +395,8 @@ struct MultiSelectionInspector: View {
                 Button(Title.copy) { model.copySelection() }
             }
             HStack(spacing: 8) {
-                Button("グループにする") { model.groupSelectedClips() }
-                Button("グループを解除") { model.ungroupSelectedClips() }.disabled(!model.selectionHasGroup)
+                Button(L10n.t("グループにする")) { model.groupSelectedClips() }
+                Button(L10n.t("グループを解除")) { model.ungroupSelectedClips() }.disabled(!model.selectionHasGroup)
             }
             HStack(spacing: 8) {
                 Button(model.selectionGroupAllDisabled ? "グループを有効にする" : "グループを無効にする") { model.toggleGroupDisabledSelected() }
@@ -461,7 +461,7 @@ struct ClipInspector: View {
     }
 
     private func rotationField() -> some View {
-        InspectorField(label: "回転（°）", key: keyControl("rotation")) {
+        InspectorField(label: L10n.t("回転（°）"), key: keyControl("rotation")) {
             NumField(value: shown("rotation", nil), step: 1, decimals: 1,
                      clamp: { Animation.clamp("rotation", $0, type: clip?.type ?? .image) },
                      onCommit: { model.setKeyed("rotation", $0, clipId: clipId) },
@@ -471,8 +471,8 @@ struct ClipInspector: View {
 
     private func flipToggles(_ c: Clip) -> some View {
         HStack(spacing: 14) {
-            Toggle("左右反転", isOn: Binding(get: { c.flipHOrDefault }, set: { model.setFlip(horizontal: true, $0, clipId: clipId) }))
-            Toggle("上下反転", isOn: Binding(get: { c.flipVOrDefault }, set: { model.setFlip(horizontal: false, $0, clipId: clipId) }))
+            Toggle(L10n.t("左右反転"), isOn: Binding(get: { c.flipHOrDefault }, set: { model.setFlip(horizontal: true, $0, clipId: clipId) }))
+            Toggle(L10n.t("上下反転"), isOn: Binding(get: { c.flipVOrDefault }, set: { model.setFlip(horizontal: false, $0, clipId: clipId) }))
         }
         .toggleStyle(.checkbox)
     }
@@ -486,7 +486,7 @@ struct ClipInspector: View {
     }
 
     private func fontPicker(_ c: Clip) -> some View {
-        InspectorField(label: "フォント") {
+        InspectorField(label: L10n.t("フォント")) {
             Picker("", selection: Binding(get: { c.fontOrDefault }, set: { v in model.setClipProperty({ $0.font = v }, name: "フォントの変更", clipId: clipId) })) {
                 ForEach(FontChoices.options(including: c.font), id: \.self) { Text($0).tag($0) }
             }
@@ -542,9 +542,9 @@ struct ClipInspector: View {
                     if let usage = SourceUsage.label(of: c) {
                         HStack(spacing: 8) {
                             Text(usage).font(MCDesign.Font.subheadline).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
-                            Button("この区間へ") { model.showSourceUsage() }
+                            Button(L10n.t("この区間へ")) { model.showSourceUsage() }
                                 .controlSize(.small)
-                                .help("再生位置をクリップの頭へ移し、元素材の使用範囲を状態欄に出す")
+                                .help(L10n.t("再生位置をクリップの頭へ移し、元素材の使用範囲を状態欄に出す"))
                         }
                     }
                 }
@@ -573,7 +573,7 @@ struct ClipInspector: View {
                 if Clip.supportsWarp(c.type) { warpSections(c) }
                 if (c.type == .video || c.type == .audio) && !c.isFreeze {
                     disclose("audio", "音声", open: true, hideHeader: true) {
-                        InspectorSection(title: "音声")
+                        InspectorSection(title: L10n.t("音声"))
                         slider("音量", .volume, step: 0.05, format: Self.pct)
                         audioFadeFields(c)
                         AudioFxPanel(model: model, clipId: clipId, forceExpanded: Self.expandAudioFx)
@@ -594,13 +594,13 @@ struct ClipInspector: View {
 
     /// グループの状態と付け外し。グループのクリップは、タイムラインで押すと全員が選ばれる。
     @ViewBuilder private func groupSection(_ c: Clip) -> some View {
-        InspectorSection(title: "グループ")
+        InspectorSection(title: L10n.t("グループ"))
         if let g = c.group {
-            Text("グループのメンバー（\(ClipGrouping.members(of: g, in: model.project).count) 個）")
+            Text(String(format: L10n.t("グループのメンバー（%d 個）"), ClipGrouping.members(of: g, in: model.project).count))
                 .font(MCDesign.Font.callout).foregroundStyle(.secondary)
             HStack(spacing: 8) {
-                Button("全員を選択") { model.selectGroupMembers(of: clipId) }
-                Button("このクリップを外す") { model.setClipProperty(\.group, to: nil, name: "グループから外す", clipId: clipId) }
+                Button(L10n.t("全員を選択")) { model.selectGroupMembers(of: clipId) }
+                Button(L10n.t("このクリップを外す")) { model.setClipProperty(\.group, to: nil, name: "グループから外す", clipId: clipId) }
             }
             HStack(spacing: 8) {
                 Button(model.groupAllDisabled(g) ? "グループを有効にする" : "グループを無効にする") {
@@ -611,7 +611,7 @@ struct ClipInspector: View {
             .controlSize(.small)
             .disabled(model.isLocked)
         } else {
-            Text("グループに入っていません。2 つ以上選んで「グループにする」と、押したときに全員が選ばれ、ドラッグでまとめて動かせます。")
+            Text(L10n.t("グループに入っていません。2 つ以上選んで「グループにする」と、押したときに全員が選ばれ、ドラッグでまとめて動かせます。"))
                 .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -662,15 +662,15 @@ struct ClipInspector: View {
     @ViewBuilder private func speedSections(_ c: Clip) -> some View {
         InspectorSection(title: c.isFreeze ? "フリーズフレーム" : "速度")
         if c.isFreeze {
-            Text("素材の \(String(format: "%.3f", c.offset)) 秒のコマを止めています。長さは「長さ（秒）」で変えられます。")
+            Text(String(format: L10n.t("素材の %.3f 秒のコマを止めています。長さは「長さ（秒）」で変えられます。"), c.offset))
                 .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         } else {
             let sp = c.effectiveSpeed
-            InspectorField(label: "速度（倍）") {
+            InspectorField(label: L10n.t("速度（倍）")) {
                 HStack(spacing: 6) {
                     Picker("", selection: Binding(get: { Self.speedPresetTag(sp) }, set: { v in if v > 0 { model.setSpeed(v, clipId: clipId) } })) {
                         ForEach(ClipTiming.presets, id: \.self) { Text("×" + ClipTiming.formatSpeed($0)).tag($0) }
-                        if Self.speedPresetTag(sp) == 0 { Text("その他").tag(0.0) }
+                        if Self.speedPresetTag(sp) == 0 { Text(L10n.t("その他")).tag(0.0) }
                     }
                     .labelsHidden()
                     .frame(width: 84)
@@ -684,23 +684,23 @@ struct ClipInspector: View {
                        begin: { model.beginGesture() },
                        change: { model.liveSpeed($0, clipId: clipId) },
                        end: { model.commitGesture(ProjectModel.speedUndoName) })
-            Toggle("逆再生", isOn: Binding(get: { c.effectiveReverse }, set: { model.setReverse($0, clipId: clipId) }))
+            Toggle(L10n.t("逆再生"), isOn: Binding(get: { c.effectiveReverse }, set: { model.setReverse($0, clipId: clipId) }))
                 .toggleStyle(.checkbox)
                 .disabled(c.rampPoints != nil)
-                .help("速度ランプがあるあいだは使えません")
-            Toggle("音程を保つ", isOn: Binding(get: { c.keepPitchOrDefault }, set: { model.setKeepPitch($0, clipId: clipId) }))
+                .help(L10n.t("速度ランプがあるあいだは使えません"))
+            Toggle(L10n.t("音程を保つ"), isOn: Binding(get: { c.keepPitchOrDefault }, set: { model.setKeepPitch($0, clipId: clipId) }))
                 .toggleStyle(.checkbox)
                 .disabled(sp == 1 || c.rampPoints != nil)
-                .help("オフにすると、速くしたぶん音が高く、遅くしたぶん低くなります（速度ランプの音は音程が速度に従います）")
+                .help(L10n.t("オフにすると、速くしたぶん音が高く、遅くしたぶん低くなります（速度ランプの音は音程が速度に従います）"))
             HStack(spacing: 6) {
-                Text("元の長さ → 新しい長さ").font(MCDesign.Font.callout).foregroundStyle(.secondary)
+                Text(L10n.t("元の長さ → 新しい長さ")).font(MCDesign.Font.callout).foregroundStyle(.secondary)
                 Spacer(minLength: 4)
                 Text(ClipTiming.lengthReadout(for: c)).font(.system(size: 12).monospacedDigit())
             }
             rampSection(c)
             if c.type == .video {
                 HStack(spacing: 6) {
-                    Text("コマの補間（速度が 1 未満のとき）").font(MCDesign.Font.callout).foregroundStyle(.secondary)
+                    Text(L10n.t("コマの補間（速度が 1 未満のとき）")).font(MCDesign.Font.callout).foregroundStyle(.secondary)
                     Spacer(minLength: 4)
                     Picker("", selection: Binding(get: { c.frameInterpolation }, set: { model.setFrameInterpolation($0, clipId: clipId) })) {
                         ForEach(FrameInterpolation.allCases, id: \.self) { Text($0.label).tag($0) }
@@ -709,7 +709,7 @@ struct ClipInspector: View {
                     .frame(maxWidth: 230)
                     .disabled(c.effectiveReverse)
                 }
-                .help("スローモーションのコマ落ちを滑らかにします。ブレンドは前後のコマの重ね合わせ、オプティカルフローは動きを推定して動きに沿った中間のコマを作ります（重い処理なので、最初のコマは少し待ちます）")
+                .help(L10n.t("スローモーションのコマ落ちを滑らかにします。ブレンドは前後のコマの重ね合わせ、オプティカルフローは動きを推定して動きに沿った中間のコマを作ります（重い処理なので、最初のコマは少し待ちます）"))
             }
         }
     }
@@ -717,50 +717,50 @@ struct ClipInspector: View {
     /// シーンクリップ専用表示(R2-3): 参照先シーンの名前と中身の概要(レイヤー・クリップ・尺・参照数)。
     /// 中身の編集は「シーンを開く」から(この場では直さない。複合クリップの節と同じ流儀)。
     @ViewBuilder private func sceneSection(_ c: Clip) -> some View {
-        InspectorSection(title: "シーン")
+        InspectorSection(title: L10n.t("シーン"))
         if let sid = c.sceneId, let scene = model.rootProject.scene(withId: sid) {
-            Text("シーン「\(scene.name)」を参照しています。シーンの中身を直すと、参照しているすべてのクリップに反映されます。")
+            Text(String(format: L10n.t("シーン「%@」を参照しています。シーンの中身を直すと、参照しているすべてのクリップに反映されます。"), scene.name))
                 .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             if let summary = SceneClipDisplay.summary(for: c, in: model.rootProject) {
                 Text(summary)
                     .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             HStack(spacing: 8) {
-                Button("シーンを開く") { _ = model.enterScene(sid) }
+                Button(L10n.t("シーンを開く")) { _ = model.enterScene(sid) }
                     .disabled(model.isLocked || model.isInsideScene || model.isInsideCompound)
-                Button("シーン一覧…") { model.openSceneList() }
+                Button(L10n.t("シーン一覧…")) { model.openSceneList() }
                     .disabled(model.isLocked)
             }
             .controlSize(.small)
         } else {
-            Text("参照先のシーンが見つかりません。このクリップは描画も音声も出ません。")
+            Text(L10n.t("参照先のシーンが見つかりません。このクリップは描画も音声も出ません。"))
                 .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
     }
 
     /// 複合クリップの中身の概要(編集は、まとめを解除して子のクリップを直す)。
     @ViewBuilder private func compoundSection(_ c: Clip) -> some View {
-        InspectorSection(title: "中身")
+        InspectorSection(title: L10n.t("中身"))
         let kids = c.tracks ?? []
         let n = kids.reduce(0) { $0 + $1.clips.count }
-        Text("レイヤー \(kids.count)・クリップ \(n)。位置・効果・トランジションは、この複合クリップ全体にかかります。中身を直すには「複合クリップを解除」します。")
+        Text(String(format: L10n.t("レイヤー %d・クリップ %d。位置・効果・トランジションは、この複合クリップ全体にかかります。中身を直すには「複合クリップを解除」します。"), kids.count, n))
             .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
     }
 
     /// 手ぶれ補正(映像クリップ)。オンオフは強さ 0 と同じ(0 はファイルに書かない)。つまみは 1 回の Undo。
     @ViewBuilder private func stabilizeSections(_ c: Clip) -> some View {
-        InspectorSection(title: "手ぶれ補正")
-        Toggle("映像を滑らかにする（縁は少し拡大して隠す）", isOn: Binding(get: { c.stabilizeStrength > 0 }, set: { on in
+        InspectorSection(title: L10n.t("手ぶれ補正"))
+        Toggle(L10n.t("映像を滑らかにする（縁は少し拡大して隠す）"), isOn: Binding(get: { c.stabilizeStrength > 0 }, set: { on in
             model.setStabilizeStrength(on ? StabilizeEditing.defaultStrength : 0, clipId: clipId)
         }))
         .toggleStyle(.checkbox)
-        .help("解析は初回の表示のあいだに背景で行い、終わるまでは補正なしで表示します")
+        .help(L10n.t("解析は初回の表示のあいだに背景で行い、終わるまでは補正なしで表示します"))
         if c.stabilizeStrength > 0 {
-            Toggle("傾きと拡大縮小も補正する", isOn: Binding(get: { c.stabilizeRollOn }, set: { on in
+            Toggle(L10n.t("傾きと拡大縮小も補正する"), isOn: Binding(get: { c.stabilizeRollOn }, set: { on in
                 model.setStabilizeRotationZoom(on, clipId: clipId)
             }))
             .toggleStyle(.checkbox)
-            .help("回転とズームのぶれも直します。オフのときは平行移動だけ直します(解析は軽くなります)")
+            .help(L10n.t("回転とズームのぶれも直します。オフのときは平行移動だけ直します(解析は軽くなります)"))
             LiveSlider(label: "強さ", value: c.stabilizeStrength, range: 0...1, step: 0.05, format: Self.pct,
                        begin: { model.beginGesture() },
                        change: { model.liveStabilizeStrength($0, clipId: clipId) },
@@ -770,17 +770,17 @@ struct ClipInspector: View {
 
     /// 形のマスク(矩形・楕円・ペン・反転・羽根)。オフは nil(ファイルに書かない)。ドラッグは 1 回の Undo。
     @ViewBuilder private func maskSections(_ c: Clip) -> some View {
-        InspectorSection(title: "形のマスク")
-        Toggle("形で切り抜く（外は透明）", isOn: Binding(get: { c.mask != nil }, set: { on in
+        InspectorSection(title: L10n.t("形のマスク"))
+        Toggle(L10n.t("形で切り抜く（外は透明）"), isOn: Binding(get: { c.mask != nil }, set: { on in
             model.setClipMask(on ? ClipMask() : nil, clipId: clipId)
         }))
         .toggleStyle(.checkbox)
         if let m = c.mask {
-            Picker("形", selection: Binding(get: { m.shape }, set: { s in
+            Picker(L10n.t("形"), selection: Binding(get: { m.shape }, set: { s in
                 model.setMaskShape(s, clipId: clipId)
             })) {
-                Text("矩形").tag("rect")
-                Text("楕円").tag("ellipse")
+                Text(L10n.t("矩形")).tag("rect")
+                Text(L10n.t("楕円")).tag("ellipse")
                 Text(L10n.t("ペン")).tag("pen")
             }
             .pickerStyle(.segmented)
@@ -794,7 +794,7 @@ struct ClipInspector: View {
                 maskSlider("高さ", m.h, \.h, range: 0.01...1)
             }
             maskSlider("羽根（ぼかし）", m.feather, \.feather, range: 0...1)
-            Toggle("反転（中を透明にする）", isOn: Binding(get: { m.invert }, set: { on in
+            Toggle(L10n.t("反転（中を透明にする）"), isOn: Binding(get: { m.invert }, set: { on in
                 model.setMaskField(clipId: clipId) { $0.invert = on }
             }))
             .toggleStyle(.checkbox)
@@ -811,11 +811,11 @@ struct ClipInspector: View {
             .disabled(model.isLocked || m.points.count >= ClipMask.maxPoints)
         ForEach(Array(m.points.enumerated()), id: \.offset) { i, pt in
             HStack(spacing: 6) {
-                Text("点\(i + 1)").font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary)
+                Text(String(format: L10n.t("点%d"), i + 1)).font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary)
                 Button(L10n.t("ハンドルをまっすぐにする")) { model.resetPenHandles(index: i, clipId: clipId) }
                     .controlSize(.mini)
                     .disabled(model.isLocked || pt.isCorner)
-                Button("削除") { model.removePenPoint(index: i, clipId: clipId) }
+                Button(L10n.t("削除")) { model.removePenPoint(index: i, clipId: clipId) }
                     .controlSize(.mini)
                     .disabled(model.isLocked || m.points.count <= 3)
             }
@@ -843,8 +843,8 @@ struct ClipInspector: View {
     // MARK: メッシュ変形・パペット変形(数値編集 + プレビュー上のドラッグ + キーフレーム)
 
     @ViewBuilder private func warpSections(_ c: Clip) -> some View {
-        InspectorSection(title: "メッシュ変形")
-        Toggle("格子で変形する", isOn: Binding(get: { c.meshWarp != nil }, set: { on in
+        InspectorSection(title: L10n.t("メッシュ変形"))
+        Toggle(L10n.t("格子で変形する"), isOn: Binding(get: { c.meshWarp != nil }, set: { on in
             if on { model.ensureMeshWarp(clipId: clipId) } else { model.clearMeshWarp(clipId: clipId) }
         }))
         .toggleStyle(.checkbox)
@@ -857,49 +857,49 @@ struct ClipInspector: View {
             ForEach(Array(m.points.enumerated()), id: \.offset) { i, pt in
                 let home = m.home(index: i)
                 HStack(spacing: 6) {
-                    Text("点\(i + 1)（\(Int(home.x * Double(m.cols - 1)) + 1),\(Int(home.y * Double(m.rows - 1)) + 1)）")
+                    Text(String(format: L10n.t("点%d（%d,%d）"), i + 1, Int(home.x * Double(m.cols - 1)) + 1, Int(home.y * Double(m.rows - 1)) + 1))
                         .font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary)
-                    Button("元に戻す") { model.resetMeshPoint(index: i, clipId: clipId) }
+                    Button(L10n.t("元に戻す")) { model.resetMeshPoint(index: i, clipId: clipId) }
                         .controlSize(.mini)
                         .disabled(model.isLocked || (abs(pt.x - home.x) < 1e-9 && abs(pt.y - home.y) < 1e-9))
                 }
                 warpSlider("横", model.animatedValue(WarpKey.mesh(i, .x), of: c), key: WarpKey.mesh(i, .x)) { v in model.liveMeshAxis(clipId: clipId, index: i, axis: .x, v) }
                 warpSlider("縦", model.animatedValue(WarpKey.mesh(i, .y), of: c), key: WarpKey.mesh(i, .y)) { v in model.liveMeshAxis(clipId: clipId, index: i, axis: .y, v) }
             }
-            Text("制御点を元の位置からずらすと、その周りが引っ張られて変形します。全点が元の位置のときは変形しません。プレビュー上でも制御点をドラッグでき、◇ でキーフレームを付けると位置が時間で動きます。")
+            Text(L10n.t("制御点を元の位置からずらすと、その周りが引っ張られて変形します。全点が元の位置のときは変形しません。プレビュー上でも制御点をドラッグでき、◇ でキーフレームを付けると位置が時間で動きます。"))
                 .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
-        InspectorSection(title: "パペット変形")
-        Toggle("ピンで変形する", isOn: Binding(get: { c.puppetWarp != nil }, set: { on in
+        InspectorSection(title: L10n.t("パペット変形"))
+        Toggle(L10n.t("ピンで変形する"), isOn: Binding(get: { c.puppetWarp != nil }, set: { on in
             if on { model.ensurePuppetWarp(clipId: clipId) } else { model.clearPuppetWarp(clipId: clipId) }
         }))
         .toggleStyle(.checkbox)
         if let pw = c.puppetWarp {
             HStack(spacing: 8) {
-                Button("ピンを追加（中央）") { model.addPuppetPin(fixed: false, clipId: clipId) }
-                Button("固定ピンを追加") { model.addPuppetPin(fixed: true, clipId: clipId) }
+                Button(L10n.t("ピンを追加（中央）")) { model.addPuppetPin(fixed: false, clipId: clipId) }
+                Button(L10n.t("固定ピンを追加")) { model.addPuppetPin(fixed: true, clipId: clipId) }
             }
             .controlSize(.small)
             .disabled(model.isLocked || pw.pins.count >= PuppetWarp.maxPins)
             warpSlider("影響半径", pw.radius, range: PuppetWarp.radiusRange) { v in model.livePuppetRadius(clipId: clipId, v) }
             ForEach(Array(pw.pins.enumerated()), id: \.offset) { i, pin in
                 HStack(spacing: 6) {
-                    Text("ピン\(i + 1)").font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary)
-                    Toggle("固定", isOn: Binding(get: { pin.fixed }, set: { model.setPuppetPinFixed(index: i, $0, clipId: clipId) }))
+                    Text(String(format: L10n.t("ピン%d"), i + 1)).font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary)
+                    Toggle(L10n.t("固定"), isOn: Binding(get: { pin.fixed }, set: { model.setPuppetPinFixed(index: i, $0, clipId: clipId) }))
                         .toggleStyle(.checkbox)
-                    Button("削除") { model.removePuppetPin(index: i, clipId: clipId) }
+                    Button(L10n.t("削除")) { model.removePuppetPin(index: i, clipId: clipId) }
                         .controlSize(.mini)
                 }
                 .disabled(model.isLocked)
                 if pin.fixed {
-                    Text("元の位置（\(Int(pin.hx * 100))%, \(Int(pin.hy * 100))%）に固定されています")
+                    Text(String(format: L10n.t("元の位置（%d%%, %d%%）に固定されています"), Int(pin.hx * 100), Int(pin.hy * 100)))
                         .font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
                 } else {
                     warpSlider("横", model.animatedValue(WarpKey.pin(i, .x), of: c), key: WarpKey.pin(i, .x)) { v in model.livePuppetAxis(clipId: clipId, index: i, axis: .x, v) }
                     warpSlider("縦", model.animatedValue(WarpKey.pin(i, .y), of: c), key: WarpKey.pin(i, .y)) { v in model.livePuppetAxis(clipId: clipId, index: i, axis: .y, v) }
                 }
             }
-            Text("ピンはプレビュー上でもドラッグでき、クリップの中をダブルクリックするとその場所にピンが増えます（Shift+ダブルクリックで固定ピン）。ピンを動かすと、影響半径の内側が滑らかに追従します。固定ピンの周りは動きません。◇ でキーフレームを付けると位置が時間で動きます。")
+            Text(L10n.t("ピンはプレビュー上でもドラッグでき、クリップの中をダブルクリックするとその場所にピンが増えます（Shift+ダブルクリックで固定ピン）。ピンを動かすと、影響半径の内側が滑らかに追従します。固定ピンの周りは動きません。◇ でキーフレームを付けると位置が時間で動きます。"))
                 .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -921,7 +921,7 @@ struct ClipInspector: View {
     /// 速度ランプ(時間で速さが変わる)の点の一覧。点ごとに時刻(クリップの頭から)と速度を直せる。どの操作も Undo は 1 回。
     @ViewBuilder private func rampSection(_ c: Clip) -> some View {
         if let pts = c.rampPoints {
-            Text("速度ランプ（点のあいだは各点の進み方でつなぎます。音は音程が速度に従います）")
+            Text(L10n.t("速度ランプ（点のあいだは各点の進み方でつなぎます。音は音程が速度に従います）"))
                 .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             ForEach(Array(pts.enumerated()), id: \.offset) { i, p in
                 HStack(spacing: 6) {
@@ -930,7 +930,7 @@ struct ClipInspector: View {
                              clamp: { min(max($0, 0), c.duration) },
                              onCommit: { v in model.setSpeedRampPoint(clipId: clipId, index: i, t: v) },
                              onStep: { v in model.setSpeedRampPoint(clipId: clipId, index: i, t: v) })
-                    Text("秒 ×").font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
+                    Text(L10n.t("秒 ×")).font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
                     NumField(value: p.v, step: 0.05, decimals: 2,
                              clamp: { ClipTiming.clampSpeed($0) },
                              onCommit: { v in model.setSpeedRampPoint(clipId: clipId, index: i, v: v) },
@@ -938,20 +938,20 @@ struct ClipInspector: View {
                     if i < pts.count - 1 {
                         Picker("", selection: Binding(get: { p.ease }, set: { model.setSpeedRampEase(clipId: clipId, index: i, ease: $0) })) {
                             ForEach(Ease.presets, id: \.ease) { preset in Text(preset.label).tag(preset.ease) }
-                            if !Ease.presets.contains(where: { $0.ease == p.ease }) { Text("カスタム").tag(p.ease) }
+                            if !Ease.presets.contains(where: { $0.ease == p.ease }) { Text(L10n.t("カスタム")).tag(p.ease) }
                         }
-                        .labelsHidden().fixedSize().help("この点から次の点までの進み方（イージング）")
+                        .labelsHidden().fixedSize().help(L10n.t("この点から次の点までの進み方（イージング）"))
                     }
-                    Button("削除") { model.removeSpeedRampPoint(clipId: clipId, index: i) }
+                    Button(L10n.t("削除")) { model.removeSpeedRampPoint(clipId: clipId, index: i) }
                         .disabled(pts.count <= 2)
                 }
             }
             HStack(spacing: 6) {
-                Button("点を追加") { model.addSpeedRampPoint(clipId: clipId, at: c.duration / 2) }
-                Button("ランプをやめる") { model.clearSpeedRamp(clipId: clipId) }
+                Button(L10n.t("点を追加")) { model.addSpeedRampPoint(clipId: clipId, at: c.duration / 2) }
+                Button(L10n.t("ランプをやめる")) { model.clearSpeedRamp(clipId: clipId) }
             }
         } else if c.isFreeze == false, SpeedEditing.supports(c) {
-            Button("速度ランプを作る（いまの速度のまま点を 2 つ置く）") { model.makeSpeedRamp(clipId: clipId) }
+            Button(L10n.t("速度ランプを作る（いまの速度のまま点を 2 つ置く）")) { model.makeSpeedRamp(clipId: clipId) }
         }
     }
 
@@ -999,12 +999,12 @@ struct ClipInspector: View {
                 .foregroundStyle(status == .ok ? Color.secondary : Color.red)
                 .help(path)
             Spacer(minLength: 4)
-            Button("選ぶ…") { model.chooseAndLoadLUT(clipId: clipId) }
+            Button(L10n.t("選ぶ…")) { model.chooseAndLoadLUT(clipId: clipId) }
                 .controlSize(.small).disabled(model.isLocked)
-                .help("LUT の .cube ファイルを選ぶ")
+                .help(L10n.t("LUT の .cube ファイルを選ぶ"))
         }
-        if status == .missing { Text("ファイルが見つかりません（何もかかりません）").font(.system(size: 10)).foregroundStyle(.red) }
-        if status == .invalid { Text(".cube として読めません（何もかかりません）").font(.system(size: 10)).foregroundStyle(.red) }
+        if status == .missing { Text(L10n.t("ファイルが見つかりません（何もかかりません）")).font(.system(size: 10)).foregroundStyle(.red) }
+        if status == .invalid { Text(L10n.t(".cube として読めません（何もかかりません）")).font(.system(size: 10)).foregroundStyle(.red) }
     }
 
     /// 色調転写の参照画像の名前と状態(見つからない・読めないときは赤字)。
@@ -1017,12 +1017,12 @@ struct ClipInspector: View {
                 .foregroundStyle(status == .ok ? Color.secondary : Color.red)
                 .help(path)
             Spacer(minLength: 4)
-            Button("選ぶ…") { model.chooseColorTransferReference(clipId: clipId) }
+            Button(L10n.t("選ぶ…")) { model.chooseColorTransferReference(clipId: clipId) }
                 .controlSize(.small).disabled(model.isLocked)
-                .help("色調の手本にする画像を選ぶ")
+                .help(L10n.t("色調の手本にする画像を選ぶ"))
         }
-        if status == .missing { Text("ファイルが見つかりません（何もかかりません）").font(.system(size: 10)).foregroundStyle(.red) }
-        if status == .invalid { Text("画像として読めません（何もかかりません）").font(.system(size: 10)).foregroundStyle(.red) }
+        if status == .missing { Text(L10n.t("ファイルが見つかりません（何もかかりません）")).font(.system(size: 10)).foregroundStyle(.red) }
+        if status == .invalid { Text(L10n.t("画像として読めません（何もかかりません）")).font(.system(size: 10)).foregroundStyle(.red) }
     }
 
     @ViewBuilder private func effectCard(_ c: Clip, _ i: Int) -> some View {
@@ -1039,7 +1039,7 @@ struct ClipInspector: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 2) {
                 Toggle("", isOn: Binding(get: { e.enabled }, set: { model.setEffectEnabled($0, at: i, clipId: clipId) }))
-                    .toggleStyle(.checkbox).labelsHidden().help("オン/オフ")
+                    .toggleStyle(.checkbox).labelsHidden().help(L10n.t("オン/オフ"))
                 Text(kind?.label ?? pluginDesc?.label ?? "未対応: \(e.kind)")
                     .font(MCDesign.Font.calloutSemibold)
                     .foregroundStyle((kind == nil && pluginDesc == nil) || !e.enabled ? Color.secondary : Color.primary)
@@ -1078,9 +1078,9 @@ struct ClipInspector: View {
     }
 
     @ViewBuilder private func effectSections(_ c: Clip) -> some View {
-        InspectorSection(title: "エフェクト")
+        InspectorSection(title: L10n.t("エフェクト"))
         if c.effects.isEmpty {
-            Text("エフェクトはありません").font(MCDesign.Font.callout).foregroundStyle(.secondary)
+            Text(L10n.t("エフェクトはありません")).font(MCDesign.Font.callout).foregroundStyle(.secondary)
         }
         ForEach(0..<c.effects.count, id: \.self) { effectCard(c, $0) }
         HStack(spacing: 8) {
@@ -1088,17 +1088,17 @@ struct ClipInspector: View {
                 ForEach(EffectKind.allCases, id: \.rawValue) { k in Button(k.label) { model.addEffect(k, clipId: clipId) } }
                 if !AppServices.pluginEffectDescriptors.isEmpty {
                     Divider()
-                    Section("プラグイン") {
+                    Section(L10n.t("プラグイン")) {
                         ForEach(AppServices.pluginEffectDescriptors, id: \.id) { d in Button(d.label) { model.addPluginEffect(d, clipId: clipId) } }
                     }
                 }
-            } label: { Text("＋ 追加") }
+            } label: { Text(L10n.t("＋ 追加")) }
                 .menuStyle(.button)
                 .fixedSize()
                 .disabled(model.isLocked)
             Menu {
                 ForEach(EffectPreset.allCases, id: \.rawValue) { p in Button(p.title) { model.applyEffectPreset(p) } }
-            } label: { Text("プリセット") }
+            } label: { Text(L10n.t("プリセット")) }
                 .menuStyle(.button)
                 .fixedSize()
                 .disabled(model.isLocked)
@@ -1116,13 +1116,13 @@ struct ClipInspector: View {
         return Picker("", selection: Binding(
             get: { cur?.kind ?? "" },
             set: { v in model.setTransitionKind(v.isEmpty ? nil : TransitionKind(rawValue: v), edge: edge, clipId: clipId) })) {
-            Text("なし").tag("")
+            Text(L10n.t("なし")).tag("")
             ForEach(TransitionCategory.allCases, id: \.rawValue) { cat in
                 Section(cat.label) {
                     ForEach(TransitionKind.allCases.filter { $0.category == cat }, id: \.rawValue) { Text($0.label).tag($0.rawValue) }
                 }
             }
-            if let cur, cur.known == nil { Text("（未対応: \(cur.kind)）").tag(cur.kind) }
+            if let cur, cur.known == nil { Text(String(format: L10n.t("（未対応: %@）"), cur.kind)).tag(cur.kind) }
         }
         .labelsHidden()
     }
@@ -1130,7 +1130,7 @@ struct ClipInspector: View {
     private func easePicker(_ tr: MovieCutCore.Transition, _ edge: TransitionEdge) -> some View {
         Picker("", selection: Binding(get: { tr.ease }, set: { model.setTransitionEase($0, edge: edge, clipId: clipId) })) {
             ForEach(TransitionEditing.easeChoices, id: \.label) { Text($0.label).tag($0.ease) }
-            if !TransitionEditing.easeChoices.contains(where: { $0.ease == tr.ease }) { Text("（その他）").tag(tr.ease) }
+            if !TransitionEditing.easeChoices.contains(where: { $0.ease == tr.ease }) { Text(L10n.t("（その他）")).tag(tr.ease) }
         }
         .labelsHidden()
     }
@@ -1143,25 +1143,25 @@ struct ClipInspector: View {
         }
         if let tr {
             HStack(alignment: .top, spacing: 10) {
-                InspectorField(label: "長さ（秒）") {
+                InspectorField(label: L10n.t("長さ（秒）")) {
                     NumField(value: tr.effectiveDuration(clipDuration: c.duration), step: 0.1, decimals: 2,
                              clamp: { MovieCutCore.Transition.clampedDuration($0, clipDuration: c.duration) },
                              onCommit: { model.setTransitionDuration($0, edge: edge, clipId: clipId) },
                              onStep: { model.coalescedTransitionDuration($0, edge: edge, clipId: clipId) })
                 }
-                InspectorField(label: "進み方") { easePicker(tr, edge) }
+                InspectorField(label: L10n.t("進み方")) { easePicker(tr, edge) }
             }
             if tr.known?.isRuleWipe == true {
                 HStack(alignment: .top, spacing: 10) {
-                    InspectorField(label: "やわらかさ") {
+                    InspectorField(label: L10n.t("やわらかさ")) {
                         NumField(value: tr.ruleSoftness, step: 0.01, decimals: 2,
                                  clamp: { min(max($0, 0), MovieCutCore.RuleWipeMath.maxSoftness) },
                                  onCommit: { model.setTransitionRuleSoftness($0, edge: edge, clipId: clipId) },
                                  onStep: { model.coalescedTransitionRuleSoftness($0, edge: edge, clipId: clipId) })
                     }
                     if tr.known == .ruleCustom {
-                        InspectorField(label: "ルール画像") {
-                            TextField("素材の場所", text: Binding(
+                        InspectorField(label: L10n.t("ルール画像")) {
+                            TextField(L10n.t("素材の場所"), text: Binding(
                                 get: { tr.ruleSource ?? "" },
                                 set: { model.setTransitionRuleSource($0.isEmpty ? nil : $0, edge: edge, clipId: clipId) }))
                                 .textFieldStyle(.roundedBorder)
@@ -1170,13 +1170,13 @@ struct ClipInspector: View {
                 }
             }
             if tr.known == .morphCut {
-                InspectorField(label: "モーフの強さ") {
+                InspectorField(label: L10n.t("モーフの強さ")) {
                     NumField(value: tr.morphParameters.strength, step: 0.05, decimals: 2,
                              clamp: { min(max($0, 0), 1) },
                              onCommit: { model.setTransitionMorphStrength($0, edge: edge, clipId: clipId) },
                              onStep: { model.coalescedTransitionMorphStrength($0, edge: edge, clipId: clipId) })
                 }
-                Toggle("顔の位置合わせを優先", isOn: Binding(
+                Toggle(L10n.t("顔の位置合わせを優先"), isOn: Binding(
                     get: { tr.morphParameters.facePriority },
                     set: { model.setTransitionMorphFacePriority($0, edge: edge, clipId: clipId) }))
                     .font(MCDesign.Font.callout)
@@ -1185,11 +1185,11 @@ struct ClipInspector: View {
     }
 
     @ViewBuilder private func transitionSections(_ c: Clip) -> some View {
-        InspectorSection(title: "トランジション")
+        InspectorSection(title: L10n.t("トランジション"))
         transitionRow(c, .in)
         transitionRow(c, .out)
         if TransitionEditing.supportsAudio(c.type) {
-            Toggle("映像のトランジションと同じ長さで音声もフェード",
+            Toggle(L10n.t("映像のトランジションと同じ長さで音声もフェード"),
                    isOn: Binding(get: { TransitionEditing.isAudioLinked(c) }, set: { model.setAudioLinked($0, clipId: clipId) }))
                 .toggleStyle(.checkbox)
                 .font(MCDesign.Font.callout)
@@ -1199,22 +1199,22 @@ struct ClipInspector: View {
 
     @ViewBuilder private func audioFadeFields(_ c: Clip) -> some View {
         HStack(alignment: .top, spacing: 10) {
-            InspectorField(label: "フェードイン（秒）") {
+            InspectorField(label: L10n.t("フェードイン（秒）")) {
                 NumField(value: c.fadeInOrDefault, step: 0.1, decimals: 2, clamp: { min(max($0, 0), c.duration) },
                          onCommit: { model.setAudioFade($0, edge: .in, clipId: clipId) },
                          onStep: { model.coalescedAudioFade($0, edge: .in, clipId: clipId) })
             }
-            InspectorField(label: "フェードアウト（秒）") {
+            InspectorField(label: L10n.t("フェードアウト（秒）")) {
                 NumField(value: c.fadeOutOrDefault, step: 0.1, decimals: 2, clamp: { min(max($0, 0), c.duration) },
                          onCommit: { model.setAudioFade($0, edge: .out, clipId: clipId) },
                          onStep: { model.coalescedAudioFade($0, edge: .out, clipId: clipId) })
             }
         }
         if c.hasAudioFade {
-            InspectorField(label: "フェードの曲線") {
+            InspectorField(label: L10n.t("フェードの曲線")) {
                 Picker("", selection: Binding(get: { c.fadeIsEqualPower }, set: { model.setFadeCurve(equalPower: $0, clipId: clipId) })) {
-                    Text("直線").tag(false)
-                    Text("等パワー").tag(true)
+                    Text(L10n.t("直線")).tag(false)
+                    Text(L10n.t("等パワー")).tag(true)
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
@@ -1223,7 +1223,7 @@ struct ClipInspector: View {
     }
 
     @ViewBuilder private func textSections(_ c: Clip) -> some View {
-        InspectorSection(title: "文字")
+        InspectorSection(title: L10n.t("文字"))
         MultilineField(label: "文字", value: c.text ?? "", live: true, focusRequest: model.textFocusRequest,
                        onLive: { t in model.coalescedClipProperty({ $0.text = t }, name: "文字の変更", clipId: clipId) },
                        onCommit: { t in model.flushCoalesced(); model.setClipProperty({ $0.text = t }, name: "文字の変更", clipId: clipId) })
@@ -1236,19 +1236,19 @@ struct ClipInspector: View {
     }
 
     @ViewBuilder private func placeSections(_ c: Clip) -> some View {
-        InspectorSection(title: "位置")
+        InspectorSection(title: L10n.t("位置"))
         HStack(alignment: .top, spacing: 10) {
             num("横位置", .x)
             num("縦位置", .y)
         }
-        InspectorSection(title: "変形")
+        InspectorSection(title: L10n.t("変形"))
         HStack(alignment: .top, spacing: 10) {
             num("拡大", .scale, step: 0.05)
             rotationField()
         }
         flipToggles(c)
         if c.type != .tachie {
-            InspectorSection(title: "切り抜き")
+            InspectorSection(title: L10n.t("切り抜き"))
             HStack(alignment: .top, spacing: 10) {
                 cropField(.left, c)
                 cropField(.top, c)
@@ -1258,21 +1258,21 @@ struct ClipInspector: View {
                 cropField(.bottom, c)
             }
         }
-        Button { model.resetTransform(clipId: clipId) } label: { Text("変形をリセット").frame(maxWidth: .infinity) }
+        Button { model.resetTransform(clipId: clipId) } label: { Text(L10n.t("変形をリセット")).frame(maxWidth: .infinity) }
             .controlSize(.small)
             .disabled(model.isLocked || !Self.hasTransform(c))
-            .help("回転・反転・切り抜き・拡大を元に戻します")
-        InspectorSection(title: "見た目")
+            .help(L10n.t("回転・反転・切り抜き・拡大を元に戻します"))
+        InspectorSection(title: L10n.t("見た目"))
         slider("不透明度", .opacity, step: 0.01, format: Self.pct)
         slider("ぼかし（px）", .blur, step: 1, format: Self.px)
-        InspectorField(label: "合成方法") { blendPicker(c) }
+        InspectorField(label: L10n.t("合成方法")) { blendPicker(c) }
     }
 
     /// 下のレイヤーとの合成方法(ブレンドモード)。未設定 = 通常。
     private func blendPicker(_ c: Clip) -> some View {
         Picker("", selection: Binding(get: { c.blendMode?.rawValue ?? "" },
                                       set: { v in model.setClipProperty(\.blendMode, to: ClipBlendMode(rawValue: v), name: "合成方法の変更", clipId: clipId) })) {
-            Text("通常").tag("")
+            Text(L10n.t("通常")).tag("")
             ForEach(ClipBlendMode.allCases, id: \.rawValue) { m in Text(m.label).tag(m.rawValue) }
         }
     }
@@ -1284,7 +1284,7 @@ struct ClipInspector: View {
     }
 
     @ViewBuilder private func blurSections(_ c: Clip) -> some View {
-        InspectorSection(title: "範囲")
+        InspectorSection(title: L10n.t("範囲"))
         HStack(alignment: .top, spacing: 10) {
             num("中心 横", .x)
             num("中心 縦", .y)
@@ -1293,31 +1293,31 @@ struct ClipInspector: View {
             num("幅", .w)
             num("高さ", .h)
         }
-        InspectorField(label: "形") {
+        InspectorField(label: L10n.t("形")) {
             Picker("", selection: Binding(get: { c.shapeOrDefault }, set: { v in model.setClipProperty({ $0.shape = v }, name: "ぼかしの形の変更", clipId: clipId) })) {
-                Text("四角").tag("rect")
-                Text("楕円").tag("ellipse")
+                Text(L10n.t("四角")).tag("rect")
+                Text(L10n.t("楕円")).tag("ellipse")
             }
             .pickerStyle(.segmented)
             .labelsHidden()
         }
-        InspectorSection(title: "見た目")
-        InspectorField(label: "方式") {
+        InspectorSection(title: L10n.t("見た目"))
+        InspectorField(label: L10n.t("方式")) {
             Picker("", selection: Binding(get: { c.blurModeOrDefault }, set: { v in model.setClipProperty({ $0.blurMode = v == "blur" ? nil : v }, name: "ぼかしの方式の変更", clipId: clipId) })) {
-                Text("ぼかし").tag("blur")
-                Text("モザイク").tag("mosaic")
-                Text("絞り").tag("bokeh")
+                Text(L10n.t("ぼかし")).tag("blur")
+                Text(L10n.t("モザイク")).tag("mosaic")
+                Text(L10n.t("絞り")).tag("bokeh")
             }
             .pickerStyle(.segmented)
             .labelsHidden()
         }
         if c.blurModeOrDefault == "bokeh" {
-            InspectorField(label: "絞りの形") {
+            InspectorField(label: L10n.t("絞りの形")) {
                 Picker("", selection: Binding(get: { c.bokehShapeOrDefault }, set: { v in model.setBokehShape(v, clipId: clipId) })) {
                     ForEach(ApertureShape.allCases, id: \.self) { Text($0.label).tag($0) }
                 }
                 .labelsHidden()
-                .help("背景のボケが、この形の円盤になります（明るい光ほどはっきり見えます）")
+                .help(L10n.t("背景のボケが、この形の円盤になります（明るい光ほどはっきり見えます）"))
             }
         }
         if c.blurModeOrDefault == "mosaic" {
@@ -1332,7 +1332,7 @@ extension ClipInspector {
     /// 音声ビジュアライザ: 範囲(x・y・w・h は動かせる)と見た目(棒/波、色、本数)。
     @ViewBuilder func visualizerSections(_ c: Clip) -> some View {
         let vz = c.visualizerOrDefault
-        InspectorSection(title: "範囲")
+        InspectorSection(title: L10n.t("範囲"))
         HStack(alignment: .top, spacing: 10) {
             num("中心 横", .x)
             num("中心 縦", .y)
@@ -1341,35 +1341,35 @@ extension ClipInspector {
             num("幅", .w)
             num("高さ", .h)
         }
-        InspectorSection(title: "入力")
-        InspectorField(label: "見方") {
+        InspectorSection(title: L10n.t("入力"))
+        InspectorField(label: L10n.t("見方")) {
             Picker("", selection: Binding(get: { vz.modeOrDefault }, set: { v in model.setClipProperty({ $0.visualizer = Self.vizUpdated($0.visualizer) { $0.mode = v } }, name: "ビジュアライザの見方の変更", clipId: clipId) })) {
-                Text("音量").tag("level")
-                Text("スペクトル").tag("spectrum")
+                Text(L10n.t("音量")).tag("level")
+                Text(L10n.t("スペクトル")).tag("spectrum")
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .help("音量: 全体の大きさで動く。スペクトル: 左が低い音・右が高い音で、周波数ごとに動く")
+            .help(L10n.t("音量: 全体の大きさで動く。スペクトル: 左が低い音・右が高い音で、周波数ごとに動く"))
         }
-        InspectorField(label: "音声") {
+        InspectorField(label: L10n.t("音声")) {
             let sources = model.project.allClips.filter { [ClipType.audio, .voice, .video].contains($0.type) && $0.src != nil }
             Picker("", selection: Binding(get: { vz.source ?? "" }, set: { v in model.setClipProperty({ $0.visualizer = Self.vizUpdated($0.visualizer) { $0.source = v.isEmpty ? nil : v } }, name: "ビジュアライザの入力音声の変更", clipId: clipId) })) {
-                Text("全体のミックス").tag("")
+                Text(L10n.t("全体のミックス")).tag("")
                 ForEach(sources, id: \.id) { s in
                     Text(((s.src ?? "") as NSString).lastPathComponent).tag(s.id)
                 }
                 if let cur = vz.source, !sources.contains(where: { $0.id == cur }) {
-                    Text("（見つからないクリップ）").tag(cur)
+                    Text(L10n.t("（見つからないクリップ）")).tag(cur)
                 }
             }
             .labelsHidden()
-            .help("選んだ音声クリップだけの音で動かします。「全体のミックス」は書き出しと同じ合成音声")
+            .help(L10n.t("選んだ音声クリップだけの音で動かします。「全体のミックス」は書き出しと同じ合成音声"))
         }
-        InspectorSection(title: "見た目")
-        InspectorField(label: "形") {
+        InspectorSection(title: L10n.t("見た目"))
+        InspectorField(label: L10n.t("形")) {
             Picker("", selection: Binding(get: { vz.styleOrDefault }, set: { v in model.setClipProperty({ $0.visualizer = Self.vizUpdated($0.visualizer) { $0.style = v } }, name: "ビジュアライザの形の変更", clipId: clipId) })) {
-                Text("棒").tag("bars")
-                Text("波").tag("wave")
+                Text(L10n.t("棒")).tag("bars")
+                Text(L10n.t("波")).tag("wave")
             }
             .pickerStyle(.segmented)
             .labelsHidden()
@@ -1377,10 +1377,10 @@ extension ClipInspector {
         ColorField(label: "色", hex: vz.colorOrDefault) { hex in
             model.coalescedClipProperty({ $0.visualizer = Self.vizUpdated($0.visualizer) { $0.color = hex } }, name: "ビジュアライザの色の変更", clipId: clipId)
         }
-        InspectorField(label: "本数") {
+        InspectorField(label: L10n.t("本数")) {
             Stepper(value: Binding(get: { vz.countOrDefault }, set: { v in model.setClipProperty({ $0.visualizer = Self.vizUpdated($0.visualizer) { $0.count = v } }, name: "ビジュアライザの本数の変更", clipId: clipId) }),
                     in: Visualizer.countRange) {
-                Text("\(vz.countOrDefault) 本").monospacedDigit()
+                Text(String(format: L10n.t("%d 本"), vz.countOrDefault)).monospacedDigit()
             }
         }
     }
@@ -1388,7 +1388,7 @@ extension ClipInspector {
     /// 図形: 範囲(x・y・w・h は動かせる)と見た目(種類、塗り、線、太さ、角丸)。
     @ViewBuilder func shapeSections(_ c: Clip) -> some View {
         let f = c.figureOrDefault
-        InspectorSection(title: "範囲")
+        InspectorSection(title: L10n.t("範囲"))
         HStack(alignment: .top, spacing: 10) {
             num("中心 横", .x)
             num("中心 縦", .y)
@@ -1397,14 +1397,14 @@ extension ClipInspector {
             num("幅", .w)
             num("高さ", .h)
         }
-        InspectorSection(title: "見た目")
-        InspectorField(label: "種類") {
+        InspectorSection(title: L10n.t("見た目"))
+        InspectorField(label: L10n.t("種類")) {
             Picker("", selection: Binding(get: { f.figureKind }, set: { k in model.setClipProperty({ $0.figure = Self.figUpdated($0.figure) { $0.kind = k.rawValue } }, name: "図形の種類の変更", clipId: clipId) })) {
                 ForEach(FigureKind.allCases, id: \.self) { Text($0.title).tag($0) }
             }
             .labelsHidden()
         }
-        Toggle("塗る", isOn: Binding(get: { f.fillOrDefault != Figure.noneColor }, set: { on in
+        Toggle(L10n.t("塗る"), isOn: Binding(get: { f.fillOrDefault != Figure.noneColor }, set: { on in
             model.setClipProperty({ $0.figure = Self.figUpdated($0.figure) { $0.fill = on ? nil : Figure.noneColor } }, name: "図形の塗りの切り替え", clipId: clipId)
         })).toggleStyle(.checkbox)
         if f.fillOrDefault != Figure.noneColor {
@@ -1412,7 +1412,7 @@ extension ClipInspector {
                 model.coalescedClipProperty({ $0.figure = Self.figUpdated($0.figure) { $0.fill = hex } }, name: "図形の塗りの色の変更", clipId: clipId)
             }
         }
-        Toggle("線を引く", isOn: Binding(get: { f.strokeOrDefault != Figure.noneColor }, set: { on in
+        Toggle(L10n.t("線を引く"), isOn: Binding(get: { f.strokeOrDefault != Figure.noneColor }, set: { on in
             model.setClipProperty({ $0.figure = Self.figUpdated($0.figure) { $0.stroke = on ? "#000000" : Figure.noneColor } }, name: "図形の線の切り替え", clipId: clipId)
         })).toggleStyle(.checkbox)
         if f.strokeOrDefault != Figure.noneColor {
@@ -1420,14 +1420,14 @@ extension ClipInspector {
                 model.coalescedClipProperty({ $0.figure = Self.figUpdated($0.figure) { $0.stroke = hex } }, name: "図形の線の色の変更", clipId: clipId)
             }
         }
-        InspectorField(label: "線の太さ") {
+        InspectorField(label: L10n.t("線の太さ")) {
             Stepper(value: Binding(get: { f.strokeWidthOrDefault }, set: { v in model.coalescedClipProperty({ $0.figure = Self.figUpdated($0.figure) { $0.strokeWidth = v } }, name: "図形の線の太さの変更", clipId: clipId) }),
                     in: Figure.strokeWidthRange, step: 1) {
                 Text("\(Int(f.strokeWidthOrDefault)) px").monospacedDigit()
             }
         }
         if f.figureKind == .rect {
-            InspectorField(label: "角丸") {
+            InspectorField(label: L10n.t("角丸")) {
                 Stepper(value: Binding(get: { f.cornerOrDefault }, set: { v in model.coalescedClipProperty({ $0.figure = Self.figUpdated($0.figure) { $0.corner = v } }, name: "図形の角丸の変更", clipId: clipId) }),
                         in: Figure.cornerRange, step: 0.05) {
                     Text("\(Int((f.cornerOrDefault * 100).rounded())) %").monospacedDigit()

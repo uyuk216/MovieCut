@@ -194,7 +194,7 @@ extension ProjectModel {
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
         panel.allowedContentTypes = (ClipEditing.mediaExtensions + ["psd", "svg", "mid", "midi"]).compactMap { UTType(filenameExtension: $0) }
-        panel.title = "素材を追加"
+        panel.title = L10n.t("素材を追加")
         let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
             guard resp == .OK else { return }
             let urls = panel.urls

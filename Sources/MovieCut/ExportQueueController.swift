@@ -91,7 +91,7 @@ struct ExportQueueSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("書き出しキュー").font(MCDesign.Font.title3.bold())
+            Text(L10n.t("書き出しキュー")).font(MCDesign.Font.title3.bold())
             if controller.entries.isEmpty {
                 InspectorGuideCard(symbol: "tray", heading: "キューは空です",
                                    message: "出力 ▸ 書き出しキューに追加… で、今の設定の MP4 を積めます。")
@@ -102,10 +102,10 @@ struct ExportQueueSheet: View {
                     .accessibilityIdentifier("export-queue-list")
             }
             HStack {
-                Button("終わったものを消す") { controller.clearFinished() }
+                Button(L10n.t("終わったものを消す")) { controller.clearFinished() }
                     .disabled(!controller.entries.contains { !$0.state.isActive })
                 Spacer()
-                Button("閉じる", action: close)
+                Button(L10n.t("閉じる"), action: close)
                     .keyboardShortcut(.cancelAction)
             }
         }
@@ -128,7 +128,7 @@ struct ExportQueueSheet: View {
             }
             Spacer(minLength: 8)
             if e.state.isActive {
-                Button("取り消す") { controller.cancel(e.id) }
+                Button(L10n.t("取り消す")) { controller.cancel(e.id) }
                     .controlSize(.small)
             }
         }

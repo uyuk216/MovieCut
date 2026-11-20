@@ -13,8 +13,8 @@ extension ProjectModel {
         let formats = WebVideoFormat.allCases
         let panel = NSSavePanel()
         panel.canCreateDirectories = true
-        panel.title = "WebM / AV1 / WebP / DNxHR で書き出す"
-        panel.message = "これらの形式は ffmpeg(アニメーション WebP は img2webp も)を使って変換します(無い形式は理由を表示します)。DNxHR は MOV(音声は無圧縮 PCM)で書き出します。"
+        panel.title = L10n.t("WebM / AV1 / WebP / DNxHR で書き出す")
+        panel.message = L10n.t("これらの形式は ffmpeg(アニメーション WebP は img2webp も)を使って変換します(無い形式は理由を表示します)。DNxHR は MOV(音声は無圧縮 PCM)で書き出します。")
 
         let formatPopup = NSPopUpButton(frame: .zero, pullsDown: false)
         formatPopup.addItems(withTitles: formats.map(\.title))
@@ -22,7 +22,7 @@ extension ProjectModel {
         panel.nameFieldStringValue = documentName + "." + formats[0].fileExtension
         panel.allowedContentTypes = [UTType(filenameExtension: formats[0].fileExtension) ?? .movie]
 
-        let row = NSStackView(views: [NSTextField(labelWithString: "形式"), formatPopup])
+        let row = NSStackView(views: [NSTextField(labelWithString: L10n.t("形式")), formatPopup])
         row.orientation = .horizontal
         row.spacing = 8
 
@@ -33,7 +33,7 @@ extension ProjectModel {
         detailLabel.setAccessibilityIdentifier("webvideo-format-detail")
 
         // ラウドネス正規化(通常書き出しと同じ設定。F-3: WebVideo 経路にも引き継ぐ)
-        let loudnessBox = NSButton(checkboxWithTitle: "ラウドネス正規化", target: nil, action: nil)
+        let loudnessBox = NSButton(checkboxWithTitle: L10n.t("ラウドネス正規化"), target: nil, action: nil)
         loudnessBox.state = .off
         loudnessBox.setAccessibilityIdentifier("webvideo-loudness")
         let loudnessPopup = NSPopUpButton(frame: .zero, pullsDown: false)
@@ -75,7 +75,7 @@ extension ProjectModel {
             if let reason = format.unavailableReason(encoders: encoders, ffmpegFound: ffmpeg != nil, img2webpFound: Img2WebPLocator.find() != nil) {
                 let alert = NSAlert()
                 alert.alertStyle = .warning
-                alert.messageText = "\(format.title) は書けません"
+                alert.messageText = String(format: L10n.t("%@ は書けません"), L10n.t(format.title))
                 alert.informativeText = reason + "\n\nMP4 / MOV / GIF / APNG は通常どおり書き出せます。"
                 alert.addButton(withTitle: "OK")
                 if let w = self.window { alert.beginSheetModal(for: w) } else { alert.runModal() }
@@ -87,7 +87,7 @@ extension ProjectModel {
                 _ = profile
                 let alert = NSAlert()
                 alert.alertStyle = .warning
-                alert.messageText = "\(format.title) は書けません"
+                alert.messageText = String(format: L10n.t("%@ は書けません"), L10n.t(format.title))
                 alert.informativeText = message
                 alert.addButton(withTitle: "OK")
                 if let w = self.window { alert.beginSheetModal(for: w) } else { alert.runModal() }
@@ -109,8 +109,8 @@ extension ProjectModel {
         guard !directExportBlocked() else { return .failure(ExportError.writerFailed(nil)) }
         if reportMissingMediaForExport() { return .failure(ExportError.writerFailed(nil)) }
         let snapshot = project
-        return await runJob(title: "\(format.title) を書き出しています", fileName: url.lastPathComponent, notices: [],
-                            success: "\(url.lastPathComponent) に \(format.title) を書き出しました", result: url) { progress in
+        return await runJob(title: String(format: L10n.t("%@ を書き出しています"), L10n.t(format.title)), fileName: url.lastPathComponent, notices: [],
+                            success: String(format: L10n.t("%@ に %@ を書き出しました"), url.lastPathComponent, L10n.t(format.title)), result: url) { progress in
             try await FFmpegVideoExporter.export(project: snapshot, range: range, format: format, to: url, loudness: loudness, pluginEffectProviders: AppServices.pluginEffectProviders, progress: progress)
         }
     }

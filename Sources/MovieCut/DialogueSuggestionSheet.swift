@@ -19,33 +19,33 @@ struct DialogueSuggestionSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("AIでセリフ案を作る").font(.headline)
+            Text(L10n.t("AIでセリフ案を作る")).font(.headline)
             if !configured {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("AIテキスト生成が設定されていません。接続先のエンドポイントとモデルを設定するまで、この機能は使えません。")
+                    Text(L10n.t("AIテキスト生成が設定されていません。接続先のエンドポイントとモデルを設定するまで、この機能は使えません。"))
                         .foregroundStyle(.orange)
-                    Button("AIテキスト生成の設定…") { TextGenerationDialogs.editSettings() }
+                    Button(L10n.t("AIテキスト生成の設定…")) { TextGenerationDialogs.editSettings() }
                 }
                 .font(MCDesign.Font.subheadline)
                 .fixedSize(horizontal: false, vertical: true)
             }
             HStack(spacing: 8) {
-                Text("テーマ").frame(width: 70, alignment: .trailing)
-                TextField("例: 初めての猫カフェ", text: $theme)
+                Text(L10n.t("テーマ")).frame(width: 70, alignment: .trailing)
+                TextField(L10n.t("例: 初めての猫カフェ"), text: $theme)
             }
             HStack(spacing: 8) {
-                Text("キーワード").frame(width: 70, alignment: .trailing)
-                TextField("カンマ区切り(任意)", text: $keywordsText)
+                Text(L10n.t("キーワード")).frame(width: 70, alignment: .trailing)
+                TextField(L10n.t("カンマ区切り(任意)"), text: $keywordsText)
             }
             HStack(spacing: 8) {
-                Text("件数").frame(width: 70, alignment: .trailing)
-                Stepper(value: $count, in: DialogueSuggestionPrompt.countRange) { Text("\(count) 件") }
+                Text(L10n.t("件数")).frame(width: 70, alignment: .trailing)
+                Stepper(value: $count, in: DialogueSuggestionPrompt.countRange) { Text(String(format: L10n.t("%d 件"), count)) }
                 Spacer()
                 if generating {
                     ProgressView().controlSize(.small)
-                    Button("止める") { model.cancelTextGeneration() }
+                    Button(L10n.t("止める")) { model.cancelTextGeneration() }
                 } else {
-                    Button("セリフ案を作る") { Task { await generate() } }
+                    Button(L10n.t("セリフ案を作る")) { Task { await generate() } }
                         .buttonStyle(.borderedProminent)
                         .disabled(!configured || theme.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
@@ -54,7 +54,7 @@ struct DialogueSuggestionSheet: View {
                 if list.isEmpty {
                     InspectorGuideCard(symbol: "text.bubble", heading: "案はまだありません", message: "テーマを変えて「セリフ案を作る」を押してください。")
                 } else {
-                    Text("取り込む案にチェックを入れてください(\(selected.count) 件選択中)")
+                    Text(String(format: L10n.t("取り込む案にチェックを入れてください(%d 件選択中)"), selected.count))
                         .font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary)
                     List {
                         ForEach(Array(list.enumerated()), id: \.offset) { i, s in
@@ -72,15 +72,15 @@ struct DialogueSuggestionSheet: View {
                     .frame(minHeight: 200)
                 }
             } else {
-                Text("テーマを入れて「セリフ案を作る」を押すと、設定した生成サービスに問い合わせて案を出します。今の台本の末尾も、続きの参考として一緒に送ります。")
+                Text(L10n.t("テーマを入れて「セリフ案を作る」を押すと、設定した生成サービスに問い合わせて案を出します。今の台本の末尾も、続きの参考として一緒に送ります。"))
                     .font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
             }
             HStack {
                 Spacer()
-                Button("キャンセル") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("台本欄へ取り込む") { importSelected() }
+                Button(L10n.t("キャンセル")) { dismiss() }.keyboardShortcut(.cancelAction)
+                Button(L10n.t("台本欄へ取り込む")) { importSelected() }
                     .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
                     .disabled(selected.isEmpty)
             }

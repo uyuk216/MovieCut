@@ -130,8 +130,8 @@ extension ProjectModel {
         panel.allowedContentTypes = [.png, .jpeg]
         panel.nameFieldStringValue = documentName + ".png"
         panel.canCreateDirectories = true
-        panel.title = "現在のフレームを画像で書き出す(PNG / JPEG)"
-        panel.message = "拡張子で形式が決まります(.png / .jpg)"
+        panel.title = L10n.t("現在のフレームを画像で書き出す(PNG / JPEG)")
+        panel.message = L10n.t("拡張子で形式が決まります(.png / .jpg)")
         let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
             guard resp == .OK, let url = panel.url, let self else { return }
             Task { @MainActor in
@@ -171,15 +171,15 @@ extension ProjectModel {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = documentName
         panel.canCreateDirectories = true
-        panel.title = "連番画像を書き出す"
-        panel.message = "この名前のフォルダができて、中に 名前_00001.png … が入ります"
+        panel.title = L10n.t("連番画像を書き出す")
+        panel.message = L10n.t("この名前のフォルダができて、中に 名前_00001.png … が入ります")
         let range = project.exportRange
         let format = NSPopUpButton(frame: .zero, pullsDown: false)
         format.addItems(withTitles: StillFormat.allCases.map(\.title))
-        let rangeBox = NSButton(checkboxWithTitle: "範囲だけ書き出す", target: nil, action: nil)
+        let rangeBox = NSButton(checkboxWithTitle: L10n.t("範囲だけ書き出す"), target: nil, action: nil)
         rangeBox.state = range == nil ? .off : .on
         rangeBox.isEnabled = range != nil
-        let stack = NSStackView(views: [NSTextField(labelWithString: "形式"), format, rangeBox])
+        let stack = NSStackView(views: [NSTextField(labelWithString: L10n.t("形式")), format, rangeBox])
         stack.orientation = .horizontal; stack.spacing = 10
         stack.edgeInsets = NSEdgeInsets(top: 8, left: 12, bottom: 8, right: 12)
         panel.accessoryView = stack

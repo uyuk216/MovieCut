@@ -28,7 +28,7 @@ extension ProjectModel {
         switch AudioSyncEditing.apply(to: project, videoId: videoId, audioId: audioId, lag: lag) {
         case .moved(let p, let s):
             let ok = edit(Self.audioSyncUndoName) { $0 = p }
-            if ok { statusText = String(format: "音声を %.2f 秒に動かして合わせました", s) }
+            if ok { statusText = String(format: L10n.t("音声を %.2f 秒に動かして合わせました"), s) }
             return ok
         case .alreadySynced: statusText = "すでに合っています"
         case .beforeZero: statusText = "合わせると音声の頭が 0 秒より前になるため、動かしませんでした"

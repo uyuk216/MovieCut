@@ -16,7 +16,7 @@ struct ProxyManagementSheet: View {
             HStack {
                 Text(L10n.t("プロキシの管理")).font(MCDesign.Font.title3.bold())
                 Spacer()
-                Text("\(items.count) 件").foregroundStyle(MCDesign.Color.secondaryLabel).monospacedDigit()
+                Text(String(format: L10n.t("%d 件"), items.count)).foregroundStyle(MCDesign.Color.secondaryLabel).monospacedDigit()
             }
             Text(L10n.t("プロキシはプレビューを軽くするための映像です。書き出しは常に元の素材を使います。"))
                 .font(MCDesign.Font.caption).foregroundStyle(MCDesign.Color.secondaryLabel)

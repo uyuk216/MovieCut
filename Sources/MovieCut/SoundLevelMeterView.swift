@@ -33,7 +33,7 @@ struct SoundLevelMeterView: View {
                     .minimumScaleFactor(0.7)
             }
             .buttonStyle(.borderless)
-            .help("サウンドレベルメーターの表示を切り替えます(ピーク dBFS / ラウドネス LUFS モーメンタリ)")
+            .help(L10n.t("サウンドレベルメーターの表示を切り替えます(ピーク dBFS / ラウドネス LUFS モーメンタリ)"))
             GeometryReader { g in
                 ZStack(alignment: .bottom) {
                     RoundedRectangle(cornerRadius: 3).fill(Color.white.opacity(0.08))

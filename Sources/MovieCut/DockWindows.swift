@@ -31,7 +31,7 @@ struct DockPanelWindowRoot: View {
         VStack(spacing: 0) {
             HStack {
                 Spacer(minLength: 0)
-                Button("ウインドウに戻す") { store.attach(panel) }
+                Button(L10n.t("ウインドウに戻す")) { store.attach(panel) }
                     .controlSize(.small)
                     .accessibilityIdentifier("dock-panel-restore")
             }

@@ -15,18 +15,18 @@ struct LoudnessSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("ラウドネス").font(.title3.bold())
-            Text("書き出しと同じミックスを ITU-R BS.1770 で測ります。読み取りだけで、音量は変えません。")
+            Text(L10n.t("ラウドネス")).font(.title3.bold())
+            Text(L10n.t("書き出しと同じミックスを ITU-R BS.1770 で測ります。読み取りだけで、音量は変えません。"))
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             switch state {
             case .measuring:
-                HStack(spacing: 8) { ProgressView().controlSize(.small); Text("測っています…") }
+                HStack(spacing: 8) { ProgressView().controlSize(.small); Text(L10n.t("測っています…")) }
                     .frame(maxWidth: .infinity, minHeight: 160, alignment: .center)
             case .noAudio:
                 InspectorGuideCard(symbol: "waveform.slash", heading: "音声がありません", message: "音のあるクリップを置くと測れます。")
                     .frame(maxWidth: .infinity, minHeight: 160, alignment: .center)
             case .failed(let message):
-                Text("測れませんでした: \(message)").foregroundStyle(.red)
+                Text(String(format: L10n.t("測れませんでした: %@"), message)).foregroundStyle(.red)
                     .frame(maxWidth: .infinity, minHeight: 80, alignment: .center)
             case .done(let r):
                 Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 8) {
@@ -34,20 +34,20 @@ struct LoudnessSheet: View {
                     row("ショートターム最大", value(r.shortTermMax, "LUFS"), id: "loudness-short")
                     row("真のピーク", value(r.truePeakDb, "dBTP"), id: "loudness-true-peak")
                     row("サンプルのピーク", value(r.samplePeakDb, "dBFS"), id: "loudness-sample-peak")
-                    row("測った長さ", String(format: "%.2f 秒", r.duration), id: "loudness-duration")
+                    row("測った長さ", String(format: L10n.t("%.2f 秒"), r.duration), id: "loudness-duration")
                 }
                 if let d = r.differenceToYouTube() {
-                    Text(String(format: "YouTube の目安(−14 LUFS)との差: %+.1f dB。目安として見せるだけで、自動では音量を変えません。", d))
+                    Text(String(format: L10n.t("YouTube の目安(−14 LUFS)との差: %+.1f dB。目安として見せるだけで、自動では音量を変えません。"), d))
                         .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
                 if r.truePeakDb.isFinite, r.truePeakDb > -1 {
-                    Text("真のピークが −1 dBTP を超えています。配信先で音が割れることがあります。")
+                    Text(L10n.t("真のピークが −1 dBTP を超えています。配信先で音が割れることがあります。"))
                         .font(.callout).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
                 }
             }
             HStack {
                 Spacer()
-                Button("閉じる") { model.showLoudnessSheet = false }.keyboardShortcut(.cancelAction)
+                Button(L10n.t("閉じる")) { model.showLoudnessSheet = false }.keyboardShortcut(.cancelAction)
             }
         }
         .padding(20)
@@ -57,7 +57,7 @@ struct LoudnessSheet: View {
 
     private func row(_ label: String, _ value: String, id: String) -> some View {
         GridRow {
-            Text(label).foregroundStyle(.secondary)
+            Text(L10n.t(label)).foregroundStyle(.secondary)
             Text(value).monospacedDigit().accessibilityIdentifier(id)
         }
     }

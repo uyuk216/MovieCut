@@ -16,7 +16,7 @@ extension ProjectModel {
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
         if let t = UTType(filenameExtension: "psd") { panel.allowedContentTypes = [t] }
-        panel.title = "PSDを読み込む"
+        panel.title = L10n.t("PSDを読み込む")
         let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
             guard resp == .OK else { return }
             let urls = panel.urls
@@ -101,7 +101,7 @@ extension ProjectModel {
         let layers = doc.contentLayers
         let hidden = layers.filter { !$0.effectivelyVisible }.count
         let alert = NSAlert()
-        alert.messageText = "PSDを読み込む"
+        alert.messageText = L10n.t("PSDを読み込む")
         var info = "\(url.lastPathComponent)(\(doc.width)×\(doc.height))"
         if layers.isEmpty {
             info += "\nレイヤーを読み取れなかったため、統合した 1 枚で読み込みます。"
@@ -110,8 +110,8 @@ extension ProjectModel {
         }
         alert.informativeText = info
         alert.addButton(withTitle: layers.isEmpty ? "読み込む" : "レイヤーを分けて読み込む")
-        if !layers.isEmpty { alert.addButton(withTitle: "統合して1枚") }
-        alert.addButton(withTitle: "キャンセル")
+        if !layers.isEmpty { alert.addButton(withTitle: L10n.t("統合して1枚")) }
+        alert.addButton(withTitle: L10n.t("キャンセル"))
         let resp: NSApplication.ModalResponse
         if let w = window {
             resp = await withCheckedContinuation { c in alert.beginSheetModal(for: w) { c.resume(returning: $0) } }

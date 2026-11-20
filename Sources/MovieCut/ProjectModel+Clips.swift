@@ -271,7 +271,7 @@ extension ProjectModel {
         panel.allowedContentTypes = [.commaSeparatedText]
         panel.nameFieldStringValue = documentName + "-使用クリップ.csv"
         panel.canCreateDirectories = true
-        panel.title = "使用クリップ一覧を書き出す(CSV)"
+        panel.title = L10n.t("使用クリップ一覧を書き出す(CSV)")
         let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
             guard resp == .OK, let url = panel.url, let self else { return }
             do {

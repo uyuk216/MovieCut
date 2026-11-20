@@ -69,7 +69,7 @@ struct TimelineSection: View {
                     .disabled(model.isLocked)
                 Text(L10n.t("拡大"))
                 Slider(value: $model.pps, in: TimelineLayout.minPps...TimelineLayout.maxPps).frame(width: 140)
-                    .help(L10n.t("タイムラインの拡大率を変えます(現在 1秒 = \(Int(model.pps.rounded()))px)"))
+                    .help(String(format: L10n.t("タイムラインの拡大率を変えます(現在 1秒 = %dpx)"), Int(model.pps.rounded())))
                 Button(L10n.t("全体表示")) { model.onFitTimeline() }
                     .help(L10n.t("すべてのクリップが画面に収まる拡大率にします"))
                 Toggle(L10n.t("ぴったり揃える"), isOn: $model.snapEnabled)

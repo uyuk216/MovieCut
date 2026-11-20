@@ -10,20 +10,20 @@ struct ResolutionFields: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                Text("幅")
-                TextField("幅", text: Binding(get: { input.widthText }, set: { input.setWidth($0) }))
+                Text(L10n.t("幅"))
+                TextField(L10n.t("幅"), text: Binding(get: { input.widthText }, set: { input.setWidth($0) }))
                     .textFieldStyle(.roundedBorder).frame(width: 84).multilineTextAlignment(.trailing)
                     .accessibilityIdentifier("resolution-width")
                 Text("×")
-                Text("高さ")
-                TextField("高さ", text: Binding(get: { input.heightText }, set: { input.setHeight($0) }))
+                Text(L10n.t("高さ"))
+                TextField(L10n.t("高さ"), text: Binding(get: { input.heightText }, set: { input.setHeight($0) }))
                     .textFieldStyle(.roundedBorder).frame(width: 84).multilineTextAlignment(.trailing)
                     .accessibilityIdentifier("resolution-height")
-                Button { input.swap() } label: { Label("縦横を入れ替え", systemImage: "arrow.left.arrow.right") }
-                    .help("幅と高さを入れ替えます")
+                Button { input.swap() } label: { Label(L10n.t("縦横を入れ替え"), systemImage: "arrow.left.arrow.right") }
+                    .help(L10n.t("幅と高さを入れ替えます"))
                 Spacer(minLength: 0)
             }
-            Toggle("縦横比を固定", isOn: Binding(get: { input.lockAspect }, set: { input.setLock($0) }))
+            Toggle(L10n.t("縦横比を固定"), isOn: Binding(get: { input.lockAspect }, set: { input.setLock($0) }))
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 128), spacing: 6)], alignment: .leading, spacing: 6) {
                 ForEach(Array(ResolutionInput.quickSizes.enumerated()), id: \.offset) { _, q in
                     Button(q.label) { input.set(width: q.width, height: q.height) }
@@ -52,8 +52,8 @@ struct FrameRateFields: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                Text("フレームレート")
-                TextField("例 29.97 / 12.5 / 30000/1001", text: $text)
+                Text(L10n.t("フレームレート"))
+                TextField(L10n.t("例 29.97 / 12.5 / 30000/1001"), text: $text)
                     .textFieldStyle(.roundedBorder).frame(width: 190).multilineTextAlignment(.trailing)
                     .accessibilityIdentifier("fps-field")
                 Text("fps")
@@ -64,7 +64,7 @@ struct FrameRateFields: View {
                 }
             }
             HStack(spacing: 6) {
-                Text("放送用").font(.caption).foregroundStyle(.secondary)
+                Text(L10n.t("放送用")).font(.caption).foregroundStyle(.secondary)
                 ForEach(FrameRate.broadcastPresets, id: \.self) { v in
                     Button(FrameRate.label(v)) { text = FrameRate.label(v) }.controlSize(.small)
                 }
@@ -91,12 +91,12 @@ struct ResolutionSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("解像度を入力").font(.title3.bold())
+            Text(L10n.t("解像度を入力")).font(.title3.bold())
             ResolutionFields(input: $input)
             HStack {
                 Spacer()
-                Button("キャンセル") { model.showResolutionSheet = false }.keyboardShortcut(.cancelAction)
-                Button("適用") { apply() }
+                Button(L10n.t("キャンセル")) { model.showResolutionSheet = false }.keyboardShortcut(.cancelAction)
+                Button(L10n.t("適用")) { apply() }
                     .keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
                     .disabled(!input.isValid)
             }
@@ -126,12 +126,12 @@ struct FrameRateSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("フレームレートを入力").font(.title3.bold())
+            Text(L10n.t("フレームレートを入力")).font(.title3.bold())
             FrameRateFields(text: $text)
             HStack {
                 Spacer()
-                Button("キャンセル") { model.showFpsSheet = false }.keyboardShortcut(.cancelAction)
-                Button("適用") { apply() }
+                Button(L10n.t("キャンセル")) { model.showFpsSheet = false }.keyboardShortcut(.cancelAction)
+                Button(L10n.t("適用")) { apply() }
                     .keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
                     .disabled({ if case .failure = FrameRateInput.parse(text) { return true } else { return false } }())
             }
@@ -174,28 +174,28 @@ struct SilenceCutSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("無音をカット").font(.headline)
+            Text(L10n.t("無音をカット")).font(.headline)
             slider("しきい値", value: $threshold, range: SilenceParams.thresholdRange, step: 1, format: { String(format: "%.0f dB", $0) })
-            slider("最短の無音", value: $minSilence, range: SilenceParams.minSilenceRange, step: 0.05, format: { String(format: "%.2f 秒", $0) })
-            slider("余白", value: $pad, range: SilenceParams.padRange, step: 0.01, format: { String(format: "%.2f 秒", $0) })
-            Toggle("後ろを詰める", isOn: $ripple).toggleStyle(.checkbox)
+            slider("最短の無音", value: $minSilence, range: SilenceParams.minSilenceRange, step: 0.05, format: { String(format: L10n.t("%.2f 秒"), $0) })
+            slider("余白", value: $pad, range: SilenceParams.padRange, step: 0.01, format: { String(format: L10n.t("%.2f 秒"), $0) })
+            Toggle(L10n.t("後ろを詰める"), isOn: $ripple).toggleStyle(.checkbox)
             Group {
                 if loading {
-                    HStack(spacing: 6) { ProgressView().controlSize(.small); Text("音を調べています…") }
+                    HStack(spacing: 6) { ProgressView().controlSize(.small); Text(L10n.t("音を調べています…")) }
                 } else if failed {
-                    Text("このクリップの音を読めませんでした。").foregroundStyle(.red)
+                    Text(L10n.t("このクリップの音を読めませんでした。")).foregroundStyle(.red)
                 } else if allSilent {
-                    Text("全体が無音になるので、カットできません。しきい値を下げてください。").foregroundStyle(.orange)
+                    Text(L10n.t("全体が無音になるので、カットできません。しきい値を下げてください。")).foregroundStyle(.orange)
                 } else {
-                    Text("\(cuts.count) 箇所をカットします" + (cuts.isEmpty ? "" : String(format: "（合計 %.2f 秒）", removed)))
+                    Text(String(format: L10n.t("%d 箇所をカットします"), cuts.count)) + (cuts.isEmpty ? "" : String(format: L10n.t("（合計 %.2f 秒）"), removed))
                 }
             }
             .font(.callout)
             HStack {
                 Spacer()
-                Button("キャンセル") { model.showSilenceSheet = false }
+                Button(L10n.t("キャンセル")) { model.showSilenceSheet = false }
                     .keyboardShortcut(.cancelAction)
-                Button("カット") { commit() }
+                Button(L10n.t("カット")) { commit() }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
                     .disabled(loading || failed || cuts.isEmpty || allSilent)
@@ -208,7 +208,7 @@ struct SilenceCutSheet: View {
 
     private func slider(_ label: String, value: Binding<Double>, range: ClosedRange<Double>, step: Double, format: (Double) -> String) -> some View {
         HStack {
-            Text(label).frame(width: 84, alignment: .leading)
+            Text(L10n.t(label)).frame(width: 84, alignment: .leading)
             Slider(value: value, in: range, step: step)
             Text(format(value.wrappedValue)).monospacedDigit().frame(width: 64, alignment: .trailing)
         }
@@ -247,32 +247,32 @@ struct SceneSplitSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("シーンで分割").font(.headline)
-            Text("映像が大きく切り替わる所(カット点)でクリップを割ります。緩やかな切り替え(ディゾルブなど)や少しずつ変わる映像は拾いにくいことがあります。")
+            Text(L10n.t("シーンで分割")).font(.headline)
+            Text(L10n.t("映像が大きく切り替わる所(カット点)でクリップを割ります。緩やかな切り替え(ディゾルブなど)や少しずつ変わる映像は拾いにくいことがあります。"))
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             slider("しきい値", value: $threshold, range: SceneParams.thresholdRange, step: 0.01, format: { String(format: "%.2f", $0) })
-            slider("最短シーン", value: $minScene, range: SceneParams.minSceneRange, step: 0.1, format: { String(format: "%.1f 秒", $0) })
+            slider("最短シーン", value: $minScene, range: SceneParams.minSceneRange, step: 0.1, format: { String(format: L10n.t("%.1f 秒"), $0) })
             HStack {
-                Text("間隔").frame(width: 84, alignment: .leading)
+                Text(L10n.t("間隔")).frame(width: 84, alignment: .leading)
                 Slider(value: $interval, in: SceneParams.intervalRange, step: 0.05)
-                Text(String(format: "%.2f 秒", interval)).monospacedDigit().frame(width: 64, alignment: .trailing)
-                Button("測り直す") { Task { await analyze() } }.disabled(loading)
+                Text(String(format: L10n.t("%.2f 秒"), interval)).monospacedDigit().frame(width: 64, alignment: .trailing)
+                Button(L10n.t("測り直す")) { Task { await analyze() } }.disabled(loading)
             }
             Group {
                 if loading {
-                    HStack(spacing: 6) { ProgressView().controlSize(.small); Text("映像を調べています…") }
+                    HStack(spacing: 6) { ProgressView().controlSize(.small); Text(L10n.t("映像を調べています…")) }
                 } else if failed {
-                    Text("このクリップの映像を読めませんでした。").foregroundStyle(.red)
+                    Text(L10n.t("このクリップの映像を読めませんでした。")).foregroundStyle(.red)
                 } else {
-                    Text("\(cuts.count) 箇所で分割します")
+                    Text(String(format: L10n.t("%d 箇所で分割します"), cuts.count))
                 }
             }
             .font(.callout)
             HStack {
                 Spacer()
-                Button("キャンセル") { model.showSceneSheet = false }
+                Button(L10n.t("キャンセル")) { model.showSceneSheet = false }
                     .keyboardShortcut(.cancelAction)
-                Button("分割") { commit() }
+                Button(L10n.t("分割")) { commit() }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
                     .disabled(loading || failed || cuts.isEmpty)
@@ -285,7 +285,7 @@ struct SceneSplitSheet: View {
 
     private func slider(_ label: String, value: Binding<Double>, range: ClosedRange<Double>, step: Double, format: (Double) -> String) -> some View {
         HStack {
-            Text(label).frame(width: 84, alignment: .leading)
+            Text(L10n.t(label)).frame(width: 84, alignment: .leading)
             Slider(value: value, in: range, step: step)
             Text(format(value.wrappedValue)).monospacedDigit().frame(width: 64, alignment: .trailing)
         }

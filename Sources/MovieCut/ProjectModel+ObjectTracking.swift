@@ -50,7 +50,7 @@ extension ProjectModel {
                 _ = ObjectTracking.apply(track: track, to: &p.tracks[loc.track].clips[loc.index])
             }
             if let lostAt = track.lostAt {
-                self.statusText = String(format: "対象への追従を付けました（%.1f 秒で対象を見失ったため、そこまでで打ち切りました）", lostAt)
+                self.statusText = String(format: L10n.t("対象への追従を付けました（%.1f 秒で対象を見失ったため、そこまでで打ち切りました）"), lostAt)
             } else {
                 self.statusText = "対象への追従を付けました"
             }
@@ -72,7 +72,7 @@ extension ProjectModel {
             _ = self.edit("ぼかし範囲の追従を追加") { p in ClipEditing.appendToTopLayer(blur, in: &p) }
             self.selectedClipId = newId
             if let lostAt = track.lostAt {
-                self.statusText = String(format: "ぼかし範囲の追従を付けました（%.1f 秒で対象を見失ったため、そこまでで打ち切りました）", lostAt)
+                self.statusText = String(format: L10n.t("ぼかし範囲の追従を付けました（%.1f 秒で対象を見失ったため、そこまでで打ち切りました）"), lostAt)
             } else {
                 self.statusText = "ぼかし範囲の追従を付けました"
             }

@@ -14,8 +14,8 @@ extension ProjectModel {
         panel.allowedContentTypes = [.gif]
         panel.nameFieldStringValue = documentName + ".gif"
         panel.canCreateDirectories = true
-        panel.title = "GIF として書き出す"
-        panel.message = "fps と大きさは下で選べます。音は入りません。"
+        panel.title = L10n.t("GIF として書き出す")
+        panel.message = L10n.t("fps と大きさは下で選べます。音は入りません。")
 
         let fpsValues = GIFOptions.presetFPS
         let fpsPopup = NSPopUpButton(frame: .zero, pullsDown: false)
@@ -29,13 +29,13 @@ extension ProjectModel {
         widthPopup.selectItem(at: GIFOptions.presetWidths.firstIndex(of: GIFOptions.standard.maxWidth ?? -1) ?? 1)
 
         let range = project.exportRange
-        let rangeBox = NSButton(checkboxWithTitle: range.map { String(format: "範囲だけ書き出す(%.2f〜%.2f 秒)", $0.start, $0.end) } ?? "範囲だけ書き出す(範囲なし)",
+        let rangeBox = NSButton(checkboxWithTitle: range.map { String(format: L10n.t("範囲だけ書き出す(%.2f〜%.2f 秒)"), $0.start, $0.end) } ?? L10n.t("範囲だけ書き出す(範囲なし)"),
                                 target: nil, action: nil)
         rangeBox.state = range == nil ? .off : .on
         rangeBox.isEnabled = range != nil
         rangeBox.setAccessibilityIdentifier("gif-range-only")
 
-        let row = NSStackView(views: [NSTextField(labelWithString: "速さ"), fpsPopup, NSTextField(labelWithString: "大きさ"), widthPopup])
+        let row = NSStackView(views: [NSTextField(labelWithString: L10n.t("速さ")), fpsPopup, NSTextField(labelWithString: L10n.t("大きさ")), widthPopup])
         row.orientation = .horizontal
         row.spacing = 8
         let column = NSStackView(views: [row, rangeBox])
@@ -67,7 +67,7 @@ extension ProjectModel {
         let snapshot = project
         let frames = GIFExporter.plan(project: snapshot, range: range, options: options).frames
         return await runJob(title: "GIF を書き出しています", fileName: url.lastPathComponent, notices: [],
-                            success: "\(url.lastPathComponent) に \(frames) コマの GIF を書き出しました", result: url) { progress in
+                            success: String(format: L10n.t("%@ に %d コマの GIF を書き出しました"), url.lastPathComponent, frames), result: url) { progress in
             try await GIFExporter.export(project: snapshot, range: range, options: options, to: url, pluginEffectProviders: AppServices.pluginEffectProviders, progress: progress)
         }
     }

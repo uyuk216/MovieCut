@@ -18,7 +18,7 @@ extension ProjectModel {
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
         if let t = UTType(filenameExtension: "svg") { panel.allowedContentTypes = [t] }
-        panel.title = "SVGを読み込む"
+        panel.title = L10n.t("SVGを読み込む")
         let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
             guard resp == .OK else { return }
             let urls = panel.urls
@@ -84,7 +84,7 @@ extension ProjectModel {
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
         panel.allowedContentTypes = ["mid", "midi"].compactMap { UTType(filenameExtension: $0) }
-        panel.title = "MIDIを読み込む"
+        panel.title = L10n.t("MIDIを読み込む")
         // SoundFont(.sf2)の任意指定(R2-4)。未選択なら従来の簡易シンセで音声化する。
         let soundFontAccessory = SoundFontAccessoryView()
         panel.accessoryView = soundFontAccessory.view
@@ -148,7 +148,7 @@ extension ProjectModel {
         panel.canChooseDirectories = true
         panel.canChooseFiles = true
         panel.allowedContentTypes = ClipEditing.imageExtensions.compactMap { UTType(filenameExtension: $0) }
-        panel.title = "連番画像を読み込む(コマのファイルか、フォルダを選ぶ)"
+        panel.title = L10n.t("連番画像を読み込む(コマのファイルか、フォルダを選ぶ)")
         let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
             guard resp == .OK else { return }
             let urls = panel.urls
@@ -183,15 +183,15 @@ extension ProjectModel {
     /// フレームレートを選ぶシート(12 / 24 / 30 / 60、既定 24)。キャンセルは nil。
     private func askSequenceFPS(sequences: [ImageSequence]) async -> Double? {
         let alert = NSAlert()
-        alert.messageText = "連番画像を読み込む"
+        alert.messageText = L10n.t("連番画像を読み込む")
         let frames = sequences.reduce(0) { $0 + $1.frameCount }
-        alert.informativeText = "\(sequences.count) 件の連番(合計 \(frames) コマ)を 1 件ずつアニメーション素材にします。フレームレートを選んでください。"
+        alert.informativeText = String(format: L10n.t("%d 件の連番(合計 %d コマ)を 1 件ずつアニメーション素材にします。フレームレートを選んでください。"), sequences.count, frames)
         let popup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 160, height: 26))
         popup.addItems(withTitles: ["12 fps", "24 fps", "30 fps", "60 fps"])
         popup.selectItem(at: 1)
         alert.accessoryView = popup
-        alert.addButton(withTitle: "読み込む")
-        alert.addButton(withTitle: "キャンセル")
+        alert.addButton(withTitle: L10n.t("読み込む"))
+        alert.addButton(withTitle: L10n.t("キャンセル"))
         let resp: NSApplication.ModalResponse
         if let w = window {
             resp = await withCheckedContinuation { c in alert.beginSheetModal(for: w) { c.resume(returning: $0) } }
@@ -257,7 +257,7 @@ final class SoundFontAccessoryView: NSObject {
     private let label: NSTextField
 
     override init() {
-        label = NSTextField(labelWithString: "SoundFont: 未選択(簡易シンセ)")
+        label = NSTextField(labelWithString: L10n.t("SoundFont: 未選択(簡易シンセ)"))
         view = NSView(frame: NSRect(x: 0, y: 0, width: 420, height: 30))
         super.init()
         let button = NSButton(title: "SoundFont (.sf2) を選ぶ…", target: self, action: #selector(choose))
@@ -273,7 +273,7 @@ final class SoundFontAccessoryView: NSObject {
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         if let t = UTType(filenameExtension: "sf2") { panel.allowedContentTypes = [t] }
-        panel.title = "SoundFontを選ぶ"
+        panel.title = L10n.t("SoundFontを選ぶ")
         guard panel.runModal() == .OK, let url = panel.url else { return }
         soundFontPath = url.path
         label.stringValue = "SoundFont: \(url.lastPathComponent)"

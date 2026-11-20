@@ -23,31 +23,31 @@ struct MulticamCreateSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("マルチカメラを作る").font(.headline)
-            Text("選んだ映像を、いちばん先頭のクリップ(カメラ1)の音に合わせます。音はカメラ1のものを使い、ほかのカメラの元のクリップは無音になります。")
+            Text(L10n.t("マルチカメラを作る")).font(.headline)
+            Text(L10n.t("選んだ映像を、いちばん先頭のクリップ(カメラ1)の音に合わせます。音はカメラ1のものを使い、ほかのカメラの元のクリップは無音になります。"))
                 .font(.caption).foregroundStyle(.secondary)
                 .frame(width: 440, alignment: .leading).fixedSize(horizontal: false, vertical: true)
-            if measuring { HStack { ProgressView().controlSize(.small); Text("音を比べています…").font(.caption) } }
+            if measuring { HStack { ProgressView().controlSize(.small); Text(L10n.t("音を比べています…")).font(.caption) } }
             ForEach(Array(angles.enumerated()), id: \.element.id) { i, c in
                 HStack {
-                    Text("カメラ\(i + 1)").frame(width: 64, alignment: .leading)
+                    Text(String(format: L10n.t("カメラ%d"), i + 1)).frame(width: 64, alignment: .leading)
                     Text(((c.src ?? "") as NSString).lastPathComponent).lineLimit(1).truncationMode(.middle).frame(width: 150, alignment: .leading)
                     if i == 0 {
-                        Text("基準").foregroundStyle(.secondary)
+                        Text(L10n.t("基準")).foregroundStyle(.secondary)
                     } else {
                         TextField("0", text: Binding(get: { texts[c.id] ?? "0" }, set: { texts[c.id] = $0 })).textFieldStyle(.roundedBorder).frame(width: 70)
-                        Text("秒").foregroundStyle(.secondary)
+                        Text(L10n.t("秒")).foregroundStyle(.secondary)
                         status(c.id)
                     }
                 }
             }
-            Text("ずれ: 基準より何秒遅れて同じ出来事が写っているか(負なら早い)。音が合わなかったときは、ここで手で入れます。")
+            Text(L10n.t("ずれ: 基準より何秒遅れて同じ出来事が写っているか(負なら早い)。音が合わなかったときは、ここで手で入れます。"))
                 .font(.caption).foregroundStyle(.secondary)
-            if failed { Text("ずれは数字で入れてください").font(.caption).foregroundStyle(.red) }
+            if failed { Text(L10n.t("ずれは数字で入れてください")).font(.caption).foregroundStyle(.red) }
             HStack {
                 Spacer()
-                Button("キャンセル") { model.showMulticamCreateSheet = false }.keyboardShortcut(.cancelAction)
-                Button("作成") { commit() }.keyboardShortcut(.defaultAction).disabled(measuring)
+                Button(L10n.t("キャンセル")) { model.showMulticamCreateSheet = false }.keyboardShortcut(.cancelAction)
+                Button(L10n.t("作成")) { commit() }.keyboardShortcut(.defaultAction).disabled(measuring)
             }
         }
         .padding(16)
@@ -56,8 +56,8 @@ struct MulticamCreateSheet: View {
 
     @ViewBuilder private func status(_ id: String) -> some View {
         if measuring { EmptyView() }
-        else if let v = measured[id], v != nil { Text("音で合わせました").font(.caption).foregroundStyle(.green) }
-        else { Text("合わせられませんでした").font(.caption).foregroundStyle(.orange) }
+        else if let v = measured[id], v != nil { Text(L10n.t("音で合わせました")).font(.caption).foregroundStyle(.green) }
+        else { Text(L10n.t("合わせられませんでした")).font(.caption).foregroundStyle(.orange) }
     }
 
     private func measure() async {
@@ -96,18 +96,18 @@ struct MulticamSwitchSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("マルチカメラ切替").font(.headline)
+            Text(L10n.t("マルチカメラ切替")).font(.headline)
             if model.project.multicams.count > 1 {
-                Picker("グループ", selection: Binding(get: { group?.id ?? "" }, set: { groupId = $0 })) {
+                Picker(L10n.t("グループ"), selection: Binding(get: { group?.id ?? "" }, set: { groupId = $0 })) {
                     ForEach(model.project.multicams) { Text($0.name).tag($0.id) }
                 }.frame(width: 300)
             }
-            Text("再生しながら、1〜9 のキーかボタンで、その時刻からそのカメラに切り替えます。切り替えは 1 回ずつ元に戻せます。")
+            Text(L10n.t("再生しながら、1〜9 のキーかボタンで、その時刻からそのカメラに切り替えます。切り替えは 1 回ずつ元に戻せます。"))
                 .font(.caption).foregroundStyle(.secondary)
                 .frame(width: 420, alignment: .leading).fixedSize(horizontal: false, vertical: true)
             HStack {
                 Button(model.isPlaying ? "一時停止" : "再生") { model.playback.togglePlay() }
-                Text(String(format: "%.2f 秒", model.currentTime)).monospacedDigit().foregroundStyle(.secondary)
+                Text(String(format: L10n.t("%.2f 秒"), model.currentTime)).monospacedDigit().foregroundStyle(.secondary)
             }
             if let g = group {
                 LazyVGrid(columns: Array(repeating: GridItem(.fixed(62), spacing: 6), count: 5), alignment: .leading, spacing: 6) {
@@ -119,11 +119,11 @@ struct MulticamSwitchSheet: View {
                     }
                 }
                 if let r = g.range, model.currentTime < r.lowerBound || model.currentTime >= r.upperBound {
-                    Text("再生位置が基準のカメラの範囲の外です").font(.caption).foregroundStyle(.orange)
+                    Text(L10n.t("再生位置が基準のカメラの範囲の外です")).font(.caption).foregroundStyle(.orange)
                 }
             }
             Text(model.statusText).font(.caption).foregroundStyle(.secondary).lineLimit(2).frame(width: 420, alignment: .leading)
-            HStack { Spacer(); Button("閉じる") { model.showMulticamSwitchSheet = false }.keyboardShortcut(.cancelAction) }
+            HStack { Spacer(); Button(L10n.t("閉じる")) { model.showMulticamSwitchSheet = false }.keyboardShortcut(.cancelAction) }
         }
         .padding(16)
     }

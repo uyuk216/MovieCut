@@ -11,9 +11,9 @@ struct NoteListSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("注記一覧").font(.title3.bold())
+                Text(L10n.t("注記一覧")).font(.title3.bold())
                 Spacer()
-                Text("\(rows.count) 件").foregroundStyle(.secondary).monospacedDigit()
+                Text(String(format: L10n.t("%d 件"), rows.count)).foregroundStyle(.secondary).monospacedDigit()
             }
             if rows.isEmpty {
                 InspectorGuideCard(symbol: "note.text", heading: "注記はありません", message: "インスペクタの「注記」に書くと、ここに出ます。")
@@ -31,11 +31,11 @@ struct NoteListSheet: View {
                 }
             }
             HStack {
-                Text("行を選ぶとクリップへ移ります。").font(.caption).foregroundStyle(.secondary)
+                Text(L10n.t("行を選ぶとクリップへ移ります。")).font(.caption).foregroundStyle(.secondary)
                 Spacer()
-                Button("テキストで書き出す…") { model.chooseAndExportNotes(csv: false) }.disabled(rows.isEmpty)
-                Button("CSV を書き出す…") { model.chooseAndExportNotes(csv: true) }.disabled(rows.isEmpty)
-                Button("閉じる") { model.showNoteListSheet = false }.keyboardShortcut(.cancelAction)
+                Button(L10n.t("テキストで書き出す…")) { model.chooseAndExportNotes(csv: false) }.disabled(rows.isEmpty)
+                Button(L10n.t("CSV を書き出す…")) { model.chooseAndExportNotes(csv: true) }.disabled(rows.isEmpty)
+                Button(L10n.t("閉じる")) { model.showNoteListSheet = false }.keyboardShortcut(.cancelAction)
             }
         }
         .padding(20)

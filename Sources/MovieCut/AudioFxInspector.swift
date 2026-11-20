@@ -22,7 +22,7 @@ struct AudioFxPanel: View {
     private static func pitchText(_ v: Double) -> String {
         if v == 0 { return "0 半音" }
         let sign = v > 0 ? "+" : "−"
-        return sign + String(format: "%.0f 半音", abs(v))
+        return sign + String(format: L10n.t("%.0f 半音"), abs(v))
     }
     private static func centsText(_ v: Double) -> String {
         let c = Int(v.rounded())
@@ -79,12 +79,12 @@ struct AudioFxPanel: View {
                          format: { "\(Int(($0 * 100).rounded()))%" }, undo: ProjectModel.denoiseUndoName) {
                     _ = AudioFxEditing.setDenoise(&$0, $1)
                 }
-                Toggle("強（スペクトル）", isOn: Binding(
+                Toggle(L10n.t("強（スペクトル）"), isOn: Binding(
                     get: { c.audioFx?.spectralDenoiseOn ?? false },
                     set: { on in model.setAudioFx({ _ = AudioFxEditing.setDenoiseSpectral(&$0, on) }, name: ProjectModel.denoiseUndoName, clipId: clipId) }))
-                    .help("いちばん静かな 0.5 秒をノイズとみなし、周波数ごとにノイズだけを減らします（声の最中のノイズにも効く。書き出しは少し時間がかかります）。静かな所が無いクリップでは効きが弱くなります")
+                    .help(L10n.t("いちばん静かな 0.5 秒をノイズとみなし、周波数ごとにノイズだけを減らします（声の最中のノイズにも効く。書き出しは少し時間がかかります）。静かな所が無いクリップでは効きが弱くなります"))
                 fxSlider("ノイズゲート", value: c.audioFx?.gateDb ?? AudioFx.gateRange.lowerBound - 1, range: (AudioFx.gateRange.lowerBound - 1)...AudioFx.gateRange.upperBound, step: 1,
-                         format: { $0 < AudioFx.gateRange.lowerBound ? "なし" : String(format: "−%.0f dB 以下を消す", abs($0)) }, undo: ProjectModel.gateUndoName) {
+                         format: { $0 < AudioFx.gateRange.lowerBound ? "なし" : String(format: L10n.t("−%.0f dB 以下を消す"), abs($0)) }, undo: ProjectModel.gateUndoName) {
                     _ = AudioFxEditing.setGate(&$0, $1 < AudioFx.gateRange.lowerBound ? nil : $1)
                 }
                 fxSlider("リミッター", value: c.audioFx?.limiterDb ?? AudioFx.limiterRange.lowerBound - 1, range: (AudioFx.limiterRange.lowerBound - 1)...AudioFx.limiterRange.upperBound, step: 0.5,
@@ -119,13 +119,13 @@ struct AudioFxPanel: View {
                 }
                 HStack {
                     Spacer()
-                    Button("リセット") { model.setAudioFx({ _ = AudioFxEditing.resetEQ(&$0) }, name: "イコライザーのリセット", clipId: clipId) }
+                    Button(L10n.t("リセット")) { model.setAudioFx({ _ = AudioFxEditing.resetEQ(&$0) }, name: "イコライザーのリセット", clipId: clipId) }
                         .disabled(!eq.isActive)
                 }
             }
             .padding(.top, 4)
         } label: {
-            Text("イコライザー").font(MCDesign.Font.calloutSemibold).foregroundStyle(eq.isActive ? Color.primary : Color.secondary)
+            Text(L10n.t("イコライザー")).font(MCDesign.Font.calloutSemibold).foregroundStyle(eq.isActive ? Color.primary : Color.secondary)
         }
     }
 
@@ -136,7 +136,7 @@ struct AudioFxPanel: View {
         let on = comp?.isActive ?? false
         DisclosureGroup(isExpanded: expanded($openComp, active: on)) {
             VStack(alignment: .leading, spacing: 6) {
-                Toggle("コンプレッサーを使う", isOn: Binding(get: { on }, set: { v in
+                Toggle(L10n.t("コンプレッサーを使う"), isOn: Binding(get: { on }, set: { v in
                     model.setAudioFx({ _ = AudioFxEditing.setCompressorEnabled(&$0, v) }, name: "コンプレッサーの切り替え", clipId: clipId)
                 }))
                 .toggleStyle(.checkbox)
@@ -152,7 +152,7 @@ struct AudioFxPanel: View {
             }
             .padding(.top, 4)
         } label: {
-            Text("コンプレッサー").font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
+            Text(L10n.t("コンプレッサー")).font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
         }
     }
 
@@ -163,7 +163,7 @@ struct AudioFxPanel: View {
         let on = rv?.isActive ?? false
         DisclosureGroup(isExpanded: expanded($openReverb, active: on)) {
             VStack(alignment: .leading, spacing: 6) {
-                Toggle("リバーブを使う", isOn: Binding(get: { rv?.enabled ?? false }, set: { v in
+                Toggle(L10n.t("リバーブを使う"), isOn: Binding(get: { rv?.enabled ?? false }, set: { v in
                     model.setAudioFx({ _ = AudioFxEditing.setReverbEnabled(&$0, v) }, name: "リバーブの切り替え", clipId: clipId)
                 }))
                 .toggleStyle(.checkbox)
@@ -172,7 +172,7 @@ struct AudioFxPanel: View {
                     fxSlider("ミックス", value: k.mix, range: 0...1, step: 0.01, format: { "\(Int(($0 * 100).rounded()))%" }, undo: ProjectModel.reverbUndoName) {
                         _ = AudioFxEditing.setReverbMix(&$0, $1)
                     }
-                    InspectorField(label: "広さ") {
+                    InspectorField(label: L10n.t("広さ")) {
                         Picker("", selection: Binding(get: { k.sizeOrDefault }, set: { v in
                             model.setAudioFx({ _ = AudioFxEditing.setReverbSize(&$0, v) }, name: ProjectModel.reverbUndoName, clipId: clipId)
                         })) {
@@ -186,7 +186,7 @@ struct AudioFxPanel: View {
             }
             .padding(.top, 4)
         } label: {
-            Text("リバーブ").font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
+            Text(L10n.t("リバーブ")).font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
         }
     }
 
@@ -197,7 +197,7 @@ struct AudioFxPanel: View {
         let on = dl?.isActive ?? false
         DisclosureGroup(isExpanded: expanded($openDelay, active: on)) {
             VStack(alignment: .leading, spacing: 6) {
-                Toggle("ディレイを使う", isOn: Binding(get: { dl?.enabled ?? false }, set: { v in
+                Toggle(L10n.t("ディレイを使う"), isOn: Binding(get: { dl?.enabled ?? false }, set: { v in
                     model.setAudioFx({ _ = AudioFxEditing.setDelayEnabled(&$0, v) }, name: "ディレイの切り替え", clipId: clipId)
                 }))
                 .toggleStyle(.checkbox)
@@ -205,17 +205,17 @@ struct AudioFxPanel: View {
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(AudioFxEditing.DelayParam.allCases, id: \.self) { p in
                         fxSlider(p.label, value: p.value(of: k), range: p.range, step: p == .time ? 0.01 : 0.05,
-                                 format: { p == .time ? String(format: "%.2f 秒", $0) : "\(Int(($0 * 100).rounded()))%" },
+                                 format: { p == .time ? String(format: L10n.t("%.2f 秒"), $0) : "\(Int(($0 * 100).rounded()))%" },
                                  undo: p.undoName) { _ = AudioFxEditing.setDelay(&$0, p, $1) }
                     }
-                    Text("遅れた音を重ねます(エコー)。繰り返しを大きくすると尾が長くなります。")
+                    Text(L10n.t("遅れた音を重ねます(エコー)。繰り返しを大きくすると尾が長くなります。"))
                         .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
                 .opacity(dl?.enabled ?? false ? 1 : 0.45)
             }
             .padding(.top, 4)
         } label: {
-            Text("ディレイ").font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
+            Text(L10n.t("ディレイ")).font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
         }
     }
 
@@ -226,14 +226,14 @@ struct AudioFxPanel: View {
         let on = nm?.isActive ?? false
         DisclosureGroup(isExpanded: expanded($openNorm, active: on)) {
             VStack(alignment: .leading, spacing: 6) {
-                Toggle("ノーマライズを使う", isOn: Binding(get: { on }, set: { v in
+                Toggle(L10n.t("ノーマライズを使う"), isOn: Binding(get: { on }, set: { v in
                     model.setAudioFx({ _ = AudioFxEditing.setNormalizeEnabled(&$0, v) }, name: "ノーマライズの切り替え", clipId: clipId)
                 }))
                 .toggleStyle(.checkbox)
                 let k = nm ?? AudioFx.Normalize()
                 let mode = k.modeOrDefault
                 VStack(alignment: .leading, spacing: 6) {
-                    InspectorField(label: "方式") {
+                    InspectorField(label: L10n.t("方式")) {
                         Picker("", selection: Binding(get: { mode }, set: { v in
                             model.setAudioFx({ _ = AudioFxEditing.setNormalizeMode(&$0, v) }, name: ProjectModel.normalizeUndoName, clipId: clipId)
                         })) {
@@ -244,14 +244,14 @@ struct AudioFxPanel: View {
                     }
                     fxSlider(mode == .peak ? "目標ピーク（dBFS）" : "目標ラウドネス（LUFS）", value: k.targetDb, range: AudioFx.Normalize.range(for: mode), step: 0.5,
                              format: { String(format: "%.1f", $0) }, undo: ProjectModel.normalizeUndoName) { _ = AudioFxEditing.setNormalizeTarget(&$0, $1) }
-                    Text("クリップ全体を一度測って、音量を合わせます。EQ・コンプレッサー・リバーブの後に測ります。")
+                    Text(L10n.t("クリップ全体を一度測って、音量を合わせます。EQ・コンプレッサー・リバーブの後に測ります。"))
                         .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
                 .opacity(on ? 1 : 0.45)
             }
             .padding(.top, 4)
         } label: {
-            Text("ノーマライズ").font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
+            Text(L10n.t("ノーマライズ")).font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
         }
     }
 }
@@ -265,22 +265,22 @@ extension AudioFxPanel {
             let d = c.duck ?? Duck()
             DisclosureGroup(isExpanded: expanded($openDuck, active: on)) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Toggle("声があるときに BGM を下げる", isOn: Binding(get: { on }, set: { v in
+                    Toggle(L10n.t("声があるときに BGM を下げる"), isOn: Binding(get: { on }, set: { v in
                         model.setDuck({ _ = DuckEditing.setEnabled(&$0, v) }, name: v ? "自動ダッキングをオン" : "自動ダッキングをオフ", clipId: clipId)
                     }))
                     .toggleStyle(.checkbox)
                     VStack(alignment: .leading, spacing: 6) {
                         duckSlider("下げる量", value: d.amountDb, range: Duck.amountRange, step: 0.5, format: { String(format: "%.1f dB", $0) }) { _ = DuckEditing.setAmount(&$0, $1) }
-                        duckSlider("下がる速さ（アタック）", value: d.attackSeconds, range: Duck.attackRange, step: 0.01, format: { String(format: "%.2f 秒", $0) }) { _ = DuckEditing.setAttack(&$0, $1) }
-                        duckSlider("戻る速さ（リリース）", value: d.releaseSeconds, range: Duck.releaseRange, step: 0.05, format: { String(format: "%.2f 秒", $0) }) { _ = DuckEditing.setRelease(&$0, $1) }
-                        Text("ボイスのクリップがある間、この音を下げます。声の少し前から下げ始め、終わると元に戻ります。プレビューも書き出しも同じです。")
+                        duckSlider("下がる速さ（アタック）", value: d.attackSeconds, range: Duck.attackRange, step: 0.01, format: { String(format: L10n.t("%.2f 秒"), $0) }) { _ = DuckEditing.setAttack(&$0, $1) }
+                        duckSlider("戻る速さ（リリース）", value: d.releaseSeconds, range: Duck.releaseRange, step: 0.05, format: { String(format: L10n.t("%.2f 秒"), $0) }) { _ = DuckEditing.setRelease(&$0, $1) }
+                        Text(L10n.t("ボイスのクリップがある間、この音を下げます。声の少し前から下げ始め、終わると元に戻ります。プレビューも書き出しも同じです。"))
                             .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     }
                     .opacity(on ? 1 : 0.45)
                 }
                 .padding(.top, 4)
             } label: {
-                Text("自動ダッキング").font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
+                Text(L10n.t("自動ダッキング")).font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
             }
         }
     }
@@ -289,11 +289,11 @@ extension AudioFxPanel {
     @ViewBuilder fileprivate func voiceDesignationToggle(_ c: Clip) -> some View {
         if ClipEditing.supportsVoiceDesignation(c) {
             VStack(alignment: .leading, spacing: 4) {
-                Toggle("声として扱う", isOn: Binding(get: { c.isTreatedAsVoice }, set: { v in
+                Toggle(L10n.t("声として扱う"), isOn: Binding(get: { c.isTreatedAsVoice }, set: { v in
                     model.setTreatedAsVoice(ids: [clipId], v)
                 }))
                 .toggleStyle(.checkbox)
-                Text("オンにすると、このクリップがある間、自動ダッキングをオンにした BGM を下げます。音や映像は変わりません。")
+                Text(L10n.t("オンにすると、このクリップがある間、自動ダッキングをオンにした BGM を下げます。音や映像は変わりません。"))
                     .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             .padding(.top, 4)

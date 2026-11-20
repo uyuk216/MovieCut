@@ -86,8 +86,8 @@ enum HelpDocs {
         guard let url = resolve(doc) else {
             let a = NSAlert()
             a.alertStyle = .warning
-            a.messageText = "「\(doc.title)」のファイルが見つかりません"
-            a.informativeText = "\(doc.fileName) がアプリの中にもリポジトリにもありませんでした。"
+            a.messageText = String(format: L10n.t("「%@」のファイルが見つかりません"), doc.title)
+            a.informativeText = String(format: L10n.t("%@ がアプリの中にもリポジトリにもありませんでした。"), doc.fileName)
             a.runModal()
             return
         }

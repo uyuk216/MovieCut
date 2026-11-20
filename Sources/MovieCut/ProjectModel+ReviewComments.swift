@@ -100,7 +100,7 @@ extension ProjectModel {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [UTType.json, UTType.commaSeparatedText]
         panel.nameFieldStringValue = "review-comments.json"
-        panel.title = "レビューコメントを書き出す"
+        panel.title = L10n.t("レビューコメントを書き出す")
         let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
             guard resp == .OK, let url = panel.url, let self else { return }
             do {
@@ -124,7 +124,7 @@ extension ProjectModel {
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.allowedContentTypes = [UTType.json, UTType.commaSeparatedText]
-        panel.title = "レビューコメントを読み込む"
+        panel.title = L10n.t("レビューコメントを読み込む")
         let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
             guard resp == .OK, let url = panel.url, let self else { return }
             guard let data = try? InputLimits.readFile(url, limit: ReviewCommentExchange.maxExchangeBytes, what: "レビューコメントの交換ファイル") else {

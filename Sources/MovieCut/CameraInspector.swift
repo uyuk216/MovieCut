@@ -10,9 +10,9 @@ struct CameraSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            InspectorSection(title: "カメラ")
+            InspectorSection(title: L10n.t("カメラ"))
             if model.project.camera == nil {
-                Text("未設定（従来どおりの描画です）。値を変えるとカメラが付きます。")
+                Text(L10n.t("未設定（従来どおりの描画です）。値を変えるとカメラが付きます。"))
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -20,9 +20,9 @@ struct CameraSection: View {
             field("orbit", step: 1, decimals: 1)
             field("fov", step: 1, decimals: 0)
             HStack(spacing: 8) {
-                Button("カメラをリセット") { model.resetCamera() }
+                Button(L10n.t("カメラをリセット")) { model.resetCamera() }
                     .disabled(model.project.camera == nil)
-                Text("注目点は回り込み・拡大の軸、視野角は小さいほど拡大です。")
+                Text(L10n.t("注目点は回り込み・拡大の軸、視野角は小さいほど拡大です。"))
                     .font(.caption).foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -58,32 +58,32 @@ struct TrackingSection: View {
         let isSource = (clip.type == .video || clip.type == .image) && clip.src != nil
         if canFollow || isSource || clip.tracking != nil {
             VStack(alignment: .leading, spacing: 6) {
-                InspectorSection(title: "トラッキング")
+                InspectorSection(title: L10n.t("トラッキング"))
                 if let p = model.objectTrackingProgress {
-                    ProgressView(value: p) { Text("対象を追跡しています…") }
-                    Button("追跡を中止") { model.cancelObjectTracking() }
+                    ProgressView(value: p) { Text(L10n.t("対象を追跡しています…")) }
+                    Button(L10n.t("追跡を中止")) { model.cancelObjectTracking() }
                 } else {
                     if canFollow {
                         Button(clip.type == .blur ? "この範囲を対象に追従させる" : "対象に追従させる（位置・大きさ）") {
                             model.runObjectTracking(clipId: clip.id)
                         }
-                        .help("下のレイヤーの映像の中央の対象を追い、位置と大きさのキーフレームを作ります")
+                        .help(L10n.t("下のレイヤーの映像の中央の対象を追い、位置と大きさのキーフレームを作ります"))
                     }
                     if isSource {
-                        Button("この映像の対象をぼかしで追従") { model.addBlurFollower(clipId: clip.id) }
-                            .help("映像の中央の対象を追うぼかし範囲クリップを新しく作ります")
+                        Button(L10n.t("この映像の対象をぼかしで追従")) { model.addBlurFollower(clipId: clip.id) }
+                            .help(L10n.t("映像の中央の対象を追うぼかし範囲クリップを新しく作ります"))
                     }
                     if let track = clip.tracking {
-                        Text("追従中: \(track.samples.count) サンプル（元クリップ \(track.sourceClipId == clip.id ? "自身" : "下のレイヤー")）")
+                        Text(String(format: L10n.t("追従中: %d サンプル（元クリップ %@）"), track.samples.count, L10n.t(track.sourceClipId == clip.id ? "自身" : "下のレイヤー")))
                             .font(.caption).foregroundStyle(.secondary)
                         if let lostAt = track.lostAt {
-                            Text(String(format: "%.1f 秒で対象を見失ったため、追従はそこまでです", lostAt))
+                            Text(String(format: L10n.t("%.1f 秒で対象を見失ったため、追従はそこまでです"), lostAt))
                                 .font(.caption).foregroundStyle(.orange)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
-                        Button("追従を消す") { model.clearObjectFollow(clipId: clip.id) }
+                        Button(L10n.t("追従を消す")) { model.clearObjectFollow(clipId: clip.id) }
                     } else if !canFollow && !isSource {
-                        Text("追従には、このクリップより下のレイヤーに映像・画像が必要です。")
+                        Text(L10n.t("追従には、このクリップより下のレイヤーに映像・画像が必要です。"))
                             .font(.caption).foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }

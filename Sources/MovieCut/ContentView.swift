@@ -118,11 +118,11 @@ struct ContentView: View {
         .sheet(isPresented: Binding(get: { model.isExporting }, set: { _ in })) { ExportSheet(model: model) }
         .alert(L10n.t(model.errorTitle), isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {
             Button(L10n.t("OK")) { model.errorMessage = nil }
-        } message: { Text(model.errorMessage ?? "") }
-        .alert(model.pendingDeleteCharId.flatMap { model.deleteConfirmation(for: $0)?.title } ?? "", isPresented: Binding(get: { model.pendingDeleteCharId != nil }, set: { if !$0 { model.pendingDeleteCharId = nil } })) {
+        } message: { Text(L10n.t(model.errorMessage ?? "")) }
+        .alert(L10n.t(model.pendingDeleteCharId.flatMap { model.deleteConfirmation(for: $0)?.title } ?? ""), isPresented: Binding(get: { model.pendingDeleteCharId != nil }, set: { if !$0 { model.pendingDeleteCharId = nil } })) {
             Button(L10n.t("消す"), role: .destructive) { if let id = model.pendingDeleteCharId { model.deleteCharacter(id) } }
             Button(L10n.t("キャンセル"), role: .cancel) { model.pendingDeleteCharId = nil }
-        } message: { Text(model.pendingDeleteCharId.flatMap { model.deleteConfirmation(for: $0)?.message } ?? "") }
+        } message: { Text(L10n.t(model.pendingDeleteCharId.flatMap { model.deleteConfirmation(for: $0)?.message } ?? "")) }
         .background(WindowAccessor { w in AppWindowPolicy.apply(to: w); model.window = w; if w.isMainWindow { ActiveDocument.shared.activate(model) } })
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
             // タイムライン以外にドロップされたとき: 再生ヘッドの位置に置く(タイムライン上は TimelineCanvas が受ける)
@@ -221,15 +221,15 @@ struct StatusBar: View {
 
     /// 左に出す状態文。statusText が空のときは何も出さない(クリップ数は右に常時出す)。
     static func leftText(_ model: ProjectModel) -> String { model.statusText }
-    static func clipCountText(_ n: Int) -> String { "クリップ \(n) 個" }
+    static func clipCountText(_ n: Int) -> String { String(format: L10n.t("クリップ %d 個"), n) }
 
     var body: some View {
         HStack(spacing: MCDesign.Spacing.m) {
-            Text(Self.leftText(model))
+            Text(L10n.t(Self.leftText(model)))
                 .lineLimit(1)
                 .truncationMode(.tail)
             Spacer(minLength: MCDesign.Spacing.m)
-            Text(L10n.t(Self.clipCountText(model.project.allClips.count)))
+            Text(Self.clipCountText(model.project.allClips.count))
             Text(TransportBar.chipText(model))
         }
         .font(MCDesign.Font.subheadline)
@@ -308,7 +308,7 @@ struct LeftPanel: View {
             }
             .frame(maxHeight: .infinity)
             if !model.scriptMissingExpressions.isEmpty {
-                Text("表情の画像が無い行: " + model.scriptMissingExpressions.joined(separator: "、"))
+                Text(L10n.t("表情の画像が無い行: ") + model.scriptMissingExpressions.joined(separator: "、"))
                     .font(.caption).foregroundStyle(.red)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 6)
@@ -478,7 +478,7 @@ struct ExportSheet: View {
     @ObservedObject var model: ProjectModel
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(model.exportTitle).font(.headline)
+            Text(L10n.t(model.exportTitle)).font(.headline)
             if !model.exportNotice.isEmpty {
                 Text(model.exportNotice).font(.caption).foregroundStyle(.orange).frame(width: 320, alignment: .leading)
             }
@@ -507,7 +507,7 @@ struct JumpToTimeSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(L10n.t("時間を指定して移動")).font(.headline)
-            TextField("例: 12.5 / 1:23 / 1:23.5 / 00:01:23.50", text: $text)
+            TextField(L10n.t("例: 12.5 / 1:23 / 1:23.5 / 00:01:23.50"), text: $text)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 340)
                 .focused($focused)
@@ -516,7 +516,7 @@ struct JumpToTimeSheet: View {
             if failed {
                 Text(L10n.t("時間を読み取れませんでした。例: 12.5(秒)・1:23(分:秒)・00:01:23.50(時:分:秒)")).font(.caption).foregroundStyle(.red)
             } else {
-                Text("全体の長さ \(timecode(model.project.endTime))。範囲を超えた値は先頭か末尾に収めます。").font(.caption).foregroundStyle(.secondary)
+                Text(String(format: L10n.t("全体の長さ %@。範囲を超えた値は先頭か末尾に収めます。"), timecode(model.project.endTime))).font(.caption).foregroundStyle(.secondary)
             }
             HStack {
                 Spacer()
@@ -542,7 +542,7 @@ struct RenameMarkerSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(L10n.t("マーカーの名前")).font(.headline)
-            TextField("名前", text: $name)
+            TextField(L10n.t("名前"), text: $name)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 300)
                 .focused($focused)
@@ -601,8 +601,8 @@ struct SettingsSheet: View {
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
         panel.treatsFilePackagesAsDirectories = true
-        panel.message = "whisper.cpp の実行ファイル(whisper-cli)を選んでください"
-        panel.prompt = "選ぶ"
+        panel.message = L10n.t("whisper.cpp の実行ファイル(whisper-cli)を選んでください")
+        panel.prompt = L10n.t("選ぶ")
         guard panel.runModal() == .OK, let url = panel.url else { return }
         // シンボリックリンク(Homebrew など)は実体に直してから検証する(Core の WhisperLocator と同じ)。
         let real = url.resolvingSymlinksInPath().standardizedFileURL.path
@@ -621,8 +621,8 @@ struct SettingsSheet: View {
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
         panel.allowedContentTypes = [.init(filenameExtension: "bin") ?? .data]
-        panel.message = "Whisper のモデル(ggml-base.bin など)を選んでください"
-        panel.prompt = "選ぶ"
+        panel.message = L10n.t("Whisper のモデル(ggml-base.bin など)を選んでください")
+        panel.prompt = L10n.t("選ぶ")
         guard panel.runModal() == .OK, let url = panel.url else { return }
         guard WhisperLocator.validateModel(path: url.path) != nil else {
             whisperMessage = L10n.t("モデルは .bin のファイルを選んでください。")

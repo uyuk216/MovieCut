@@ -30,7 +30,7 @@ extension ProjectModel {
             return false
         }
         let ok = edit(Self.beatUndoName) { $0 = r.project }
-        if ok { statusText = String(format: "ビート %d 個にマーカーを打ちました（約 %.0f BPM）", r.added, bpm) }
+        if ok { statusText = String(format: L10n.t("ビート %d 個にマーカーを打ちました（約 %.0f BPM）"), r.added, bpm) }
         return ok
     }
 }

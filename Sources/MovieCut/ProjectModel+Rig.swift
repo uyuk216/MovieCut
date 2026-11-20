@@ -86,8 +86,8 @@ extension ProjectModel {
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
-        panel.title = "立ち絵パーツのフォルダを選ぶ"
-        panel.message = "眉・目・口・髪・体などの透過 PNG(同じ大きさ)が入ったフォルダ。下の階層も見ます"
+        panel.title = L10n.t("立ち絵パーツのフォルダを選ぶ")
+        panel.message = L10n.t("眉・目・口・髪・体などの透過 PNG(同じ大きさ)が入ったフォルダ。下の階層も見ます")
         let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
             guard resp == .OK, let url = panel.url else { return }
             Task { @MainActor in _ = await self?.importRigFolder(url: url) }
@@ -101,7 +101,7 @@ extension ProjectModel {
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         if let t = UTType(filenameExtension: "psd") { panel.allowedContentTypes = [t] }
-        panel.title = "立ち絵にする PSD を選ぶ"
+        panel.title = L10n.t("立ち絵にする PSD を選ぶ")
         let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
             guard resp == .OK, let url = panel.url else { return }
             Task { @MainActor in _ = await self?.importRigPSD(url: url) }

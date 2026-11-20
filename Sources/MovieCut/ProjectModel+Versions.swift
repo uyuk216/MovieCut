@@ -25,8 +25,8 @@ extension ProjectModel {
         warnedNewerFormat = true
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = ProjectFormat.newerWarning
-        alert.informativeText = ProjectFormat.newerWarningDetail
+        alert.messageText = L10n.t(ProjectFormat.newerWarning)
+        alert.informativeText = L10n.t(ProjectFormat.newerWarningDetail)
         alert.addButton(withTitle: "OK")
         alert.beginSheetModal(for: window) { _ in then() }
     }
@@ -76,8 +76,8 @@ extension ProjectModel {
             return
         }
         let alert = NSAlert()
-        alert.messageText = "過去の版から復元"
-        alert.informativeText = "選んだ版のコピーを、新しい無題の書類として開きます。今のプロジェクトのファイルは変わりません。"
+        alert.messageText = L10n.t("過去の版から復元")
+        alert.informativeText = L10n.t("選んだ版のコピーを、新しい無題の書類として開きます。今のプロジェクトのファイルは変わりません。")
         let popup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 320, height: 26), pullsDown: false)
         popup.addItems(withTitles: entries.map { ProjectVersions.title($0) })
         popup.setAccessibilityIdentifier("version-restore-list")
@@ -87,15 +87,15 @@ extension ProjectModel {
         let choices = keepChoices.contains(current) ? keepChoices : (keepChoices + [current]).sorted()
         keepPopup.addItems(withTitles: choices.map { "\($0) 世代" })
         keepPopup.selectItem(at: choices.firstIndex(of: current) ?? 1)
-        let label = NSTextField(labelWithString: "残す世代の数")
+        let label = NSTextField(labelWithString: L10n.t("残す世代の数"))
         let row = NSStackView(views: [label, keepPopup])
         row.orientation = .horizontal; row.spacing = 8
         let stack = NSStackView(views: [popup, row])
         stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 8
         stack.frame = NSRect(x: 0, y: 0, width: 320, height: 62)
         alert.accessoryView = stack
-        alert.addButton(withTitle: "コピーを開く")
-        alert.addButton(withTitle: "キャンセル")
+        alert.addButton(withTitle: L10n.t("コピーを開く"))
+        alert.addButton(withTitle: L10n.t("キャンセル"))
         let resp = alert.runModal()
         // 世代の数は、開かなくても選んだ値を残す
         DataLocations.current.defaults.set(choices[max(0, keepPopup.indexOfSelectedItem)], forKey: ProjectVersions.keepDefaultsKey)

@@ -198,9 +198,9 @@ extension ProjectModel {
             errorMessage = GenerativeMediaError.notConfigured.errorDescription
             return
         }
-        guard let v = AIDialogs.form(title: "AI で\(kind.title)を生成(API)",
-                                     message: "あなたの API アカウントで\(kind.title)を生成し、音声クリップとして再生ヘッドに置きます。次の画面で、送る内容・送信先・費用の注意を確認できます。",
-                                     fields: [("\(kind.title)のプロンプト", ""), ("長さ(秒)", VideoGenerationSettings.secondsText(s.durationSeconds)), ("形式", s.outputFormat)], okTitle: "次へ")
+        guard let v = AIDialogs.form(title: String(format: L10n.t("AI で%@を生成(API)"), L10n.t(kind.title)),
+                                     message: String(format: L10n.t("あなたの API アカウントで%@を生成し、音声クリップとして再生ヘッドに置きます。次の画面で、送る内容・送信先・費用の注意を確認できます。"), L10n.t(kind.title)),
+                                     fields: [(String(format: L10n.t("%@のプロンプト"), L10n.t(kind.title)), ""), ("長さ(秒)", VideoGenerationSettings.secondsText(s.durationSeconds)), ("形式", s.outputFormat)], okTitle: "次へ")
         else { return }
         let duration = Double(v[1].trimmingCharacters(in: .whitespacesAndNewlines))
         let format = v[2].trimmingCharacters(in: .whitespacesAndNewlines)

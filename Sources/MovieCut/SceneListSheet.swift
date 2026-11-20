@@ -15,9 +15,9 @@ struct SceneListSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("シーン一覧").font(.title3.bold())
+                Text(L10n.t("シーン一覧")).font(.title3.bold())
                 Spacer()
-                Text("\(scenes.count) 件").foregroundStyle(.secondary).monospacedDigit()
+                Text(String(format: L10n.t("%d 件"), scenes.count)).foregroundStyle(.secondary).monospacedDigit()
             }
             if scenes.isEmpty {
                 InspectorGuideCard(symbol: "film.stack", heading: "シーンがありません", message: "下の欄から作成できます。シーンは名前付きの独立タイムラインで、タイムラインへ何箇所でも配置して再利用できます。")
@@ -31,16 +31,16 @@ struct SceneListSheet: View {
                 .frame(minHeight: 220)
             }
             HStack {
-                TextField("新しいシーンの名前", text: $newName)
+                TextField(L10n.t("新しいシーンの名前"), text: $newName)
                     .frame(width: 220)
                     .onSubmit { create() }
-                Button("シーンを作成") { create() }
+                Button(L10n.t("シーンを作成")) { create() }
                     .disabled(newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 Spacer()
-                Button("閉じる") { model.showSceneListSheet = false }
+                Button(L10n.t("閉じる")) { model.showSceneListSheet = false }
                     .keyboardShortcut(.cancelAction)
             }
-            Text("参照されているシーンは削除できません(先にシーンクリップを削除してください)。「開く」でシーンの中身をタイムラインで編集できます。")
+            Text(L10n.t("参照されているシーンは削除できません(先にシーンクリップを削除してください)。「開く」でシーンの中身をタイムラインで編集できます。"))
                 .font(.caption).foregroundStyle(.secondary)
         }
         .padding(20)
@@ -53,31 +53,31 @@ struct SceneListSheet: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 if renamingId == scene.id {
-                    TextField("シーンの名前", text: $renameText)
+                    TextField(L10n.t("シーンの名前"), text: $renameText)
                         .frame(width: 200)
                         .onSubmit { commitRename(scene) }
-                    Button("決定") { commitRename(scene) }
-                    Button("やめる") { renamingId = nil }
+                    Button(L10n.t("決定")) { commitRename(scene) }
+                    Button(L10n.t("やめる")) { renamingId = nil }
                 } else {
                     Text(scene.name).bold()
-                    Text("尺 \(Self.seconds(SceneEditing.duration(of: scene))) 秒 / 参照 \(refs) 箇所")
+                    Text(String(format: L10n.t("尺 %@ 秒 / 参照 %d 箇所"), Self.seconds(SceneEditing.duration(of: scene)), refs))
                         .foregroundStyle(.secondary).monospacedDigit()
                     if model.editingSceneId == scene.id {
-                        Text("編集中").foregroundStyle(.secondary)
+                        Text(L10n.t("編集中")).foregroundStyle(.secondary)
                     }
                 }
             }
             HStack {
-                Button("開く") {
+                Button(L10n.t("開く")) {
                     model.showSceneListSheet = false
                     _ = model.enterScene(scene.id)
                 }
                 .disabled(model.isInsideScene || model.isInsideCompound)
-                Button("配置") { _ = model.placeSceneClip(scene.id) }
+                Button(L10n.t("配置")) { _ = model.placeSceneClip(scene.id) }
                     .disabled(SceneEditing.duration(of: scene) <= 0)
-                Button("名前を変更") { renamingId = scene.id; renameText = scene.name }
-                Button("複製") { _ = model.duplicateScene(scene.id) }
-                Button("削除") { _ = model.deleteScene(scene.id) }
+                Button(L10n.t("名前を変更")) { renamingId = scene.id; renameText = scene.name }
+                Button(L10n.t("複製")) { _ = model.duplicateScene(scene.id) }
+                Button(L10n.t("削除")) { _ = model.deleteScene(scene.id) }
                     .disabled(refs > 0)
             }
             .buttonStyle(.borderless)

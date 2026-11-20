@@ -22,20 +22,20 @@ struct DiarizationSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("話者分離").font(.headline)
+            Text(L10n.t("話者分離")).font(.headline)
             Text(SpeakerDiarizationInfo.limitationNotice)
                 .font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 12) {
-                Picker("認識", selection: $useWhisper) {
-                    Text("音声認識").tag(false)
+                Picker(L10n.t("認識"), selection: $useWhisper) {
+                    Text(L10n.t("音声認識")).tag(false)
                     Text("Whisper").tag(true)
                 }
                 .pickerStyle(.segmented)
                 .frame(width: 200)
-                Stepper(value: $maxSpeakers, in: 1...8) { Text("話者は最大 \(maxSpeakers) 人") }
+                Stepper(value: $maxSpeakers, in: 1...8) { Text(String(format: L10n.t("話者は最大 %d 人"), maxSpeakers)) }
                     .font(MCDesign.Font.subheadline)
-                Button("分け直す") { recluster() }
+                Button(L10n.t("分け直す")) { recluster() }
                     .disabled(run == nil)
                 Spacer()
             }
@@ -44,7 +44,7 @@ struct DiarizationSheet: View {
                     if r.segments.isEmpty {
                         InspectorGuideCard(symbol: "text.magnifyingglass", heading: "文は見つかりませんでした", message: "音声に話し声が含まれているか、クリップを確かめてください。")
                     } else {
-                        Text("\(r.segments.count) 区間、\(SpeakerLabels.speakerCount(diarized)) 人の話者に分けました。ラベルは行ごとに直せます。")
+                        Text(String(format: L10n.t("%d 区間、%d 人の話者に分けました。ラベルは行ごとに直せます。"), r.segments.count, SpeakerLabels.speakerCount(diarized)))
                             .font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary)
                         List {
                             ForEach(Array(diarized.enumerated()), id: \.offset) { i, d in
@@ -69,7 +69,7 @@ struct DiarizationSheet: View {
                 } else if let e = failure {
                     Text(e).foregroundStyle(.red)
                 } else {
-                    HStack(spacing: 6) { ProgressView().controlSize(.small); Text("音声を文字にして、話者を分けています…") }
+                    HStack(spacing: 6) { ProgressView().controlSize(.small); Text(L10n.t("音声を文字にして、話者を分けています…")) }
                 }
             }
             .font(.callout)
@@ -78,18 +78,18 @@ struct DiarizationSheet: View {
             }
             HStack {
                 Spacer()
-                Button("キャンセル") { model.showDiarizationSheet = false }.keyboardShortcut(.cancelAction)
-                Button("台本欄へ送る") {
+                Button(L10n.t("キャンセル")) { model.showDiarizationSheet = false }.keyboardShortcut(.cancelAction)
+                Button(L10n.t("台本欄へ送る")) {
                     let n = model.sendDiarizationToScript(diarized)
                     note = n > 0 ? "台本欄へ \(n) 行を送りました(1 回で元に戻せます)" : "送れる行がありませんでした"
                 }
                 .disabled(diarized.isEmpty)
-                Button("既存の字幕に付ける") {
+                Button(L10n.t("既存の字幕に付ける")) {
                     let n = model.applyDiarizationLabelsToExistingSubtitles(diarized)
                     note = n > 0 ? "字幕 \(n) 件に話者ラベルを付けました(1 回で元に戻せます)" : "付けられる字幕がありませんでした"
                 }
                 .disabled(diarized.isEmpty)
-                Button("字幕を作る") {
+                Button(L10n.t("字幕を作る")) {
                     if model.applyDiarizationToSubtitles(diarized) { model.showDiarizationSheet = false }
                 }
                 .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)

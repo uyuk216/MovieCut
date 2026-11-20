@@ -76,7 +76,7 @@ struct DependencyBannerBar: View {
                 }
                 Button { center.dismiss() } label: { Image(systemName: "xmark") }
                     .buttonStyle(.borderless)
-                    .help("閉じる(この起動中は、もう出しません)")
+                    .help(L10n.t("閉じる(この起動中は、もう出しません)"))
             }
             .padding(.horizontal, 12).padding(.vertical, 7)
             .frame(maxWidth: .infinity)

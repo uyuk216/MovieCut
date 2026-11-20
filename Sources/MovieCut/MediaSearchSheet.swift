@@ -33,7 +33,7 @@ struct MediaSearchSheet: View {
                                        message: "音のあるクリップを選んで「音声から字幕を作る」などで文字起こしすると、その素材が検索できるようになります。")
                         .frame(maxWidth: 460)
                 } else if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text(hits.isEmpty ? L10n.t("一致する文はありません") : "\(hits.count) 件の文が一致")
+                    Text(hits.isEmpty ? L10n.t("一致する文はありません") : String(format: L10n.t("%d 件の文が一致"), hits.count))
                         .font(MCDesign.Font.subheadline)
                         .foregroundStyle(hits.isEmpty ? MCDesign.Color.textSecondary : .primary)
                 }

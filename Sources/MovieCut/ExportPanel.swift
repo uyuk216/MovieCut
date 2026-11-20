@@ -32,7 +32,7 @@ final class ExportPanelOptions: NSObject {
     private let ratePopup = NSPopUpButton(frame: .zero, pullsDown: false)
     /// 完成ミックスのラウドネス正規化(既定オフ)と目標値。ピーク上限は Core 既定(-1 dBTP)のまま。
     static let loudnessTargetChoices: [Double] = [-11, -14, -16, -18, -20]
-    private let loudnessBox = NSButton(checkboxWithTitle: "ラウドネス正規化", target: nil, action: nil)
+    private let loudnessBox = NSButton(checkboxWithTitle: L10n.t("ラウドネス正規化"), target: nil, action: nil)
     /// 字幕トラック(mov_text)の埋め込み(既定オフ = 従来どおり)。MP4 のときだけ効く。
     private let embedBox = NSButton(checkboxWithTitle: L10n.t("字幕を埋め込む"), target: nil, action: nil)
     private let loudnessPopup = NSPopUpButton(frame: .zero, pullsDown: false)
@@ -98,7 +98,7 @@ final class ExportPanelOptions: NSObject {
         guard let panel else { return }
         panel.allowedContentTypes = [contentType(for: c)]
         panel.nameFieldStringValue = c.spec?.suggestedFileName(documentName: documentName) ?? documentName + "." + OutputPlan.fileExtension(forCodec: projectCodec)
-        panel.title = c.spec.map { "書き出し — \($0.name)" } ?? (OutputPlan.isProRes(projectCodec) ? "\(OutputPlan.codecLabel(projectCodec)) 書き出し" : "MP4 書き出し")
+        panel.title = c.spec.map { String(format: L10n.t("書き出し — %@"), $0.name) } ?? (OutputPlan.isProRes(projectCodec) ? String(format: L10n.t("%@ 書き出し"), OutputPlan.codecLabel(projectCodec)) : L10n.t("MP4 書き出し"))
         // 埋め込みは MP4 だけ(音声のみと ProRes の .mov では字幕トラックを入れない)
         embedBox.isEnabled = !c.audioOnly && !(c.spec == nil && OutputPlan.isProRes(projectCodec))
     }

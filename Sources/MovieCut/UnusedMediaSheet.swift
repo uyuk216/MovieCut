@@ -10,11 +10,11 @@ struct UnusedMediaSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("未使用の素材").font(.title3.bold())
+                Text(L10n.t("未使用の素材")).font(.title3.bold())
                 Spacer()
-                Text("\(items.count) 件").foregroundStyle(.secondary).monospacedDigit()
+                Text(String(format: L10n.t("%d 件"), items.count)).foregroundStyle(.secondary).monospacedDigit()
             }
-            Text("どのクリップにも使われていない素材です。削除しても、ディスクのファイルは消えません(このプロジェクトの素材リストから外すだけです)。")
+            Text(L10n.t("どのクリップにも使われていない素材です。削除しても、ディスクのファイルは消えません(このプロジェクトの素材リストから外すだけです)。"))
                 .font(.caption).foregroundStyle(.secondary)
             if items.isEmpty {
                 InspectorGuideCard(symbol: "checkmark.circle", heading: "未使用の素材はありません", message: "すべての素材がクリップで使われています。")
@@ -27,15 +27,15 @@ struct UnusedMediaSheet: View {
                             Text(item.path).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                         }
                         Spacer()
-                        Button("削除") { model.removeUnusedMedia([item.path]) }
+                        Button(L10n.t("削除")) { model.removeUnusedMedia([item.path]) }
                     }
                 }
                 .frame(minHeight: 240)
             }
             HStack {
-                Button("一括削除") { model.removeUnusedMedia(nil) }.disabled(items.isEmpty)
+                Button(L10n.t("一括削除")) { model.removeUnusedMedia(nil) }.disabled(items.isEmpty)
                 Spacer()
-                Button("閉じる") { model.showUnusedMediaSheet = false }.keyboardShortcut(.cancelAction)
+                Button(L10n.t("閉じる")) { model.showUnusedMediaSheet = false }.keyboardShortcut(.cancelAction)
             }
         }
         .padding(20)

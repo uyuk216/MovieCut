@@ -86,8 +86,8 @@ struct RigInspectorSection: View {
     private func fileName(_ p: String?) -> String { p.map { URL(fileURLWithPath: $0).deletingPathExtension().lastPathComponent } ?? "なし" }
 
     var body: some View {
-        InspectorSection(title: "立ち絵パーツ")
-        Text("見本を押すと、そのパーツに切り替わります。目と口は、まばたき・口パク・表情で自動で切り替わります")
+        InspectorSection(title: L10n.t("立ち絵パーツ"))
+        Text(L10n.t("見本を押すと、そのパーツに切り替わります。目と口は、まばたき・口パク・表情で自動で切り替わります"))
             .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         alignmentRow()
         ForEach(rig.slots, id: \.name) { slot in slotView(slot) }
@@ -97,12 +97,12 @@ struct RigInspectorSection: View {
     /// 大きさが違うパーツ(体より縦に長い髪など)を、縦のどこに揃えるか。
     private func alignmentRow() -> some View {
         HStack(spacing: 6) {
-            Text("大きさが違うパーツの揃え").font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
+            Text(L10n.t("大きさが違うパーツの揃え")).font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
             Picker("", selection: Binding(get: { rig.alignmentOrDefault }, set: { model.rigSetAlignment(tachieId: tachieId, $0) })) {
                 ForEach(PartAlignment.allCases, id: \.self) { Text($0.label).tag($0) }
             }
             .pickerStyle(.segmented).labelsHidden().frame(maxWidth: 200)
-            .help("体と大きさが違う髪などの縦の置き方。中央揃えは元のキャンバスを中央から広げた画像向け。細かい位置は各パーツの「位置の補正」で")
+            .help(L10n.t("体と大きさが違う髪などの縦の置き方。中央揃えは元のキャンバスを中央から広げた画像向け。細かい位置は各パーツの「位置の補正」で"))
         }
         .controlSize(.small)
         .disabled(model.isLocked)
@@ -119,20 +119,20 @@ struct RigInspectorSection: View {
                 LazyHStack(spacing: 4) {
                     Button { model.rigSelect(tachieId: tachieId, slot: slot.name, index: -1) } label: {
                         RigPartThumb(path: nil, selected: slot.active == -1)
-                    }.buttonStyle(.plain).help("\(slot.name)を出さない")
+                    }.buttonStyle(.plain).help(String(format: L10n.t("%@を出さない"), L10n.t(slot.name)))
                     ForEach(Array(slot.parts.enumerated()), id: \.offset) { i, p in
                         Button { model.rigSelect(tachieId: tachieId, slot: slot.name, index: i) } label: {
                             RigPartThumb(path: p, selected: slot.active == i, label: badge(slot.name, i))
-                        }.buttonStyle(.plain).help("\(i + 1) 番: \(fileName(p))")
+                        }.buttonStyle(.plain).help(String(format: L10n.t("%d 番: %@"), i + 1, fileName(p)))
                     }
                 }
                 .padding(.vertical, 2)
             }
             .frame(height: 66)
             offsetRow(slot)
-            Toggle("体の後ろに置く", isOn: Binding(get: { slot.isBehind }, set: { model.rigSetSlotBehind(tachieId: tachieId, slot: slot.name, behind: $0) }))
+            Toggle(L10n.t("体の後ろに置く"), isOn: Binding(get: { slot.isBehind }, set: { model.rigSetSlotBehind(tachieId: tachieId, slot: slot.name, behind: $0) }))
                 .controlSize(.small).font(MCDesign.Font.subheadline)
-                .help("後ろ髪など、体より奥に見せたいスロットをいちばん下に重ねます(オフ: 体の前。従来の順)")
+                .help(L10n.t("後ろ髪など、体より奥に見せたいスロットをいちばん下に重ねます(オフ: 体の前。従来の順)"))
             if slot.name == CharacterRig.eyeSlot { blinkRow() }
             if slot.name == CharacterRig.mouthSlot { mouthRows() }
         }
@@ -145,11 +145,11 @@ struct RigInspectorSection: View {
             let path = slot.parts[slot.active]
             let off = rig.partOffsets?[path] ?? PartOffset()
             HStack(spacing: 6) {
-                Text("位置の補正").font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
+                Text(L10n.t("位置の補正")).font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
                 offsetField("x", value: off.dx) { model.setTachiePartOffset(tachieId: tachieId, path: path, offset: PartOffset(dx: $0, dy: off.dy)) }
                 offsetField("y", value: off.dy) { model.setTachiePartOffset(tachieId: tachieId, path: path, offset: PartOffset(dx: off.dx, dy: $0)) }
                 Button { model.setTachiePartOffset(tachieId: tachieId, path: path, offset: PartOffset()) } label: { Image(systemName: "arrow.counterclockwise") }
-                    .disabled(off.isZero).help("このパーツの位置の補正を 0 に戻す")
+                    .disabled(off.isZero).help(L10n.t("このパーツの位置の補正を 0 に戻す"))
             }
             .controlSize(.small)
         }
@@ -176,11 +176,11 @@ struct RigInspectorSection: View {
 
     private func blinkRow() -> some View {
         HStack(spacing: 6) {
-            Button("これを まばたき") { model.rigAssignBlink(tachieId: tachieId) }
-                .help("今選んでいる目を「閉じた目」にして、ときどき一瞬だけ出します")
+            Button(L10n.t("これを まばたき")) { model.rigAssignBlink(tachieId: tachieId) }
+                .help(L10n.t("今選んでいる目を「閉じた目」にして、ときどき一瞬だけ出します"))
                 .disabled(rig.slot(CharacterRig.eyeSlot)?.active ?? -1 < 0)
             Button { model.rigClearBlink(tachieId: tachieId) } label: { Image(systemName: "xmark") }
-                .disabled(rig.blink == nil).help("まばたきを外す")
+                .disabled(rig.blink == nil).help(L10n.t("まばたきを外す"))
             Text(rig.blink.map { "まばたき: \($0 + 1) 番" } ?? "まばたきなし").font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
         }
         .controlSize(.small)
@@ -193,16 +193,16 @@ struct RigInspectorSection: View {
         }
         let cur = rig.slot(CharacterRig.mouthSlot)?.active ?? -1
         return VStack(alignment: .leading, spacing: 4) {
-            Text("今の口を割り当てる（話していない間は「閉じ」、話している間は「開き」か あいうえお）").font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Text(L10n.t("今の口を割り当てる（話していない間は「閉じ」、話している間は「開き」か あいうえお）")).font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 4) {
                 ForEach(roles, id: \.0) { r, label in
                     Button(label) { model.rigAssignMouth(tachieId: tachieId, role: r) }
-                        .help("口: \(label) に今の口を割り当てる" + (assigned(r).map { "（今は \($0 + 1) 番）" } ?? ""))
+                        .help(String(format: L10n.t("口: %@ に今の口を割り当てる"), L10n.t(label)) + (assigned(r).map { String(format: L10n.t("（今は %d 番）"), $0 + 1) } ?? ""))
                         .disabled(cur < 0)
                         .overlay(alignment: .topTrailing) { if assigned(r) != nil { Circle().fill(Color.accentColor).frame(width: 6, height: 6).offset(x: 2, y: -2) } }
                 }
                 Button { for (r, _) in roles { model.rigAssignMouth(tachieId: tachieId, role: r, use: false) } } label: { Image(systemName: "xmark") }
-                    .help("口の割り当てをすべて外す")
+                    .help(L10n.t("口の割り当てをすべて外す"))
                     .disabled(roles.allSatisfy { assigned($0.0) == nil })
             }
         }
@@ -211,24 +211,24 @@ struct RigInspectorSection: View {
 
     @ViewBuilder private func expressionsView() -> some View {
         let items = (rig.expressions ?? [:]).sorted { $0.key < $1.key }
-        InspectorSection(title: "表情（パーツの組み合わせ）")
-        Text("セリフの先頭に [名前] と書くと、その行の間この組み合わせになります（口は話し方に合わせて動きます）")
+        InspectorSection(title: L10n.t("表情（パーツの組み合わせ）"))
+        Text(L10n.t("セリフの先頭に [名前] と書くと、その行の間この組み合わせになります（口は話し方に合わせて動きます）"))
             .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         ForEach(items, id: \.key) { key, picks in
             HStack(spacing: 6) {
                 NameField(value: key) { model.rigRenameExpression(tachieId: tachieId, from: key, to: $0) }
-                Button("選ぶ") { model.rigApplyExpression(tachieId: tachieId, name: key) }.help("この表情のパーツを今の選択にする")
-                Button("更新") { model.rigRecaptureExpression(tachieId: tachieId, name: key) }.help("今の選択でこの表情を上書きする")
-                Button { model.rigDeleteExpression(tachieId: tachieId, name: key) } label: { Image(systemName: "minus.circle") }.help("この表情を消す")
+                Button(L10n.t("選ぶ")) { model.rigApplyExpression(tachieId: tachieId, name: key) }.help(L10n.t("この表情のパーツを今の選択にする"))
+                Button(L10n.t("更新")) { model.rigRecaptureExpression(tachieId: tachieId, name: key) }.help(L10n.t("今の選択でこの表情を上書きする"))
+                Button { model.rigDeleteExpression(tachieId: tachieId, name: key) } label: { Image(systemName: "minus.circle") }.help(L10n.t("この表情を消す"))
             }
             .controlSize(.small)
             .disabled(model.isLocked)
         }
         Button { _ = model.rigAddExpression(tachieId: tachieId) } label: {
-            Label("今の選択を表情に追加", systemImage: "plus.circle").frame(maxWidth: .infinity)
+            Label(L10n.t("今の選択を表情に追加"), systemImage: "plus.circle").frame(maxWidth: .infinity)
         }
         .controlSize(.small)
         .disabled(model.isLocked)
-        .help("眉・目・口などの今の選択を、名前をつけた表情として覚えます")
+        .help(L10n.t("眉・目・口などの今の選択を、名前をつけた表情として覚えます"))
     }
 }

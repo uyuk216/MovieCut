@@ -34,8 +34,8 @@ extension ProjectModel {
         panel.allowedContentTypes = [.commaSeparatedText]
         panel.nameFieldStringValue = documentName + "_台本.csv"
         panel.canCreateDirectories = true
-        panel.title = "台本をCSVで書き出す"
-        panel.message = "列は「キャラ,セリフ,読み,字幕,表情」です。そのまま読み込んで同じ台本に戻せます"
+        panel.title = L10n.t("台本をCSVで書き出す")
+        panel.message = L10n.t("列は「キャラ,セリフ,読み,字幕,表情」です。そのまま読み込んで同じ台本に戻せます")
         let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
             guard resp == .OK, let url = panel.url, let self else { return }
             do {
@@ -60,8 +60,8 @@ extension ProjectModel {
         panel.allowedContentTypes = [.commaSeparatedText, .plainText]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
-        panel.title = "台本CSVを読み込む"
-        panel.message = "CSV の行を台本に直して、台本欄の末尾へ足します"
+        panel.title = L10n.t("台本CSVを読み込む")
+        panel.message = L10n.t("CSV の行を台本に直して、台本欄の末尾へ足します")
         let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
             guard resp == .OK, let url = panel.url, let self else { return }
             do {

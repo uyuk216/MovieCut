@@ -49,7 +49,7 @@ extension ProjectModel {
         panel.allowedContentTypes = [UTType(filenameExtension: format.fileExtension) ?? .data]
         panel.nameFieldStringValue = documentName + "." + format.fileExtension
         panel.canCreateDirectories = true
-        panel.title = "\(format.name)で書き出す"
+        panel.title = String(format: L10n.t("%@で書き出す"), format.name)
         panel.message = format.detail ?? "プラグインが提供する形式で書き出します。"
         let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
             guard resp == .OK, let picked = panel.url, let self else { return }
@@ -72,7 +72,7 @@ extension ProjectModel {
         let snapshot = project
         let assets = self.assets
         return await runJob(title: "プラグイン形式で書き出しています", fileName: url.lastPathComponent, notices: [],
-                            success: "\(url.lastPathComponent) に書き出しました", result: url) { progress in
+                            success: String(format: L10n.t("%@ に書き出しました"), url.lastPathComponent), result: url) { progress in
             let host = AppServices.makePluginHost(for: snapshot)
             let result = try await PluginExportJob.runIfAvailable(host: host, formatID: formatID, project: snapshot, assets: assets, range: range, to: url, progress: progress)
             if result == nil { throw PluginError.noExportPlugin(formatID: formatID) }

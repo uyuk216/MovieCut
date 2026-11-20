@@ -139,7 +139,7 @@ struct AudioLibrarySheet: View {
             breadcrumbBar
             if folder != nil && !items.isEmpty {
                 HStack(spacing: 8) {
-                    TextField("名前で検索", text: $query)
+                    TextField(L10n.t("名前で検索"), text: $query)
                         .textFieldStyle(.roundedBorder)
                         .frame(maxWidth: 220)
                         .accessibilityIdentifier("media-browser-search")
@@ -183,7 +183,7 @@ struct AudioLibrarySheet: View {
                 }
             }
             HStack {
-                Text("ダブルクリック・Return・ドラッグで追加。再生ヘッド(\(String(format: "%.2f", model.currentTime)) 秒)の位置か、ドロップした位置とレイヤーに置き、1 回の取り消しで戻せます。")
+                Text(String(format: L10n.t("ダブルクリック・Return・ドラッグで追加。再生ヘッド(%.2f 秒)の位置か、ドロップした位置とレイヤーに置き、1 回の取り消しで戻せます。"), model.currentTime))
                     .font(.caption).foregroundStyle(MCDesign.Color.textSecondary)
                 Spacer(minLength: 8)
                 Button(L10n.t("閉じる")) { preview.stop(); model.showAudioLibrary = false }
@@ -241,31 +241,31 @@ struct AudioLibrarySheet: View {
     private var metadataFilterBar: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
-                TextField("キーワードで絞り込み", text: $filterKeyword)
+                TextField(L10n.t("キーワードで絞り込み"), text: $filterKeyword)
                     .textFieldStyle(.roundedBorder).frame(maxWidth: 170)
                     .accessibilityIdentifier("media-browser-keyword-filter")
                 Picker(L10n.t("評価"), selection: $filterMinRating) {
-                    Text("評価で絞らない").tag(0)
-                    ForEach(1...5, id: \.self) { Text("★\($0)以上").tag($0) }
+                    Text(L10n.t("評価で絞らない")).tag(0)
+                    ForEach(1...5, id: \.self) { Text(String(format: L10n.t("★%d以上"), $0)).tag($0) }
                 }
                 .labelsHidden().frame(width: 120)
                 .accessibilityIdentifier("media-browser-rating-filter")
                 Picker(L10n.t("ラベル"), selection: $filterLabel) {
-                    Text("ラベルで絞らない").tag("")
+                    Text(L10n.t("ラベルで絞らない")).tag("")
                     ForEach(MediaLabelColor.allCases, id: \.rawValue) { Text($0.title).tag($0.rawValue) }
                 }
                 .labelsHidden().frame(width: 110)
                 .accessibilityIdentifier("media-browser-label-filter")
                 Spacer(minLength: 8)
                 Picker(L10n.t("コレクション"), selection: $collectionId) {
-                    Text("コレクションなし").tag("")
+                    Text(L10n.t("コレクションなし")).tag("")
                     ForEach(model.project.smartCollections) { Text($0.name).tag($0.id) }
                 }
                 .labelsHidden().frame(width: 170)
                 .accessibilityIdentifier("media-browser-collection-picker")
             }
             HStack(spacing: 8) {
-                TextField("コレクション名", text: $newCollectionName)
+                TextField(L10n.t("コレクション名"), text: $newCollectionName)
                     .textFieldStyle(.roundedBorder).frame(maxWidth: 170)
                     .accessibilityIdentifier("media-browser-collection-name")
                 Button(L10n.t("今の条件でコレクションを追加")) { addCollectionFromCurrentCriteria() }
@@ -469,13 +469,13 @@ struct AudioLibrarySheet: View {
     private func metadataEditor(for s: MediaBrowser.Item) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(L10n.t("素材のメタデータ")).font(.headline)
-            TextField("キーワード(カンマ区切り)", text: $editKeywords)
+            TextField(L10n.t("キーワード(カンマ区切り)"), text: $editKeywords)
                 .textFieldStyle(.roundedBorder)
                 .accessibilityIdentifier("media-metadata-keywords")
             HStack(spacing: 6) {
                 Text(L10n.t("評価"))
                 Picker(L10n.t("評価"), selection: $editRating) {
-                    Text("未評価").tag(-1)
+                    Text(L10n.t("未評価")).tag(-1)
                     ForEach(0...5, id: \.self) { Text("★\($0)").tag($0) }
                 }
                 .labelsHidden().frame(width: 100)
@@ -484,13 +484,13 @@ struct AudioLibrarySheet: View {
             HStack(spacing: 6) {
                 Text(L10n.t("ラベル"))
                 Picker(L10n.t("ラベル"), selection: $editLabel) {
-                    Text("なし").tag("")
+                    Text(L10n.t("なし")).tag("")
                     ForEach(MediaLabelColor.allCases, id: \.rawValue) { Text($0.title).tag($0.rawValue) }
                 }
                 .labelsHidden().frame(width: 110)
                 .accessibilityIdentifier("media-metadata-label")
             }
-            TextField("メモ", text: $editNote, axis: .vertical)
+            TextField(L10n.t("メモ"), text: $editNote, axis: .vertical)
                 .textFieldStyle(.roundedBorder).lineLimit(2...4)
                 .accessibilityIdentifier("media-metadata-note")
             HStack(spacing: 8) {
@@ -530,7 +530,7 @@ struct AudioLibrarySheet: View {
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
-        panel.title = "素材のフォルダを選ぶ"
+        panel.title = L10n.t("素材のフォルダを選ぶ")
         // 素材ブラウザは別ウインドウ(非モーダル)なので、フォルダ選びも独立したパネルで出す
         panel.begin { resp in
             guard resp == .OK, let url = panel.url else { return }

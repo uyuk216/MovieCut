@@ -51,7 +51,7 @@ struct AudioFxExtendedPanel: View {
                 if fx != nil {
                     HStack {
                         Spacer()
-                        Button("拡張エフェクトをすべて外す") {
+                        Button(L10n.t("拡張エフェクトをすべて外す")) {
                             model.setAudioFx({ _ = AudioFxEditing.clearExtended(&$0) }, name: "拡張エフェクトを外す", clipId: clipId)
                         }
                     }
@@ -70,7 +70,7 @@ struct AudioFxExtendedPanel: View {
                 ForEach(AudioFx.FilterKind.allCases, id: \.self) { kind in
                     let f = fx?.filter(kind)
                     VStack(alignment: .leading, spacing: 4) {
-                        Toggle("\(kind.label)を使う", isOn: onOff(f?.enabled ?? false, undo: "フィルターの切り替え") {
+                        Toggle(String(format: L10n.t("%@を使う"), L10n.t(kind.label)), isOn: onOff(f?.enabled ?? false, undo: "フィルターの切り替え") {
                             _ = AudioFxEditing.setFilterEnabled(&$0, kind: kind, $1)
                         })
                         .toggleStyle(.checkbox)
@@ -87,12 +87,12 @@ struct AudioFxExtendedPanel: View {
                     }
                     .opacity((f?.enabled ?? false) ? 1 : 0.6)
                 }
-                Text("ハイパス→ローパス→バンドパス→ノッチの順にかかります。")
+                Text(L10n.t("ハイパス→ローパス→バンドパス→ノッチの順にかかります。"))
                     .font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
             }
             .padding(.top, 4)
         } label: {
-            Text("フィルター").font(MCDesign.Font.calloutSemibold).foregroundStyle(anyActive ? Color.primary : Color.secondary)
+            Text(L10n.t("フィルター")).font(MCDesign.Font.calloutSemibold).foregroundStyle(anyActive ? Color.primary : Color.secondary)
         }
     }
 
@@ -109,13 +109,13 @@ struct AudioFxExtendedPanel: View {
                 }
                 HStack {
                     Spacer()
-                    Button("リセット") { model.setAudioFx({ _ = AudioFxEditing.resetParametricEQ(&$0) }, name: "イコライザー（5バンド）のリセット", clipId: clipId) }
+                    Button(L10n.t("リセット")) { model.setAudioFx({ _ = AudioFxEditing.resetParametricEQ(&$0) }, name: "イコライザー（5バンド）のリセット", clipId: clipId) }
                         .disabled(!eq.isActive)
                 }
             }
             .padding(.top, 4)
         } label: {
-            Text("イコライザー（5バンド）").font(MCDesign.Font.calloutSemibold).foregroundStyle(eq.isActive ? Color.primary : Color.secondary)
+            Text(L10n.t("イコライザー（5バンド）")).font(MCDesign.Font.calloutSemibold).foregroundStyle(eq.isActive ? Color.primary : Color.secondary)
         }
     }
 
@@ -126,7 +126,7 @@ struct AudioFxExtendedPanel: View {
         let on = d?.isActive ?? false
         DisclosureGroup(isExpanded: expanded("dist", active: on)) {
             VStack(alignment: .leading, spacing: 6) {
-                Toggle("ディストーションを使う", isOn: onOff(d?.enabled ?? false, undo: "ディストーションの切り替え") {
+                Toggle(L10n.t("ディストーションを使う"), isOn: onOff(d?.enabled ?? false, undo: "ディストーションの切り替え") {
                     _ = AudioFxEditing.setDistortionEnabled(&$0, $1)
                 }).toggleStyle(.checkbox)
                 let k = d ?? AudioFx.Distortion()
@@ -141,7 +141,7 @@ struct AudioFxExtendedPanel: View {
             }
             .padding(.top, 4)
         } label: {
-            Text("ディストーション").font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
+            Text(L10n.t("ディストーション")).font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
         }
     }
 
@@ -150,7 +150,7 @@ struct AudioFxExtendedPanel: View {
         let on = d?.isActive ?? false
         DisclosureGroup(isExpanded: expanded("tube", active: on)) {
             VStack(alignment: .leading, spacing: 6) {
-                Toggle("チューブを使う", isOn: onOff(d?.enabled ?? false, undo: "チューブの切り替え") {
+                Toggle(L10n.t("チューブを使う"), isOn: onOff(d?.enabled ?? false, undo: "チューブの切り替え") {
                     _ = AudioFxEditing.setTubeEnabled(&$0, $1)
                 }).toggleStyle(.checkbox)
                 let k = d ?? AudioFx.Tube()
@@ -161,13 +161,13 @@ struct AudioFxExtendedPanel: View {
                     fxSlider("ミックス", value: k.mix, range: AudioFx.Tube.mixRange, step: 0.01, format: Self.pct, undo: "チューブの変更") {
                         _ = AudioFxEditing.setTube(&$0, .mix, $1)
                     }
-                    Text("真空管風の柔らかい歪み（近似）です。")
+                    Text(L10n.t("真空管風の柔らかい歪み（近似）です。"))
                         .font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
                 }.opacity((d?.enabled ?? false) ? 1 : 0.45)
             }
             .padding(.top, 4)
         } label: {
-            Text("チューブ").font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
+            Text(L10n.t("チューブ")).font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
         }
     }
 
@@ -178,7 +178,7 @@ struct AudioFxExtendedPanel: View {
         let on = d?.isActive ?? false
         DisclosureGroup(isExpanded: expanded("chorus", active: on)) {
             VStack(alignment: .leading, spacing: 6) {
-                Toggle("コーラスを使う", isOn: onOff(d?.enabled ?? false, undo: "コーラスの切り替え") {
+                Toggle(L10n.t("コーラスを使う"), isOn: onOff(d?.enabled ?? false, undo: "コーラスの切り替え") {
                     _ = AudioFxEditing.setChorusEnabled(&$0, $1)
                 }).toggleStyle(.checkbox)
                 let k = d ?? AudioFx.Chorus()
@@ -193,7 +193,7 @@ struct AudioFxExtendedPanel: View {
             }
             .padding(.top, 4)
         } label: {
-            Text("コーラス").font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
+            Text(L10n.t("コーラス")).font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
         }
     }
 
@@ -202,7 +202,7 @@ struct AudioFxExtendedPanel: View {
         let on = d?.isActive ?? false
         DisclosureGroup(isExpanded: expanded("flanger", active: on)) {
             VStack(alignment: .leading, spacing: 6) {
-                Toggle("フランジャーを使う", isOn: onOff(d?.enabled ?? false, undo: "フランジャーの切り替え") {
+                Toggle(L10n.t("フランジャーを使う"), isOn: onOff(d?.enabled ?? false, undo: "フランジャーの切り替え") {
                     _ = AudioFxEditing.setFlangerEnabled(&$0, $1)
                 }).toggleStyle(.checkbox)
                 let k = d ?? AudioFx.Flanger()
@@ -217,7 +217,7 @@ struct AudioFxExtendedPanel: View {
             }
             .padding(.top, 4)
         } label: {
-            Text("フランジャー").font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
+            Text(L10n.t("フランジャー")).font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
         }
     }
 
@@ -226,7 +226,7 @@ struct AudioFxExtendedPanel: View {
         let on = d?.isActive ?? false
         DisclosureGroup(isExpanded: expanded("phaser", active: on)) {
             VStack(alignment: .leading, spacing: 6) {
-                Toggle("フェイザーを使う", isOn: onOff(d?.enabled ?? false, undo: "フェイザーの切り替え") {
+                Toggle(L10n.t("フェイザーを使う"), isOn: onOff(d?.enabled ?? false, undo: "フェイザーの切り替え") {
                     _ = AudioFxEditing.setPhaserEnabled(&$0, $1)
                 }).toggleStyle(.checkbox)
                 let k = d ?? AudioFx.Phaser()
@@ -241,7 +241,7 @@ struct AudioFxExtendedPanel: View {
             }
             .padding(.top, 4)
         } label: {
-            Text("フェイザー").font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
+            Text(L10n.t("フェイザー")).font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
         }
     }
 
@@ -250,7 +250,7 @@ struct AudioFxExtendedPanel: View {
         let on = d?.isActive ?? false
         DisclosureGroup(isExpanded: expanded("tremolo", active: on)) {
             VStack(alignment: .leading, spacing: 6) {
-                Toggle("トレモロを使う", isOn: onOff(d?.enabled ?? false, undo: "トレモロの切り替え") {
+                Toggle(L10n.t("トレモロを使う"), isOn: onOff(d?.enabled ?? false, undo: "トレモロの切り替え") {
                     _ = AudioFxEditing.setTremoloEnabled(&$0, $1)
                 }).toggleStyle(.checkbox)
                 let k = d ?? AudioFx.Tremolo()
@@ -265,7 +265,7 @@ struct AudioFxExtendedPanel: View {
             }
             .padding(.top, 4)
         } label: {
-            Text("トレモロ").font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
+            Text(L10n.t("トレモロ")).font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
         }
     }
 
@@ -274,7 +274,7 @@ struct AudioFxExtendedPanel: View {
         let on = d?.isActive ?? false
         DisclosureGroup(isExpanded: expanded("vibrato", active: on)) {
             VStack(alignment: .leading, spacing: 6) {
-                Toggle("ビブラートを使う", isOn: onOff(d?.enabled ?? false, undo: "ビブラートの切り替え") {
+                Toggle(L10n.t("ビブラートを使う"), isOn: onOff(d?.enabled ?? false, undo: "ビブラートの切り替え") {
                     _ = AudioFxEditing.setVibratoEnabled(&$0, $1)
                 }).toggleStyle(.checkbox)
                 let k = d ?? AudioFx.Vibrato()
@@ -289,7 +289,7 @@ struct AudioFxExtendedPanel: View {
             }
             .padding(.top, 4)
         } label: {
-            Text("ビブラート").font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
+            Text(L10n.t("ビブラート")).font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
         }
     }
 
@@ -300,12 +300,12 @@ struct AudioFxExtendedPanel: View {
         let on = d?.isActive ?? false
         DisclosureGroup(isExpanded: expanded("wah", active: on)) {
             VStack(alignment: .leading, spacing: 6) {
-                Toggle("ワウを使う", isOn: onOff(d?.enabled ?? false, undo: "ワウの切り替え") {
+                Toggle(L10n.t("ワウを使う"), isOn: onOff(d?.enabled ?? false, undo: "ワウの切り替え") {
                     _ = AudioFxEditing.setWahEnabled(&$0, $1)
                 }).toggleStyle(.checkbox)
                 let k = d ?? AudioFx.Wah()
                 VStack(alignment: .leading, spacing: 6) {
-                    Toggle("オートワウ（音量で開く）", isOn: onOff(k.auto, undo: "オートワウの切り替え") {
+                    Toggle(L10n.t("オートワウ（音量で開く）"), isOn: onOff(k.auto, undo: "オートワウの切り替え") {
                         _ = AudioFxEditing.setWahAuto(&$0, $1)
                     }).toggleStyle(.checkbox)
                     fxSlider("開き具合", value: k.positionValue, range: AudioFx.Wah.positionRange, step: 0.01, format: Self.pct, undo: AudioFxEditing.WahParam.position.undoName) {
@@ -320,7 +320,7 @@ struct AudioFxExtendedPanel: View {
             }
             .padding(.top, 4)
         } label: {
-            Text("ワウ / オートワウ").font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
+            Text(L10n.t("ワウ / オートワウ")).font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
         }
     }
 
@@ -331,24 +331,24 @@ struct AudioFxExtendedPanel: View {
         let on = d?.isActive ?? false
         DisclosureGroup(isExpanded: expanded("echo", active: on)) {
             VStack(alignment: .leading, spacing: 6) {
-                Toggle("エコーを使う", isOn: onOff(d?.enabled ?? false, undo: "エコーの切り替え") {
+                Toggle(L10n.t("エコーを使う"), isOn: onOff(d?.enabled ?? false, undo: "エコーの切り替え") {
                     _ = AudioFxEditing.setEchoEnabled(&$0, $1)
                 }).toggleStyle(.checkbox)
                 let k = d ?? AudioFx.Echo()
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(AudioFxEditing.EchoParam.allCases, id: \.self) { p in
                         fxSlider(p.label, value: p.value(of: k), range: p.range, step: p == .time ? 0.01 : 0.05,
-                                 format: { p == .time ? String(format: "%.2f 秒", $0) : Self.pct($0) }, undo: p.undoName) {
+                                 format: { p == .time ? String(format: L10n.t("%.2f 秒"), $0) : Self.pct($0) }, undo: p.undoName) {
                             _ = AudioFxEditing.setEcho(&$0, p, $1)
                         }
                     }
-                    Text("ディレイより柔らかく、繰り返すたびに高域が落ちます。")
+                    Text(L10n.t("ディレイより柔らかく、繰り返すたびに高域が落ちます。"))
                         .font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
                 }.opacity((d?.enabled ?? false) ? 1 : 0.45)
             }
             .padding(.top, 4)
         } label: {
-            Text("エコー").font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
+            Text(L10n.t("エコー")).font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
         }
     }
 
@@ -359,7 +359,7 @@ struct AudioFxExtendedPanel: View {
         let on = d?.isActive ?? false
         DisclosureGroup(isExpanded: expanded("lowq", active: on)) {
             VStack(alignment: .leading, spacing: 6) {
-                Toggle("低音質化を使う", isOn: onOff(d?.enabled ?? false, undo: "低音質化の切り替え") {
+                Toggle(L10n.t("低音質化を使う"), isOn: onOff(d?.enabled ?? false, undo: "低音質化の切り替え") {
                     _ = AudioFxEditing.setLowQualityEnabled(&$0, $1)
                 }).toggleStyle(.checkbox)
                 let k = d ?? AudioFx.LowQuality()
@@ -374,7 +374,7 @@ struct AudioFxExtendedPanel: View {
             }
             .padding(.top, 4)
         } label: {
-            Text("低音質化").font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
+            Text(L10n.t("低音質化")).font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
         }
     }
 
@@ -383,7 +383,7 @@ struct AudioFxExtendedPanel: View {
         let on = d?.isActive ?? false
         DisclosureGroup(isExpanded: expanded("robot", active: on)) {
             VStack(alignment: .leading, spacing: 6) {
-                Toggle("ロボット化を使う", isOn: onOff(d?.enabled ?? false, undo: "ロボット化の切り替え") {
+                Toggle(L10n.t("ロボット化を使う"), isOn: onOff(d?.enabled ?? false, undo: "ロボット化の切り替え") {
                     _ = AudioFxEditing.setRobotEnabled(&$0, $1)
                 }).toggleStyle(.checkbox)
                 let k = d ?? AudioFx.Robot()
@@ -394,13 +394,13 @@ struct AudioFxExtendedPanel: View {
                             _ = AudioFxEditing.setRobot(&$0, p, $1)
                         }
                     }
-                    Text("リング変調による近似です。声が金属的になります。")
+                    Text(L10n.t("リング変調による近似です。声が金属的になります。"))
                         .font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
                 }.opacity((d?.enabled ?? false) ? 1 : 0.45)
             }
             .padding(.top, 4)
         } label: {
-            Text("ロボット化").font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
+            Text(L10n.t("ロボット化")).font(MCDesign.Font.calloutSemibold).foregroundStyle(on ? Color.primary : Color.secondary)
         }
     }
 }

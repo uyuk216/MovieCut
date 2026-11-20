@@ -13,14 +13,14 @@ struct ObjectMaskSection: View {
     var body: some View {
         if model.canCreateObjectMask(clip) || clip.objectMask != nil {
             VStack(alignment: .leading, spacing: 6) {
-                InspectorSection(title: "オブジェクトマスク")
+                InspectorSection(title: L10n.t("オブジェクトマスク"))
                 if let p = model.objectMaskProgress {
                     ProgressView(value: p) { Text(L10n.t("対象を追跡しています…")) }
                     Button(L10n.t("作成を中止")) { model.cancelObjectMaskCreation() }
                 } else if let om = clip.objectMask {
                     Text(L10n.t("対象を追跡中"))
                         .font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
-                    Text("\(om.samples.count) サンプル")
+                    Text(String(format: L10n.t("%d サンプル"), om.samples.count))
                         .font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
                     LiveSlider(label: L10n.t("羽根（ぼかし）"), value: om.feather, range: 0...1, step: 0.01, format: Self.pct,
                                begin: { model.beginGesture() },

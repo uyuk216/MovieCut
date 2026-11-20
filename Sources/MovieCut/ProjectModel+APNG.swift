@@ -14,7 +14,7 @@ extension ProjectModel {
         panel.allowedContentTypes = [.png]
         panel.nameFieldStringValue = documentName + ".png"
         panel.canCreateDirectories = true
-        panel.title = "APNG として書き出す"
+        panel.title = L10n.t("APNG として書き出す")
         panel.message = project.hasTransparentBackground
             ? "背景が透明なので、透明のまま書き出します。音は入りません。"
             : "透明を残すには、出力 ▸ 背景色 ▸ 透明 にします。音は入りません。"
@@ -36,13 +36,13 @@ extension ProjectModel {
         loopPopup.selectItem(at: 0)
 
         let range = project.exportRange
-        let rangeBox = NSButton(checkboxWithTitle: range.map { String(format: "範囲だけ書き出す(%.2f〜%.2f 秒)", $0.start, $0.end) } ?? "範囲だけ書き出す(範囲なし)",
+        let rangeBox = NSButton(checkboxWithTitle: range.map { String(format: L10n.t("範囲だけ書き出す(%.2f〜%.2f 秒)"), $0.start, $0.end) } ?? L10n.t("範囲だけ書き出す(範囲なし)"),
                                 target: nil, action: nil)
         rangeBox.state = range == nil ? .off : .on
         rangeBox.isEnabled = range != nil
         rangeBox.setAccessibilityIdentifier("apng-range-only")
 
-        let row = NSStackView(views: [NSTextField(labelWithString: "速さ"), fpsPopup, NSTextField(labelWithString: "大きさ"), widthPopup, loopPopup])
+        let row = NSStackView(views: [NSTextField(labelWithString: L10n.t("速さ")), fpsPopup, NSTextField(labelWithString: L10n.t("大きさ")), widthPopup, loopPopup])
         row.orientation = .horizontal
         row.spacing = 8
         let column = NSStackView(views: [row, rangeBox])
@@ -75,7 +75,7 @@ extension ProjectModel {
         let snapshot = project
         let frames = APNGExporter.plan(project: snapshot, range: range, options: options).frames
         return await runJob(title: "APNG を書き出しています", fileName: url.lastPathComponent, notices: [],
-                            success: "\(url.lastPathComponent) に \(frames) コマの APNG を書き出しました", result: url) { progress in
+                            success: String(format: L10n.t("%@ に %d コマの APNG を書き出しました"), url.lastPathComponent, frames), result: url) { progress in
             try await APNGExporter.export(project: snapshot, range: range, options: options, to: url, pluginEffectProviders: AppServices.pluginEffectProviders, progress: progress)
         }
     }
