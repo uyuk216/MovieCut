@@ -239,6 +239,12 @@ final class MenuTests: XCTestCase {
     }
 
     func testCustomFpsOpensSheetAndAppliesInOneUndoStep() {
+        // applyCustomFps は「最近使ったカスタム fps」(本番と同じ recentCustomFrameRates キー)に書く。
+        // 本人の履歴を消さないよう、開始時に退避し、終了時に元へ戻す(無かったときはキーごと削除)。
+        let recent = RecentCustoms.frameRates()
+        let savedRecent = recent.defaults.object(forKey: recent.key)
+        defer { if let savedRecent { recent.defaults.set(savedRecent, forKey: recent.key) } else { recent.clear() } }
+        recent.clear()
         let m = makeModel()
         AppMenu.perform(.fpsCustom, model: m)
         XCTAssertTrue(m.showFpsSheet)
@@ -249,7 +255,6 @@ final class MenuTests: XCTestCase {
         XCTAssertEqual(m.project.fps, 60)
         m.setFps(500)
         XCTAssertEqual(m.project.fps, 60); XCTAssertNotNil(m.errorMessage)
-        RecentCustoms.frameRates().clear()
     }
 
     func testCodecItemShowsCautionForHugeSizes() {
@@ -396,7 +401,8 @@ final class MenuTests: XCTestCase {
         XCTAssertTrue(a.state.hasDocument)
         XCTAssertEqual(a.state.codec, "h264")
         m.setCodec("hevc")
-        try? await Task.sleep(nanoseconds: 100_000_000)
+        // 状態の更新は main キューの次の周回(DispatchQueue.main.async)。固定の待ちでなく、反映されるまで最大 2 秒だけ待つ。
+        for _ in 0..<100 where a.state.codec != "hevc" { try? await Task.sleep(nanoseconds: 20_000_000) }
         XCTAssertEqual(a.state.codec, "hevc")
         let other = makeModel()
         a.deactivate(other)             // 前面でないものを外しても変わらない
