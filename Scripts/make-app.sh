@@ -34,11 +34,11 @@ APP="${OUT_DIR}/${APP_NAME}.app"
 # 個人のファイル・名前がバンドルに入っていないかを調べる(見つかったら 1 を返す)
 scan_bundle() {
   local bundle="$1" bad=0 hits
-  # 例外: 配布用アップデートの公開 URL(github.com/uyuk216/MovieCut)、署名の CodeResources(ハッシュの文字列がたまたま一致する)
+  # 例外: 配布用アップデートの公開 URL(github.com/uyuk216/MovieCut)と LICENSE の作者名(公開アカウント名 uyuk216)、署名の CodeResources(ハッシュの文字列がたまたま一致する)
   hits=""
   while IFS= read -r f; do
     case "$f" in */_CodeSignature/CodeResources) continue ;; esac
-    if sed 's#github\.com/uyuk216/MovieCut/#GH/#g' "$f" | grep -q -e '/Users/' -e 'uyu'; then hits="${hits}${f}"$'\n'; fi
+    if sed -e 's#github\.com/uyuk216/MovieCut/#GH/#g' -e 's#uyuk216#GHUSER#g' "$f" | grep -q -e '/Users/' -e 'uyu'; then hits="${hits}${f}"$'\n'; fi
   done < <(grep -rIl -e '/Users/' -e 'uyu' "$bundle" 2>/dev/null || true)
   [ -n "$hits" ] && { echo "NG: 個人のパス・名前を含むテキスト:"; echo "$hits"; bad=1; }
   hits="$(find "$bundle" -type f \( -iname '*.psd' -o -iname '*.psb' -o -iname '*.mov' -o -iname '*.mp4' -o -iname '*.m4v' -o -iname '*.wav' -o -iname '*.mp3' -o -iname '*.ymproj' -o -iname '*.mcpjc' -o -iname '*.mcrecover' -o -iname '*Fixtures*' \) 2>/dev/null)"
