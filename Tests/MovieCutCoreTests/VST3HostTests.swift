@@ -269,7 +269,8 @@ final class VST3HostTests: XCTestCase {
                                                      executableDirectory: "/App/Contents/MacOS")
         XCTAssertEqual(paths.first, "/custom/bridge.dylib", "環境変数の明示指定が最優先")
         XCTAssertEqual(paths[1], "/App/Contents/Frameworks/" + VST3BridgeRuntime.libraryFileName)
-        XCTAssertEqual(paths.last, VST3BridgeRuntime.libraryFileName, "最後は dlopen の標準探索")
+        XCTAssertEqual(paths.last, "/App/Contents/MacOS/" + VST3BridgeRuntime.libraryFileName, "最後は実行ファイルの隣")
+        XCTAssertFalse(paths.contains(VST3BridgeRuntime.libraryFileName), "名前だけの候補(dlopen 標準探索)は入れない")
         let noEnv = VST3BridgeRuntime.candidatePaths(environment: [:], frameworksPath: nil, executableDirectory: nil)
         XCTAssertFalse(noEnv.contains("/custom/bridge.dylib"))
     }

@@ -83,7 +83,7 @@ public enum VST3BridgeRuntime {
         if let executableDirectory, !executableDirectory.isEmpty {
             out.append((executableDirectory as NSString).appendingPathComponent(libraryFileName))
         }
-        out.append(libraryFileName)  // dlopen の標準探索に任せる
+        // 注: 名前だけの候補(dlopen の標準探索任せ)は入れない。意図しない場所のライブラリを読み込まないため。
         // 注: /usr/local/lib のような共有の置き場は候補に入れない。開発機に置いた
         // ブリッジが、テスト実行時の到達状態まで変えてしまうのを防ぐため。
         // 開発時に使いたい場合は環境変数で明示指定する。
