@@ -36,6 +36,8 @@ final class ExportPanelOptions: NSObject {
     /// 字幕トラック(mov_text)の埋め込み(既定オフ = 従来どおり)。MP4 のときだけ効く。
     private let embedBox = NSButton(checkboxWithTitle: L10n.t("字幕を埋め込む"), target: nil, action: nil)
     private let loudnessPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+    /// 音声チャンネル(ステレオ / 5.1 サラウンド。既定はステレオ = 従来どおり)。保存パネル内の一時選択で、プロジェクトには保存しない。
+    private let channelsPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     weak var panel: NSSavePanel?
     /// 「現在の設定」で書き出すときのコーデック(ProRes なら .mov)。
     private let projectCodec: String
@@ -65,6 +67,10 @@ final class ExportPanelOptions: NSObject {
         loudnessPopup.selectItem(at: Self.loudnessTargetChoices.firstIndex(of: LoudnessNormalizationSettings.defaultTargetLUFS) ?? 0)
         loudnessPopup.isEnabled = false
         loudnessPopup.setAccessibilityIdentifier("export-loudness-target")
+        for c in ExportAudioChannels.allCases { channelsPopup.addItem(withTitle: L10n.t(c.label)) }
+        channelsPopup.selectItem(at: ExportAudioChannels.allCases.firstIndex(of: .stereo) ?? 0)
+        channelsPopup.toolTip = L10n.t("5.1 サラウンドは mp4 / m4a の AAC 6ch で書き出します。ラウドネス正規化と ProRes(.mov)の音声はステレオのままです。")
+        channelsPopup.setAccessibilityIdentifier("export-audio-channels")
         embedBox.state = .off
         embedBox.setAccessibilityIdentifier("export-embed-subtitles")
         // 最初の選択が音声のみ / ProRes のときは、最初から無効にしておく(kindChanged と同じ条件)
@@ -84,6 +90,12 @@ final class ExportPanelOptions: NSObject {
     /// 選んだ字幕埋め込みの設定(チェックがオフなら .disabled)。
     var selectedSubtitleEmbed: SubtitleEmbedSettings {
         embedBox.state == .on ? SubtitleEmbedSettings(enabled: true) : .disabled
+    }
+
+    /// 選んだ音声チャンネル(既定はステレオ)。
+    var selectedAudioChannels: ExportAudioChannels {
+        let i = channelsPopup.indexOfSelectedItem
+        return i >= 0 && i < ExportAudioChannels.allCases.count ? ExportAudioChannels.allCases[i] : .stereo
     }
 
     var selectedChoice: ExportChoice { choices[max(0, min(kindPopup.indexOfSelectedItem, choices.count - 1))] }
@@ -112,7 +124,7 @@ final class ExportPanelOptions: NSObject {
 
     /// 保存パネルのアクセサリ(範囲のチェックがあれば上に置く)。
     func accessoryView(rangeBox: NSButton?) -> NSView {
-        let rows: [(String, NSView)] = [("書き出しの種類", kindPopup), ("ビットレート", ratePopup), ("目標ラウドネス", loudnessPopup)]
+        let rows: [(String, NSView)] = [("書き出しの種類", kindPopup), ("ビットレート", ratePopup), ("音声チャンネル", channelsPopup), ("目標ラウドネス", loudnessPopup)]
         // 行: 範囲(あれば)+ 種類・ビットレート + ラウドネスのチェック + 目標ラウドネス + 字幕埋め込みのチェック
         let h: CGFloat = CGFloat(rows.count + 2 + (rangeBox == nil ? 0 : 1)) * 30 + 8
         let wrap = NSView(frame: NSRect(x: 0, y: 0, width: 380, height: h))
@@ -128,10 +140,14 @@ final class ExportPanelOptions: NSObject {
                 wrap.addSubview(loudnessBox)
                 y -= 30
             }
-            let l = NSTextField(labelWithString: label)
+            let l = NSTextField(labelWithString: L10n.t(label))
             l.frame = NSRect(x: 12, y: y + 2, width: 96, height: 20)
             control.frame = NSRect(x: 112, y: y, width: 250, height: 24)
-            if label != "目標ラウドネス" { control.setAccessibilityIdentifier(label == "ビットレート" ? "export-bitrate" : "export-kind") }
+            switch label {
+            case "ビットレート": control.setAccessibilityIdentifier("export-bitrate")
+            case "書き出しの種類": control.setAccessibilityIdentifier("export-kind")
+            default: break   // 音声チャンネル / 目標ラウドネスは生成時に設定済み
+            }
             wrap.addSubview(l)
             wrap.addSubview(control)
             y -= 30

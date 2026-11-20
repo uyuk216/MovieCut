@@ -71,8 +71,10 @@ extension ProjectModel {
             let bitrate = options.selectedBitrate
             let loudness = options.selectedLoudness
             let subtitleEmbed = options.selectedSubtitleEmbed
+            // 音声チャンネルも保存パネル内の一時選択のみ(ラウドネス・字幕埋め込みと同じく、プロジェクトには保存しない)
+            let audioChannels = options.selectedAudioChannels
             Task { @MainActor in
-                if case .success(let u) = await self.runExport(to: url, preset: choice.preset, spec: choice.spec, bitrateMbps: bitrate, range: useRange, loudness: loudness, subtitleEmbed: subtitleEmbed) {
+                if case .success(let u) = await self.runExport(to: url, preset: choice.preset, spec: choice.spec, bitrateMbps: bitrate, range: useRange, loudness: loudness, subtitleEmbed: subtitleEmbed, audioChannels: audioChannels) {
                     NSWorkspace.shared.activateFileViewerSelecting([u])
                 }
             }

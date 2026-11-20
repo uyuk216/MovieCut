@@ -145,16 +145,16 @@ public enum ExportJob {
     }
 
     /// `spec`(保存したプリセットなど)があればそれを優先する。`bitrateMbps` は仕様の値より優先する(`--bitrate`)。
-    public static func run(project: Project, preset: ExportPreset?, spec: ExportSpec? = nil, bitrateMbps: Double? = nil, range: ExportRange? = nil, to url: URL, assets: RenderAssets = RenderAssets(), loudness: LoudnessNormalizationSettings = .disabled, pluginEffectProviders: [any VideoEffectProviding] = [], vst3Provider: (any AudioEffectProviding)? = nil, subtitleEmbed: SubtitleEmbedSettings = .disabled, progress: ((Double) -> Void)? = nil) async throws {
+    public static func run(project: Project, preset: ExportPreset?, spec: ExportSpec? = nil, bitrateMbps: Double? = nil, range: ExportRange? = nil, to url: URL, assets: RenderAssets = RenderAssets(), loudness: LoudnessNormalizationSettings = .disabled, pluginEffectProviders: [any VideoEffectProviding] = [], vst3Provider: (any AudioEffectProviding)? = nil, subtitleEmbed: SubtitleEmbedSettings = .disabled, audioChannels: ExportAudioChannels = .stereo, progress: ((Double) -> Void)? = nil) async throws {
         let chosen = spec ?? preset?.spec
         let p = chosen?.apply(to: project) ?? project
         let audioOnly = chosen?.audioOnly ?? false
         if audioOnly {
-            try await AudioExporter.export(project: p, range: range, to: url, loudness: loudness, vst3Provider: vst3Provider, progress: progress)
+            try await AudioExporter.export(project: p, range: range, to: url, loudness: loudness, vst3Provider: vst3Provider, audioChannels: audioChannels, progress: progress)
         } else {
             let mbps = ExportSpec.validBitrate(bitrateMbps) ?? chosen?.bitrateMbps
             let rate = mbps.map { Int(($0 * 1_000_000).rounded()) }
-            try await Exporter(project: p, assets: assets, range: range, videoBitrate: rate, loudness: loudness, pluginEffectProviders: pluginEffectProviders, vst3Provider: vst3Provider, subtitleEmbed: subtitleEmbed).export(to: url, progress: progress)
+            try await Exporter(project: p, assets: assets, range: range, videoBitrate: rate, loudness: loudness, pluginEffectProviders: pluginEffectProviders, vst3Provider: vst3Provider, subtitleEmbed: subtitleEmbed, audioChannels: audioChannels).export(to: url, progress: progress)
         }
     }
 }
@@ -172,22 +172,40 @@ public enum AudioExporter {
         var shouldStop: Bool { lock.withLock { _cancelled || _failure != nil } }
     }
 
-    public static func export(project: Project, range: ExportRange? = nil, to url: URL, loudness: LoudnessNormalizationSettings = .disabled, vst3Provider: (any AudioEffectProviding)? = nil, progress: ((Double) -> Void)? = nil) async throws {
+    /// `.m4a` の AVAssetWriter が 6ch AAC(AAC 5.1 レイアウト)の入力を受けるか(実際には書かず、`canAdd` だけ確かめる)。
+    static func canWriteSurround51M4A() -> Bool {
+        let probe = FileManager.default.temporaryDirectory.appendingPathComponent("moviecut-probe51-\(UUID().uuidString).m4a")
+        defer { try? FileManager.default.removeItem(at: probe) }
+        guard let w = try? AVAssetWriter(outputURL: probe, fileType: .m4a) else { return false }
+        return w.canAdd(AVAssetWriterInput(mediaType: .audio, outputSettings: Surround51AAC.writerSettings))
+    }
+
+    public static func export(project: Project, range: ExportRange? = nil, to url: URL, loudness: LoudnessNormalizationSettings = .disabled, vst3Provider: (any AudioEffectProviding)? = nil, audioChannels: ExportAudioChannels = .stereo, progress: ((Double) -> Void)? = nil) async throws {
         let control = Control()
         try await withTaskCancellationHandler {
-            try await run(project: project, range: range, to: url, loudness: loudness, vst3Provider: vst3Provider, progress: progress, control: control)
+            try await run(project: project, range: range, to: url, loudness: loudness, vst3Provider: vst3Provider, audioChannels: audioChannels, progress: progress, control: control)
         } onCancel: { control.cancel() }
     }
 
-    private static func run(project: Project, range: ExportRange?, to url: URL, loudness: LoudnessNormalizationSettings, vst3Provider: (any AudioEffectProviding)? = nil, progress: ((Double) -> Void)?, control: Control) async throws {
+    private static func run(project: Project, range: ExportRange?, to url: URL, loudness: LoudnessNormalizationSettings, vst3Provider: (any AudioEffectProviding)? = nil, audioChannels: ExportAudioChannels = .stereo, progress: ((Double) -> Void)?, control: Control) async throws {
         guard project.endTime > 0 else { throw ExportError.emptyProject }
         let mixURL = FileManager.default.temporaryDirectory.appendingPathComponent("moviecut-mix-\(UUID().uuidString).caf")
         defer { try? FileManager.default.removeItem(at: mixURL) }
         let proj = project
+        // 5.1 は、この環境の AVAssetWriter(.m4a)が 6ch AAC の入力を受け付けるときだけ。受けなければステレオに倒す
+        var surround = audioChannels == .surround51
+        if surround, !canWriteSurround51M4A() {
+            FileHandle.standardError.write(Data("5.1 の .m4a 書き出しを使えないため、音声はステレオで書き出します\n".utf8))
+            surround = false
+        }
+        let useSurround = surround
         let mix: AudioMixer.MixResult
         do {
             nonisolated(unsafe) let vst3 = vst3Provider   // 専用キューの中だけで使う(プロバイダはスレッドをまたがない)
-            mix = try await Task.detached { try AudioMixer.mixdownDetailed(project: proj, to: mixURL, range: range, vst3Provider: vst3) }.value
+            mix = try await Task.detached { () throws -> AudioMixer.MixResult in
+                if useSurround { return try AudioMixer.mixdownSurround51(project: proj, to: mixURL, range: range, vst3Provider: vst3) }
+                return try AudioMixer.mixdownDetailed(project: proj, to: mixURL, range: range, vst3Provider: vst3)
+            }.value
         } catch {
             if error is CancellationError { throw error }
             throw ExportError.audioMixFailed(error)
@@ -197,7 +215,10 @@ public enum AudioExporter {
         var audioURL = mixURL
         let normURL = FileManager.default.temporaryDirectory.appendingPathComponent("moviecut-mix-norm-\(UUID().uuidString).caf")
         defer { try? FileManager.default.removeItem(at: normURL) }
-        if loudness.enabled {
+        if loudness.enabled, useSurround {
+            // LoudnessNormalization は 2ch 前提なので、5.1 では適用しない(黙って無視せず記録する)
+            FileHandle.standardError.write(Data("5.1 書き出しではラウドネス正規化は適用しません(ステレオのみ対応)\n".utf8))
+        } else if loudness.enabled {
             let res = try await Task.detached { try LoudnessNormalization.normalize(input: mixURL, output: normURL, settings: loudness) }.value
             FileHandle.standardError.write(Data((LoudnessNormalization.logLine(res.plan, settings: loudness) + "\n").utf8))
             if let applied = res.outputURL { audioURL = applied }
@@ -208,12 +229,15 @@ public enum AudioExporter {
         try? FileManager.default.removeItem(at: url)
         nonisolated(unsafe) let writer: AVAssetWriter
         do { writer = try AVAssetWriter(outputURL: url, fileType: .m4a) } catch { throw ExportError.cannotCreateWriter(error) }
-        nonisolated(unsafe) let ai = AVAssetWriterInput(mediaType: .audio, outputSettings: [
+        nonisolated(unsafe) let ai = AVAssetWriterInput(mediaType: .audio, outputSettings: useSurround ? Surround51AAC.writerSettings : [
             AVFormatIDKey: kAudioFormatMPEG4AAC,
             AVSampleRateKey: 48000,
             AVNumberOfChannelsKey: 2,
             AVEncoderBitRateKey: 256_000,
         ])
+        // 5.1: AAC 5.1 の並びへ入れ替えたサンプルに付ける形式記述(ステレオのときは nil)
+        nonisolated(unsafe) let aacFormat: CMAudioFormatDescription? = useSurround ? Surround51AAC.makeFormatDescription() : nil
+        if useSurround, aacFormat == nil { throw ExportError.cannotAddInput("音声") }
         ai.expectsMediaDataInRealTime = false
         guard writer.canAdd(ai) else { throw ExportError.cannotAddInput("音声") }
         writer.add(ai)
@@ -222,7 +246,7 @@ public enum AudioExporter {
         guard let track = try await mixAsset.loadTracks(withMediaType: .audio).first,
               let reader0 = try? AVAssetReader(asset: mixAsset) else { throw ExportError.audioReadFailed(nil) }
         nonisolated(unsafe) let reader = reader0
-        nonisolated(unsafe) let out = AVAssetReaderTrackOutput(track: track, outputSettings: [
+        nonisolated(unsafe) let out = AVAssetReaderTrackOutput(track: track, outputSettings: useSurround ? Surround51AAC.readerSettings : [
             AVFormatIDKey: kAudioFormatLinearPCM,
             AVLinearPCMBitDepthKey: 32,
             AVLinearPCMIsFloatKey: true,
@@ -246,9 +270,15 @@ public enum AudioExporter {
                 func finish() { done = true; ai.markAsFinished(); c.resume() }
                 while ai.isReadyForMoreMediaData {
                     if control.shouldStop { finish(); return }
-                    guard let sb = out.copyNextSampleBuffer() else {
+                    guard let raw = out.copyNextSampleBuffer() else {
                         if reader.status == .failed { control.fail(ExportError.audioReadFailed(reader.error)) }
                         finish(); return
+                    }
+                    var sb = raw
+                    if let fmt = aacFormat {
+                        // 5.1: canonical 順 → AAC 5.1 の並びへ(Surround51Export.swift)
+                        guard let r = Surround51AAC.reordered(raw, format: fmt) else { control.fail(ExportError.audioReadFailed(nil)); finish(); return }
+                        sb = r
                     }
                     let pts = CMSampleBufferGetPresentationTimeStamp(sb).seconds
                     if !ai.append(sb) { control.fail(ExportError.appendFailed(frame: -1, underlying: writer.error)); finish(); return }

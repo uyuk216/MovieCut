@@ -55,6 +55,24 @@ private final class ExportControl: @unchecked Sendable {
 private let exportSRGB = CGColorSpace(name: CGColorSpace.sRGB)!
 private let exportBitmapInfo = CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
 
+// MARK: - 音声チャンネル(書き出しオプション)
+
+/// 書き出す音声のチャンネル構成。既定はステレオ(従来どおり。出力は従来とバイト一致)。
+/// 5.1 は保存パネル内の一時選択のみで、プロジェクトファイルには保存しない(ラウドネス・字幕埋め込みと同じ扱い)。
+/// 仕様と判断の全文は docs/マルチチャンネル音声.md「5.1 書き出し」。
+public enum ExportAudioChannels: String, CaseIterable, Equatable, Sendable {
+    case stereo
+    case surround51
+
+    /// UI に出す名前(日本語。英訳は L10nTable)。
+    public var label: String {
+        switch self {
+        case .stereo: return "ステレオ"
+        case .surround51: return "5.1 サラウンド"
+        }
+    }
+}
+
 // MARK: - Exporter
 
 /// プロジェクトを MP4(H.264 / HEVC + AAC)に書き出す。再生を待たず、フレームを順に描いて AVAssetWriter へ渡す。
@@ -76,8 +94,10 @@ public final class Exporter {
     public let vst3Provider: (any AudioEffectProviding)?
     /// 字幕トラック(mov_text)の埋め込み(既定は無効 = 従来どおり字幕トラックなし)。
     public let subtitleEmbed: SubtitleEmbedSettings
+    /// 音声のチャンネル構成(既定はステレオ = 従来どおり)。5.1 は mp4(AAC 6ch)のときだけ効き、ProRes(.mov)はステレオのまま。
+    public let audioChannels: ExportAudioChannels
 
-    public init(project: Project, assets: RenderAssets, range: ExportRange? = nil, videoBitrate: Int? = nil, loudness: LoudnessNormalizationSettings = .disabled, renderBackend: RenderBackend = .auto, pluginEffectProviders: [any VideoEffectProviding] = [], vst3Provider: (any AudioEffectProviding)? = nil, subtitleEmbed: SubtitleEmbedSettings = .disabled) {
+    public init(project: Project, assets: RenderAssets, range: ExportRange? = nil, videoBitrate: Int? = nil, loudness: LoudnessNormalizationSettings = .disabled, renderBackend: RenderBackend = .auto, pluginEffectProviders: [any VideoEffectProviding] = [], vst3Provider: (any AudioEffectProviding)? = nil, subtitleEmbed: SubtitleEmbedSettings = .disabled, audioChannels: ExportAudioChannels = .stereo) {
         self.project = project
         self.assets = assets
         self.range = range
@@ -87,6 +107,7 @@ public final class Exporter {
         self.pluginEffectProviders = pluginEffectProviders
         self.vst3Provider = vst3Provider
         self.subtitleEmbed = subtitleEmbed
+        self.audioChannels = audioChannels
     }
 
     /// ProRes のコーデック文字列 → AVAssetWriter の映像コーデック。HQ / LT / Proxy も AVAssetWriter で直接書ける(実機確認済み 2026-11-19)。
@@ -152,10 +173,18 @@ public final class Exporter {
         let mixURL = FileManager.default.temporaryDirectory.appendingPathComponent("moviecut-mix-\(UUID().uuidString).caf")
         defer { try? FileManager.default.removeItem(at: mixURL) }
         let proj = project
+        // 5.1 は ProRes(.mov)では書かない(無圧縮 6ch の .mov は未検証のため、従来どおりステレオに倒す。docs 参照)
+        let surround = audioChannels == .surround51 && !plan.isProRes
+        if audioChannels == .surround51, plan.isProRes {
+            FileHandle.standardError.write(Data("5.1 書き出しは ProRes(.mov)には未対応のため、音声はステレオで書き出します\n".utf8))
+        }
         let mix: AudioMixer.MixResult
         do {
             nonisolated(unsafe) let vst3 = self.vst3Provider   // 専用キューの中だけで使う(プロバイダはスレッドをまたがない)
-            mix = try await Task.detached { try AudioMixer.mixdownDetailed(project: proj, to: mixURL, range: self.range, vst3Provider: vst3) }.value
+            mix = try await Task.detached { () throws -> AudioMixer.MixResult in
+                if surround { return try AudioMixer.mixdownSurround51(project: proj, to: mixURL, range: self.range, vst3Provider: vst3) }
+                return try AudioMixer.mixdownDetailed(project: proj, to: mixURL, range: self.range, vst3Provider: vst3)
+            }.value
         } catch {
             if error is CancellationError { throw error }
             throw ExportError.audioMixFailed(error)
@@ -167,7 +196,10 @@ public final class Exporter {
         var audioURL = mixURL
         let normURL = FileManager.default.temporaryDirectory.appendingPathComponent("moviecut-mix-norm-\(UUID().uuidString).caf")
         defer { try? FileManager.default.removeItem(at: normURL) }
-        if hasAudio, loudness.enabled {
+        if hasAudio, loudness.enabled, surround {
+            // LoudnessNormalization は 2ch 前提なので、5.1 では適用しない(黙って無視せず記録する)
+            FileHandle.standardError.write(Data("5.1 書き出しではラウドネス正規化は適用しません(ステレオのみ対応)\n".utf8))
+        } else if hasAudio, loudness.enabled {
             let settings = loudness
             let res = try await Task.detached { try LoudnessNormalization.normalize(input: mixURL, output: normURL, settings: settings) }.value
             FileHandle.standardError.write(Data((LoudnessNormalization.logLine(res.plan, settings: settings) + "\n").utf8))
@@ -228,12 +260,15 @@ public final class Exporter {
         writer.add(vInput)
 
         // 音声入力(ミックスした一時ファイルから)
+        // 5.1: AAC 5.1 の並びへ入れ替えたサンプルに付ける形式記述(ステレオのときは nil)
+        nonisolated(unsafe) let aacFormat: CMAudioFormatDescription? = surround ? Surround51AAC.makeFormatDescription() : nil
+        if surround, aacFormat == nil { throw ExportError.cannotAddInput("音声") }
         var aInput: AVAssetWriterInput?
         var aReader: AVAssetReader?
         var aOutput: AVAssetReaderTrackOutput?
         if hasAudio {
             // ProRes(.mov)の音は、編集用の素材として無圧縮(24 ビット PCM)で入れる
-            let aSettings: [String: Any] = isProRes ? [
+            let aSettings: [String: Any] = surround ? Surround51AAC.writerSettings : isProRes ? [
                 AVFormatIDKey: kAudioFormatLinearPCM,
                 AVSampleRateKey: 48000,
                 AVNumberOfChannelsKey: 2,
@@ -254,7 +289,7 @@ public final class Exporter {
             let mixAsset = AVURLAsset(url: audioURL)
             guard let track = try await mixAsset.loadTracks(withMediaType: .audio).first,
                   let r = try? AVAssetReader(asset: mixAsset) else { throw ExportError.audioReadFailed(nil) }
-            let o = AVAssetReaderTrackOutput(track: track, outputSettings: [
+            let o = AVAssetReaderTrackOutput(track: track, outputSettings: surround ? Surround51AAC.readerSettings : [
                 AVFormatIDKey: kAudioFormatLinearPCM,
                 AVLinearPCMBitDepthKey: 32,
                 AVLinearPCMIsFloatKey: true,
@@ -336,9 +371,15 @@ public final class Exporter {
                 func finish() { aDone = true; ai.markAsFinished(); group.leave() }
                 while ai.isReadyForMoreMediaData {
                     if control.shouldStop { finish(); return }
-                    guard let sb = ao.copyNextSampleBuffer() else {
+                    guard let raw = ao.copyNextSampleBuffer() else {
                         if ar.status == .failed { control.fail(ExportError.audioReadFailed(ar.error)) }
                         finish(); return
+                    }
+                    var sb = raw
+                    if let fmt = aacFormat {
+                        // 5.1: canonical 順 → AAC 5.1 の並びへ(Surround51Export.swift)
+                        guard let r = Surround51AAC.reordered(raw, format: fmt) else { control.fail(ExportError.audioReadFailed(nil)); finish(); return }
+                        sb = r
                     }
                     if !ai.append(sb) { control.fail(ExportError.appendFailed(frame: -1, underlying: writer.error)); finish(); return }
                 }

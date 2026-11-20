@@ -1,6 +1,7 @@
 import Foundation
 import AVFoundation
 import CoreMedia
+import CoreAudio
 
 // MARK: - エラー
 
@@ -24,6 +25,17 @@ public enum AudioMixerError: LocalizedError {
 protocol PCMSource: AnyObject {
     /// 最大 frames フレームを left / right に書く。返り値は書いたフレーム数(終端では frames 未満)。
     func read(left: UnsafeMutablePointer<Float>, right: UnsafeMutablePointer<Float>, frames: Int) -> Int
+}
+
+/// 素材のチャンネル数のまま、役割(レイアウト)つきで読める音声ソース(5.1 書き出し専用。ラウンド5 Phase B)。
+/// `PCMSource` の `read(left:right:frames:)`(ステレオ読み)とは独立で、既存の準拠型・既存の経路には影響しない。
+protocol MultiPCMSource: PCMSource {
+    /// 素材のチャンネル数(`readMulti` が書くチャンネル数)。
+    var multiChannelCount: Int { get }
+    /// チャンネルごとの役割(長さ = `multiChannelCount`。サンプルの並びはこの順)。
+    var multiChannelRoles: [AudioChannelRole] { get }
+    /// 最大 frames フレームを、チャンネルごとのバッファ(`buffers[c]` の先頭から)へ書く。返り値は書いたフレーム数。
+    func readMulti(into buffers: [UnsafeMutablePointer<Float>], frames: Int) -> Int
 }
 
 private let mixSampleRate = 48000.0
@@ -182,8 +194,10 @@ final class FilePCMSource: PCMSource {
 /// 既定(ダウンミックス)は出力側で 48 kHz / 2ch の Float32 インターリーブに変換させる
 /// (チャンネルの並び・レイアウトを知っている AVFoundation 側に落としてもらう)。
 /// チャンネル選択(`channelMode != .downmix`)を指定したときだけ、素材のチャンネル数のまま読んで
-/// `MultichannelDownmix` の係数で自前で選ぶ(並びの前提は WAV 順。docs/マルチチャンネル音声.md)。
-final class AssetPCMSource: PCMSource {
+/// `MultichannelDownmix` の係数で自前で選ぶ。この経路は素材のレイアウト順(AAC 5.1 は C L R Ls Rs LFE)で
+/// 返ってくるので、並びは位置前提(WAV 順)ではなくトラックの AudioChannelLayout から決める
+/// (取れなければ位置前提にフォールバック。docs/マルチチャンネル音声.md)。
+final class AssetPCMSource: MultiPCMSource {
     private let reader: AVAssetReader
     private let output: AVAssetReaderTrackOutput
     private let rangeStart: Double
@@ -196,6 +210,8 @@ final class AssetPCMSource: PCMSource {
     private let channels: Int
     /// チャンネルごとのステレオ係数(`channels` 分。2ch 経路は恒等)。
     private let weights: [(l: Float, r: Float)]
+    /// チャンネルごとの役割(`channels` 分。5.1 書き出しの `readMulti` 用。レイアウトが取れなければ位置前提)。
+    private let roles: [AudioChannelRole]
 
     /// 素材トラックのチャンネル数(形式記述の ASBD から。分からなければ nil)。
     private static func nativeChannelCount(of track: AVAssetTrack) -> Int? {
@@ -209,14 +225,49 @@ final class AssetPCMSource: PCMSource {
         return nil
     }
 
-    init?(url: URL, offset: Double, duration: Double, channelMode: SourceChannelMode = .downmix) {
+    /// 素材トラックの AudioChannelLayout から、チャンネルごとの役割を求める(読み出し順 = 素材のレイアウト順)。
+    /// - タグが UseChannelDescriptions 以外: タグから役割表へ(`MultichannelDownmix.roles(forLayoutTag:)`)
+    /// - UseChannelDescriptions: 各 AudioChannelDescription の mChannelLabel から
+    /// 取れない(レイアウト無し・未知のタグ・ラベルが不明・チャンネル数不一致)ときは nil を返し、
+    /// 呼び出し側が位置前提(`roles(channelCount:)`)にフォールバックする。
+    private static func nativeRoles(of track: AVAssetTrack, channelCount: Int) -> [AudioChannelRole]? {
+        for fdAny in track.formatDescriptions {
+            let fd = fdAny as! CMAudioFormatDescription
+            guard let lp = CMAudioFormatDescriptionGetChannelLayout(fd, sizeOut: nil) else { continue }
+            let tag = lp.pointee.mChannelLayoutTag
+            let roles: [AudioChannelRole]?
+            if tag == kAudioChannelLayoutTag_UseChannelDescriptions {
+                // mChannelDescriptions は構造体末尾の可変長配列(宣言上は 1 要素)。先頭の位置から数だけ読む。
+                let n = Int(lp.pointee.mNumberChannelDescriptions)
+                guard n > 0, let off = MemoryLayout<AudioChannelLayout>.offset(of: \AudioChannelLayout.mChannelDescriptions) else { continue }
+                let base = (UnsafeRawPointer(lp) + off).assumingMemoryBound(to: AudioChannelDescription.self)
+                roles = MultichannelDownmix.roles(forChannelLabels: (0..<n).map { base[$0].mChannelLabel })
+            } else {
+                roles = MultichannelDownmix.roles(forLayoutTag: tag)
+            }
+            if let r = roles, r.count == channelCount { return r }
+        }
+        return nil
+    }
+
+    /// `forceNative`: `channelMode` が `.downmix` でも素材のチャンネル数のまま読む(5.1 書き出しの `readMulti` 用)。
+    /// 既定(false)の経路は従来と同一。
+    init?(url: URL, offset: Double, duration: Double, channelMode: SourceChannelMode = .downmix, forceNative: Bool = false) {
         let asset = AVURLAsset(url: url)
         guard let track = asset.tracks(withMediaType: .audio).first,
               let r = try? AVAssetReader(asset: asset) else { return nil }
-        let native = channelMode == .downmix ? nil : Self.nativeChannelCount(of: track)
+        let native = (channelMode == .downmix && !forceNative) ? nil : Self.nativeChannelCount(of: track)
         let outChannels = native ?? 2
         channels = outChannels
-        weights = MultichannelDownmix.stereoWeights(channelCount: outChannels, mode: channelMode)
+        // 素材のレイアウトから役割が取れればそれで、取れなければ従来の位置前提で係数を決める。
+        // (既定の .downmix は native == nil で 2ch 変換を AVFoundation に任せるので、ここは通らず不変。)
+        let layoutRoles = native != nil ? Self.nativeRoles(of: track, channelCount: outChannels) : nil
+        if let layoutRoles {
+            weights = MultichannelDownmix.stereoWeights(roles: layoutRoles, mode: channelMode)
+        } else {
+            weights = MultichannelDownmix.stereoWeights(channelCount: outChannels, mode: channelMode)
+        }
+        roles = layoutRoles ?? MultichannelDownmix.roles(channelCount: outChannels)
         var settings: [String: Any] = [
             AVFormatIDKey: kAudioFormatLinearPCM,
             AVLinearPCMBitDepthKey: 32,
@@ -288,6 +339,182 @@ final class AssetPCMSource: PCMSource {
                 }
             }
             pendingPos += n; done += n
+        }
+        return done
+    }
+
+    // MARK: 5.1 書き出し用(素材のチャンネル数のまま、レイアウト順で読む)
+
+    var multiChannelCount: Int { channels }
+    var multiChannelRoles: [AudioChannelRole] { roles }
+
+    /// `forceNative` で開いた(または `channelMode != .downmix` で開いた)ときに、素材のチャンネルごとに書く。
+    /// 並びは素材のレイアウト順のまま(役割は `multiChannelRoles`)。並べ替えは呼び出し側(ミックス)で行う。
+    func readMulti(into buffers: [UnsafeMutablePointer<Float>], frames: Int) -> Int {
+        var done = 0
+        let nch = min(channels, buffers.count)
+        if !started { _ = fetch() }
+        while done < frames, leadFrames > 0 {
+            for c in 0..<nch { buffers[c][done] = 0 }
+            done += 1; leadFrames -= 1
+        }
+        while done < frames {
+            if pendingPos * channels >= pending.count, !fetch() { break }
+            let avail = (pending.count - pendingPos * channels) / channels
+            if avail == 0 { continue }
+            let n = min(frames - done, avail)
+            for k in 0..<n {
+                let base = (pendingPos + k) * channels
+                for c in 0..<nch { buffers[c][done + k] = pending[base + c] }
+            }
+            pendingPos += n; done += n
+        }
+        return done
+    }
+}
+
+/// AVAudioFile から、素材のチャンネル数のまま読む(WAV / CAF / M4A など。5.1 書き出し用)。
+/// - 同一レート: 変換なしでそのまま返す。
+/// - レート違い: **チャンネルごとにモノの `AVAudioConverter` を 1 つずつ**通す。
+///   多チャンネルのままコンバータに渡すと 3ch 目以降が落ちることが実測で分かっている(`FilePCMSource.init` のコメント)ため、
+///   モノ → モノ(実績のある経路)に分解した。リサンプルはチャンネルごとに同じ線形フィルタなので、
+///   チャンネル別に処理しても結果は同じになる。入力は 1 塊ずつ全チャンネルへ配り(`.noDataNow` で状態を保ったまま)、
+///   終端で `.endOfStream` を渡して残りを吐かせる。
+/// - 役割は位置前提(`MultichannelDownmix.roles(channelCount:)`)。File 経路は WAV 系が主用途で、
+///   `AVAudioFile` のレイアウトは WAV では当てにならないため Phase A と同じ判断で据え置く(docs 参照)。
+final class FileMultiPCMSource: MultiPCMSource {
+    private static let chunk: AVAudioFrameCount = 16384
+    private let file: AVAudioFile
+    let multiChannelCount: Int
+    let multiChannelRoles: [AudioChannelRole]
+    private let inBuf: AVAudioPCMBuffer
+    private let resample: Bool
+    private var converters: [AVAudioConverter] = []
+    private var monoIn: [AVAudioPCMBuffer] = []
+    private var monoOut: [AVAudioPCMBuffer] = []
+    /// 直近の塊(チャンネルごと)。消費し終えたら次の塊で置き換える。
+    private var pend: [[Float]]
+    private var outPos = 0
+    private var outCount = 0
+    private var inputEOF = false
+    private var flushed = false
+    private var finished = false
+
+    init(url: URL, offset: Double) throws {
+        file = try AVAudioFile(forReading: url)
+        let inFmt = file.processingFormat
+        let n = max(1, Int(inFmt.channelCount))
+        multiChannelCount = n
+        multiChannelRoles = MultichannelDownmix.roles(channelCount: n)
+        pend = [[Float]](repeating: [], count: n)
+        let pos = AVAudioFramePosition(max(0, offset) * inFmt.sampleRate)
+        if pos >= file.length { finished = true } else { file.framePosition = pos }
+        guard let ib = AVAudioPCMBuffer(pcmFormat: inFmt, frameCapacity: Self.chunk) else {
+            throw AudioMixerError.cannotRead(path: url.path, underlying: nil)
+        }
+        inBuf = ib
+        resample = abs(inFmt.sampleRate - mixSampleRate) > 0.5
+        if resample {
+            guard let mi = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: inFmt.sampleRate, channels: 1, interleaved: false),
+                  let mo = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: mixSampleRate, channels: 1, interleaved: false) else {
+                throw AudioMixerError.cannotRead(path: url.path, underlying: nil)
+            }
+            let outCap = AVAudioFrameCount((Double(Self.chunk) * mixSampleRate / inFmt.sampleRate).rounded(.up)) + 1024
+            for _ in 0..<n {
+                guard let conv = AVAudioConverter(from: mi, to: mo),
+                      let bi = AVAudioPCMBuffer(pcmFormat: mi, frameCapacity: Self.chunk),
+                      let bo = AVAudioPCMBuffer(pcmFormat: mo, frameCapacity: outCap) else {
+                    throw AudioMixerError.cannotRead(path: url.path, underlying: nil)
+                }
+                converters.append(conv); monoIn.append(bi); monoOut.append(bo)
+            }
+        }
+    }
+
+    /// 次の塊を pend に作る。もう無ければ false。
+    private func refill() -> Bool {
+        if finished { return false }
+        outPos = 0; outCount = 0
+        let n = multiChannelCount
+        guard let inCh = inBuf.floatChannelData else { finished = true; return false }
+        while true {
+            var got = 0
+            if !inputEOF {
+                do { try file.read(into: inBuf, frameCount: Self.chunk); got = Int(inBuf.frameLength) } catch { got = 0 }
+                if got == 0 { inputEOF = true }
+            }
+            if !resample {
+                if got == 0 { finished = true; return false }
+                for c in 0..<n { pend[c] = Array(UnsafeBufferPointer(start: inCh[c], count: got)) }
+                outCount = got
+                return true
+            }
+            if inputEOF && flushed { finished = true; return false }
+            let flushing = inputEOF
+            for c in 0..<n {
+                let conv = converters[c], mi = monoIn[c], mo = monoOut[c]
+                if !flushing, let dst = mi.floatChannelData?[0] {
+                    dst.update(from: inCh[c], count: got)
+                    mi.frameLength = AVAudioFrameCount(got)
+                }
+                var provided = false
+                var err: NSError?
+                let st = conv.convert(to: mo, error: &err) { _, status in
+                    if flushing { status.pointee = .endOfStream; return nil }
+                    if provided { status.pointee = .noDataNow; return nil }
+                    provided = true
+                    status.pointee = .haveData
+                    return mi
+                }
+                if st == .error { finished = true; return false }
+                let frames = Int(mo.frameLength)
+                if let src = mo.floatChannelData?[0], frames > 0 {
+                    pend[c] = Array(UnsafeBufferPointer(start: src, count: frames))
+                } else {
+                    pend[c] = []
+                }
+            }
+            if flushing { flushed = true }
+            // 全チャンネルは同じ設定なので出力数は同じはずだが、念のため最短に揃える
+            outCount = pend.map(\.count).min() ?? 0
+            if outCount > 0 { return true }
+            if flushed { finished = true; return false }
+            // コンバータが入力を溜めただけで出力が 0 のとき: 次の塊へ
+        }
+    }
+
+    // PCMSource: ステレオ読みはこの型の用途ではない(5.1 のミックスは readMulti を使う)。
+    // 念のため、役割ベースの BS.775 ダウンミックスで返す(FilePCMSource と同じ係数)。
+    func read(left: UnsafeMutablePointer<Float>, right: UnsafeMutablePointer<Float>, frames: Int) -> Int {
+        let w = MultichannelDownmix.stereoWeights(roles: multiChannelRoles, mode: .downmix)
+        var done = 0
+        while done < frames {
+            if outPos >= outCount, !refill() { break }
+            let n = min(frames - done, outCount - outPos)
+            for k in 0..<n { left[done + k] = 0; right[done + k] = 0 }
+            for c in 0..<min(multiChannelCount, w.count) {
+                let (wl, wr) = multiChannelCount == 1 ? (Float(1), Float(1)) : (w[c].l, w[c].r)
+                if wl == 0 && wr == 0 { continue }
+                for k in 0..<n {
+                    let v = pend[c][outPos + k]
+                    left[done + k] += v * wl
+                    right[done + k] += v * wr
+                }
+            }
+            outPos += n; done += n
+        }
+        return done
+    }
+
+    func readMulti(into buffers: [UnsafeMutablePointer<Float>], frames: Int) -> Int {
+        var done = 0
+        while done < frames {
+            if outPos >= outCount, !refill() { break }
+            let n = min(frames - done, outCount - outPos)
+            for c in 0..<min(multiChannelCount, buffers.count) {
+                pend[c].withUnsafeBufferPointer { (buffers[c] + done).update(from: $0.baseAddress! + outPos, count: n) }
+            }
+            outPos += n; done += n
         }
         return done
     }
@@ -587,6 +814,200 @@ public enum AudioMixer {
             // mp4 の音声など AVAudioFile で開けないものは AVAssetReader で
             if FileManager.default.fileExists(atPath: url.path),
                let s = AssetPCMSource(url: url, offset: offset, duration: span, channelMode: mode) { return s }
+            throw AudioMixerError.cannotRead(path: url.path, underlying: error)
+        }
+    }
+}
+
+// MARK: - 5.1 ミックス(改善ラウンド5 Phase B)
+
+/// 5.1 ミックスの 1 クリップぶんの読み手。
+private enum SurroundVoice {
+    /// ステレオとして読む(エフェクト付き・速度/逆再生/音程のクリップ)。L/R へ置く。
+    case stereo(PCMSource)
+    /// 素材のチャンネル数のまま読む。`placements[c]` = 素材チャンネル c を canonical 順のどこへ何倍で置くか。
+    case multi(MultiPCMSource, [[(channel: Int, gain: Float)]])
+}
+
+extension AudioMixer {
+    /// プロジェクト全体の音声を 48 kHz・**canonical 順 L R C LFE Ls Rs の 6ch** Float32(非インターリーブ・
+    /// 5.1 レイアウト `MPEG_5_1_A` つき)で書く。拡張子で形式が決まる(.caf / .wav)。
+    /// 既存の `mixdownDetailed`(ステレオ)とは完全に別の関数で、あちらのコードには触れていない(既定出力のバイト一致のため)。
+    /// 項目の集め方(`Item` の組み立て)は `mixdownDetailed` と同じ規則を複製している(ステレオ本体を共有化して壊すより複製を選んだ)。
+    ///
+    /// クリップごとの寄与:
+    /// - エフェクト付き(内蔵チェーン/VST3/ノーマライズ/ノイズ除去)・速度/逆再生/音程のクリップ → **ステレオ寄与**
+    ///   (従来のステレオ読み + `AudioFxChain` を通し、L/R へ置く。DSP がステレオ前提で、`AudioRemap` の一時ファイルも
+    ///   ステレオ前提のため)
+    /// - それ以外 → 素材のチャンネル数で読み、`MultichannelDownmix.surround51Placements` の規則で置く
+    ///   (3ch 以上はパススルー、ステレオは L/R、モノラルは C。チャンネル選択は `.firstPair` → L/R、`.center` → C)
+    /// - ゲイン・フェード・音量キー・ダッキングは全チャンネル共通の倍率。パンは L/R にだけ。
+    ///   トラックミキサーは L/R に trackL/trackR、他(C/LFE/Ls/Rs)には (trackL+trackR)/2
+    static func mixdownSurround51(project: Project, to url: URL, range: ExportRange? = nil, vst3Provider: (any AudioEffectProviding)? = nil) throws -> MixResult {
+        let sr = mixSampleRate
+        let shift = range.map { Int(($0.start * sr).rounded()) } ?? 0
+        let total = range.map { Int((($0.end - $0.start) * sr).rounded()) } ?? Int((project.endTime * sr).rounded())
+        var items: [Item] = []
+        let voiceSpans = project.allClips.contains(where: { $0.hasDuck }) ? Ducking.voiceSpans(in: project) : []
+        for (c, tmix) in CompoundEditing.audibleClipsWithTrackMix(in: project) where c.type == .audio || c.type == .voice || c.type == .video {
+            guard let s = c.src, !s.isEmpty, c.duration > 0, !c.isFreeze else { continue }
+            var sf = Int((c.start * sr).rounded()) - shift
+            let fullStart = sf, fullLength = Int((c.duration * sr).rounded())
+            let ef = min(total, sf + fullLength)
+            let pitched = (c.audioFx?.pitchSemitones ?? 0) != 0
+            let remap = c.hasAudioRemap || pitched
+            var off = remap ? 0 : c.offset
+            if sf < 0 { off += Double(-sf) / sr; sf = 0 }
+            guard ef > sf else { continue }
+            var item = Item(clip: c, startFrame: sf, endFrame: ef, offset: off, remapped: remap, gain: Float(c.volume ?? 1))
+            item.fullStart = fullStart
+            item.trackL = tmix.l; item.trackR = tmix.r
+            if c.hasAudioFade {
+                item.fadeStart = fullStart; item.length = fullLength
+                item.fadeInFrames = min(fullLength, Int((c.fadeInOrDefault * sr).rounded()))
+                item.fadeOutFrames = min(fullLength, Int((c.fadeOutOrDefault * sr).rounded()))
+                item.equalPower = c.fadeIsEqualPower
+            }
+            if c.hasVolumeKeys { item.volumeEnv = VolumeEnvelope(c.keyframes["volume"], sr: sr) }
+            if let fx = c.audioFx, fx.isActive || (vst3Provider != nil && !fx.enabledVST3Slots.isEmpty) { item.fx = fx }
+            if c.hasPan { item.pan = AudioPan.gains(c.panOrDefault) }
+            if c.hasDuck, Clip.supportsDuck(c), !voiceSpans.isEmpty { item.duck = c.duck }
+            items.append(item)
+        }
+        items.sort { $0.startFrame < $1.startFrame }
+
+        try? FileManager.default.removeItem(at: url)
+        let nOut = MultichannelDownmix.surround51ChannelCount
+        var settings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: sr,
+            AVNumberOfChannelsKey: nOut,
+            AVLinearPCMBitDepthKey: 32,
+            AVLinearPCMIsFloatKey: true,
+            AVLinearPCMIsBigEndianKey: false,
+            AVLinearPCMIsNonInterleaved: false,
+        ]
+        let out: AVAudioFile
+        do {
+            settings[AVChannelLayoutKey] = Surround51Layout.data(tag: kAudioChannelLayoutTag_MPEG_5_1_A)
+            out = try AVAudioFile(forWriting: url, settings: settings, commonFormat: .pcmFormatFloat32, interleaved: false)
+        } catch {
+            // レイアウト付きで開けない形式のときは、レイアウトなし(6ch の並びだけ)で書く
+            try? FileManager.default.removeItem(at: url)
+            settings.removeValue(forKey: AVChannelLayoutKey)
+            do { out = try AVAudioFile(forWriting: url, settings: settings, commonFormat: .pcmFormatFloat32, interleaved: false) }
+            catch { throw AudioMixerError.cannotWrite(url: url, underlying: error) }
+        }
+
+        let chunk = Int(sr) * 10
+        let mix = (0..<nOut).map { _ in UnsafeMutablePointer<Float>.allocate(capacity: chunk) }
+        let tL = UnsafeMutablePointer<Float>.allocate(capacity: chunk), tR = UnsafeMutablePointer<Float>.allocate(capacity: chunk)
+        let fgBuf = UnsafeMutablePointer<Float>.allocate(capacity: chunk)
+        var scratch: [UnsafeMutablePointer<Float>] = []   // 素材チャンネルごとの読み出し用(必要な数まで増やす)
+        defer { mix.forEach { $0.deallocate() }; tL.deallocate(); tR.deallocate(); fgBuf.deallocate(); scratch.forEach { $0.deallocate() } }
+
+        var voices: [Int: SurroundVoice] = [:]
+        var chains: [Int: AudioFxChain] = [:]
+        var normGains: [Int: Float] = [:]
+        var failed: Set<Int> = []
+        var opened = 0
+        let remapDir = FileManager.default.temporaryDirectory.appendingPathComponent("moviecut-remap-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: remapDir) }
+        var cs = 0
+        while cs < total {
+            let ce = min(total, cs + chunk)
+            let n = ce - cs
+            for m in mix { m.update(repeating: 0, count: n) }
+            for (idx, it) in items.enumerated() where it.startFrame < ce && it.endFrame > cs && !failed.contains(idx) {
+                let voice: SurroundVoice
+                if let v = voices[idx] { voice = v } else {
+                    if it.remapped || it.fx != nil {
+                        guard let s = try openItem(it, remapDir: remapDir) else { failed.insert(idx); continue }
+                        voice = .stereo(s)
+                        if let fx = it.fx {
+                            let processors = vst3Provider.map { vst3Processors(for: fx, provider: $0, sampleRate: sr) } ?? []
+                            if fx.hasChain || !processors.isEmpty { chains[idx] = AudioFxChain(fx, sr: sr, vst3Processors: processors) }
+                            if let nz = fx.normalize, nz.isActive { normGains[idx] = try normalizeGain(for: it, fx: fx, normalize: nz, remapDir: remapDir, tL: tL, tR: tR, vst3Provider: vst3Provider) }
+                        }
+                    } else {
+                        guard let m = try openMultiSource(it.clip, offset: it.offset, span: it.clip.duration) else { failed.insert(idx); continue }
+                        let roles = m.multiChannelRoles.count == m.multiChannelCount ? m.multiChannelRoles : MultichannelDownmix.roles(channelCount: m.multiChannelCount)
+                        voice = .multi(m, MultichannelDownmix.surround51Placements(roles: roles, mode: it.clip.channelModeOrDefault))
+                    }
+                    voices[idx] = voice; opened += 1
+                }
+                let a = max(cs, it.startFrame), b = min(ce, it.endFrame)
+                let base = a - cs
+                let ng = normGains[idx] ?? 1
+                let g = it.gain * ng
+                let pl = it.pan?.l ?? 1, pr = it.pan?.r ?? 1
+                // 読んだ分(got)の倍率を作る共通処理(ゲイン/音量キー・ダッキング・フェード。全チャンネル共通)
+                func fillFactors(_ got: Int) {
+                    let dg: [Float]? = it.duck.map { Ducking.gains(startFrame: a + shift, count: got, sr: sr, spans: voiceSpans, duck: $0) }
+                    for k in 0..<got {
+                        let pos = a + k - it.fullStart
+                        var f = it.volumeEnv.map { $0.gain(at: pos) * ng } ?? g
+                        if let dg { f *= dg[k] }
+                        if it.hasFade { f *= AudioFade.gain(pos: pos, length: it.length, fadeIn: it.fadeInFrames, fadeOut: it.fadeOutFrames, equalPower: it.equalPower) }
+                        fgBuf[k] = f
+                    }
+                }
+                switch voice {
+                case .stereo(let src):
+                    let got = src.read(left: tL, right: tR, frames: b - a)
+                    chains[idx]?.process(tL, tR, got)
+                    fillFactors(got)
+                    for k in 0..<got {
+                        mix[MultichannelDownmix.ch51L][base + k] += tL[k] * fgBuf[k] * pl * it.trackL
+                        mix[MultichannelDownmix.ch51R][base + k] += tR[k] * fgBuf[k] * pr * it.trackR
+                    }
+                case .multi(let src, let placements):
+                    let nc = min(src.multiChannelCount, placements.count)
+                    while scratch.count < nc { scratch.append(UnsafeMutablePointer<Float>.allocate(capacity: chunk)) }
+                    let got = src.readMulti(into: Array(scratch[0..<nc]), frames: b - a)
+                    fillFactors(got)
+                    let trackMid = (it.trackL + it.trackR) / 2
+                    for c in 0..<nc {
+                        let s = scratch[c]
+                        for (o, gain) in placements[c] {
+                            // パンとトラックの左右ゲインは L/R にだけ。他(C/LFE/Ls/Rs)は共通倍率とトラックの平均
+                            let coef: Float
+                            switch o {
+                            case MultichannelDownmix.ch51L: coef = gain * pl * it.trackL
+                            case MultichannelDownmix.ch51R: coef = gain * pr * it.trackR
+                            default: coef = gain * trackMid
+                            }
+                            let dst = mix[o]
+                            for k in 0..<got { dst[base + k] += s[k] * fgBuf[k] * coef }
+                        }
+                    }
+                }
+                if it.endFrame <= ce { voices[idx] = nil }
+            }
+            guard let buf = AVAudioPCMBuffer(pcmFormat: out.processingFormat, frameCapacity: AVAudioFrameCount(n)),
+                  let ch = buf.floatChannelData else { throw AudioMixerError.cannotWrite(url: url, underlying: nil) }
+            buf.frameLength = AVAudioFrameCount(n)
+            for c in 0..<nOut { for k in 0..<n { ch[c][k] = min(1, max(-1, mix[c][k])) } }
+            do { try out.write(from: buf) } catch { throw AudioMixerError.cannotWrite(url: url, underlying: error) }
+            cs = ce
+        }
+        return MixResult(duration: Double(total) / sr, sourceCount: opened)
+    }
+
+    /// 5.1 ミックス用: クリップの音声を素材のチャンネル数のまま読める形で開く。
+    /// video に音声が無い・読めないときは nil(無音扱い)、audio / voice が読めないときは例外(`openSource` と同じ約束)。
+    private static func openMultiSource(_ c: Clip, offset: Double, span: Double) throws -> MultiPCMSource? {
+        let url = URL(fileURLWithPath: c.src ?? "")
+        let mode = c.channelModeOrDefault
+        if c.type == .video {
+            guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+            return AssetPCMSource(url: url, offset: offset, duration: span, channelMode: mode, forceNative: true)
+        }
+        do {
+            return try FileMultiPCMSource(url: url, offset: offset)
+        } catch {
+            if FileManager.default.fileExists(atPath: url.path),
+               let s = AssetPCMSource(url: url, offset: offset, duration: span, channelMode: mode, forceNative: true) { return s }
             throw AudioMixerError.cannotRead(path: url.path, underlying: error)
         }
     }
