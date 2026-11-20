@@ -86,11 +86,12 @@ struct RigInspectorSection: View {
     private func fileName(_ p: String?) -> String { p.map { URL(fileURLWithPath: $0).deletingPathExtension().lastPathComponent } ?? "なし" }
 
     var body: some View {
-        InspectorSection(title: L10n.t("立ち絵パーツ"))
+        InspectorSubsection("inspector.rig.parts") {
         Text(L10n.t("見本を押すと、そのパーツに切り替わります。目と口は、まばたき・口パク・表情で自動で切り替わります"))
             .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         alignmentRow()
         ForEach(rig.slots, id: \.name) { slot in slotView(slot) }
+        }
         expressionsView()
     }
 
@@ -211,7 +212,7 @@ struct RigInspectorSection: View {
 
     @ViewBuilder private func expressionsView() -> some View {
         let items = (rig.expressions ?? [:]).sorted { $0.key < $1.key }
-        InspectorSection(title: L10n.t("表情（パーツの組み合わせ）"))
+        InspectorSubsection("inspector.rig.expressions") {
         Text(L10n.t("セリフの先頭に [名前] と書くと、その行の間この組み合わせになります（口は話し方に合わせて動きます）"))
             .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         ForEach(items, id: \.key) { key, picks in
@@ -230,5 +231,6 @@ struct RigInspectorSection: View {
         .controlSize(.small)
         .disabled(model.isLocked)
         .help(L10n.t("眉・目・口などの今の選択を、名前をつけた表情として覚えます"))
+        }
     }
 }

@@ -54,7 +54,7 @@ struct TachieClipSection: View {
     let clip: Clip
 
     var body: some View {
-        InspectorSection(title: "立ち絵")
+        InspectorSubsection("inspector.tachie.main") {
         InspectorField(label: "素材") {
             Picker("", selection: Binding(get: { clip.tachieId ?? "" }, set: { model.setClipTachie(clipId: clip.id, tachieId: $0) })) {
                 if model.tachie(clip.tachieId) == nil { Text("（消えた素材）").tag(clip.tachieId ?? "") }
@@ -84,6 +84,7 @@ struct TachieClipSection: View {
             }
         }
         .controlSize(.small)
+        }
         if let t = model.tachie(clip.tachieId) {
             TachieExpressionRow(model: model, clip: clip, tachie: t)
             TachieAssetBody(model: model, tachie: t)
@@ -102,7 +103,7 @@ struct TachieExpressionRow: View {
         let names = TachieEditing.expressionNames(of: tachie)
         let voice = TachieEditing.driverVoice(model.project, clip: clip, at: model.currentTime)
         let current = voice.flatMap { ExpressionTag.split($0.text ?? "").tag }
-        InspectorSection(title: "表情の切り替え（再生位置）")
+        InspectorSubsection("inspector.tachie.expression") {
         Text(voice == nil ? "再生位置に連動する声がありません"
              : "再生位置の声の表情: \(current ?? "通常")（切り替わるのは声の頭。声のセリフの先頭に [表情名] が付きます）")
             .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
@@ -122,6 +123,7 @@ struct TachieExpressionRow: View {
         .controlSize(.small)
         .disabled(model.isLocked)
         .onAppear { if pick.isEmpty, let f = names.first { pick = f } }
+        }
     }
 }
 
@@ -139,7 +141,7 @@ struct TachieAssetBody: View {
         if let rig = tachie.rig, rig.hasParts {
             RigInspectorSection(model: model, tachieId: tachie.id, rig: rig)
         } else {
-            InspectorSection(title: "画像")
+            InspectorSubsection("inspector.tachie.image") {
             Text("GIF・APNG 等のアニメーション画像も使えます（タイムライン時刻でループ再生）")
                 .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             ForEach([(ProjectModel.TachieImageSlot.closed, tachie.imgClosed), (.open, tachie.imgOpen), (.blink, tachie.imgBlink)], id: \.0.label) { slot, path in
@@ -147,7 +149,8 @@ struct TachieAssetBody: View {
                          choose: { model.chooseImage(title: "立ち絵(\(slot.label))を選ぶ") { model.setTachieImage(tachieId: tachie.id, slot: slot, url: $0) } },
                          clear: { model.setTachieImage(tachieId: tachie.id, slot: slot, url: nil) })
             }
-            InspectorSection(title: "あいうえお（口の形）")
+            }
+            InspectorSubsection("inspector.tachie.mouth") {
             ForEach(["a", "i", "u", "e", "o"], id: \.self) { key in
                 imageRow(label: ProjectModel.vowelLabel(key), path: tachie.imgVowels?[key],
                          choose: { model.chooseImage(title: "口「\(ProjectModel.vowelLabel(key))」の画像を選ぶ") { model.setTachieVowelImage(tachieId: tachie.id, key: key, url: $0) } },
@@ -155,6 +158,7 @@ struct TachieAssetBody: View {
             }
             if !(tachie.expressions ?? [:]).isEmpty {
                 Text("表情 \((tachie.expressions ?? [:]).count) 枚").font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
+            }
             }
         }
     }

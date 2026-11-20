@@ -30,7 +30,7 @@ struct TextStyleInspector: View {
     // MARK: 吹き出し(B-2)
 
     @ViewBuilder private func bubbleSection(_ c: Clip) -> some View {
-        InspectorSection(title: L10n.t("吹き出し"))
+        InspectorSubsection("inspector.textStyle.balloon") {
         Toggle(L10n.t("吹き出しを付ける"), isOn: Binding(get: { c.bubble != nil }, set: { on in
             model.setBubble(on ? Bubble() : nil, name: on ? "吹き出しを付ける" : "吹き出しを外す", clipId: clipId)
         }))
@@ -56,6 +56,7 @@ struct TextStyleInspector: View {
             }
             .padding(.leading, 10)
             .disabled(model.isLocked)
+        }
         }
     }
 
@@ -97,7 +98,7 @@ struct TextStyleInspector: View {
     // MARK: スタイル
 
     @ViewBuilder private func styleSection(_ c: Clip) -> some View {
-        InspectorSection(title: L10n.t("スタイル"))
+        InspectorSubsection("inspector.textStyle.style") {
         HStack(spacing: 8) {
             Menu {
                 ForEach(TextStyleLibrary.builtins.filter { !$0.id.hasPrefix(TextStyleLibrary.titlePrefix) }) { s in Button(s.name) { model.applyTextStyle(id: s.id, clipId: clipId) } }
@@ -142,6 +143,7 @@ struct TextStyleInspector: View {
                 Button(L10n.t("変更")) { if let id = renamingId { model.renameTextStyle(id: id, to: draftName) }; renamingId = nil }
                 Button(L10n.t("キャンセル"), role: .cancel) { renamingId = nil }
             }
+        }
     }
 
     // MARK: 装飾
@@ -169,7 +171,7 @@ struct TextStyleInspector: View {
 
     @ViewBuilder private func decorationSections(_ c: Clip) -> some View {
         let st = c.textStyle ?? TextStyle()
-        InspectorSection(title: c.type == .voice ? "字幕の装飾" : "装飾")
+        InspectorSubsection("inspector.textStyle.decoration", title: c.type == .voice ? "字幕の装飾" : "装飾") {
         // 影
         toggle("影", isOn: st.shadow != nil, name: "影の変更") { $0.shadow = $1 ? TextStyle.Shadow() : nil }
         if let sh = st.shadow {
@@ -264,12 +266,13 @@ struct TextStyleInspector: View {
         Button { model.setTextStyle({ $0 = TextStyle() }, name: "装飾をリセット", clipId: clipId) } label: { Text(L10n.t("装飾をリセット")).frame(maxWidth: .infinity) }
             .controlSize(.small)
             .disabled(model.isLocked || c.textStyle == nil)
+        }
     }
 
     // MARK: カウントダウン(文字クリップ)
 
     @ViewBuilder private func counterSection(_ c: Clip) -> some View {
-        InspectorSection(title: L10n.t("カウントダウン"))
+        InspectorSubsection("inspector.textStyle.countdown") {
         Toggle(L10n.t("カウントダウンを付ける"), isOn: Binding(get: { c.counter != nil }, set: { on in
             model.setCounter(on ? TextCounter() : nil, name: on ? "カウントダウンにする" : "カウントダウンを外す", clipId: clipId)
         }))
@@ -297,13 +300,14 @@ struct TextStyleInspector: View {
             .disabled(model.isLocked)
             Text(L10n.t("クリップの頭から終わりまで、開始から終わりへ直線に変わります。文字は「テキスト」の後ろに続きます。")).font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
         }
+        }
     }
 
     // MARK: 他のクリップの値(文字クリップ)
 
     @ViewBuilder private func valueRefSection(_ c: Clip) -> some View {
         let cands = model.valueRefCandidates(for: c.id)
-        InspectorSection(title: L10n.t("他のクリップの値"))
+        InspectorSubsection("inspector.textStyle.otherClips") {
         Toggle(L10n.t("他のクリップの値を表示"), isOn: Binding(get: { c.valueRef != nil }, set: { on in
             guard let first = cands.first else { return }
             model.setValueRef(on ? ValueRef(clipId: first.id) : nil, name: on ? "他のクリップの値を表示" : "値の表示を外す", clipId: clipId)
@@ -340,6 +344,7 @@ struct TextStyleInspector: View {
             .disabled(model.isLocked)
             Text(L10n.t("再生位置での値(キーフレーム反映)が「テキスト」の後ろに続きます。参照先が無いときは「—」。カウントダウンがあるときはそちらが先です。")).font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
         }
+        }
     }
 
     private static func candidateLabel(_ k: Clip) -> String {
@@ -355,7 +360,7 @@ struct TextStyleInspector: View {
 
     @ViewBuilder private func animationSection(_ c: Clip) -> some View {
         let kind = c.textAnim?.known ?? .none
-        InspectorSection(title: L10n.t("文字アニメーション"))
+        InspectorSubsection("inspector.textStyle.animation") {
         InspectorField(label: L10n.t("種類")) {
             Picker("", selection: Binding(get: { c.textAnim == nil ? TextAnimKind.none.rawValue : c.textAnim!.kind },
                                           set: { v in model.setTextAnim(TextAnimKind(rawValue: v) ?? .none, clipId: clipId) })) {
@@ -391,6 +396,7 @@ struct TextStyleInspector: View {
             } else {
                 Text(L10n.t("クリップの頭からこの長さだけ動きます。")).font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
             }
+        }
         }
     }
 }
