@@ -193,6 +193,8 @@ enum MenuCommand: Hashable {
     case guide(PreviewGuide)
     // 表示 ▸ スナップ(プレビューの直接操作の吸着。アプリ全体の設定。ショートカットは持たない)
     case previewSnapToggle
+    // 表示 ▸ ガイド線を表示(ガイド全体の表示 ON/OFF。種類の選択とは独立。ショートカットは持たない)
+    case previewGuidesVisibilityToggle
     // 画面のドッキング(パネルの表示と、配置のプリセット)
     case dockPanel(DockPanel), dockLayout(DockPreset)
     // ファイル ▸ 最近使った項目 / 起動時の画面を表示(書類がなくても使える。ショートカットは持たない)
@@ -465,6 +467,8 @@ struct MenuState: Equatable {
     var previewGuides: Set<PreviewGuide> = []
     /// 表示 ▸ スナップ: プレビューの直接操作で吸着するか(アプリ全体の設定。既定は ON で、ストアの既定と合わせる)。
     var previewSnapEnabled = true
+    /// 表示 ▸ ガイド線を表示: ガイド全体の表示(既定は ON で、ストアの既定と合わせる)。
+    var previewGuidesVisible = true
     /// プロキシ編集: 表示のチェック / 映像の素材があって作れる
     var previewProxyEnabled = false
     var proxyAutoCreateEnabled = false
@@ -484,6 +488,7 @@ struct MenuState: Equatable {
         previewTier = PreviewTierStore.current
         previewGuides = PreviewGuideStore.current
         previewSnapEnabled = PreviewSnapStore.current
+        previewGuidesVisible = PreviewGuideStore.isVisible
         templateNames = ProjectTemplateLibrary.names
         let rc = RecentProjectsController.shared
         recentItems = rc.recents.entries.map { RecentMenuItem(path: $0.path, name: $0.name, missing: rc.isMissing($0)) }
@@ -1641,6 +1646,11 @@ enum AppMenuSpec {
         PreviewGuide.allCases.map { MenuItemSpec(command: .guide($0), title: $0.title, shortcut: nil, enabled: true, checked: s.previewGuides.contains($0)) }
     }
 
+    /// 表示 ▸ ガイド線を表示(ガイド全体の表示 ON/OFF。種類の選択とは独立。チェックで切り替える。ショートカットは持たない)。
+    static func previewGuidesVisibilityItem(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .previewGuidesVisibilityToggle, title: "ガイド線を表示", shortcut: nil, enabled: true, checked: s.previewGuidesVisible)
+    }
+
     /// 表示 ▸ スナップ(プレビューの直接操作の吸着。チェックで切り替える。ショートカットは持たない)。
     static func previewSnapItem(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .previewSnapToggle, title: "スナップ", shortcut: nil, enabled: true, checked: s.previewSnapEnabled, hint: "プレビューで吸着")
@@ -1679,7 +1689,7 @@ enum AppMenuSpec {
         [about, checkForUpdates, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), textGenerationSettingsItem(s), imageGenerationSettingsItem(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s), apngExport(s), ymmpExport(s), webVideoExport(s), pngWavExport(s), exoExport(s), fcpXmlExport(s), edlExport(s)] + pluginExportItems(s) + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), trackMixerItem(s), clipListItem(s), noteListItem(s)] + scriptStoryboardItems(s) + scriptCSVItems(s) + [makeProxies(s), manageProxiesItem(s)] + [] + clipMenu(s).flatMap { $0 } + multicamItems(s) + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + pluginEffectItems(s) + effectPresetItems(s) + effectActions(s) + faceBlurItems(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textVerticalItem(s), textPerCharItem(s), textCounterItem(s), dictionaryItem(s), scriptTableItem(s), dialogueSuggestionsItem(s), saveItemTemplateItem(s)] + itemTemplateApplyItems(s) + itemTemplateCreateItems(s) + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [sceneSplitItem(s), silenceCutItem(s)] + rangeDeleteItems(s) + [audioAutoSyncItem(s), beatMarkersItem(s), remixItem(s), scaleDuplicateItem(s), beatPlaceItem(s), fillerCutItem(s), transcriptEditItem(s), speakerDiarizationItem(s), lutLoadItem(s), colorTransferItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerColorItems(s) + markerList(s) + reviewCommentItems(s) + reviewCommentList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
-            + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + previewTierItems(s) + guideItems(s) + [previewSnapItem(s), previewProxy(s), proxyAutoCreateItem(s), fullScreen(s)] + help.flatMap { $0 }
+            + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + previewTierItems(s) + [previewGuidesVisibilityItem(s)] + guideItems(s) + [previewSnapItem(s), previewProxy(s), proxyAutoCreateItem(s), fullScreen(s)] + help.flatMap { $0 }
     }
 }
 
@@ -1713,6 +1723,9 @@ enum AppMenu {
             ActiveDocument.shared.refresh()
         case .guide(let g):
             PreviewGuideStore.toggle(g)
+            ActiveDocument.shared.refresh()
+        case .previewGuidesVisibilityToggle:
+            PreviewGuideStore.toggleVisibility()
             ActiveDocument.shared.refresh()
         case .previewSnapToggle:
             PreviewSnapStore.toggle()

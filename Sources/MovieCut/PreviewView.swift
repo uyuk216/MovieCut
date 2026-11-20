@@ -271,7 +271,7 @@ final class PreviewCanvasView: NSView {
     /// ガイド線を描き直す(枠の位置・大きさ・設定が変わったとき)。ガイドが無ければ隠す。
     /// セーフ領域と中心線は実線(guideLayer)、分割グリッド線だけ点線・控えめな濃さの別レイヤー(gridGuideLayer)。
     private func redrawGuides() {
-        let guides = PreviewGuideStore.current
+        let guides = PreviewGuide.effective(PreviewGuideStore.current, visible: PreviewGuideStore.isVisible)
         let canvas = aspect
         guard !guides.isEmpty, frameLayer.frame.width > 0 else {
             CATransaction.begin(); CATransaction.setDisableActions(true)
@@ -629,7 +629,7 @@ final class PreviewCanvasView: NSView {
     /// スナップ先を集める(ドラッグ開始時に一度だけ): キャンバスの端・中心、表示中のガイド線、
     /// 同じ時刻に見えている他のクリップ(枠で選べる種類で、不透明なもの)の枠。集める計算は Core の PreviewSnap。
     private func collectSnapTargets(excluding clipId: String, canvas: CGSize) -> PreviewSnap.Targets {
-        guard let m = model else { return PreviewSnap.targets(canvas: canvas, guides: PreviewGuideStore.current) }
+        guard let m = model else { return PreviewSnap.targets(canvas: canvas, guides: PreviewGuide.effective(PreviewGuideStore.current, visible: PreviewGuideStore.isVisible)) }
         let renderer = Renderer(project: m.project, assets: m.assets)
         var boxes: [TransformBox] = []
         for id in PreviewPicking.stack(in: m.project, at: m.currentTime) where id != clipId {
@@ -640,7 +640,7 @@ final class PreviewCanvasView: NSView {
                   let size = renderer.objectSize(of: c, at: m.currentTime) else { continue }
             boxes.append(TransformBox.make(clip: c, objectSize: size, at: m.currentTime - c.start, canvas: canvas))
         }
-        return PreviewSnap.targets(canvas: canvas, guides: PreviewGuideStore.current, otherBoxes: boxes)
+        return PreviewSnap.targets(canvas: canvas, guides: PreviewGuide.effective(PreviewGuideStore.current, visible: PreviewGuideStore.isVisible), otherBoxes: boxes)
     }
 
     /// 吸着の閾値をキャンバスの画素に直したもの(画面の 8pt 相当)。

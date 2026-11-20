@@ -90,4 +90,31 @@ final class PreviewGuideTests: XCTestCase {
         XCTAssertEqual(PreviewGuide.encode([.grid4, .titleSafe, .center]), ["titleSafe", "center", "grid4"])
         XCTAssertEqual(PreviewGuide.resolve(PreviewGuide.encode([.grid2, .actionSafe])), [.actionSafe, .grid2])
     }
+
+    // MARK: 表示フラグ(effective)
+
+    func testEffectiveIsEmptyWhenHiddenSoDrawingGeometryIsEmpty() {
+        let all = Set(PreviewGuide.allCases.filter { !$0.isGrid }).union([.thirds])
+        let off = PreviewGuide.effective(all, visible: false)
+        XCTAssertTrue(off.isEmpty)
+        XCTAssertTrue(GuideGeometry.lines(off, canvas: fhd).isEmpty)
+        XCTAssertTrue(GuideGeometry.gridLines(off, canvas: fhd).isEmpty)
+        XCTAssertTrue(GuideGeometry.safeRects(off, canvas: fhd).isEmpty)
+        let on = PreviewGuide.effective(all, visible: true)
+        XCTAssertEqual(on, all, "表示 ON なら従来どおり")
+        XCTAssertFalse(GuideGeometry.lines(on, canvas: fhd).isEmpty)
+        XCTAssertFalse(GuideGeometry.gridLines(on, canvas: fhd).isEmpty)
+        XCTAssertEqual(GuideGeometry.safeRects(on, canvas: fhd).count, 2)
+    }
+
+    func testSnapTargetsDropGuideCoordinatesWhenHiddenButKeepCanvasEdgesAndCenter() {
+        let guides: Set<PreviewGuide> = [.thirds]
+        let off = PreviewSnap.targets(canvas: fhd, guides: PreviewGuide.effective(guides, visible: false), otherBoxes: [])
+        XCTAssertFalse(off.verticals.contains(640)); XCTAssertFalse(off.verticals.contains(1280))
+        for x in [0.0, 960, 1920] { XCTAssertTrue(off.verticals.contains(x), "キャンバスの端・中心は残る") }
+        for y in [0.0, 540, 1080] { XCTAssertTrue(off.horizontals.contains(y)) }
+        let on = PreviewSnap.targets(canvas: fhd, guides: PreviewGuide.effective(guides, visible: true), otherBoxes: [])
+        XCTAssertTrue(on.verticals.contains(640)); XCTAssertTrue(on.verticals.contains(1280))
+        XCTAssertTrue(on.horizontals.contains(360)); XCTAssertTrue(on.horizontals.contains(720))
+    }
 }

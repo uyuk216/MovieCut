@@ -100,7 +100,7 @@ final class MenuTests: XCTestCase {
         XCTAssertFalse(s.hasDocument)
         for spec in AppMenuSpec.all(s) {
             switch spec.command {
-            case .about, .checkForUpdates, .welcomeAtLaunchToggle, .helpShortcuts, .helpVoicevox, .helpAquestalk, .helpLicense, .helpThirdParty, .previewBackground, .previewTier, .previewProxyToggle, .proxyAutoCreateToggle, .guide, .previewSnapToggle, .addFont: XCTAssertTrue(spec.enabled, "\(spec.title)")
+            case .about, .checkForUpdates, .welcomeAtLaunchToggle, .helpShortcuts, .helpVoicevox, .helpAquestalk, .helpLicense, .helpThirdParty, .previewBackground, .previewTier, .previewProxyToggle, .proxyAutoCreateToggle, .guide, .previewSnapToggle, .previewGuidesVisibilityToggle, .addFont: XCTAssertTrue(spec.enabled, "\(spec.title)")
             default: XCTAssertFalse(spec.enabled, "\(spec.title) が有効です")
             }
         }
@@ -148,7 +148,7 @@ final class MenuTests: XCTestCase {
         let s = state { $0.isLocked = true; $0.hasSelection = true; $0.canSplit = true }
         for spec in AppMenuSpec.all(s) {
             switch spec.command {
-            case .about, .checkForUpdates, .welcomeAtLaunchToggle, .helpShortcuts, .helpVoicevox, .helpAquestalk, .helpLicense, .helpThirdParty, .fullScreen, .previewBackground, .previewTier, .previewProxyToggle, .proxyAutoCreateToggle, .guide, .previewSnapToggle, .addFont: XCTAssertTrue(spec.enabled, "\(spec.title)")
+            case .about, .checkForUpdates, .welcomeAtLaunchToggle, .helpShortcuts, .helpVoicevox, .helpAquestalk, .helpLicense, .helpThirdParty, .fullScreen, .previewBackground, .previewTier, .previewProxyToggle, .proxyAutoCreateToggle, .guide, .previewSnapToggle, .previewGuidesVisibilityToggle, .addFont: XCTAssertTrue(spec.enabled, "\(spec.title)")
             default: XCTAssertFalse(spec.enabled, "\(spec.title) が書き出し中も有効です")
             }
         }
@@ -160,6 +160,7 @@ final class MenuTests: XCTestCase {
         noModel.welcomeAtLaunch = WelcomeSettings.showAtLaunch()   // 起動時の画面の設定は本人の環境の値を読む
         noModel.previewTier = PreviewTierStore.current              // プレビュー画質も保存された値を読む
         noModel.previewSnapEnabled = PreviewSnapStore.current       // スナップも保存された値を読む
+        noModel.previewGuidesVisible = PreviewGuideStore.isVisible   // ガイド線の表示 ON/OFF も保存された値を読む
         noModel.proxyAutoCreateEnabled = ProxySettings.autoCreateEnabled()   // プロキシの自動作成も保存された値を読む
         XCTAssertEqual(MenuState(model: nil), noModel)
         var s = MenuState(model: m)

@@ -75,6 +75,12 @@ public enum PreviewGuide: String, CaseIterable, Sendable {
         return out
     }
 
+    /// 表示フラグを通した「実際に使う」集合。表示 OFF なら空集合(何も出さない・スナップ先にも足さない)。
+    /// 描画(redrawGuides)とスナップ先の収集(collectSnapTargets)の両方がこれを通す。
+    public static func effective(_ set: Set<PreviewGuide>, visible: Bool) -> Set<PreviewGuide> {
+        visible ? set : []
+    }
+
     /// 保存する形(並びは allCases の順で固定)。
     public static func encode(_ set: Set<PreviewGuide>) -> [String] {
         allCases.filter { set.contains($0) }.map(\.rawValue)

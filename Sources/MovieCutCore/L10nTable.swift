@@ -58,6 +58,7 @@ enum L10nTable {
         "アニメーション": "Animation",
         "エフェクト": "Effects",
         "ガイド線": "Guides",
+        "ガイド線を表示": "Show Guides",
         "4分割線（2×2）": "4 Grid (2x2)",
         "16分割線（4×4）": "16 Grid (4x4)",
         "スナップ": "Snap",
