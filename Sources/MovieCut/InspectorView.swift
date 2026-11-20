@@ -158,6 +158,10 @@ struct InspectorField<Content: View>: View {
 }
 
 /// 数値の入力欄(Return・フォーカスが外れたときに確定、右のステッパーは連続編集)。
+/// ステッパーは長押しで連続ステップする共通部品(PressHoldStepper)を使う:
+/// 短押し 1 回、0.4 秒押し続けると 0.05 秒間隔で繰り返し、離すと即止まる。
+/// 発火はすべて従来と同じ onStep を通るので、クランプ・ステップ幅・Undo の
+/// まとめ方(coalesced 系は 1 回の長押しが 1 回の Undo)は従来どおり。
 struct NumField: View {
     let value: Double
     var step: Double = 0.01
@@ -194,8 +198,7 @@ struct NumField: View {
                 .focused($focused)
                 .onSubmit { commit(); focused = false }     // Return で確定したら入力を終える(Space・Delete がまた効く)
                 .onChange(of: focused) { _, now in if !now { commit() } }
-            Stepper("", onIncrement: { onStep(value + step) }, onDecrement: { onStep(value - step) })
-                .labelsHidden()
+            PressHoldStepper(onIncrement: { onStep(value + step) }, onDecrement: { onStep(value - step) })
         }
         .onAppear { text = Self.format(value, decimals: decimals) }
         .onChange(of: value) { _, v in if !focused { text = Self.format(v, decimals: decimals) } }
