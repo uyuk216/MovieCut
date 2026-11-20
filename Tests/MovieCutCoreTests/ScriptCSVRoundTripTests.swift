@@ -9,10 +9,10 @@ final class ScriptCSVRoundTripTests: XCTestCase {
 
     func testRowsRoundTripPreservesSpecialCharacters() {
         let rows: [Row] = [
-            Row(characterName: "霊夢", dialogue: "ねえ、聞いて", reading: "ねえ、きいて", expression: "笑顔"),
-            Row(characterName: "魔理沙", dialogue: "カンマ,と\"引用\"と\n改行", subtitle: "字幕,あり"),
-            Row(characterName: "霊夢", dialogue: "相棒", reading: "あいぼう"),
-            Row(characterName: "魔理沙", dialogue: "字幕なしの行", subtitle: ""),
+            Row(characterName: "キャラ1", dialogue: "ねえ、聞いて", reading: "ねえ、きいて", expression: "笑顔"),
+            Row(characterName: "キャラ2", dialogue: "カンマ,と\"引用\"と\n改行", subtitle: "字幕,あり"),
+            Row(characterName: "キャラ1", dialogue: "相棒", reading: "あいぼう"),
+            Row(characterName: "キャラ2", dialogue: "字幕なしの行", subtitle: ""),
             Row(characterName: "", dialogue: "名前なし"),
             Row(dialogue: "※ ここはメモ"),
         ]
@@ -39,53 +39,53 @@ final class ScriptCSVRoundTripTests: XCTestCase {
     }
 
     func testReadingFallsBackToDialogueInScriptLine() {
-        let withReading = Row(characterName: "霊夢", dialogue: "相棒", reading: "あいぼう")
-        XCTAssertEqual(withReading.scriptLine, "霊夢: あいぼう | 相棒",
+        let withReading = Row(characterName: "キャラ1", dialogue: "相棒", reading: "あいぼう")
+        XCTAssertEqual(withReading.scriptLine, "キャラ1: あいぼう | 相棒",
                        "読みが違えば字幕は元の表記(読み辞書で作ったクリップと同じ形)")
         XCTAssertEqual(withReading.clipSubtitleText, "相棒")
-        let plain = Row(characterName: "霊夢", dialogue: "こんにちは")
-        XCTAssertEqual(plain.scriptLine, "霊夢: こんにちは")
+        let plain = Row(characterName: "キャラ1", dialogue: "こんにちは")
+        XCTAssertEqual(plain.scriptLine, "キャラ1: こんにちは")
         XCTAssertNil(plain.clipSubtitleText)
     }
 
     // MARK: 読み込みの形(見出し・列数)
 
     func testHeaderReorderingWithAllColumns() {
-        let csv = "字幕,表情,読み,セリフ,キャラ\r\n字幕A,笑顔,よみA,表記A,霊夢\r\n, ,よみB,表記B,魔理沙"
+        let csv = "字幕,表情,読み,セリフ,キャラ\r\n字幕A,笑顔,よみA,表記A,キャラ1\r\n, ,よみB,表記B,キャラ2"
         let rows = ScriptCSV.scriptRows(fromCSV: csv)
         XCTAssertEqual(rows, [
-            Row(characterName: "霊夢", dialogue: "表記A", reading: "よみA", subtitle: "字幕A", expression: "笑顔"),
-            Row(characterName: "魔理沙", dialogue: "表記B", reading: "よみB"),
+            Row(characterName: "キャラ1", dialogue: "表記A", reading: "よみA", subtitle: "字幕A", expression: "笑顔"),
+            Row(characterName: "キャラ2", dialogue: "表記B", reading: "よみB"),
         ])
     }
 
     func testLegacyHeaderWithoutDialogueColumnTreatsReadingAsSpoken() {
         // 従来形式の見出し(名前,読み上げ文,字幕): 読み上げ文がセリフ欄に入る
-        let csv = "名前,読み上げ文,字幕\n霊夢,あいぼう,相棒"
+        let csv = "名前,読み上げ文,字幕\nキャラ1,あいぼう,相棒"
         let rows = ScriptCSV.scriptRows(fromCSV: csv)
-        XCTAssertEqual(rows, [Row(characterName: "霊夢", dialogue: "あいぼう", subtitle: "相棒")])
+        XCTAssertEqual(rows, [Row(characterName: "キャラ1", dialogue: "あいぼう", subtitle: "相棒")])
         XCTAssertEqual(ScriptCSV.lines(fromRows: rows), ScriptCSV.lines(fromCSV: csv))
     }
 
     func testHeaderlessColumnCounts() {
         XCTAssertEqual(ScriptCSV.scriptRows(fromCSV: "セリフだけ"),
                        [Row(dialogue: "セリフだけ")])
-        XCTAssertEqual(ScriptCSV.scriptRows(fromCSV: "霊夢,こんにちは"),
-                       [Row(characterName: "霊夢", dialogue: "こんにちは")])
+        XCTAssertEqual(ScriptCSV.scriptRows(fromCSV: "キャラ1,こんにちは"),
+                       [Row(characterName: "キャラ1", dialogue: "こんにちは")])
         // 4 列(見出しなし) = キャラ,セリフ,読み,字幕
-        XCTAssertEqual(ScriptCSV.scriptRows(fromCSV: "霊夢,相棒,あいぼう,"),
-                       [Row(characterName: "霊夢", dialogue: "相棒", reading: "あいぼう")])
-        XCTAssertEqual(ScriptCSV.scriptRows(fromCSV: "霊夢,相棒,あいぼう,")[0].scriptLine, "霊夢: あいぼう | 相棒")
+        XCTAssertEqual(ScriptCSV.scriptRows(fromCSV: "キャラ1,相棒,あいぼう,"),
+                       [Row(characterName: "キャラ1", dialogue: "相棒", reading: "あいぼう")])
+        XCTAssertEqual(ScriptCSV.scriptRows(fromCSV: "キャラ1,相棒,あいぼう,")[0].scriptLine, "キャラ1: あいぼう | 相棒")
     }
 
     func testLegacySamplesMatchExistingLinesConversion() {
         // 既存の ScriptCSV.lines(fromCSV:) と、行経由の変換が同じ台本行を出す(従来 CSV の互換)
         let samples = [
-            "霊夢,こんにちは,こんにちは(字幕)\n魔理沙,やあ,\n\n霊夢,字幕なしの行",
-            "字幕,名前,セリフ\n字幕A,霊夢,読みA\n,魔理沙,読みB",
+            "キャラ1,こんにちは,こんにちは(字幕)\nキャラ2,やあ,\n\nキャラ1,字幕なしの行",
+            "字幕,名前,セリフ\n字幕A,キャラ1,読みA\n,キャラ2,読みB",
             "※ ここはメモ\n,名前なしのセリフ",
             "セリフだけ1\nセリフだけ2",
-            "霊夢,\"ねえ、聞いて\",字幕です",
+            "キャラ1,\"ねえ、聞いて\",字幕です",
         ]
         for csv in samples {
             XCTAssertEqual(ScriptCSV.lines(fromRows: ScriptCSV.scriptRows(fromCSV: csv)),
@@ -94,14 +94,14 @@ final class ScriptCSVRoundTripTests: XCTestCase {
     }
 
     func testQuotedEmptySubtitleMeansNoSubtitle() {
-        let rows = ScriptCSV.scriptRows(fromCSV: "キャラ,セリフ,読み,字幕,表情\n霊夢,消える,,\"\",")
+        let rows = ScriptCSV.scriptRows(fromCSV: "キャラ,セリフ,読み,字幕,表情\nキャラ1,消える,,\"\",")
         XCTAssertEqual(rows.first?.subtitle, "")
-        let unspecified = ScriptCSV.scriptRows(fromCSV: "キャラ,セリフ,読み,字幕,表情\n霊夢,残る,,,")
+        let unspecified = ScriptCSV.scriptRows(fromCSV: "キャラ,セリフ,読み,字幕,表情\nキャラ1,残る,,,")
         XCTAssertNil(unspecified.first?.subtitle)
     }
 
     func testExpressionBracketsAreStrippedOnImport() {
-        let rows = ScriptCSV.scriptRows(fromCSV: "キャラ,セリフ,読み,字幕,表情\n霊夢,やあ,,,[笑顔]")
+        let rows = ScriptCSV.scriptRows(fromCSV: "キャラ,セリフ,読み,字幕,表情\nキャラ1,やあ,,,[笑顔]")
         XCTAssertEqual(rows.first?.expression, "笑顔")
         XCTAssertEqual(rows.first?.spokenText, "[笑顔]やあ")
     }
@@ -110,8 +110,8 @@ final class ScriptCSVRoundTripTests: XCTestCase {
 
     private func sampleProject() -> Project {
         var p = Project()
-        var c1 = Character(); c1.name = "霊夢"
-        var c2 = Character(); c2.name = "魔理沙"
+        var c1 = Character(); c1.name = "キャラ1"
+        var c2 = Character(); c2.name = "キャラ2"
         p.characters = [c1, c2]
         func voice(_ char: Character, _ text: String, _ sub: String?, _ start: Double) -> Clip {
             var c = Clip(); c.type = .voice; c.text = text; c.subtitleText = sub
@@ -135,8 +135,8 @@ final class ScriptCSVRoundTripTests: XCTestCase {
     func testProjectExportShape() {
         let r = ScriptCSV.rows(from: sampleProject())
         XCTAssertEqual(r.skipped, 1, "セリフが空のクリップは数える")
-        XCTAssertEqual(r.rows.map(\.characterName), ["霊夢", "霊夢", "魔理沙", "魔理沙", "霊夢", "魔理沙"])
-        XCTAssertEqual(r.rows[1], Row(characterName: "霊夢", dialogue: "相棒", reading: "あいぼう"),
+        XCTAssertEqual(r.rows.map(\.characterName), ["キャラ1", "キャラ1", "キャラ2", "キャラ2", "キャラ1", "キャラ2"])
+        XCTAssertEqual(r.rows[1], Row(characterName: "キャラ1", dialogue: "相棒", reading: "あいぼう"),
                        "読み辞書形は セリフ=元の表記 / 読み=読み上げ文 に分かれる")
         XCTAssertEqual(r.rows[2].expression, "笑顔")
         XCTAssertEqual(r.rows[2].dialogue, "やった")

@@ -63,7 +63,7 @@ moviecut-cli export in.mcpjc out.m4a --preset audio        # 音声のみ(AAC 25
 ```
 moviecut-cli script script.txt --out p.ymproj                                    # 既定キャラで新規作成
 moviecut-cli script script.txt --out p.ymproj --template base.mcpjc --clean      # 既存プロジェクトのキャラ・設定を引き継ぐ(クリップとマーカーは消す)
-moviecut-cli script script.txt --out p.ymproj --size 1080x1920 --char ずんだもん   # 縦動画・既定キャラ(名前のない行の話し手)の指定
+moviecut-cli script script.txt --out p.ymproj --size 1080x1920 --char キャラ3   # 縦動画・既定キャラ(名前のない行の話し手)の指定
 moviecut-cli script script.csv --out p.ymproj --dict words.txt                      # CSV 台本(「名前,読み上げ,字幕」列・見出し可)と読み辞書も使える
 moviecut-cli addimage p.ymproj slide.png p2.ymproj [--start 0] [--duration 5]    # 画像クリップを追加(無指定ならプロジェクトの終わりまで)
 moviecut-cli project-info p.ymproj                                               # 中身を JSON で確認(読み取り専用)
