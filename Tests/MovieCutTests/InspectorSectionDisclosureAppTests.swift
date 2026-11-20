@@ -44,6 +44,7 @@ final class InspectorSectionDisclosureAppTests: XCTestCase {
             "inspector.textStyle.countdown", "inspector.textStyle.otherClips", "inspector.textStyle.animation",
             "inspector.tachie.main", "inspector.tachie.expression", "inspector.tachie.image", "inspector.tachie.mouth",
             "inspector.rig.parts", "inspector.rig.expressions",
+            "inspector.character.basic", "inspector.character.voice", "inspector.character.actions",
         ]
         for k in ["filter", "peq", "dist", "tube", "chorus", "flanger", "phaser", "tremolo", "vibrato", "wah", "echo", "lowq", "robot"] {
             s.insert("inspector.audioFx.ext.\(k)")

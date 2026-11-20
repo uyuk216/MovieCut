@@ -100,6 +100,7 @@ public enum InspectorSectionCatalog {
         sub("inspector.tachie.main", "立ち絵"), sub("inspector.tachie.expression", "表情の切り替え（再生位置）"),
         sub("inspector.tachie.image", "画像"), sub("inspector.tachie.mouth", "あいうえお（口の形）"),
         sub("inspector.rig.parts", "立ち絵パーツ"), sub("inspector.rig.expressions", "表情（パーツの組み合わせ）"),
+        sub("inspector.character.basic", "基本"), sub("inspector.character.voice", "声"), sub("inspector.character.actions", "操作"),
     ]
 
     private static let byID: [String: InspectorSectionDefinition] = Dictionary(all.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })

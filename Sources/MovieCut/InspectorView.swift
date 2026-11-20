@@ -1552,64 +1552,67 @@ struct CharacterInspector: View {
     var body: some View {
         if let c = ch {
             VStack(alignment: .leading, spacing: 8) {
-                InspectorSection(title: "基本")
-                Text("キャラクターは声と字幕の設定だけを持ちます。立ち絵は「立ち絵素材」とタイムラインの立ち絵クリップで扱います。")
-                    .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                InspectorField(label: "名前") {
-                    NameField(value: c.name) { n in model.setCharacterProperty({ $0.name = n }, name: "キャラの名前の変更", charId: charId) }
-                }
-                ColorField(label: "字幕の縁の色", hex: c.color) { hex in
-                    model.coalescedCharacterProperty({ $0.color = hex }, name: "字幕の縁の色の変更", charId: charId)
-                }
-                InspectorField(label: "字幕の文字色") {
-                    HStack(spacing: 8) {
-                        ColorPicker("", selection: Binding(get: { Color(hex: c.subtitleColor ?? "#ffffff") }, set: { v in
-                            model.coalescedCharacterProperty({ $0.subtitleColor = SpeakerSubtitleColor.normalized(v.hexString) }, name: "話し手の字幕の色の変更", charId: charId)
-                        }), supportsOpacity: false)
-                            .labelsHidden()
-                            .frame(width: 56, height: 28)
-                        Text(c.subtitleColor?.uppercased() ?? "文字スタイルの色").font(MCDesign.Font.monospaced(11)).foregroundStyle(.secondary)
-                        Button("既定に戻す") { model.setCharacterProperty({ $0.subtitleColor = nil }, name: "話し手の字幕の色を外す", charId: charId) }
-                            .controlSize(.small)
-                            .disabled(c.subtitleColor == nil)
+                InspectorSubsection("inspector.character.basic") {
+                    Text("キャラクターは声と字幕の設定だけを持ちます。立ち絵は「立ち絵素材」とタイムラインの立ち絵クリップで扱います。")
+                        .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    InspectorField(label: "名前") {
+                        NameField(value: c.name) { n in model.setCharacterProperty({ $0.name = n }, name: "キャラの名前の変更", charId: charId) }
                     }
-                }
-                .disabled(model.isLocked)
-                InspectorSection(title: "声")
-                InspectorField(label: "音声エンジン") {
-                    Picker("", selection: Binding(get: { c.engine }, set: { model.characterEngineChanged(charId: charId, to: $0) })) {
-                        Text("VOICEVOX").tag("voicevox")
-                        Text("ゆっくり (AquesTalk)").tag("aquestalk")
-                        Text("COEIROINK").tag("coeiroink")
-                        Text("SHAREVOX").tag("sharevox")
+                    ColorField(label: "字幕の縁の色", hex: c.color) { hex in
+                        model.coalescedCharacterProperty({ $0.color = hex }, name: "字幕の縁の色の変更", charId: charId)
                     }
-                    .labelsHidden()
+                    InspectorField(label: "字幕の文字色") {
+                        HStack(spacing: 8) {
+                            ColorPicker("", selection: Binding(get: { Color(hex: c.subtitleColor ?? "#ffffff") }, set: { v in
+                                model.coalescedCharacterProperty({ $0.subtitleColor = SpeakerSubtitleColor.normalized(v.hexString) }, name: "話し手の字幕の色の変更", charId: charId)
+                            }), supportsOpacity: false)
+                                .labelsHidden()
+                                .frame(width: 56, height: 28)
+                            Text(c.subtitleColor?.uppercased() ?? "文字スタイルの色").font(MCDesign.Font.monospaced(11)).foregroundStyle(.secondary)
+                            Button("既定に戻す") { model.setCharacterProperty({ $0.subtitleColor = nil }, name: "話し手の字幕の色を外す", charId: charId) }
+                                .controlSize(.small)
+                                .disabled(c.subtitleColor == nil)
+                        }
+                    }
+                    .disabled(model.isLocked)
                 }
-                if c.engine == "voicevox" { voicevoxFields(c) } else if VoicevoxFamily.isAdditionalEngine(c.engine) { familyFields(c) } else { aquestalkFields(c) }
-                if !c.hasVoiceChosen {
-                    HStack(alignment: .center, spacing: 8) {
-                        Image(systemName: "info.circle.fill").foregroundStyle(.orange)
-                        Text(L10n.t("声がまだ選ばれていません")).font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
-                        Spacer(minLength: 4)
-                        Button(L10n.t("おすすめ音声設定…")) { showPresets = true }
-                            .buttonStyle(.borderedProminent)
+                InspectorSubsection("inspector.character.voice") {
+                    InspectorField(label: "音声エンジン") {
+                        Picker("", selection: Binding(get: { c.engine }, set: { model.characterEngineChanged(charId: charId, to: $0) })) {
+                            Text("VOICEVOX").tag("voicevox")
+                            Text("ゆっくり (AquesTalk)").tag("aquestalk")
+                            Text("COEIROINK").tag("coeiroink")
+                            Text("SHAREVOX").tag("sharevox")
+                        }
+                        .labelsHidden()
+                    }
+                    if c.engine == "voicevox" { voicevoxFields(c) } else if VoicevoxFamily.isAdditionalEngine(c.engine) { familyFields(c) } else { aquestalkFields(c) }
+                    if !c.hasVoiceChosen {
+                        HStack(alignment: .center, spacing: 8) {
+                            Image(systemName: "info.circle.fill").foregroundStyle(.orange)
+                            Text(L10n.t("声がまだ選ばれていません")).font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
+                            Spacer(minLength: 4)
+                            Button(L10n.t("おすすめ音声設定…")) { showPresets = true }
+                                .buttonStyle(.borderedProminent)
+                                .controlSize(.small)
+                                .disabled(model.isLocked)
+                        }
+                    } else {
+                        Button("おすすめ音声設定…") { showPresets = true }
                             .controlSize(.small)
                             .disabled(model.isLocked)
                     }
-                } else {
-                    Button("おすすめ音声設定…") { showPresets = true }
-                        .controlSize(.small)
-                        .disabled(model.isLocked)
                 }
-                InspectorSection(title: "操作")
-                Button { Task { await model.testSpeak(charId: charId) } } label: { Text("試しに読み上げる").frame(maxWidth: .infinity) }
-                    .disabled(model.isLocked)
-                let n = CharacterEditing.voiceClips(of: charId, in: model.project).count
-                Button { Task { await model.regenerateAllVoices(charId: charId) } } label: { Text("このキャラの全セリフを作り直す\(n > 0 ? "（\(n)）" : "")").frame(maxWidth: .infinity) }
-                    .disabled(model.isLocked || n == 0)
-                Button(role: .destructive) { model.requestDeleteCharacter(charId) } label: { Text("このキャラを消す").foregroundStyle(MCDesign.Color.destructive).frame(maxWidth: .infinity) }
-                    .disabled(model.isLocked || model.project.characters.count <= 1)
-                    .help(model.project.characters.count <= 1 ? "最後の1人は消せません" : "このキャラとセリフを消します")
+                InspectorSubsection("inspector.character.actions") {
+                    Button { Task { await model.testSpeak(charId: charId) } } label: { Text("試しに読み上げる").frame(maxWidth: .infinity) }
+                        .disabled(model.isLocked)
+                    let n = CharacterEditing.voiceClips(of: charId, in: model.project).count
+                    Button { Task { await model.regenerateAllVoices(charId: charId) } } label: { Text("このキャラの全セリフを作り直す\(n > 0 ? "（\(n)）" : "")").frame(maxWidth: .infinity) }
+                        .disabled(model.isLocked || n == 0)
+                    Button(role: .destructive) { model.requestDeleteCharacter(charId) } label: { Text("このキャラを消す").foregroundStyle(MCDesign.Color.destructive).frame(maxWidth: .infinity) }
+                        .disabled(model.isLocked || model.project.characters.count <= 1)
+                        .help(model.project.characters.count <= 1 ? "最後の1人は消せません" : "このキャラとセリフを消します")
+                }
             }
             .controlSize(.regular)
             .sheet(isPresented: $showPresets) { VoicePresetSheet(model: model, charId: charId) }
