@@ -501,4 +501,4 @@ XCTest + `@testable import MovieCutCore`。ID は全て固定文字列(`newId()`
 - 追加: `docs/project-format-audit-r6.md`(本書)
 - 追加: `Tests/MovieCutCoreTests/ProjectGoldenRoundTripTests.swift`
 - 実装(`Sources/`)への変更: **なし**(コメント含め無し)
-- 注: ワークツリーに未追跡の `audit-brief-r6q1.md`(指示書)がある。本作業では触っていない。
+- 注: 指示書ファイルはコミット対象外として作業後に除去済み。本コミットに含まれるのは上記 2 ファイルのみ。
