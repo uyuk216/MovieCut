@@ -140,6 +140,15 @@ swift test --filter MenuTests
 2. 同じクラスを `--repeat`(または数回の連続実行)して通ること。高負荷(別プロセスで動画処理を走らせた状態)でも `ActiveDocument` のテストが通ること。
 3. S1 の確認: 実アプリの言語を English にした状態で `swift test --filter MenuTests` を実行し、日本語の題の比較で落ちるかどうかを確認(落ちれば、本番側の方針を決める材料)。
 
+## Mac での検証結果(統括側で実施、2026-11-21)
+
+- 検証クローン `/Users/uyu/moviecut-r5-work`(ブランチ先端 30d4306)で実施。アプリ本体は起動していない。テスト後に `openAndSavePanelService` / MovieCut.app プロセスの残留なしを確認。
+- `swift test --filter MenuTests`: **3回連続、各45件・0失敗**。
+- 状態共有しやすい関連スイート(`PreviewGuideAppTests`・`PreviewSnapAppTests`・`PreviewTierAppTests`・`InspectorSectionDisclosureAppTests`・`InspectorSectionCatalogTests`、および `PlaybackTests`・`VoiceRippleAppTests`・`TrimLoopAppTests`): いずれも 0 失敗。
+- **F1 の復元を実証**: テストホストの defaults ドメイン(`com.uyu.moviecut.test`)の `recentCustomFrameRates` に番兵値 `["11.11", "22.22"]` を入れて対象テスト単体を実行 → 通過し、実行後も番兵値がそのまま残った(旧コードの末尾 `clear()` では消えていた経路)。番兵値は検証後に削除し、元の「キー無し」状態に戻した。
+- **S1 の追試**: 同ドメインに `appLanguage = en` を入れて `MenuTests` を実行 → **45件・0失敗で、MenuTests の範囲では再現しなかった**(期待値側も同じ `L10n.current` から組み立てられるためと考えられる)。他クラスでの再現有無は未確認のため、S1 は「本番側の疑い・未再現」として残す。投入したキーは検証後に削除済み。
+- フルスイートは統括の統合時に実施(本監査では未実施)。
+
 ## 今後の推奨(今回は実施せず)
 1. **S1(L10n の実設定参照)**: テスト実行中は保存済みの言語設定を無視する一括の入口を用意する(本番コード変更が絡むため統括判断)。
 2. スナップショット系 13 ファイルの既定出力先: 開発者固有のセッションパス(`/private/tmp/claude-501/…`)を、`temporaryDirectory` 配下の UUID 付きフォルダか `XCTSkip` に整理する(公開リリースに向けた衛生。出力は目視用で検証に使っていない)。
