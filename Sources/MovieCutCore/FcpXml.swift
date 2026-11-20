@@ -193,10 +193,10 @@ public enum FcpXmlExporter {
         public var convertedCount: Int { convertedCounts.values.reduce(0, +) }
         public var hasLoss: Bool { !unsupported.isEmpty || !droppedFeatures.isEmpty }
         public var summaryLines: [String] {
-            var lines = ["書き出し: \(convertedCount) 件"]
-            for u in unsupported { lines.append("書き出せませんでした [\(u.typeName)] \(u.label): \(u.reason)") }
-            for d in droppedFeatures { lines.append("一部のみ書き出し \(d.label): \(d.feature)(\(d.reason))") }
-            for n in notes { lines.append("注記: \(n)") }
+            var lines = [String(format: L10n.t("書き出し: %d 件"), convertedCount)]
+            for u in unsupported { lines.append(String(format: L10n.t("書き出せませんでした [%@] %@: %@"), u.typeName, u.label, L10n.t(u.reason))) }
+            for d in droppedFeatures { lines.append(String(format: L10n.t("一部のみ書き出し %@: %@(%@)"), d.label, L10n.t(d.feature), L10n.t(d.reason))) }
+            for n in notes { lines.append(String(format: L10n.t("注記: %@"), L10n.t(n))) }
             return lines
         }
     }
@@ -658,9 +658,9 @@ public enum FcpXmlImporter {
         public var convertedCount: Int { convertedCounts.values.reduce(0, +) }
         public var hasLoss: Bool { !unsupported.isEmpty }
         public var summaryLines: [String] {
-            var lines = ["読み込み: \(convertedCount) 件"]
-            for u in unsupported { lines.append("読み込めませんでした [\(u.element)] \(u.label): \(u.reason)") }
-            for n in notes { lines.append("注記: \(n)") }
+            var lines = [String(format: L10n.t("読み込み: %d 件"), convertedCount)]
+            for u in unsupported { lines.append(String(format: L10n.t("読み込めませんでした [%@] %@: %@"), u.element, u.label, L10n.t(u.reason))) }
+            for n in notes { lines.append(String(format: L10n.t("注記: %@"), L10n.t(n))) }
             return lines
         }
     }

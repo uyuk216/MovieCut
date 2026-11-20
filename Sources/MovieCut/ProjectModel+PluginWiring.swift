@@ -26,7 +26,7 @@ extension ProjectModel {
         effect.color = descriptor.defaultColor
         var probe = c
         guard EffectEditing.append(&probe, [effect]) else { return false }
-        setClipProperty({ _ = EffectEditing.append(&$0, [effect]) }, name: "エフェクトの追加: \(descriptor.label)", clipId: c.id)
+        setClipProperty({ _ = EffectEditing.append(&$0, [effect]) }, name: String(format: L10n.t("エフェクトの追加: %@"), descriptor.label), clipId: c.id)
         return true
     }
 

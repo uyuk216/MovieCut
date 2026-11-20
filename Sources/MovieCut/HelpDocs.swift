@@ -18,12 +18,12 @@ enum AppInfo {
     /// About パネルの説明文。ライセンスのファイルが見つかれば「ライセンス」の語がリンクになる。
     static func credits(licenseURL: URL?) -> NSAttributedString {
         let base: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.labelColor]
-        let out = NSMutableAttributedString(string: "\(subtitle)\n\(tagline)\n\(notBundledNote)\n", attributes: base)
-        out.append(NSAttributedString(string: "詳しくは「ヘルプ」メニューの ", attributes: base))
+        let out = NSMutableAttributedString(string: "\(L10n.t(subtitle))\n\(L10n.t(tagline))\n\(L10n.t(notBundledNote))\n", attributes: base)
+        out.append(NSAttributedString(string: L10n.t("詳しくは「ヘルプ」メニューの "), attributes: base))
         var link = base
         if let u = licenseURL { link[.link] = u }
-        out.append(NSAttributedString(string: "ライセンス", attributes: link))
-        out.append(NSAttributedString(string: " と「第三者の規約」をご覧ください。", attributes: base))
+        out.append(NSAttributedString(string: L10n.t("ライセンス"), attributes: link))
+        out.append(NSAttributedString(string: L10n.t(" と「第三者の規約」をご覧ください。"), attributes: base))
         return out
     }
 
@@ -87,7 +87,7 @@ enum HelpDocs {
         guard let url = resolve(doc) else {
             let a = NSAlert()
             a.alertStyle = .warning
-            a.messageText = String(format: L10n.t("「%@」のファイルが見つかりません"), doc.title)
+            a.messageText = String(format: L10n.t("「%@」のファイルが見つかりません"), L10n.t(doc.title))
             a.informativeText = String(format: L10n.t("%@ がアプリの中にもリポジトリにもありませんでした。"), doc.fileName)
             a.runModal()
             return

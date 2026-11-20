@@ -31,8 +31,8 @@ public enum MissingMedia {
     /// 書き出しを止める文言(先頭の数件の名前を並べ、残りは件数で示す)。
     public static func blockMessage(_ items: [Item], limit: Int = 5) -> String {
         let names = items.prefix(limit).map { "・\($0.fileName)(レイヤー「\($0.trackName)」)" }
-        var msg = "素材が見つからないため書き出せません。素材の場所を直してから、もう一度書き出してください。\n" + names.joined(separator: "\n")
-        if items.count > limit { msg += "\nほか \(items.count - limit) 件" }
+        var msg = L10n.t("素材が見つからないため書き出せません。素材の場所を直してから、もう一度書き出してください。") + "\n" + names.joined(separator: "\n")
+        if items.count > limit { msg += "\n" + String(format: L10n.t("ほか %d 件"), items.count - limit) }
         return msg
     }
 

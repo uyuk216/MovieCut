@@ -41,12 +41,12 @@ extension ProjectModel {
         FontChoices.userFamilies = FontLibrary.families(in: dir)
         if !failed.isEmpty {
             errorTitle = "フォントを追加できませんでした"
-            errorMessage = "読めないファイル: " + failed.joined(separator: "、")
+            errorMessage = String(format: L10n.t("読めないファイル: %@"), failed.joined(separator: "、"))
         }
         if families.isEmpty {
             statusText = failed.isEmpty ? "追加するフォントがありません" : "フォントを追加できませんでした"
         } else {
-            statusText = "フォントを \(copied) 件追加しました(\(families.joined(separator: "、")))"
+            statusText = String(format: L10n.t("フォントを %d 件追加しました(%@)"), copied, families.joined(separator: "、"))
         }
         return families
     }

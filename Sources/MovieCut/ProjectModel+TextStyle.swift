@@ -30,7 +30,7 @@ extension ProjectModel {
         guard let c = styleTarget(clipId) else { return false }
         var probe = c
         guard TextStyleEditing.setAnim(&probe, kind: kind, duration: duration, speed: speed) else { return false }
-        setClipProperty({ _ = TextStyleEditing.setAnim(&$0, kind: kind, duration: duration, speed: speed) }, name: "文字アニメーション: " + kind.label, clipId: c.id)
+        setClipProperty({ _ = TextStyleEditing.setAnim(&$0, kind: kind, duration: duration, speed: speed) }, name: String(format: L10n.t("文字アニメーション: %@"), L10n.t(kind.label)), clipId: c.id)
         return true
     }
 
@@ -91,7 +91,7 @@ extension ProjectModel {
         var probe = c
         guard s.look.apply(to: &probe) else { return false }
         let look = s.look
-        setClipProperty({ _ = look.apply(to: &$0) }, name: "スタイルを適用: " + s.name, clipId: c.id)
+        setClipProperty({ _ = look.apply(to: &$0) }, name: String(format: L10n.t("スタイルを適用: %@"), s.name), clipId: c.id)
         return true
     }
 
@@ -156,7 +156,7 @@ extension ProjectModel {
             statusText = r.lockedSkipped > 0 ? "ロックされたレイヤーの文字は変えませんでした" : "変わる文字クリップがありません"
             return 0
         }
-        edit("スタイルを一括適用: " + s.name) { $0 = r.project }
+        edit(String(format: L10n.t("スタイルを一括適用: %@"), s.name)) { $0 = r.project }
         var note = "\(r.changedIds.count) 個の文字クリップにスタイルを当てました"
         if r.lockedSkipped > 0 { note += "(ロックされた \(r.lockedSkipped) 個は変えていません)" }
         statusText = note

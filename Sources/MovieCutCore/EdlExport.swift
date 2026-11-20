@@ -46,9 +46,9 @@ public enum EdlExporter {
         public init() {}
         public var hasLoss: Bool { !skipped.isEmpty }
         public var summaryLines: [String] {
-            var lines = ["書き出し: \(eventCount) イベント"]
-            for s in skipped { lines.append("書き出せませんでした \(s.label): \(s.reason)") }
-            for n in notes { lines.append("注記: \(n)") }
+            var lines = [String(format: L10n.t("書き出し: %d イベント"), eventCount)]
+            for s in skipped { lines.append(String(format: L10n.t("書き出せませんでした %@: %@"), s.label, L10n.t(s.reason))) }
+            for n in notes { lines.append(String(format: L10n.t("注記: %@"), L10n.t(n))) }
             return lines
         }
     }

@@ -85,7 +85,7 @@ extension ProjectModel {
             ? add
             : old.trimmingCharacters(in: .newlines) + "\n" + add
         registerScriptUndo(restoreTo: old, name: name)
-        statusText = "台本欄へ \(fresh.count) 行を足しました(1 回で元に戻せます)"
+        statusText = String(format: L10n.t("台本欄へ %d 行を足しました(1 回で元に戻せます)"), fresh.count)
         return fresh.count
     }
 
@@ -96,7 +96,7 @@ extension ProjectModel {
         um.registerUndo(withTarget: self) { m in
             MainActor.assumeIsolated { m.restoreScriptText(value, name: name) }
         }
-        um.setActionName(name)
+        um.setActionName(L10n.t(name))
         um.endUndoGrouping()
     }
 

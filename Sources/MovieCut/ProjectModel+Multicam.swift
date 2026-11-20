@@ -86,7 +86,7 @@ extension ProjectModel {
         }
         switch Multicam.cut(in: project, groupId: g.id, angle: angle, at: t) {
         case .cut(let p):
-            let ok = edit("アングル\(angle + 1)に切り替え") { $0 = p }
+            let ok = edit(String(format: L10n.t("アングル%dに切り替え"), angle + 1)) { $0 = p }
             if ok { statusText = String(format: L10n.t("%.2f 秒から %@ に切り替えました"), t, g.angles[angle].name) }
             return ok
         case .unchanged: statusText = "すでにその角度です"

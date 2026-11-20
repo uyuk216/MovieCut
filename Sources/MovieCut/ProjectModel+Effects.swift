@@ -18,7 +18,7 @@ extension ProjectModel {
         guard let c = targetClip(clipId) else { return false }
         var probe = c
         guard EffectEditing.add(&probe, kind) else { return false }
-        setClipProperty({ _ = EffectEditing.add(&$0, kind) }, name: "エフェクトの追加: \(kind.label)", clipId: c.id)
+        setClipProperty({ _ = EffectEditing.add(&$0, kind) }, name: String(format: L10n.t("エフェクトの追加: %@"), L10n.t(kind.label)), clipId: c.id)
         return true
     }
 
@@ -32,7 +32,7 @@ extension ProjectModel {
         var probe = c
         guard EffectEditing.remove(&probe, at: index) else { return false }
         let label = c.effects[index].known?.label ?? "エフェクト"
-        setClipProperty({ _ = EffectEditing.remove(&$0, at: index) }, name: "エフェクトの削除: \(label)", clipId: c.id)
+        setClipProperty({ _ = EffectEditing.remove(&$0, at: index) }, name: String(format: L10n.t("エフェクトの削除: %@"), label), clipId: c.id)
         return true
     }
 
@@ -132,7 +132,7 @@ extension ProjectModel {
         }
         var probe = c
         guard EffectEditing.setLUTPath(&probe, url.path) else { return false }
-        setClipProperty({ _ = EffectEditing.setLUTPath(&$0, url.path) }, name: "LUT の読み込み: \(url.lastPathComponent)", clipId: c.id)
+        setClipProperty({ _ = EffectEditing.setLUTPath(&$0, url.path) }, name: String(format: L10n.t("LUT の読み込み: %@"), url.lastPathComponent), clipId: c.id)
         return true
     }
 
@@ -165,7 +165,7 @@ extension ProjectModel {
         }
         var probe = c
         guard EffectEditing.setColorTransferPath(&probe, url.path) else { return false }
-        setClipProperty({ _ = EffectEditing.setColorTransferPath(&$0, url.path) }, name: "色調転写の参照: \(url.lastPathComponent)", clipId: c.id)
+        setClipProperty({ _ = EffectEditing.setColorTransferPath(&$0, url.path) }, name: String(format: L10n.t("色調転写の参照: %@"), url.lastPathComponent), clipId: c.id)
         return true
     }
 

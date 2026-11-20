@@ -69,9 +69,9 @@ public enum PrprojImporter {
         public var convertedCount: Int { convertedCounts.values.reduce(0, +) }
         public var hasLoss: Bool { !unsupported.isEmpty }
         public var summaryLines: [String] {
-            var lines = ["読み込み: \(convertedCount) 件"]
-            for u in unsupported { lines.append("読み込めませんでした [\(u.element)] \(u.label): \(u.reason)") }
-            for n in notes { lines.append("注記: \(n)") }
+            var lines = [String(format: L10n.t("読み込み: %d 件"), convertedCount)]
+            for u in unsupported { lines.append(String(format: L10n.t("読み込めませんでした [%@] %@: %@"), u.element, u.label, L10n.t(u.reason))) }
+            for n in notes { lines.append(String(format: L10n.t("注記: %@"), L10n.t(n))) }
             return lines
         }
     }

@@ -161,7 +161,7 @@ public enum EffectPreset: String, CaseIterable, Sendable {
         }
     }
 
-    public var undoName: String { "エフェクトのプリセット: " + title }
+    public var undoName: String { String(format: L10n.t("エフェクトのプリセット: %@"), L10n.t(title)) }
 
     /// 足すエフェクト(値は仕様の範囲内)。
     public var effects: [Effect] {

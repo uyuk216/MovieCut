@@ -16,12 +16,12 @@ extension ProjectModel {
     }
 
     func rigSelect(tachieId: String, slot: String, index: Int) {
-        editRig(tachieId: tachieId, name: "立ち絵パーツの切り替え(\(slot))") { RigEditing.select($0, slot: slot, index: index) }
+        editRig(tachieId: tachieId, name: String(format: L10n.t("立ち絵パーツの切り替え(%@)"), slot)) { RigEditing.select($0, slot: slot, index: index) }
     }
 
     /// 大きさが違うパーツの縦の揃え方(上・中央・下)。
     func rigSetAlignment(tachieId: String, _ a: PartAlignment) {
-        editRig(tachieId: tachieId, name: "立ち絵パーツの揃え方(\(a.label))") { RigEditing.setAlignment($0, a) }
+        editRig(tachieId: tachieId, name: String(format: L10n.t("立ち絵パーツの揃え方(%@)"), L10n.t(a.label))) { RigEditing.setAlignment($0, a) }
     }
 
     /// スロットを体の後ろ(一番下)に置くか、前に重ねるか。
@@ -149,11 +149,11 @@ extension ProjectModel {
             added.append(t)
         }
         let ids = added.map(\.id)
-        guard edit("立ち絵パーツの読み込み(\(added.count) 件)", { p in for t in added { p = TachieEditing.add(p, tachie: t) } }) else { rigGroupPlan = nil; return [] }
+        guard edit(String(format: L10n.t("立ち絵パーツの読み込み(%d 件)"), added.count), { p in for t in added { p = TachieEditing.add(p, tachie: t) } }) else { rigGroupPlan = nil; return [] }
         selectedTachieId = ids.first
         selectedClipId = nil
         rigGroupPlan = nil
-        statusText = "立ち絵素材を \(added.count) 件追加しました(" + added.map(\.name).joined(separator: "・") + ")"
+        statusText = String(format: L10n.t("立ち絵素材を %d 件追加しました(%@)"), added.count, added.map(\.name).joined(separator: "・"))
         return ids
     }
 
@@ -186,7 +186,7 @@ extension ProjectModel {
         guard let id = addTachie(t, undoName: undoName) else { return nil }
         selectedTachieId = id
         selectedClipId = nil
-        statusText = "立ち絵「\(name)」を追加しました(" + rig.slots.map { "\($0.name) \($0.parts.count)" }.joined(separator: "・") + ")。" + detail.joined(separator: "。")
+        statusText = String(format: L10n.t("立ち絵「%@」を追加しました(%@)。%@"), name, rig.slots.map { "\($0.name) \($0.parts.count)" }.joined(separator: "・"), detail.joined(separator: "。"))
         return id
     }
 }
