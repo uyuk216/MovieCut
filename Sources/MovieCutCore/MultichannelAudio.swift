@@ -238,12 +238,12 @@ public enum MultichannelDownmix {
     public static func surround51Placement(for role: AudioChannelRole, extraIndex: Int? = nil) -> [(channel: Int, gain: Float)] {
         let g = surroundGain
         switch role {
-        case .left: return [(ch51L, 1)]
-        case .right: return [(ch51R, 1)]
-        case .center: return [(ch51C, 1)]
-        case .lfe: return [(ch51LFE, 1)]
-        case .leftSurround: return [(ch51Ls, 1)]
-        case .rightSurround: return [(ch51Rs, 1)]
+        case .left: return [(ch51L, 1.0)]
+        case .right: return [(ch51R, 1.0)]
+        case .center: return [(ch51C, 1.0)]
+        case .lfe: return [(ch51LFE, 1.0)]
+        case .leftSurround: return [(ch51Ls, 1.0)]
+        case .rightSurround: return [(ch51Rs, 1.0)]
         case .leftBack: return [(ch51Ls, g)]
         case .rightBack: return [(ch51Rs, g)]
         case .centerSurround: return [(ch51Ls, g), (ch51Rs, g)]
@@ -271,7 +271,7 @@ public enum MultichannelDownmix {
                 return p
             }
         }
-        if n == 1 { return mode == .firstPair ? fromStereo([(1, 1)]) : [[(ch51C, 1)]] }
+        if n == 1 { return mode == .firstPair ? fromStereo([(1, 1)]) : [[(ch51C, 1.0)]] }
         switch mode {
         case .downmix:
             return roles.enumerated().map { (i, r) -> [(channel: Int, gain: Float)] in surround51Placement(for: r, extraIndex: r == .unknown ? i : nil) }
@@ -279,7 +279,7 @@ public enum MultichannelDownmix {
             return fromStereo(stereoWeights(roles: roles, mode: .firstPair))
         case .center:
             guard roles.contains(.center) else { return fromStereo(stereoWeights(roles: roles, mode: .downmix)) }
-            return roles.map { (r: AudioChannelRole) -> [(channel: Int, gain: Float)] in r == .center ? [(ch51C, 1)] : [] }
+            return roles.map { (r: AudioChannelRole) -> [(channel: Int, gain: Float)] in r == .center ? [(ch51C, 1.0)] : [] }
         }
     }
 
