@@ -39,7 +39,9 @@ struct DialogueSuggestionSheet: View {
             }
             HStack(spacing: 8) {
                 Text(L10n.t("件数")).frame(width: 70, alignment: .trailing)
-                Stepper(value: $count, in: DialogueSuggestionPrompt.countRange) { Text(String(format: L10n.t("%d 件"), count)) }
+                LabeledStepperRow(label: String(format: L10n.t("%d 件"), count),
+                                  onIncrement: { count = StepperValue.stepped(count, by: 1, in: DialogueSuggestionPrompt.countRange) },
+                                  onDecrement: { count = StepperValue.stepped(count, by: -1, in: DialogueSuggestionPrompt.countRange) })
                 Spacer()
                 if generating {
                     ProgressView().controlSize(.small)

@@ -853,8 +853,16 @@ struct ClipInspector: View {
         .toggleStyle(.checkbox)
         if let m = c.meshWarp {
             HStack(spacing: 12) {
-                Stepper("列 \(m.cols)", value: Binding(get: { m.cols }, set: { model.setMeshGrid(cols: $0, rows: m.rows, clipId: clipId) }), in: MeshWarp.minGrid...MeshWarp.maxGrid)
-                Stepper("行 \(m.rows)", value: Binding(get: { m.rows }, set: { model.setMeshGrid(cols: m.cols, rows: $0, clipId: clipId) }), in: MeshWarp.minGrid...MeshWarp.maxGrid)
+                LabeledStepperRow(label: "列 \(m.cols)",
+                                  onIncrement: { model.liveMeshGrid(cols: StepperValue.stepped(m.cols, by: 1, in: MeshWarp.minGrid...MeshWarp.maxGrid), rows: m.rows, clipId: clipId) },
+                                  onDecrement: { model.liveMeshGrid(cols: StepperValue.stepped(m.cols, by: -1, in: MeshWarp.minGrid...MeshWarp.maxGrid), rows: m.rows, clipId: clipId) },
+                                  onPressBegan: { model.beginStepperSession() },
+                                  onPressEnded: { model.commitStepperSession(ProjectModel.warpUndoName) })
+                LabeledStepperRow(label: "行 \(m.rows)",
+                                  onIncrement: { model.liveMeshGrid(cols: m.cols, rows: StepperValue.stepped(m.rows, by: 1, in: MeshWarp.minGrid...MeshWarp.maxGrid), clipId: clipId) },
+                                  onDecrement: { model.liveMeshGrid(cols: m.cols, rows: StepperValue.stepped(m.rows, by: -1, in: MeshWarp.minGrid...MeshWarp.maxGrid), clipId: clipId) },
+                                  onPressBegan: { model.beginStepperSession() },
+                                  onPressEnded: { model.commitStepperSession(ProjectModel.warpUndoName) })
             }
             .disabled(model.isLocked)
             ForEach(Array(m.points.enumerated()), id: \.offset) { i, pt in
@@ -1381,10 +1389,12 @@ extension ClipInspector {
             model.coalescedClipProperty({ $0.visualizer = Self.vizUpdated($0.visualizer) { $0.color = hex } }, name: "ビジュアライザの色の変更", clipId: clipId)
         }
         InspectorField(label: L10n.t("本数")) {
-            Stepper(value: Binding(get: { vz.countOrDefault }, set: { v in model.setClipProperty({ $0.visualizer = Self.vizUpdated($0.visualizer) { $0.count = v } }, name: "ビジュアライザの本数の変更", clipId: clipId) }),
-                    in: Visualizer.countRange) {
-                Text(String(format: L10n.t("%d 本"), vz.countOrDefault)).monospacedDigit()
-            }
+            LabeledStepperRow(label: String(format: L10n.t("%d 本"), vz.countOrDefault),
+                              onIncrement: { model.liveClipProperty({ $0.visualizer = Self.vizUpdated($0.visualizer) { $0.count = StepperValue.stepped(vz.countOrDefault, by: 1, in: Visualizer.countRange) } }, name: "ビジュアライザの本数の変更", clipId: clipId) },
+                              onDecrement: { model.liveClipProperty({ $0.visualizer = Self.vizUpdated($0.visualizer) { $0.count = StepperValue.stepped(vz.countOrDefault, by: -1, in: Visualizer.countRange) } }, name: "ビジュアライザの本数の変更", clipId: clipId) },
+                              onPressBegan: { model.beginStepperSession() },
+                              onPressEnded: { model.commitStepperSession("ビジュアライザの本数の変更") },
+                              monospacedDigits: true)
         }
     }
 
@@ -1424,17 +1434,21 @@ extension ClipInspector {
             }
         }
         InspectorField(label: L10n.t("線の太さ")) {
-            Stepper(value: Binding(get: { f.strokeWidthOrDefault }, set: { v in model.coalescedClipProperty({ $0.figure = Self.figUpdated($0.figure) { $0.strokeWidth = v } }, name: "図形の線の太さの変更", clipId: clipId) }),
-                    in: Figure.strokeWidthRange, step: 1) {
-                Text("\(Int(f.strokeWidthOrDefault)) px").monospacedDigit()
-            }
+            LabeledStepperRow(label: "\(Int(f.strokeWidthOrDefault)) px",
+                              onIncrement: { model.liveClipProperty({ $0.figure = Self.figUpdated($0.figure) { $0.strokeWidth = StepperValue.stepped(f.strokeWidthOrDefault, by: 1, in: Figure.strokeWidthRange) } }, name: "図形の線の太さの変更", clipId: clipId) },
+                              onDecrement: { model.liveClipProperty({ $0.figure = Self.figUpdated($0.figure) { $0.strokeWidth = StepperValue.stepped(f.strokeWidthOrDefault, by: -1, in: Figure.strokeWidthRange) } }, name: "図形の線の太さの変更", clipId: clipId) },
+                              onPressBegan: { model.beginStepperSession() },
+                              onPressEnded: { model.commitStepperSession("図形の線の太さの変更") },
+                              monospacedDigits: true)
         }
         if f.figureKind == .rect {
             InspectorField(label: L10n.t("角丸")) {
-                Stepper(value: Binding(get: { f.cornerOrDefault }, set: { v in model.coalescedClipProperty({ $0.figure = Self.figUpdated($0.figure) { $0.corner = v } }, name: "図形の角丸の変更", clipId: clipId) }),
-                        in: Figure.cornerRange, step: 0.05) {
-                    Text("\(Int((f.cornerOrDefault * 100).rounded())) %").monospacedDigit()
-                }
+                LabeledStepperRow(label: "\(Int((f.cornerOrDefault * 100).rounded())) %",
+                                  onIncrement: { model.liveClipProperty({ $0.figure = Self.figUpdated($0.figure) { $0.corner = StepperValue.stepped(f.cornerOrDefault, by: 0.05, in: Figure.cornerRange) } }, name: "図形の角丸の変更", clipId: clipId) },
+                                  onDecrement: { model.liveClipProperty({ $0.figure = Self.figUpdated($0.figure) { $0.corner = StepperValue.stepped(f.cornerOrDefault, by: -0.05, in: Figure.cornerRange) } }, name: "図形の角丸の変更", clipId: clipId) },
+                                  onPressBegan: { model.beginStepperSession() },
+                                  onPressEnded: { model.commitStepperSession("図形の角丸の変更") },
+                                  monospacedDigits: true)
             }
         }
     }

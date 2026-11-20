@@ -19,6 +19,25 @@ public enum StepperDirection: Equatable, Sendable {
     case decrement
 }
 
+/// ステッパーの 1 ステップぶんの値の計算。SwiftUI の `Stepper` が内部でやっていた
+/// 「ステップ幅ぶん動かして値域で止める」を、共通部品(LabeledStepperRow /
+/// PressHoldStepper の呼び出し側)が明示的に行うための純粋な計算。
+/// 値域の端では端の値を返し(越えない)、非有限の値はそのまま返す(呼び出し側の
+/// 既存の丸めに任せる)。時計も UI も持たないので単体テストできる。
+public enum StepperValue {
+    /// 整数版: `value` を `delta` ぶん動かし、`range` で止めた値。
+    public static func stepped(_ value: Int, by delta: Int, in range: ClosedRange<Int>) -> Int {
+        let moved = value.addingReportingOverflow(delta).overflow ? (delta > 0 ? Int.max : Int.min) : value + delta
+        return min(max(moved, range.lowerBound), range.upperBound)
+    }
+
+    /// 小数版: `value` を `delta` ぶん動かし、`range` で止めた値。
+    public static func stepped(_ value: Double, by delta: Double, in range: ClosedRange<Double>) -> Double {
+        guard value.isFinite, delta.isFinite else { return value }
+        return min(max(value + delta, range.lowerBound), range.upperBound)
+    }
+}
+
 /// 長押し連続発火の状態機械。値型で、時刻はすべて引数で受け取る。
 public struct StepperRepeatScheduler: Equatable, Sendable {
     /// 押してから連続発火が始まるまでの待ち時間(秒)。

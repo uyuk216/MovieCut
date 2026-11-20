@@ -170,3 +170,35 @@ final class StepperRepeatTests: XCTestCase {
         }
     }
 }
+
+/// ステッパーの 1 ステップぶんの値計算(StepperValue)。ラベル付き行の共通部品が
+/// SwiftUI Stepper の代わりに行う「ステップ幅ぶん動かして値域で止める」の固定。
+final class StepperValueTests: XCTestCase {
+
+    func testIntSteppingMovesByDelta() {
+        XCTAssertEqual(StepperValue.stepped(4, by: 1, in: 1...8), 5)
+        XCTAssertEqual(StepperValue.stepped(4, by: -1, in: 1...8), 3)
+        XCTAssertEqual(StepperValue.stepped(0, by: 1, in: -24...24), 1)
+        XCTAssertEqual(StepperValue.stepped(8, by: -3, in: 1...30), 5)
+    }
+
+    func testIntSteppingClampsAtRangeEnds() {
+        XCTAssertEqual(StepperValue.stepped(8, by: 1, in: 1...8), 8, "上限では止まる")
+        XCTAssertEqual(StepperValue.stepped(1, by: -1, in: 1...8), 1, "下限では止まる")
+        XCTAssertEqual(StepperValue.stepped(0, by: -1, in: 0...128), 0)
+        XCTAssertEqual(StepperValue.stepped(127, by: 5, in: 0...128), 128, "越える分は端で止まる")
+    }
+
+    func testDoubleSteppingMovesAndClamps() {
+        XCTAssertEqual(StepperValue.stepped(2.0, by: 1, in: Figure.strokeWidthRange), 3.0, accuracy: 1e-9)
+        XCTAssertEqual(StepperValue.stepped(0.1, by: 0.05, in: Figure.cornerRange), 0.15, accuracy: 1e-9)
+        XCTAssertEqual(StepperValue.stepped(0.5, by: 0.05, in: Figure.cornerRange), 0.5, accuracy: 1e-9, "上限で止まる")
+        XCTAssertEqual(StepperValue.stepped(0.0, by: -0.05, in: Figure.cornerRange), 0.0, accuracy: 1e-9, "下限で止まる")
+        XCTAssertEqual(StepperValue.stepped(60.0, by: 1, in: Figure.strokeWidthRange), 60.0, accuracy: 1e-9)
+    }
+
+    func testDoubleSteppingKeepsNonFiniteValue() {
+        XCTAssertTrue(StepperValue.stepped(Double.nan, by: 1, in: 0...10).isNaN)
+        XCTAssertEqual(StepperValue.stepped(5.0, by: Double.nan, in: 0...10), 5.0, accuracy: 1e-9)
+    }
+}

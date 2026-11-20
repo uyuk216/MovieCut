@@ -22,8 +22,12 @@ struct ScaleDuplicateSheet: View {
             Picker(L10n.t("音階"), selection: $scale) {
                 ForEach(PitchScale.allCases, id: \.self) { Text($0.title).tag($0) }
             }
-            Stepper(value: $rootShift, in: -24...24) { Text(String(format: L10n.t("開始の音: 元の音から %@"), Self.semitoneText(rootShift))) }
-            Stepper(value: $count, in: 1...PitchLayout.maxCount) { Text(String(format: L10n.t("個数: %d"), count)) }
+            LabeledStepperRow(label: String(format: L10n.t("開始の音: 元の音から %@"), Self.semitoneText(rootShift)),
+                              onIncrement: { rootShift = StepperValue.stepped(rootShift, by: 1, in: -24...24) },
+                              onDecrement: { rootShift = StepperValue.stepped(rootShift, by: -1, in: -24...24) })
+            LabeledStepperRow(label: String(format: L10n.t("個数: %d"), count),
+                              onIncrement: { count = StepperValue.stepped(count, by: 1, in: 1...PitchLayout.maxCount) },
+                              onDecrement: { count = StepperValue.stepped(count, by: -1, in: 1...PitchLayout.maxCount) })
             Toggle(L10n.t("下降する"), isOn: $descending).toggleStyle(.checkbox)
             Group {
                 if let plan {
@@ -73,8 +77,12 @@ struct BeatPlaceSheet: View {
             Text(L10n.t("クリップの位置以降のマーカーの位置に、選んだクリップを繰り返し置きます。次のマーカーまでより長いぶんは短くなります。元のクリップが 1 つ目になります。"))
                 .font(.callout).foregroundStyle(.secondary)
             Toggle(L10n.t("「ビート」のマーカーだけを使う"), isOn: $beatsOnly).toggleStyle(.checkbox)
-            Stepper(value: $pitchStep, in: -12...12) { Text(String(format: L10n.t("1 つごとの音程の変化: %@"), ScaleDuplicateSheet.semitoneText(pitchStep))) }
-            Stepper(value: $limit, in: 0...PitchLayout.maxCount) { Text(L10n.t("個数の上限: ") + (limit == 0 ? "なし（すべて）" : "\(limit)")) }
+            LabeledStepperRow(label: String(format: L10n.t("1 つごとの音程の変化: %@"), ScaleDuplicateSheet.semitoneText(pitchStep)),
+                              onIncrement: { pitchStep = StepperValue.stepped(pitchStep, by: 1, in: -12...12) },
+                              onDecrement: { pitchStep = StepperValue.stepped(pitchStep, by: -1, in: -12...12) })
+            LabeledStepperRow(label: L10n.t("個数の上限: ") + (limit == 0 ? "なし（すべて）" : "\(limit)"),
+                              onIncrement: { limit = StepperValue.stepped(limit, by: 1, in: 0...PitchLayout.maxCount) },
+                              onDecrement: { limit = StepperValue.stepped(limit, by: -1, in: 0...PitchLayout.maxCount) })
             Group {
                 if let plan {
                     if plan.steps.isEmpty {

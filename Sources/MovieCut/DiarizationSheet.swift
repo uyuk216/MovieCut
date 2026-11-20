@@ -33,7 +33,9 @@ struct DiarizationSheet: View {
                 }
                 .pickerStyle(.segmented)
                 .frame(width: 200)
-                Stepper(value: $maxSpeakers, in: 1...8) { Text(String(format: L10n.t("話者は最大 %d 人"), maxSpeakers)) }
+                LabeledStepperRow(label: String(format: L10n.t("話者は最大 %d 人"), maxSpeakers),
+                                  onIncrement: { maxSpeakers = StepperValue.stepped(maxSpeakers, by: 1, in: 1...8) },
+                                  onDecrement: { maxSpeakers = StepperValue.stepped(maxSpeakers, by: -1, in: 1...8) })
                     .font(MCDesign.Font.subheadline)
                 Button(L10n.t("分け直す")) { recluster() }
                     .disabled(run == nil)

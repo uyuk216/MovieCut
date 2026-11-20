@@ -20,6 +20,13 @@ extension ProjectModel {
         setClipProperty({ c in _ = WarpEditing.setMeshGrid(&c, cols: cols, rows: rows) }, name: Self.warpUndoName, clipId: clipId)
     }
 
+    /// ステッパー行の押下セッション中(`beginStepperSession` 〜 `commitStepperSession`)の格子の書き換え。
+    /// セッション中は Undo に積まず、離したときにセッション全体で 1 回になる。
+    /// セッションの外(キーボード操作など)では 1 回の編集として書く(`liveClipProperty` の作法)。
+    func liveMeshGrid(cols: Int, rows: Int, clipId: String? = nil) {
+        liveClipProperty({ c in _ = WarpEditing.setMeshGrid(&c, cols: cols, rows: rows) }, name: Self.warpUndoName, clipId: clipId)
+    }
+
     func resetMeshPoint(index: Int, clipId: String? = nil) {
         setClipProperty({ c in _ = WarpEditing.resetMeshPoint(&c, index: index) }, name: Self.warpUndoName, clipId: clipId)
     }

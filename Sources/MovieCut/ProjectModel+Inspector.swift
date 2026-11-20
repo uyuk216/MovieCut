@@ -146,6 +146,23 @@ extension ProjectModel {
         coalescedClipProperty({ field.apply(value, to: &$0) }, name: field.undoName, clipId: clipId)
     }
 
+    // MARK: ステッパーの押下セッション(長押しを Undo 1 回にまとめる)
+
+    /// ラベル付きステッパー行(LabeledStepperRow)の押下開始。たまっている coalesced
+    /// 編集を先に確定してから、スライダーのドラッグと同じジェスチャを始める。
+    /// セッション中、行のステップは `liveClipProperty` 系で書く(Undo に積まない)。
+    func beginStepperSession() {
+        flushCoalesced()
+        beginGesture()
+    }
+
+    /// 押下終了。セッション中に何か変わっていれば、全体を 1 回の Undo として登録する。
+    /// 値域の端で何も変わらなかったセッション・短押しで値が戻ったセッションは何も登録しない
+    /// (`commitGesture` の既定の挙動)。
+    func commitStepperSession(_ name: String) {
+        commitGesture(name)
+    }
+
     /// まとめている連続編集があれば、いま確定する(入力欄を離れたとき・別の編集の前・選択が変わったとき)。
     func flushCoalesced() {
         coalesceTask?.cancel()
