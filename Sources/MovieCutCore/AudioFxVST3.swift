@@ -110,14 +110,19 @@ public extension AudioFx {
     var enabledVST3Slots: [VST3Slot] { vst3Slots.filter { $0.isEnabled } }
     /// VST3 指定が音に効く場合のキャッシュ鍵部品(従来の `cacheToken` には含めない。
     /// 再生キャッシュ鍵は `AudioCacheKey` がこの材料を別枠で足す)。
-    /// 有効なスロットだけを、バンドル ID・パラメータ(キー順)・状態の長さで決定的に並べる。
+    /// 有効なスロットだけを、バンドル ID・パラメータ(キー順)・状態の長さと内容のハッシュで決定的に並べる。
     var vst3CacheToken: String {
         enabledVST3Slots.map { slot in
             var part = "vst3=" + slot.bundleID.lowercased()
             if let params = slot.params, !params.isEmpty {
                 part += "(" + params.keys.sorted().map { "\($0)=\(params[$0]!)" }.joined(separator: ",") + ")"
             }
-            if let state = slot.state, !state.isEmpty { part += "[state:\(state.count)]" }
+            if let state = slot.state, !state.isEmpty {
+                // 長さだけだと、同じ長さで中身の違う状態が同じ鍵になり古い音が再生される。FNV-1a で中身も鍵に入れる
+                var h: UInt64 = 0xcbf29ce484222325
+                for b in state.utf8 { h = (h ^ UInt64(b)) &* 0x100000001b3 }
+                part += "[state:\(state.utf8.count):\(String(h, radix: 16))]"
+            }
             return part
         }.joined(separator: ";")
     }

@@ -137,6 +137,19 @@ final class VST3WiringTests: XCTestCase {
         XCTAssertEqual(try AudioFixture.peak(wet, from: 0.05, to: 0.95), 0.15, accuracy: 0.04, "自動化の書き出しにも VST3 が効く")
     }
 
+    // MARK: 再生キャッシュ鍵
+
+    /// 同じ長さで中身の違う状態チャンクは、別の鍵にならなければならない(長さだけだと古い音が再生される)。
+    func testVST3CacheTokenDistinguishesStateContentOfSameLength() {
+        func fx(_ state: String) -> AudioFx {
+            AudioFx(vst3: [AudioFx.VST3Slot(bundleID: "com.example.fakegain", state: state)])
+        }
+        let a = fx(Data([1, 2, 3, 4]).base64EncodedString())
+        let b = fx(Data([9, 8, 7, 6]).base64EncodedString())
+        XCTAssertNotEqual(a.vst3CacheToken, b.vst3CacheToken)
+        XCTAssertEqual(a.vst3CacheToken, fx(Data([1, 2, 3, 4]).base64EncodedString()).vst3CacheToken, "同じ状態なら鍵は決定的に同じ")
+    }
+
     // MARK: 測定経路(Loudness は書き出しと同じミックスを測る)
 
     func testLoudnessMeasureReflectsVST3() throws {

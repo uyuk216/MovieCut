@@ -26,6 +26,35 @@ final class L10nTests: XCTestCase {
         }
     }
 
+    /// 書式指定子(%d %@ %.2f など)の並びが、原文と英訳で同じであること(String(format: L10n.t(原文), ...) が壊れない)。
+    func testFormatSpecifiersMatchBetweenJapaneseAndEnglish() throws {
+        let re = try NSRegularExpression(pattern: "%(?:\\d+\\$)?[-+ #0]*\\d*(?:\\.\\d+)?(?:l{0,2}|h{0,2}|q|z)[diuoxXfFeEgGcsS@]")
+        func specs(_ s: String) -> [String] {
+            let ns = s as NSString
+            return re.matches(in: s, range: NSRange(location: 0, length: ns.length)).map {
+                // 幅・精度・長さ修飾は無視し、型の文字だけで比べる
+                String(ns.substring(with: $0.range).last!)
+            }
+        }
+        for (ja, en) in L10nTable.english {
+            XCTAssertEqual(specs(ja), specs(en), "書式指定子が原文と英訳で食い違う: \(ja) → \(en)")
+        }
+    }
+
+    /// NSPopUpButton は同じタイトルの項目を 1 つにまとめてしまう。訳したあとの選択肢のタイトルが重ならないこと
+    /// (重なると選んだ位置と enum の並びがずれる)。
+    func testTranslatedPopupChoicesStayDistinct() {
+        L10n.force(.en)
+        func check(_ name: String, _ titles: [String]) {
+            XCTAssertEqual(Set(titles).count, titles.count, "\(name) の英訳が重複している: \(titles)")
+        }
+        check("AI 翻訳先", AITranslatePrompt.Language.allCases.map { L10n.t($0.label) })
+        check("AI 言い換え", AIRewritePrompt.Mode.allCases.map { L10n.t($0.title) })
+        check("AI プロバイダ", AIProviderKind.allCases.map { L10n.t($0.title) })
+        check("画像サイズ", ImageGenerationSize.allCases.map { L10n.t($0.title) })
+        check("動画サイズ", VideoGenerationSize.allCases.map { L10n.t($0.title) })
+    }
+
     func testJapaneseIsIdentityAndEnglishTranslates() {
         for (ja, en) in L10nTable.english {
             XCTAssertEqual(L10n.t(ja, in: .ja), ja, "日本語では何も変わらない")
