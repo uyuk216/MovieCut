@@ -548,13 +548,18 @@ final class ProjectModel: ObservableObject {
         return true
     }
 
+    static let scopeLostNotice = "複合クリップの中の状態を根へ戻せなかったため、この編集は反映されませんでした"
     static let lockedNotice = "ロックされたレイヤー・クリップは編集できません"
 
     private func replace(with newView: Project, name: String) {
         // シーンの中にいるあいだは、見え方をシーンの定義へ戻してから根にする(複合スコープとは同時に入らない)
         var rootCandidate = newView
         if let sid = editingSceneId, let sr = sceneScopeRoot, let e = SceneScope.embed(view: newView, into: sr, sceneId: sid) { rootCandidate = e }
-        guard let rootNew = compoundPath.isEmpty ? rootCandidate : scopeRoot.flatMap({ CompoundScope.embed(view: rootCandidate, into: $0, path: compoundPath) }) else { return }
+        guard let rootNew = compoundPath.isEmpty ? rootCandidate : scopeRoot.flatMap({ CompoundScope.embed(view: rootCandidate, into: $0, path: compoundPath) }) else {
+            // 通常は届かない(applyRoot が「path 非空 ⇒ scopeRoot あり・path は根に実在」を保つ)。崩れたときに無言で捨てない
+            statusText = Self.scopeLostNotice
+            return
+        }
         applyRoot(rootNew, name: name)
     }
 

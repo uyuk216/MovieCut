@@ -95,3 +95,17 @@ final class DragRevertAuditTests: XCTestCase {
         XCTAssertEqual(m.clip("a")?.volume, nil)
     }
 }
+
+/// 複合スコープの根が失われた(通常は届かない)状態で編集を確定しても、無言で捨てず状態欄で知らせる。
+@MainActor
+final class ScopeLostNoticeTests: XCTestCase {
+    func testReplaceWithLostScopeRootReportsInsteadOfSilentDrop() {
+        let m = ProjectModel(project: Project.new())
+        m.notices = OneTimeNotices()
+        m.compoundPath = ["missing"]   // 不変条件を壊した状態(scopeRoot = nil)
+        m.scopeRoot = nil
+        let ok = m.edit("テスト") { $0.tracks.append(Track(name: "追加")) }
+        XCTAssertTrue(ok)
+        XCTAssertEqual(m.statusText, ProjectModel.scopeLostNotice)
+    }
+}
