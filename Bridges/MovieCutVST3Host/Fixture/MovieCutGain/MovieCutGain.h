@@ -14,15 +14,17 @@ enum ParamIDs { kGainId = 0, kBypassId = 1, kVuId = 2 };
 
 extern const Steinberg::FUID kMovieCutGainUID;
 
-/// 最小の IPlugView。サイズ保持・canResize・プラットフォーム判定は SDK の CPluginView に任せる
-/// (getSize/onSize は内部の rect を読み書きするので、onSize で受けたサイズが getSize に反映される。
-/// canResize は kResultTrue、isPlatformTypeSupported は macOS では NSView のみ true)。
+/// 最小の IPlugView。サイズ保持(getSize/onSize は内部の rect の読み書き)は SDK の CPluginView に任せる
+/// ので、onSize で受けたサイズが getSize に反映される。ただし CPluginView の
+/// isPlatformTypeSupported は既定で kNotImplemented を返すため、ここで override する
+/// (macOS は NSView のみ対応。それ以外は kResultFalse)。
 /// attached では子の NSView を作らず、親を保持するだけにしている: NSView の生成には
 /// Objective-C++(.mm)が要り、フィクスチャの目的(ブリッジの attach/size/destroy の配線検証)には
 /// 親ビューの受け渡しが確認できれば足りるため。実描画の確認は実プラグインで行う。
 class MovieCutGainEditorView : public Steinberg::CPluginView {
 public:
     MovieCutGainEditorView();
+    Steinberg::tresult PLUGIN_API isPlatformTypeSupported(Steinberg::FIDString type) SMTG_OVERRIDE;
 };
 
 class MovieCutGain : public Steinberg::Vst::SingleComponentEffect {

@@ -4,6 +4,7 @@
 #include "pluginterfaces/base/ibstream.h"
 #include "pluginterfaces/base/ustring.h"
 #include "pluginterfaces/vst/ivstparameterchanges.h"
+#include "pluginterfaces/gui/iplugview.h"
 #include "pluginterfaces/vst/ivstplugview.h"
 
 #include <cmath>
@@ -21,6 +22,15 @@ MovieCutGain::MovieCutGain() = default;
 
 MovieCutGainEditorView::MovieCutGainEditorView() : CPluginView(nullptr) {
     rect = ViewRect(0, 0, 320, 200);  // 固定の初期サイズ
+}
+
+tresult PLUGIN_API MovieCutGainEditorView::isPlatformTypeSupported(FIDString type) {
+#if defined(__APPLE__)
+    return (type && std::strcmp(type, kPlatformTypeNSView) == 0) ? kResultTrue : kResultFalse;
+#else
+    (void)type;
+    return kResultFalse;
+#endif
 }
 
 IPlugView* PLUGIN_API MovieCutGain::createView(FIDString name) {
