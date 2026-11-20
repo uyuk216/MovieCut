@@ -13,7 +13,7 @@ import Foundation
 // 失敗時は、その時点までに作ったものを逆順で全部畳んでから失敗を返す。
 
 /// エディタセッションの失敗理由。
-public enum VST3EditorSessionError: Equatable, Sendable {
+public enum VST3EditorSessionError: Equatable, Sendable, Error {
     /// プラグインがエディタを持たない(エラーと区別する専用)。
     case noEditor
     /// ブリッジが失敗を返した。
