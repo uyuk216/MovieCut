@@ -1,7 +1,7 @@
 # VST3 プラグイン調査と到達範囲(W3-07 / YMM4 監査 #67)
 
 - 対象: バッチ U(W3-07 VST3 プラグイン対応)
-- 実装ブランチ: `feat/vst3-feasibility`(base: `feat/muse-access` a425248)
+- 実装ブランチ: `feat/vst3-feasibility`
 - 結論を先に: **今回は「検出(スキャン)+ 境界(プロトコルと保存形式)+ 正直な UI 表示」までを実装し、
   音声処理ホストそのものは未達**とした。理由はライセンスではなく工学と検証の側にある(下記)。
   VST3 を指定したクリップの音は、従来とバイト単位で同じ(バイパスが仕様)。
@@ -18,7 +18,7 @@
 | パラメータ記述モデルと検証/整形(R5-1) | 実装済み | `VST3Parameter.swift` |
 | 処理契約の純粋ロジック(バス/setup交渉・ブロック検証・補償計算)(R5-1) | 実装済み | `VST3ProcessingContract.swift` |
 | C++ ブリッジの ABI 定義(R5-1) | 定義済み | `docs/vst3-bridge/MovieCutVST3Bridge.h` / `VST3Bridge.swift` |
-| C++ ブリッジの実装(W6-1) | 実装済み(VM/Linux で実音検証済み。Mac 未検証) | `Bridges/MovieCutVST3Host/MovieCutVST3Bridge.cpp` |
+| C++ ブリッジの実装(W6-1) | 実装済み(Linux 環境で実音検証済み。Mac 実機では未確認) | `Bridges/MovieCutVST3Host/MovieCutVST3Bridge.cpp` |
 | Swift 側バックエンド境界 + ネイティブ接続(W6-1) | 実装済み | `VST3BridgeBackend.swift` / `VST3NativeBridge.swift` / `VST3HostProcessor.swift` |
 | チェーン接続(拡張の後・リミッターの前)(W6-1) | 実装済み(プロバイダを渡した経路のみ) | `AudioFxChain` / `AudioMixer.mixdown(vst3Provider:)` |
 | 検証用フィクスチャ MovieCutGain(W6-1) | 実装済み(Linux でビルド・検証済み。Mac 未検証) | `Bridges/MovieCutVST3Host/Fixture/MovieCutGain/` |
@@ -135,7 +135,7 @@ VST3 プラグイン(.vst3 バンドル = Mach-O バイナリ)を鳴らすには
 
 ## 6.5 R5-1 で前進させた範囲(単体テスト可能な範囲のみ)
 
-2026-11-19、ブランチ `feat/vst3-next`(base: `feat/muse-access` c8454af)で、
+2026-11-19、ブランチ `feat/vst3-next`で、
 「次にやるなら」のうち **実プラグイン無しで単体テストで検証できる部分だけ** を前進させた。
 範囲の判断理由: 実ホスト本体は、この Mac に検証用プラグインが 1 つも無い以上、
 作っても正しさを確認できない(従来の線引きと同じ)。一方で、ホストが将来必要とする
@@ -172,10 +172,10 @@ VST3 プラグイン(.vst3 バンドル = Mach-O バイナリ)を鳴らすには
 
 ## 6.6 W6-1 で実装した範囲(ホスト本体)
 
-2026-11-20、ブランチ `feat/vst3-host`(base: `feat/muse-access` d8dddc1)で、
-「次にやるなら」の 1〜3 を実装した。作業は VM(Linux)のみで、Mac には触っていない。
+2026-11-20、ブランチ `feat/vst3-host`で、
+「次にやるなら」の 1〜3 を実装した。作業は Linux 環境のみで行い、Mac 実機では未確認。
 VST3 SDK は GitHub の steinbergmedia/vst3sdk 3.8.1 相当(pluginterfaces / base /
-public.sdk の各リポジトリ)を VM に clone して参照した(SDK は MIT)。
+public.sdk の各リポジトリ)を Linux 環境に clone して参照した(SDK は MIT)。
 
 - **C++ ブリッジ実装**(`Bridges/MovieCutVST3Host/MovieCutVST3Bridge.cpp`、CMake 同梱):
   ABI ヘッダの全関数 + 追加関数(クラス列挙・パラメータ現在値・レイテンシ/テール)。
@@ -211,7 +211,7 @@ public.sdk の各リポジトリ)を VM に clone して参照した(SDK は MIT
 - **フィクスチャ**: `Fixture/MovieCutGain`(SingleComponentEffect 継承、ゲイン id=0 /
   バイパス id=1 / Vu id=2、状態はゲイン+バイパスの往復)。SDK のビルドシステムに
   依存しない単独 CMake で .vst3 バンドルを組み立てる。
-- **VM での実検証(2026-11-20)**: ブリッジとフィクスチャを Linux でビルドし、
+- **Linux 環境での実検証(2026-11-20)**: ブリッジとフィクスチャを Linux でビルドし、
   `Bridges/MovieCutVST3Host/Tests/smoke_test.py`(ctypes で ABI のみ使用)が **全項目 PASS**:
   handshake / open / クラス列挙(CID 取得)/ create(CID 指定も)/ パラメータ 3 件取得 /
   setup / active / process(既定ゲイン 0.75 で 0.5→0.375、変化点 0.5 で →0.25)/
@@ -219,7 +219,7 @@ public.sdk の各リポジトリ)を VM に clone して参照した(SDK は MIT
 - **テスト**: Swift 側に Core 19 件(`VST3HostTests`: フェイクバックエンドでの接続・
   ブロック分割・パラメータ往復・状態往復・途中失敗時のバイパス切替・チェーン順序・
   ミックス経由のゲイン・探索順・ABI 定数・スロット編集)と App 2 件(パラメータ編集の
-  Undo 歩数・パネル生成)を追加。**Swift テストは VM で実行できないため未実行**(Mac で実行する)。
+  Undo 歩数・パネル生成)を追加。**Swift テストは Linux 環境で実行できないため未実行**(Mac で実行する)。
 
 ### Mac で統括が行う検証手順(実機検証待ちの範囲)
 
@@ -246,7 +246,7 @@ public.sdk の各リポジトリ)を VM に clone して参照した(SDK は MIT
 ## 7. 未達の範囲と理由
 
 - **Mac 実機での音声処理の検証**(W6-1 で更新): ホスト本体・処理接続・状態保存・
-  簡易パラメータ UI は実装し、VM(Linux)ではフィクスチャで実音検証まで済んだ。
+  簡易パラメータ UI は実装し、Linux 環境ではフィクスチャで実音検証まで済んだ。
   残るのは Mac 実機での確認(macOS バンドル形式のロード、実プラグイン、アプリ経由の
   書き出し)で、手順は 6.6 節に置いた。検証が済むまでは、アプリ本体の再生/書き出し経路へは
   プロバイダを渡していない(= 既定では音は従来どおり)。SwiftPM への C++ ターゲット追加は

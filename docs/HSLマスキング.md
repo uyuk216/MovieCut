@@ -1,6 +1,6 @@
 # HSLマスキング（Premiere Pro 27.0「HSL マスキング」のローカル等価）
 
-ブランチ `feat/hsl-mask`（起点は `feat/muse-access` 6bb6a5d）。
+ブランチ `feat/hsl-mask`。
 棚卸し表 `premiere-inventory.md` カラー節「HSL マスキング」が仕様の起点。
 色相・彩度・輝度で領域を切り分け、その部分だけを残す（外は透明）マスクを、
 クリップのマスク種別として追加した。既存の形マスク・オブジェクトマスク・

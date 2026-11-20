@@ -103,7 +103,8 @@ final class DistributionGuardTests: XCTestCase {
         var hits: [String] = []
         for f in files {
             guard let s = try? String(contentsOf: f, encoding: .utf8) else { continue }
-            for w in forbidden where s.contains(w) { hits.append("\(f.lastPathComponent): \(w)") }
+            let scrubbed = s.replacingOccurrences(of: "uyuk216", with: "")   // 公開アカウント名(uyuk216)は個人情報ではない
+            for w in forbidden where scrubbed.contains(w) { hits.append("\(f.lastPathComponent): \(w)") }
         }
         XCTAssertTrue(hits.isEmpty, "個人情報の疑い: \(hits)")
     }

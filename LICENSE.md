@@ -1,6 +1,6 @@
 # Movie Cut License
 
-Copyright (c) 【作者名】
+Copyright (c) uyuk216
 
 This software is licensed under the PolyForm Internal Use License 1.0.0 (Part 1, official text, unmodified), together with the Additional Terms in Part 2. If Part 2 conflicts with Part 1, Part 2 prevails.
 
@@ -127,7 +127,7 @@ You may publish a modified version only if all of the following are true: (1) yo
 
 ## A4. Name and icon
 
-Unless the permit expressly allows it, a modified version or fork must not use the name "Movie Cut", the app icon, or any name, logo, or icon that is confusingly similar. A modified version must not suggest that it is made or endorsed by 【作者名】.
+Unless the permit expressly allows it, a modified version or fork must not use the name "Movie Cut", the app icon, or any name, logo, or icon that is confusingly similar. A modified version must not suggest that it is made or endorsed by uyuk216.
 
 ## A5. Third-party engines
 

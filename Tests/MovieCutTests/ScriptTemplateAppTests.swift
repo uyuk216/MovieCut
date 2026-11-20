@@ -7,8 +7,8 @@ import MovieCutCore
 final class ScriptTemplateAppTests: XCTestCase {
     private func sampleModel() -> ProjectModel {
         var p = Project()
-        var c1 = Character(); c1.name = "霊夢"
-        var c2 = Character(); c2.name = "魔理沙"
+        var c1 = Character(); c1.name = "キャラ1"
+        var c2 = Character(); c2.name = "キャラ2"
         p.characters = [c1, c2]
         func voice(_ char: Character, _ text: String, _ start: Double) -> Clip {
             var c = Clip(); c.type = .voice; c.text = text; c.charId = char.id
@@ -64,12 +64,12 @@ final class ScriptTemplateAppTests: XCTestCase {
     func testImportScriptCSVAppendsLinesToScriptText() {
         let m = sampleModel()
         XCTAssertEqual(m.scriptText, "")
-        let n = m.importScriptCSV(text: "キャラ,セリフ,読み,字幕,表情\n霊夢,相棒,あいぼう,,\n魔理沙,やあ,,,笑顔")
+        let n = m.importScriptCSV(text: "キャラ,セリフ,読み,字幕,表情\nキャラ1,相棒,あいぼう,,\nキャラ2,やあ,,,笑顔")
         XCTAssertEqual(n, 2)
-        XCTAssertEqual(m.scriptText, "霊夢: あいぼう | 相棒\n魔理沙: [笑顔]やあ")
+        XCTAssertEqual(m.scriptText, "キャラ1: あいぼう | 相棒\nキャラ2: [笑顔]やあ")
         // 2 回目は末尾へ足す
-        XCTAssertEqual(m.importScriptCSV(text: "霊夢,追加の行"), 1)
-        XCTAssertTrue(m.scriptText.hasSuffix("\n霊夢: 追加の行"))
+        XCTAssertEqual(m.importScriptCSV(text: "キャラ1,追加の行"), 1)
+        XCTAssertTrue(m.scriptText.hasSuffix("\nキャラ1: 追加の行"))
         // 読めない CSV は何も足さない
         XCTAssertEqual(m.importScriptCSV(text: ""), 0)
     }
@@ -88,10 +88,10 @@ final class ScriptTemplateAppTests: XCTestCase {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
         let url = dir.appendingPathComponent("t.csv")
-        try "霊夢,こんにちは".write(to: url, atomically: true, encoding: .utf8)
-        XCTAssertEqual(try ProjectModel.readCSVText(from: url), "霊夢,こんにちは")
-        try "霊夢,こんにちは".write(to: url, atomically: true, encoding: .shiftJIS)
-        XCTAssertEqual(try ProjectModel.readCSVText(from: url), "霊夢,こんにちは", "Shift_JIS の CSV も読む")
+        try "キャラ1,こんにちは".write(to: url, atomically: true, encoding: .utf8)
+        XCTAssertEqual(try ProjectModel.readCSVText(from: url), "キャラ1,こんにちは")
+        try "キャラ1,こんにちは".write(to: url, atomically: true, encoding: .shiftJIS)
+        XCTAssertEqual(try ProjectModel.readCSVText(from: url), "キャラ1,こんにちは", "Shift_JIS の CSV も読む")
     }
 
     // MARK: アイテムテンプレート(#8)

@@ -39,7 +39,7 @@
 - Core テスト `PngWavExoExportTests`(8 件): 連番の計画・命名・桁数、実書き出しの枚数・画素サイズ・背景色、無音 WAV の長さ、音声つき WAV の長さと正規化の有無による出力差(実測 LUFS)、キャンセル時の後片付け、exo のフレーム換算・テキスト 16 進往復・構造パース往復(Shift_JIS バイト列含む)・非対応要素のレポート、WebVideo のラウドネス引き継ぎ(ffmpeg がある環境で実書き出し→音声を戻して実測)。
 
 
-## 実機検証 R4-1(2026-11-19、検証ブランチ feat/verification-r4、起点 feat/muse-access 05f762b)
+## 実機検証 R4-1(2026-11-19、検証ブランチ feat/verification-r4)
 
 検証用クローンで CLI(`moviecut-cli`)と Core API の両経路から書き出し→再取り込みの往復を確認した。コードは変更していない。
 

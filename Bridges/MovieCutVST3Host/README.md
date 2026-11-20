@@ -28,7 +28,7 @@ VST3 プラグインを実際に鳴らすための部品一式。ABI の正は
   (bit4=bypass, bit5=programChange)へ変換してから返す(hidden は readOnly も立てる)。
 - **setProcessing の許容**: SDK の AudioEffect 既定実装は setProcessing で
   kNotImplemented を返す(公式サンプルも同様)。ブリッジはこれを失敗扱いしない。
-- **検証済み(VM/Linux)**: SDK 3.8.1 相当のヘッダでブリッジとフィクスチャをビルドし、
+- **検証済み(Linux 環境)**: SDK 3.8.1 相当のヘッダでブリッジとフィクスチャをビルドし、
   smoke_test.py が全項目 PASS(ゲイン 0.75 既定 / 変化点 0.5 / 状態往復で復元 /
   CID 指定生成)。**Mac 実機(macOS バンドル形式・実プラグイン・アプリ経由)は未検証**。
   手順は docs 6.6 節。

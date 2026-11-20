@@ -5,8 +5,8 @@ import XCTest
 final class ScriptTableTests: XCTestCase {
     private func sampleProject() -> Project {
         var p = Project()
-        var c1 = Character(); c1.name = "霊夢"
-        var c2 = Character(); c2.name = "魔理沙"
+        var c1 = Character(); c1.name = "キャラ1"
+        var c2 = Character(); c2.name = "キャラ2"
         p.characters = [c1, c2]
         func voice(_ char: Character, _ text: String, _ sub: String?, _ start: Double) -> Clip {
             var c = Clip(); c.type = .voice; c.text = text; c.subtitleText = sub
@@ -26,13 +26,13 @@ final class ScriptTableTests: XCTestCase {
         let p = sampleProject()
         let lines = ScriptTable.lines(in: p)
         XCTAssertEqual(lines.count, 3, "ボイスだけ・開始順")
-        XCTAssertEqual(lines[0].characterName, "霊夢")
+        XCTAssertEqual(lines[0].characterName, "キャラ1")
         XCTAssertEqual(lines[0].spoken, "こんにちは")
         XCTAssertEqual(lines[0].expression, "笑顔", "表情タグは本文から分ける")
         XCTAssertNil(lines[0].subtitle)
         XCTAssertEqual(lines[1].spoken, "あいぼう")
         XCTAssertEqual(lines[1].subtitle, "相棒")
-        XCTAssertEqual(lines[2].characterName, "魔理沙")
+        XCTAssertEqual(lines[2].characterName, "キャラ2")
         XCTAssertEqual(lines.map(\.start), [0, 2, 5])
     }
 

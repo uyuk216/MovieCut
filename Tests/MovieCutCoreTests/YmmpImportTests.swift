@@ -24,12 +24,12 @@ final class YmmpImportTests: XCTestCase {
         XCTAssertEqual(out.report.sourceFPS, 60)
         XCTAssertEqual(out.report.timelineName, "メイン")
         XCTAssertEqual(out.project.characters.count, 2)
-        let reimu = try XCTUnwrap(out.project.characters.first { $0.name == "テスト霊夢" })
+        let reimu = try XCTUnwrap(out.project.characters.first { $0.name == "テストキャラ1" })
         XCTAssertEqual(reimu.engine, "voicevox")
         XCTAssertEqual(reimu.speaker, 8, "VOICEVOX の StyleID を speaker に引き継ぐ")
         XCTAssertEqual(reimu.color, "#8b0000", "#AARRGGBB からアルファを落とす")
         XCTAssertEqual(reimu.subtitleColor, "#ffffff")
-        let marisa = try XCTUnwrap(out.project.characters.first { $0.name == "テスト魔理沙" })
+        let marisa = try XCTUnwrap(out.project.characters.first { $0.name == "テストキャラ2" })
         XCTAssertEqual(marisa.engine, "aquestalk")
     }
 
@@ -48,7 +48,7 @@ final class YmmpImportTests: XCTestCase {
         XCTAssertEqual(first.fontSize, 64)
         XCTAssertEqual(first.font, "Yu Gothic")
         XCTAssertEqual(first.color, "#ffffff")
-        let reimu = try XCTUnwrap(out.project.characters.first { $0.name == "テスト霊夢" })
+        let reimu = try XCTUnwrap(out.project.characters.first { $0.name == "テストキャラ1" })
         XCTAssertEqual(first.charId, reimu.id)
         let second = try XCTUnwrap(voices.max { $0.start < $1.start })
         XCTAssertEqual(second.start, 2.0)

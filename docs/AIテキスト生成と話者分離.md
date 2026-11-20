@@ -1,7 +1,7 @@
 # AIテキスト生成(W3-08)と話者分離(W3-27)
 
 YMM4 監査 #74(AIテキスト生成)・#75(話者分離)への対応。実装はブランチ
-`feat/ai-text-diarization`(base: feat/muse-access 38d9eed)。
+`feat/ai-text-diarization`。
 
 ## W3-08 AIテキスト生成(#74)
 
