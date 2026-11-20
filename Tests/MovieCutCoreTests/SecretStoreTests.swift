@@ -41,4 +41,19 @@ final class SecretStoreTests: XCTestCase {
         s.save(to: d, secrets: store)
         XCTAssertEqual(store.get("textgen.apiKey"), "")
     }
+
+    /// 書き込めないキーチェーン(ロック中・権限なし)。
+    private final class FailingBackend: SecretBackend, @unchecked Sendable {
+        func read(account: String) -> String? { nil }
+        func write(_ value: String, account: String) {}
+        func delete(account: String) {}
+    }
+
+    /// キーチェーンへ書けなかったときに、UserDefaults の平文を消してはいけない(消すとキーが失われる)。
+    func testMigrationKeepsLegacyValueWhenKeychainWriteFails() {
+        let d = defaults(), store = SecretStore(backend: FailingBackend())
+        d.set("old-key", forKey: "textgen.apiKey")
+        _ = store.load(account: "textgen.apiKey", migratingFrom: d)
+        XCTAssertEqual(d.string(forKey: "textgen.apiKey"), "old-key")
+    }
 }

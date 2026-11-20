@@ -75,8 +75,10 @@ public struct SecretStore: Sendable {
     public func load(account: String, migratingFrom d: UserDefaults) -> String {
         if let legacy = d.string(forKey: account) {
             if !legacy.isEmpty, (backend.read(account: account) ?? "").isEmpty { backend.write(legacy, account: account) }
-            d.removeObject(forKey: account)
+            // キーチェーンに入ったことを読み戻して確かめてから平文を消す(書けなかったときに鍵を失わない)
+            if legacy.isEmpty || !(backend.read(account: account) ?? "").isEmpty { d.removeObject(forKey: account) }
         }
-        return get(account)
+        let stored = get(account)
+        return stored.isEmpty ? (d.string(forKey: account) ?? "") : stored
     }
 }
