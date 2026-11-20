@@ -9,7 +9,7 @@ final class ProjectFormatTests: XCTestCase {
 
     func testNewProjectWritesCurrentVersion() throws {
         XCTAssertEqual(try json(.new())["formatVersion"] as? Int, ProjectFormat.current)
-        XCTAssertEqual(ProjectFormat.current, 1)
+        XCTAssertEqual(ProjectFormat.current, 2)
     }
 
     func testLegacyFileWithoutTheFieldIsVersionZeroAndLoadsAsBefore() throws {
@@ -20,7 +20,20 @@ final class ProjectFormatTests: XCTestCase {
         XCTAssertFalse(p.isNewerFormat)
         XCTAssertEqual(p.width, 1280)
         XCTAssertNil(p.extra["formatVersion"])
-        XCTAssertEqual(try json(p)["formatVersion"] as? Int, 1, "保存すると現在の版を書く")
+        XCTAssertEqual(try json(p)["formatVersion"] as? Int, ProjectFormat.current, "保存すると現在の版を書く")
+    }
+
+    func testVersion1FileStillLoadsAndResavesAsCurrent() throws {
+        let data = Data(#"{"formatVersion":1,"width":640,"height":360,"tracks":[{"id":"t","name":"L","clips":[{"id":"k","type":"text","start":0,"duration":1,"text":"あ"}]}]}"#.utf8)
+        XCTAssertEqual(ProjectFormat.version(in: data), 1)
+        let p = try Project.decode(from: data)
+        XCTAssertEqual(p.sourceFormat.value, 1)
+        XCTAssertFalse(p.isNewerFormat, "1 は古い版。新しい版の警告は出さない")
+        XCTAssertEqual(p.width, 640)
+        XCTAssertEqual(p.tracks.first?.clips.first?.text, "あ")
+        XCTAssertEqual(try json(p)["formatVersion"] as? Int, 2, "保存すると 2 になる")
+        XCTAssertTrue(ProjectFormat.isNewer(3))
+        XCTAssertFalse(ProjectFormat.isNewer(2))
     }
 
     func testVersionReadingIsStrict() {

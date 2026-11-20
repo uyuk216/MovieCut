@@ -8,7 +8,7 @@ import Foundation
 ///   残らない部分があり得るので、利用者に 1 度知らせ、最初の保存の前に元の中身を世代バックアップへ残す。
 public enum ProjectFormat {
     /// このアプリが知っている形式の版。
-    public static let current = 1
+    public static let current = 2
     /// ファイルに書くキー。
     public static let key = "formatVersion"
 
