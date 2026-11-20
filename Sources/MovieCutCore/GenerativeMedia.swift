@@ -139,6 +139,10 @@ public enum GenerativeMediaError: Error, LocalizedError, Equatable {
     case jobTimedOut
     /// 生成延長の指定が不正(対象クリップ・秒数など)。
     case invalidExtension(String)
+    /// 生成結果の取得先 URL が安全でない(https 以外など)。
+    case downloadRejected(String)
+    /// 生成結果が大きすぎる。
+    case downloadTooLarge(limit: Int)
 
     public var errorDescription: String? {
         switch self {
@@ -172,6 +176,10 @@ public enum GenerativeMediaError: Error, LocalizedError, Equatable {
             return "生成ジョブが時間内に終わりませんでした。サービスの状態を確認して、もう一度お試しください。"
         case .invalidExtension(let why):
             return "生成延長の指定が正しくありません: \(why)"
+        case .downloadRejected(let why):
+            return "生成結果を取得できません: \(why)"
+        case .downloadTooLarge(let limit):
+            return "生成結果が大きすぎるので取得しません(上限 \(limit / 1_048_576) MB)。"
         }
     }
 }

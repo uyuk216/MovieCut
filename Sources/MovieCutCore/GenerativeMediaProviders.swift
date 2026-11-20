@@ -233,12 +233,11 @@ public struct OpenAICompatibleVideoProvider: GenerativeMediaProvider {
     public func contentURL(id: String) -> URL { jobURL(id: id).appendingPathComponent("content") }
 
     private func get(_ url: URL) async throws -> (Data, Int) {
-        var req = URLRequest(url: url)
-        req.httpMethod = "GET"
-        req.timeoutInterval = timeout
-        // 取得先が作成先と同じホストのときだけキーを付ける(画像生成と同じ作法)。
-        if url.host == endpoint.host { authorized(&req) }
-        return try await transport.send(req)
+        // https(または loopback の http)だけ取得し、キーは作成先と scheme・host・port が完全に一致するときだけ付ける。
+        let req = try MediaDownloadPolicy.downloadRequest(url: url, endpoint: endpoint, apiKey: apiKey, timeout: timeout)
+        let (data, status) = try await transport.send(req)
+        try MediaDownloadPolicy.checkSize(data)
+        return (data, status)
     }
 
     /// 応答データからメディア本体を取り出す。URL しか無ければ取りに行く。
@@ -387,15 +386,12 @@ public struct OpenAICompatibleAudioProvider: GenerativeMediaProvider {
             if let b64 = try GenerativeResponseParsing.base64MediaData(from: data) {
                 bytes = b64
             } else if let remote = GenerativeResponseParsing.mediaURL(from: data) {
-                var get = URLRequest(url: remote)
-                get.timeoutInterval = timeout
-                if !apiKey.isEmpty, remote.host == endpoint.host {
-                    get.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-                }
+                let get = try MediaDownloadPolicy.downloadRequest(url: remote, endpoint: endpoint, apiKey: apiKey, timeout: timeout)
                 let (downloaded, dlStatus) = try await transport.send(get)
                 guard (200..<300).contains(dlStatus) else {
                     throw GenerativeMediaError.http(dlStatus, String(decoding: downloaded, as: UTF8.self))
                 }
+                try MediaDownloadPolicy.checkSize(downloaded)
                 bytes = downloaded
             } else {
                 throw GenerativeMediaError.unparsable("生成結果")

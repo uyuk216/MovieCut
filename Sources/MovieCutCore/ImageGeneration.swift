@@ -49,10 +49,23 @@ public struct URLSessionImageTransport: ImageGenerationTransport {
     public init() {}
     public func send(_ request: URLRequest) async throws -> (Data, Int) {
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (stream, response) = try await URLSession.shared.bytes(for: request)
             guard let http = response as? HTTPURLResponse else {
                 throw GenerativeMediaError.transport("HTTP の応答ではありませんでした")
             }
+            let cap = MediaDownloadPolicy.maxBytes
+            if http.expectedContentLength > Int64(cap) { throw GenerativeMediaError.downloadTooLarge(limit: cap) }
+            var data = Data()
+            var chunk = [UInt8](); chunk.reserveCapacity(65_536)
+            for try await b in stream {
+                chunk.append(b)
+                if chunk.count == 65_536 {
+                    data.append(contentsOf: chunk); chunk.removeAll(keepingCapacity: true)
+                    if data.count > cap { throw GenerativeMediaError.downloadTooLarge(limit: cap) }
+                }
+            }
+            data.append(contentsOf: chunk)
+            if data.count > cap { throw GenerativeMediaError.downloadTooLarge(limit: cap) }
             return (data, http.statusCode)
         } catch let e as GenerativeMediaError {
             throw e
@@ -152,15 +165,12 @@ public struct OpenAICompatibleImageProvider: GenerativeMediaProvider {
         var imageData = try Self.base64ImageData(from: data)
         if imageData == nil, let remote = Self.imageURL(from: data) {
             // Base64 が無いサービスは、返された URL から画像を取りに行く
-            var get = URLRequest(url: remote)
-            get.timeoutInterval = timeout
-            if !apiKey.isEmpty, remote.host == endpoint.host {
-                get.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-            }
+            let get = try MediaDownloadPolicy.downloadRequest(url: remote, endpoint: endpoint, apiKey: apiKey, timeout: timeout)
             let (downloaded, dlStatus) = try await transport.send(get)
             guard (200..<300).contains(dlStatus) else {
                 throw GenerativeMediaError.http(dlStatus, String(decoding: downloaded, as: UTF8.self))
             }
+            try MediaDownloadPolicy.checkSize(downloaded)
             imageData = downloaded
         }
         guard let bytes = imageData, !bytes.isEmpty else { throw GenerativeMediaError.emptyResponse }
