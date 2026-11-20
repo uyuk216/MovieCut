@@ -61,6 +61,18 @@ public final class RenderAssets {
         lock.lock(); budget = manager; lock.unlock()
     }
 
+    /// VST3 音声プロバイダ(再生/書き出し配線)。合成音声の解析(ビジュアライザ・口パク)が
+    /// 書き出しと同じ音になるよう、`computeMix` のミックスへ渡す。未設定(nil)なら従来どおり。
+    private var vst3Provider: (any AudioEffectProviding)?
+    /// VST3 プロバイダを設定する(nil で解除)。
+    public func setVST3Provider(_ provider: (any AudioEffectProviding)?) {
+        lock.lock(); vst3Provider = provider; lock.unlock()
+    }
+    /// 設定中の VST3 プロバイダ(`computeMix` 用)。
+    var currentVST3Provider: (any AudioEffectProviding)? {
+        lock.lock(); defer { lock.unlock() }; return vst3Provider
+    }
+
     /// プレビュー再生の動画フレームの縮小率。0 < scale ≤ 1 にそろえる。次の `beginExportMode(preview: true)` から効く。
     public func setPreviewVideoScale(_ scale: Double) {
         lock.lock(); previewVideoScale = Self.clampedVideoScale(scale); lock.unlock()
@@ -324,7 +336,7 @@ public final class RenderAssets {
     static func computeMix(_ project: Project, assets: RenderAssets, wantMono: Bool) -> MixAnalysis? {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("mc-viz-mix-\(UUID().uuidString).caf")
         defer { try? FileManager.default.removeItem(at: url) }
-        guard let dur = try? AudioMixer.mixdown(project: project, assets: assets, to: url) else { return nil }
+        guard let dur = try? AudioMixer.mixdown(project: project, assets: assets, to: url, vst3Provider: assets.currentVST3Provider) else { return nil }
         // 音が 1 つも無いときは書かれないことがある。その場合は無音の長さ分の 0
         guard FileManager.default.fileExists(atPath: url.path),
               let file = try? AVAudioFile(forReading: url) else {

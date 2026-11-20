@@ -69,7 +69,7 @@ struct LoudnessSheet: View {
     private func measure() async {
         let snapshot = model.project
         do {
-            let r = try await Task.detached(priority: .userInitiated) { try LoudnessAnalysis.measure(project: snapshot) }.value
+            let r = try await Task.detached(priority: .userInitiated) { try LoudnessAnalysis.measure(project: snapshot, vst3Provider: AppServices.vst3EffectProvider) }.value
             state = r.map { .done($0) } ?? .noAudio
         } catch {
             state = .failed(error.localizedDescription)

@@ -275,6 +275,7 @@ public enum FFmpegVideoExporter {
                               format: WebVideoFormat, crf: Int = 32, to url: URL,
                               loudness: LoudnessNormalizationSettings = .disabled,
                               pluginEffectProviders: [any VideoEffectProviding] = [],
+                              vst3Provider: (any AudioEffectProviding)? = nil,
                               progress: ((Double) -> Void)? = nil) async throws {
         guard project.endTime > 0 else { throw FFmpegExportError.emptyProject }
         guard let ffmpeg = FFmpegLocator.find() else { throw FFmpegExportError.ffmpegNotFound }
@@ -307,7 +308,7 @@ public enum FFmpegVideoExporter {
         let intermediate = tmpDir.appendingPathComponent(format.dnxProfile == nil ? "intermediate.mp4" : "intermediate.\(DNxExport.intermediateFileExtension)")
         var intermediateProject = project
         intermediateProject.codec = format.dnxProfile.map { DNxExport.intermediateCodec(for: $0) } ?? "h264"
-        try await Exporter(project: intermediateProject, assets: assets, range: range, videoBitrate: intermediateBitrate, loudness: loudness, pluginEffectProviders: pluginEffectProviders)
+        try await Exporter(project: intermediateProject, assets: assets, range: range, videoBitrate: intermediateBitrate, loudness: loudness, pluginEffectProviders: pluginEffectProviders, vst3Provider: vst3Provider)
             .export(to: intermediate) { v in progress?(v * 0.7) }
         if Task.isCancelled { throw CancellationError() }
 

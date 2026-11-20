@@ -3,9 +3,11 @@ import MovieCutCore
 
 /// インスペクタ「音声」の VST3 節。
 ///
-/// 到達範囲は「検出と指定の保存まで」で、音声処理は未対応。そのことを節の先頭に常時表示し、
-/// 「対応した」ように見せない。スキャンはメタ情報だけを読む(`VST3Scanner`)ので軽く、
-/// バイナリは一切読み込まない。スロットの追加・削除・有効切替は 1 操作 = 1 回の Undo。
+/// 節の先頭には到達状態(`VST3HostAvailability`)を常時表示し、「対応した」ように見せない。
+/// スキャンはメタ情報だけを読む(`VST3Scanner`)ので軽く、バイナリは一切読み込まない。
+/// スロットの追加・削除・有効切替は 1 操作 = 1 回の Undo。
+/// 音声処理はブリッジが使える環境で、再生・書き出し等のプロバイダ経由の経路に効く
+/// (プロバイダの生成元は `AppServices.vst3EffectProvider` に一本化)。
 struct VST3Panel: View {
     @ObservedObject var model: ProjectModel
     let clipId: String

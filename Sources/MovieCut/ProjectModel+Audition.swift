@@ -84,7 +84,7 @@ extension ProjectModel {
             try? await Task.sleep(nanoseconds: 25_000_000)            // ドラッグ中の細かい動きをまとめる
             guard !Task.isCancelled else { return }
             let result: Result<Double?, Error> = await Task.detached(priority: .userInitiated) {
-                do { return .success(try AudioAudition.renderSnippet(project: p, clipId: id, at: t, to: url)) } catch { return .failure(error) }
+                do { return .success(try AudioAudition.renderSnippet(project: p, clipId: id, at: t, to: url, vst3Provider: AppServices.vst3EffectProvider)) } catch { return .failure(error) }
             }.value
             guard let self, seq == self.auditionSeq, self.auditionOn else { try? FileManager.default.removeItem(at: url); return }
             switch result {

@@ -85,6 +85,7 @@ public enum PngWavExporter {
     public static func export(project: Project, assets: RenderAssets = RenderAssets(), range: ExportRange? = nil,
                               options: PngWavOptions = .standard, to directory: URL,
                               pluginEffectProviders: [any VideoEffectProviding] = [],
+                              vst3Provider: (any AudioEffectProviding)? = nil,
                               progress: ((Double) -> Void)? = nil) async throws -> Result {
         let p = plan(project: project, range: range, options: options)
         guard p.frameCount > 0 else { throw ExportError.emptyProject }
@@ -109,6 +110,7 @@ public enum PngWavExporter {
             }
             do {
                 // 映像: 1 コマずつ描いて書く(長尺でも 1 コマ分しかメモリに置かない)
+                if let vst3Provider { assets.setVST3Provider(vst3Provider) }
                 let renderer = Renderer(project: project, assets: assets, pluginEffectProviders: pluginEffectProviders)
                 assets.beginExportMode()
                 var last = -1.0
@@ -132,7 +134,7 @@ public enum PngWavExporter {
                 defer { try? FileManager.default.removeItem(at: tmpDir) }
                 let mixURL = tmpDir.appendingPathComponent("mix.caf")
                 let mix: AudioMixer.MixResult
-                do { mix = try AudioMixer.mixdownDetailed(project: project, to: mixURL, range: range) }
+                do { mix = try AudioMixer.mixdownDetailed(project: project, to: mixURL, range: range, vst3Provider: vst3Provider) }
                 catch { throw ExportError.audioMixFailed(error) }
                 var audioURL = mixURL
                 if mix.sourceCount > 0, loudness.enabled {

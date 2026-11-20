@@ -72,10 +72,12 @@ public final class Exporter {
     public let renderBackend: RenderBackend
     /// プラグインエフェクトのプロバイダ(F-1 配線。既定は空 = 従来描画と完全一致)。
     public let pluginEffectProviders: [any VideoEffectProviding]
+    /// VST3 音声プロバイダ(再生/書き出し配線。既定は nil = プロバイダ無しの従来ミックスと完全一致)。
+    public let vst3Provider: (any AudioEffectProviding)?
     /// 字幕トラック(mov_text)の埋め込み(既定は無効 = 従来どおり字幕トラックなし)。
     public let subtitleEmbed: SubtitleEmbedSettings
 
-    public init(project: Project, assets: RenderAssets, range: ExportRange? = nil, videoBitrate: Int? = nil, loudness: LoudnessNormalizationSettings = .disabled, renderBackend: RenderBackend = .auto, pluginEffectProviders: [any VideoEffectProviding] = [], subtitleEmbed: SubtitleEmbedSettings = .disabled) {
+    public init(project: Project, assets: RenderAssets, range: ExportRange? = nil, videoBitrate: Int? = nil, loudness: LoudnessNormalizationSettings = .disabled, renderBackend: RenderBackend = .auto, pluginEffectProviders: [any VideoEffectProviding] = [], vst3Provider: (any AudioEffectProviding)? = nil, subtitleEmbed: SubtitleEmbedSettings = .disabled) {
         self.project = project
         self.assets = assets
         self.range = range
@@ -83,6 +85,7 @@ public final class Exporter {
         self.loudness = loudness
         self.renderBackend = renderBackend
         self.pluginEffectProviders = pluginEffectProviders
+        self.vst3Provider = vst3Provider
         self.subtitleEmbed = subtitleEmbed
     }
 
@@ -142,6 +145,7 @@ public final class Exporter {
         var rp = project
         rp.width = ew; rp.height = eh
         // 専用キューの中だけで使う(AVFoundation の部品は Sendable でないので、安全は呼び出し側の約束)
+        if let vst3Provider { assets.setVST3Provider(vst3Provider) }
         nonisolated(unsafe) let renderer = Renderer(project: rp, assets: assets, backend: renderBackend, pluginEffectProviders: pluginEffectProviders)
 
         // 先に音声をミックスする(一時ファイル)
@@ -150,7 +154,8 @@ public final class Exporter {
         let proj = project
         let mix: AudioMixer.MixResult
         do {
-            mix = try await Task.detached { try AudioMixer.mixdownDetailed(project: proj, to: mixURL, range: self.range) }.value
+            nonisolated(unsafe) let vst3 = self.vst3Provider   // 専用キューの中だけで使う(プロバイダはスレッドをまたがない)
+            mix = try await Task.detached { try AudioMixer.mixdownDetailed(project: proj, to: mixURL, range: self.range, vst3Provider: vst3) }.value
         } catch {
             if error is CancellationError { throw error }
             throw ExportError.audioMixFailed(error)

@@ -47,7 +47,7 @@ func runExport(_ p: Project, to url: URL, preset: ExportPreset? = nil, spec: Exp
     }
     var nextMark = 0.1
     let t0 = Date()
-    try await ExportJob.run(project: p, preset: preset, spec: spec, bitrateMbps: bitrateMbps, range: range, to: url, loudness: loudness, subtitleEmbed: subtitleEmbed) { v in
+    try await ExportJob.run(project: p, preset: preset, spec: spec, bitrateMbps: bitrateMbps, range: range, to: url, loudness: loudness, vst3Provider: VST3EffectProvider.standard(), subtitleEmbed: subtitleEmbed) { v in
         if v >= nextMark - 1e-9 {
             FileHandle.standardError.write(Data(String(format: "  %3.0f%%\n", v * 100).utf8))
             nextMark = (v * 10 + 1e-9).rounded(.down) / 10 + 0.1
@@ -388,7 +388,7 @@ case "loudness" where args.count >= 2:
     // loudness <project> [--range a:b|project]: 書き出しと同じミックスダウンを BS.1770 で測る(読み取りのみ・自動では音量を変えない)
     do {
         let p = try Project.load(from: URL(fileURLWithPath: args[1]))
-        guard let r = try LoudnessAnalysis.measure(project: p, range: parseRange(p)) else { fail("音声がありません") }
+        guard let r = try LoudnessAnalysis.measure(project: p, range: parseRange(p), vst3Provider: VST3EffectProvider.standard()) else { fail("音声がありません") }
         func f(_ v: Double) -> String { v.isFinite ? String(format: "%.1f", v) : "−∞" }
         print("duration: \(String(format: "%.2f", r.duration)) s")
         print("integrated: \(f(r.integrated)) LUFS")
@@ -893,7 +893,7 @@ case "export-pngwav" where args.count >= 2:
         print("plan: \(p.width)x\(p.height) fps=\(FrameRate.label(p.fps)) frames=\(plan.frameCount) \(plan.firstFileName) ... \(plan.lastFileName) + \(plan.wavFileName)")
         var nextMark = 0.1
         let t0 = Date()
-        let r = try await PngWavExporter.export(project: p, range: range, options: options, to: URL(fileURLWithPath: outPath)) { v in
+        let r = try await PngWavExporter.export(project: p, range: range, options: options, to: URL(fileURLWithPath: outPath), vst3Provider: VST3EffectProvider.standard()) { v in
             if v >= nextMark - 1e-9 {
                 FileHandle.standardError.write(Data(String(format: "  %3.0f%%\n", v * 100).utf8))
                 nextMark = (v * 10 + 1e-9).rounded(.down) / 10 + 0.1

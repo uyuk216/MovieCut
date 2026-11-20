@@ -160,10 +160,12 @@ struct TruePeakDetector {
 /// 書き出しと同じミックスダウンを測る(一時ファイルは測ったら消す)。
 public enum LoudnessAnalysis {
     /// プロジェクトの全体(または範囲)の音を測る。音声が無いときは nil。
-    public static func measure(project: Project, range: ExportRange? = nil) throws -> LoudnessReport? {
+    /// `vst3Provider` は書き出しと同じミックスを測るためのもの(書き出し側が VST3 を効かせる以上、
+    /// 測定だけ素の音だと数値が実物とずれる)。nil なら従来どおりプロバイダ無しで測る。
+    public static func measure(project: Project, range: ExportRange? = nil, vst3Provider: (any AudioEffectProviding)? = nil) throws -> LoudnessReport? {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("moviecut-loudness-\(UUID().uuidString).caf")
         defer { try? FileManager.default.removeItem(at: url) }
-        let mix = try AudioMixer.mixdownDetailed(project: project, to: url, range: range)
+        let mix = try AudioMixer.mixdownDetailed(project: project, to: url, range: range, vst3Provider: vst3Provider)
         guard mix.sourceCount > 0 else { return nil }
         return try measureFile(url)
     }

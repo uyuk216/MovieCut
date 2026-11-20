@@ -25,8 +25,8 @@ public struct AudioFx: Codable, Equatable, Sendable {
     /// 拡張エフェクト群(フィルタ・歪み・モジュレーション系など)。未設定 = なし。定義は `AudioFxExtended.swift`。
     public var extended: Extended?
     /// VST3 プラグインの指定(スロット配列)。未設定/空 = なし。定義と到達範囲は `AudioFxVST3.swift`。
-    /// 音声処理ホスト未実装のため、スロットは音を変えない(バイパスが仕様)。そのため
-    /// `isActive` / `hasChain` / `cacheToken` には含めない(ホスト接続時に初めて含める)。
+    /// 音はプロバイダを渡した経路(再生・書き出し等)でのみ変わり、それ以外はバイパスが仕様。
+    /// `isActive` / `hasChain` / `cacheToken` には含めない(ミキサーと再生鍵が別枠で扱う)。
     public var vst3: [VST3Slot]?
     public var extra: [String: JSONValue] = [:]
 

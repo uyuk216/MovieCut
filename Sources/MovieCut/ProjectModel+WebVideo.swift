@@ -111,7 +111,7 @@ extension ProjectModel {
         let snapshot = project
         return await runJob(title: String(format: L10n.t("%@ を書き出しています"), L10n.t(format.title)), fileName: url.lastPathComponent, notices: [],
                             success: String(format: L10n.t("%@ に %@ を書き出しました"), url.lastPathComponent, L10n.t(format.title)), result: url) { progress in
-            try await FFmpegVideoExporter.export(project: snapshot, range: range, format: format, to: url, loudness: loudness, pluginEffectProviders: AppServices.pluginEffectProviders, progress: progress)
+            try await FFmpegVideoExporter.export(project: snapshot, range: range, format: format, to: url, loudness: loudness, pluginEffectProviders: AppServices.pluginEffectProviders, vst3Provider: AppServices.vst3EffectProvider, progress: progress)
         }
     }
 }

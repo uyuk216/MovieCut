@@ -145,16 +145,16 @@ public enum ExportJob {
     }
 
     /// `spec`(保存したプリセットなど)があればそれを優先する。`bitrateMbps` は仕様の値より優先する(`--bitrate`)。
-    public static func run(project: Project, preset: ExportPreset?, spec: ExportSpec? = nil, bitrateMbps: Double? = nil, range: ExportRange? = nil, to url: URL, assets: RenderAssets = RenderAssets(), loudness: LoudnessNormalizationSettings = .disabled, pluginEffectProviders: [any VideoEffectProviding] = [], subtitleEmbed: SubtitleEmbedSettings = .disabled, progress: ((Double) -> Void)? = nil) async throws {
+    public static func run(project: Project, preset: ExportPreset?, spec: ExportSpec? = nil, bitrateMbps: Double? = nil, range: ExportRange? = nil, to url: URL, assets: RenderAssets = RenderAssets(), loudness: LoudnessNormalizationSettings = .disabled, pluginEffectProviders: [any VideoEffectProviding] = [], vst3Provider: (any AudioEffectProviding)? = nil, subtitleEmbed: SubtitleEmbedSettings = .disabled, progress: ((Double) -> Void)? = nil) async throws {
         let chosen = spec ?? preset?.spec
         let p = chosen?.apply(to: project) ?? project
         let audioOnly = chosen?.audioOnly ?? false
         if audioOnly {
-            try await AudioExporter.export(project: p, range: range, to: url, loudness: loudness, progress: progress)
+            try await AudioExporter.export(project: p, range: range, to: url, loudness: loudness, vst3Provider: vst3Provider, progress: progress)
         } else {
             let mbps = ExportSpec.validBitrate(bitrateMbps) ?? chosen?.bitrateMbps
             let rate = mbps.map { Int(($0 * 1_000_000).rounded()) }
-            try await Exporter(project: p, assets: assets, range: range, videoBitrate: rate, loudness: loudness, pluginEffectProviders: pluginEffectProviders, subtitleEmbed: subtitleEmbed).export(to: url, progress: progress)
+            try await Exporter(project: p, assets: assets, range: range, videoBitrate: rate, loudness: loudness, pluginEffectProviders: pluginEffectProviders, vst3Provider: vst3Provider, subtitleEmbed: subtitleEmbed).export(to: url, progress: progress)
         }
     }
 }
@@ -172,21 +172,22 @@ public enum AudioExporter {
         var shouldStop: Bool { lock.withLock { _cancelled || _failure != nil } }
     }
 
-    public static func export(project: Project, range: ExportRange? = nil, to url: URL, loudness: LoudnessNormalizationSettings = .disabled, progress: ((Double) -> Void)? = nil) async throws {
+    public static func export(project: Project, range: ExportRange? = nil, to url: URL, loudness: LoudnessNormalizationSettings = .disabled, vst3Provider: (any AudioEffectProviding)? = nil, progress: ((Double) -> Void)? = nil) async throws {
         let control = Control()
         try await withTaskCancellationHandler {
-            try await run(project: project, range: range, to: url, loudness: loudness, progress: progress, control: control)
+            try await run(project: project, range: range, to: url, loudness: loudness, vst3Provider: vst3Provider, progress: progress, control: control)
         } onCancel: { control.cancel() }
     }
 
-    private static func run(project: Project, range: ExportRange?, to url: URL, loudness: LoudnessNormalizationSettings, progress: ((Double) -> Void)?, control: Control) async throws {
+    private static func run(project: Project, range: ExportRange?, to url: URL, loudness: LoudnessNormalizationSettings, vst3Provider: (any AudioEffectProviding)? = nil, progress: ((Double) -> Void)?, control: Control) async throws {
         guard project.endTime > 0 else { throw ExportError.emptyProject }
         let mixURL = FileManager.default.temporaryDirectory.appendingPathComponent("moviecut-mix-\(UUID().uuidString).caf")
         defer { try? FileManager.default.removeItem(at: mixURL) }
         let proj = project
         let mix: AudioMixer.MixResult
         do {
-            mix = try await Task.detached { try AudioMixer.mixdownDetailed(project: proj, to: mixURL, range: range) }.value
+            nonisolated(unsafe) let vst3 = vst3Provider   // 専用キューの中だけで使う(プロバイダはスレッドをまたがない)
+            mix = try await Task.detached { try AudioMixer.mixdownDetailed(project: proj, to: mixURL, range: range, vst3Provider: vst3) }.value
         } catch {
             if error is CancellationError { throw error }
             throw ExportError.audioMixFailed(error)

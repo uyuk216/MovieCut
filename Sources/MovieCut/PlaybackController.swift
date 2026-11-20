@@ -207,7 +207,8 @@ final class PlaybackController {
 
     init(model: ProjectModel?, backend: AudioBackend = EngineAudioBackend(), clock: PlaybackClock = HostClock(),
          debounce: TimeInterval = 0.25,
-         mixer: @escaping Mixer = { p, u in try AudioMixer.mixdown(project: p, assets: RenderAssets(), to: u) }) {
+         // 既定のミックス経路は VST3 プロバイダを `AppServices` の共有生成元から渡す(書き出しと同じ音にそろえる)
+         mixer: @escaping Mixer = { p, u in try AudioMixer.mixdown(project: p, assets: RenderAssets(), to: u, vst3Provider: AppServices.vst3EffectProvider) }) {
         self.model = model
         self.backend = backend
         self.clock = clock

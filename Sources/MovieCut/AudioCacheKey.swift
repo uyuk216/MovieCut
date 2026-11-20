@@ -33,6 +33,10 @@ struct AudioCacheKey: Hashable {
                 // 音声エフェクト・パン・音量のキーも、あるときだけ鍵に足す(どれも無いクリップの鍵は従来と同じ)
                 var extras = ""
                 if let fx = c.audioFx, fx.isActive { extras += "|fx=\(fx.cacheToken)" }
+                // VST3 は従来の cacheToken には含めない設計のまま、鍵材料 vst3CacheToken をここで足す
+                // (再生ミックスへプロバイダを渡すようになったので、有効なスロットの選択・パラメータ・
+                // 状態が変われば鍵も変わる必要がある。スロットが無い/全部無効なら何も足さず従来と同一)
+                if let fx = c.audioFx, !fx.vst3CacheToken.isEmpty { extras += "|vst3=\(fx.vst3CacheToken)" }
                 if c.hasPan { extras += "|pan=\(c.panOrDefault)" }
                 if c.hasDuck, Clip.supportsDuck(c) { extras += "|duck=\(c.duck!.cacheToken)" }
                 if c.type == .audio, c.isTreatedAsVoice { extras += "|voice" }   // 声の指定は BGM のダッキングを変えるので鍵に入れる

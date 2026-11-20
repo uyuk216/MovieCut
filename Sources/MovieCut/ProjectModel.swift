@@ -56,6 +56,11 @@ enum AppServices {
     static let pluginEffectProviders: [any VideoEffectProviding] = makePluginHost(for: Project.new()).allEffectProviders()
     /// プラグインエフェクトの記述子一覧(メニュー・インスペクタの表示用。実体は上のプロバイダと同じ組み込み分)。
     static let pluginEffectDescriptors: [PluginEffectDescriptor] = makePluginHost(for: Project.new()).effectDescriptors()
+    /// VST3 音声プロバイダ(再生・書き出し・測定・試聴で共有する 1 つだけの生成元)。
+    /// 生成経路は Core の `VST3EffectProvider.standard()`(= `VST3Panel` と同じ標準スキャン)に一本化し、
+    /// ここ以外で組み立てない。スキャンはメタ情報だけを読むので軽い。プラグインが無い環境では
+    /// 空のプロバイダになり、すべての経路の音は従来と一致する。
+    static let vst3EffectProvider: VST3EffectProvider = VST3EffectProvider.standard()
     /// プラグイン書き出し形式の記述子一覧(出力メニューの表示用)。
     static let pluginExportFormats: [ExportFormatDescriptor] = makePluginHost(for: Project.new()).exportFormatDescriptors()
     /// 作業メモリの予算(キャッシュが経由する単一の管理)。上限は総 RAM から決める(24GB 以上の Mac は上限なし)。
@@ -489,6 +494,7 @@ final class ProjectModel: ObservableObject {
         }
         // メモリ予算(アプリ全体で 1 つ)と、プレビュー画質の縮小率を、この書類の素材キャッシュへ。画質の設定が変わったら縮小率だけ付け直す。
         assets.setBudgetManager(AppServices.cacheBudget)
+        assets.setVST3Provider(AppServices.vst3EffectProvider)   // プレビュー側の合成音声解析も VST3 を効かせる
         assets.setPreviewVideoScale(currentPreviewTier().resolutionScale)
         nonisolated(unsafe) weak let tierAssets: RenderAssets? = assets
         previewTierObserver = NotificationCenter.default.addObserver(forName: PreviewTierStore.didChange, object: nil, queue: .main) { _ in
@@ -802,7 +808,7 @@ final class ProjectModel: ObservableObject {
         let title = (chosen.map { $0.audioOnly ? L10n.t("音声を書き出しています") : String(format: L10n.t("%@ で書き出しています"), $0.name) } ?? (plan.isProRes ? String(format: L10n.t("%@ の .mov を書き出しています"), OutputPlan.codecLabel(plan.codec)) : L10n.t("MP4 を書き出しています")))
         return await runJob(title: title, fileName: url.lastPathComponent, notices: notices,
                             success: String(format: L10n.t("%@ に書き出しました"), url.lastPathComponent) + (plan.usesFallbackCodec && isVideo ? "(HEVC)" : ""), result: url) { progress in
-            try await ExportJob.run(project: snapshot, preset: preset, spec: spec, bitrateMbps: bitrateMbps, range: range, to: url, loudness: loudness, pluginEffectProviders: AppServices.pluginEffectProviders, subtitleEmbed: subtitleEmbed, progress: progress)
+            try await ExportJob.run(project: snapshot, preset: preset, spec: spec, bitrateMbps: bitrateMbps, range: range, to: url, loudness: loudness, pluginEffectProviders: AppServices.pluginEffectProviders, vst3Provider: AppServices.vst3EffectProvider, subtitleEmbed: subtitleEmbed, progress: progress)
         }
     }
 

@@ -157,6 +157,14 @@ public struct VST3EffectProvider: AudioEffectProviding {
         self.init(plugins: scanResult.usablePlugins, availability: availability)
     }
 
+    /// 標準の置き場をスキャンして作る、アプリ全体で共有する生成経路。
+    /// `VST3Panel` のスキャン(`VST3Scanner.scanStandard()`)と同じ入口で、再生・書き出し・
+    /// 測定・試聴へ渡すプロバイダはすべてここから作る(二重実装しない)。
+    /// 置き場にプラグインが無ければ空のプロバイダになり、ミックスは従来と一致する。
+    public static func standard() -> VST3EffectProvider {
+        VST3EffectProvider(scanResult: VST3Scanner.scanStandard())
+    }
+
     public var audioEffectDescriptors: [PluginAudioEffectDescriptor] {
         plugins.map { info in
             PluginAudioEffectDescriptor(id: info.audioEffectID, label: info.name + "(VST3)",

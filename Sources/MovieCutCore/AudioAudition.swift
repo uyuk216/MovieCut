@@ -70,11 +70,13 @@ public enum AudioAudition {
 
     /// 試聴用の短い音を `url`(CAF)に書き、書いた長さ(秒)を返す。鳴らせないとき(対象が無い・範囲が短い)は nil。
     /// 読めない素材は例外(呼び出し側で状態欄に出す)。
+    /// `vst3Provider` を渡すと、そのクリップの VST3 指定も効かせて鳴らす(試聴は「ミックスの中で
+    /// そのクリップがどう鳴るか」を聞くためのものなので、本番のミックスと同じ条件にする)。
     @discardableResult
-    public static func renderSnippet(project p: Project, clipId: String, at t: Double, length: Double = snippetLength, to url: URL) throws -> Double? {
+    public static func renderSnippet(project p: Project, clipId: String, at t: Double, length: Double = snippetLength, to url: URL, vst3Provider: (any AudioEffectProviding)? = nil) throws -> Double? {
         guard let solo = soloProject(p, clipId: clipId), let clip = solo.tracks.first?.clips.first,
               let r = snippetRange(clip: clip, at: t, length: length) else { return nil }
-        let res = try AudioMixer.mixdownDetailed(project: solo, to: url, range: r)
+        let res = try AudioMixer.mixdownDetailed(project: solo, to: url, range: r, vst3Provider: vst3Provider)
         return res.sourceCount > 0 ? res.duration : nil
     }
 }
