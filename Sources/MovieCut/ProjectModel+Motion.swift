@@ -41,7 +41,7 @@ extension ProjectModel {
                 _ = MotionTrack.apply(samples: samples, to: &p.tracks[loc.track].clips[loc.index])
             }
             if let lostAt = run.lostAt {
-                self.statusText = String(format: "動きへの追従を付けました（%.1f 秒で対象を見失ったため、そこまでで打ち切りました）", lostAt)
+                self.statusText = String(format: L10n.t("動きへの追従を付けました（%.1f 秒で対象を見失ったため、そこまでで打ち切りました）"), lostAt)
             }
         }
     }

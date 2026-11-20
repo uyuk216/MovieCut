@@ -12,11 +12,11 @@ struct CandidateSwapSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("候補クリップを比較して差し替え").font(.title3.bold())
+                Text(L10n.t("候補クリップを比較して差し替え")).font(.title3.bold())
                 Spacer()
-                Text("\(cands.count) 件").foregroundStyle(.secondary).monospacedDigit()
+                Text(String(format: L10n.t("%d 件"), cands.count)).foregroundStyle(.secondary).monospacedDigit()
             }
-            Text("候補を選ぶとタイムラインに仮に反映されます。再生位置のプレビューで見比べてください。").font(.caption).foregroundStyle(.secondary)
+            Text(L10n.t("候補を選ぶとタイムラインに仮に反映されます。再生位置のプレビューで見比べてください。")).font(.caption).foregroundStyle(.secondary)
             List {
                 row(title: "元の素材", subtitle: nil, symbol: "arrow.uturn.backward", isSelected: selected == nil) { Task { await model.previewCandidate(nil) } }
                 ForEach(cands) { c in
@@ -27,10 +27,10 @@ struct CandidateSwapSheet: View {
             }
             .frame(minHeight: 220, maxHeight: 380)
             HStack {
-                Button("ファイルから候補を足す…") { model.chooseCandidateFiles() }
+                Button(L10n.t("ファイルから候補を足す…")) { model.chooseCandidateFiles() }
                 Spacer()
-                Button("キャンセル") { model.cancelCandidateSwap() }.keyboardShortcut(.cancelAction)
-                Button("差し替える") { model.commitCandidateSwap() }
+                Button(L10n.t("キャンセル")) { model.cancelCandidateSwap() }.keyboardShortcut(.cancelAction)
+                Button(L10n.t("差し替える")) { model.commitCandidateSwap() }
                     .keyboardShortcut(.defaultAction)
                     .disabled(selected == nil)
             }
@@ -44,7 +44,7 @@ struct CandidateSwapSheet: View {
             HStack(spacing: 10) {
                 Image(systemName: symbol).frame(width: 22).foregroundStyle(.secondary)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(title).lineLimit(1)
+                    Text(L10n.t(title)).lineLimit(1)
                     if let subtitle { Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle) }
                 }
                 Spacer()

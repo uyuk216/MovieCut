@@ -28,8 +28,8 @@ extension ProjectModel {
     func saveSelectedAsItemTemplate() {
         guard let clip = selectedClip else { return }
         let alert = NSAlert()
-        alert.messageText = "アイテムテンプレートとして保存"
-        alert.informativeText = "選択中のクリップの設定一式(見た目・振る舞い)を保存します。素材やセリフは、既存クリップへの適用では上書きしません。"
+        alert.messageText = L10n.t("アイテムテンプレートとして保存")
+        alert.informativeText = L10n.t("選択中のクリップの設定一式(見た目・振る舞い)を保存します。素材やセリフは、既存クリップへの適用では上書きしません。")
         let field = NSTextField(string: "\(clip.type.rawValue) テンプレート")
         field.frame = NSRect(x: 0, y: 0, width: 300, height: 24)
         let slotBox = NSButton(checkboxWithTitle: L10n.t("差し替え可能項目を付ける(文字・色・画像)"), target: nil, action: nil)
@@ -40,7 +40,7 @@ extension ProjectModel {
         stack.spacing = 8
         stack.frame = NSRect(x: 0, y: 0, width: 300, height: 56)
         alert.accessoryView = stack
-        alert.addButton(withTitle: "保存")
+        alert.addButton(withTitle: L10n.t("保存"))
         alert.addButton(withTitle: L10n.t("キャンセル"))
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         let slots = slotBox.state == .on ? ItemTemplate.suggestedSlots(for: clip) : []
@@ -66,7 +66,7 @@ extension ProjectModel {
             return saved.name
         } catch {
             let err = NSAlert()
-            err.messageText = "テンプレートを保存できませんでした"
+            err.messageText = L10n.t("テンプレートを保存できませんでした")
             err.informativeText = error.localizedDescription
             err.runModal()
             return nil
@@ -98,7 +98,7 @@ extension ProjectModel {
         stack.spacing = 6
         stack.frame = NSRect(x: 0, y: 0, width: 340, height: CGFloat(rows.count) * 28)
         alert.accessoryView = stack
-        alert.addButton(withTitle: confirmTitle)
+        alert.addButton(withTitle: L10n.t(confirmTitle))
         alert.addButton(withTitle: L10n.t("キャンセル"))
         guard alert.runModal() == .alertFirstButtonReturn else { return nil }
         var values: [String: String] = [:]

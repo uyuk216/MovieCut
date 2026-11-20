@@ -14,15 +14,15 @@ enum GenerativeMediaDialogs {
         var vs = VideoGenerationSettings.load()
         var aus = AudioGenerationSettings.load()
         let a = NSAlert()
-        a.messageText = "生成メディア(API)の設定"
-        a.informativeText = "画像・動画・音声/音楽の生成に使う、外部の生成サービスへの接続情報です。画像は OpenAI 互換の画像生成エンドポイント(images generations 形式)、動画と音声/音楽は OpenAI 互換スタイルの汎用エンドポイントに対応し、エンドポイントは種類ごとに自由に指定できます。生成はあなたの API アカウントで実行され、費用もあなたのアカウントに課金されます。APIキーはこの Mac のアプリ設定にだけ保存され、プロジェクトには入りません。MovieCut のサーバは経由しません。未設定のあいだは、その種類の生成(API)は使えません。http で送れるのはこの Mac 自身(localhost)宛てだけです。"
+        a.messageText = L10n.t("生成メディア(API)の設定")
+        a.informativeText = L10n.t("画像・動画・音声/音楽の生成に使う、外部の生成サービスへの接続情報です。画像は OpenAI 互換の画像生成エンドポイント(images generations 形式)、動画と音声/音楽は OpenAI 互換スタイルの汎用エンドポイントに対応し、エンドポイントは種類ごとに自由に指定できます。生成はあなたの API アカウントで実行され、費用もあなたのアカウントに課金されます。APIキーはこの Mac のアプリ設定にだけ保存され、プロジェクトには入りません。MovieCut のサーバは経由しません。未設定のあいだは、その種類の生成(API)は使えません。http で送れるのはこの Mac 自身(localhost)宛てだけです。")
         // 13 行: 画像 5 + 動画 5 + 音声 3。
         let rowH: CGFloat = 28
         let box = NSView(frame: NSRect(x: 0, y: 0, width: 500, height: rowH * 13))
         var rowIndex = 0
         func row(_ label: String, _ view: NSView) {
             let y = box.frame.height - rowH * CGFloat(rowIndex + 1)
-            let l = NSTextField(labelWithString: label)
+            let l = NSTextField(labelWithString: L10n.t(label))
             l.frame = NSRect(x: 0, y: y + 4, width: 130, height: 20)
             view.frame = NSRect(x: 135, y: y, width: 365, height: 26)
             box.addSubview(l); box.addSubview(view)
@@ -32,11 +32,11 @@ enum GenerativeMediaDialogs {
         let endpoint = NSTextField(string: s.endpoint)
         endpoint.placeholderString = "https://…/v1/images/generations"
         let model = NSTextField(string: s.model)
-        model.placeholderString = "モデル名"
+        model.placeholderString = L10n.t("モデル名")
         let key = NSSecureTextField(string: s.apiKey)
-        key.placeholderString = "APIキー(ローカルなサービスでは空で可)"
+        key.placeholderString = L10n.t("APIキー(ローカルなサービスでは空で可)")
         let size = NSPopUpButton(frame: .zero, pullsDown: false)
-        size.addItems(withTitles: ImageGenerationSize.allCases.map(\.title))
+        size.addItems(withTitles: ImageGenerationSize.allCases.map { L10n.t($0.title) })
         size.selectItem(at: ImageGenerationSize.allCases.firstIndex { $0.rawValue == s.size } ?? 0)
         let timeout = NSTextField(string: String(s.timeoutSeconds))
         row("画像エンドポイント", endpoint)
@@ -48,11 +48,11 @@ enum GenerativeMediaDialogs {
         let vEndpoint = NSTextField(string: vs.endpoint)
         vEndpoint.placeholderString = "https://…/v1/videos"
         let vModel = NSTextField(string: vs.model)
-        vModel.placeholderString = "モデル名"
+        vModel.placeholderString = L10n.t("モデル名")
         let vKey = NSSecureTextField(string: vs.apiKey)
-        vKey.placeholderString = "APIキー(ローカルなサービスでは空で可)"
+        vKey.placeholderString = L10n.t("APIキー(ローカルなサービスでは空で可)")
         let vSize = NSPopUpButton(frame: .zero, pullsDown: false)
-        vSize.addItems(withTitles: VideoGenerationSize.allCases.map(\.title))
+        vSize.addItems(withTitles: VideoGenerationSize.allCases.map { L10n.t($0.title) })
         vSize.selectItem(at: VideoGenerationSize.allCases.firstIndex { $0.rawValue == vs.size } ?? 0)
         let vFormat = NSTextField(string: vs.outputFormat)
         vFormat.placeholderString = "mp4"
@@ -65,15 +65,15 @@ enum GenerativeMediaDialogs {
         let aEndpoint = NSTextField(string: aus.endpoint)
         aEndpoint.placeholderString = "https://…/v1/audio/generations"
         let aModel = NSTextField(string: aus.model)
-        aModel.placeholderString = "モデル名"
+        aModel.placeholderString = L10n.t("モデル名")
         let aKey = NSSecureTextField(string: aus.apiKey)
-        aKey.placeholderString = "APIキー(ローカルなサービスでは空で可)"
+        aKey.placeholderString = L10n.t("APIキー(ローカルなサービスでは空で可)")
         row("音声エンドポイント", aEndpoint)
         row("音声モデル", aModel)
         row("音声APIキー", aKey)
         a.accessoryView = box
-        a.addButton(withTitle: "保存")
-        a.addButton(withTitle: "キャンセル")
+        a.addButton(withTitle: L10n.t("保存"))
+        a.addButton(withTitle: L10n.t("キャンセル"))
         guard a.runModal() == .alertFirstButtonReturn else { return }
         s.endpoint = endpoint.stringValue.trimmingCharacters(in: .whitespaces)
         s.model = model.stringValue.trimmingCharacters(in: .whitespaces)

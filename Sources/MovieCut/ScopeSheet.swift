@@ -18,16 +18,16 @@ struct ScopeSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("スコープ").font(.title3.bold())
+                Text(L10n.t("スコープ")).font(.title3.bold())
                 Spacer()
-                Text(String(format: "%.2f 秒のコマ", model.currentTime)).foregroundStyle(.secondary).monospacedDigit()
+                Text(String(format: L10n.t("%.2f 秒のコマ"), model.currentTime)).foregroundStyle(.secondary).monospacedDigit()
             }
             if let r = result {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("ヒストグラム(R・G・B・輝度)").font(.caption).foregroundStyle(.secondary)
+                        Text(L10n.t("ヒストグラム(R・G・B・輝度)")).font(.caption).foregroundStyle(.secondary)
                         HistogramView(result: r).frame(height: 130)
-                        Text("波形(横: 画面の左→右 / 縦: 暗い→明るい)").font(.caption).foregroundStyle(.secondary)
+                        Text(L10n.t("波形(横: 画面の左→右 / 縦: 暗い→明るい)")).font(.caption).foregroundStyle(.secondary)
                         WaveformView(result: r).frame(height: 200)
                         if let v = vectorResult {
                             Text(L10n.t("ベクトルスコープ(中心: 無彩色 / 向き: 色相 / 距離: 彩度)")).font(.caption).foregroundStyle(.secondary)
@@ -50,16 +50,16 @@ struct ScopeSheet: View {
             } else if loading {
                 ProgressView().frame(maxWidth: .infinity, minHeight: 200)
             } else {
-                Text("このコマを読めませんでした。").foregroundStyle(.secondary)
+                Text(L10n.t("このコマを読めませんでした。")).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 120)
             }
             Divider()
             spectrogramSection
             HStack {
-                Text("表示用の値(sRGB)で、書き出しには影響しません。").font(.caption).foregroundStyle(.secondary)
+                Text(L10n.t("表示用の値(sRGB)で、書き出しには影響しません。")).font(.caption).foregroundStyle(.secondary)
                 Spacer()
-                Button("更新") { Task { await refresh(); await refreshSpectrogram() } }
-                Button("閉じる") { model.showScopeSheet = false }.keyboardShortcut(.cancelAction)
+                Button(L10n.t("更新")) { Task { await refresh(); await refreshSpectrogram() } }
+                Button(L10n.t("閉じる")) { model.showScopeSheet = false }.keyboardShortcut(.cancelAction)
             }
             Text(L10n.t("ベクトルスコープとパレードは表示用に間引いて計算します。")).font(.caption).foregroundStyle(.secondary)
         }
@@ -110,7 +110,7 @@ struct ScopeSheet: View {
                         }
                         HStack(spacing: 4) {
                             Text(L10n.t("解析した長さ")).font(.caption).foregroundStyle(.secondary)
-                            Text(String(format: "%.2f 秒", r.duration)).font(.caption).monospacedDigit()
+                            Text(String(format: L10n.t("%.2f 秒"), r.duration)).font(.caption).monospacedDigit()
                         }
                     }
                     if r.truncated {

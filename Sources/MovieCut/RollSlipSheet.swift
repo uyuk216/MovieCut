@@ -42,22 +42,22 @@ struct RollSlipSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title).font(.headline)
-            Text(explanation)
+            Text(L10n.t(title)).font(.headline)
+            Text(L10n.t(explanation))
                 .font(.caption).foregroundStyle(.secondary)
                 .frame(width: 380, alignment: .leading).fixedSize(horizontal: false, vertical: true)
             HStack {
-                Text("動かす量")
+                Text(L10n.t("動かす量"))
                 TextField("1", text: $framesText).textFieldStyle(.roundedBorder).frame(width: 80)
-                Text("コマ").foregroundStyle(.secondary)
-                if failed { Text("整数で入れてください").font(.caption).foregroundStyle(.red) }
+                Text(L10n.t("コマ")).foregroundStyle(.secondary)
+                if failed { Text(L10n.t("整数で入れてください")).font(.caption).foregroundStyle(.red) }
             }
-            Text("素材の範囲を超える分は手前で止まります。ロックされたクリップは編集できません。")
+            Text(L10n.t("素材の範囲を超える分は手前で止まります。ロックされたクリップは編集できません。"))
                 .font(.caption).foregroundStyle(.secondary)
             HStack {
                 Spacer()
-                Button("キャンセル") { close() }.keyboardShortcut(.cancelAction)
-                Button("実行") { commit() }.keyboardShortcut(.defaultAction)
+                Button(L10n.t("キャンセル")) { close() }.keyboardShortcut(.cancelAction)
+                Button(L10n.t("実行")) { commit() }.keyboardShortcut(.defaultAction)
             }
         }
         .padding(16)

@@ -112,7 +112,7 @@ struct AnchorCurveEditor: View {
                 .onEnded { _ in
                     if dragging { dragging = false; end() }
                 })
-            .accessibilityLabel("\(label) 点\(i + 1)")
+            .accessibilityLabel(String(format: L10n.t("%@ 点%d"), L10n.t(label), i + 1))
     }
 }
 
@@ -163,8 +163,8 @@ struct ColorCurvesInspector: View {
     @ViewBuilder private var toneSection: some View {
         let ys = values(channel.key)
         VStack(alignment: .leading, spacing: 6) {
-            Text("トーンカーブ").font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary)
-            Picker("チャンネル", selection: $channel) {
+            Text(L10n.t("トーンカーブ")).font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary)
+            Picker(L10n.t("チャンネル"), selection: $channel) {
                 ForEach(Channel.allCases, id: \.rawValue) { Text($0.label).tag($0) }
             }
             .pickerStyle(.segmented).labelsHidden()
@@ -178,7 +178,7 @@ struct ColorCurvesInspector: View {
                 end: { model.commitGesture("カーブの変更") })
             HStack {
                 Spacer()
-                Button("リセット") { reset(base: channel.key, to: ColorCurves.anchorX) }
+                Button(L10n.t("リセット")) { reset(base: channel.key, to: ColorCurves.anchorX) }
                     .controlSize(.small).disabled(model.isLocked || ys == ColorCurves.anchorX)
             }
         }
@@ -192,9 +192,9 @@ struct ColorCurvesInspector: View {
         let flat = Array(repeating: defaults, count: 5)
         return VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(title).font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary)
+                Text(L10n.t(title)).font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary)
                 Spacer()
-                Button("リセット") { reset(base: base, to: flat) }
+                Button(L10n.t("リセット")) { reset(base: base, to: flat) }
                     .controlSize(.small).disabled(model.isLocked || ys == flat)
             }
             AnchorCurveEditor(

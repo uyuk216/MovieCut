@@ -10,8 +10,8 @@ extension ProjectModel {
         panel.allowedContentTypes = [.png, .jpeg]
         panel.nameFieldStringValue = documentName + "_thumbnail.png"
         panel.canCreateDirectories = true
-        panel.title = "サムネイル画像を書き出す(1280×720)"
-        panel.message = "拡張子で形式が決まります(.png / .jpg)。縦横比が違うときは余白を背景色で埋めます"
+        panel.title = L10n.t("サムネイル画像を書き出す(1280×720)")
+        panel.message = L10n.t("拡張子で形式が決まります(.png / .jpg)。縦横比が違うときは余白を背景色で埋めます")
         let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
             guard resp == .OK, let url = panel.url, let self else { return }
             Task { @MainActor in

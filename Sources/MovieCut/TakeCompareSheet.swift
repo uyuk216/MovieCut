@@ -12,9 +12,9 @@ struct TakeCompareSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("同じセリフのテイクを比較").font(.title3.bold())
+                Text(L10n.t("同じセリフのテイクを比較")).font(.title3.bold())
                 Spacer()
-                Text("\(groups.count) 組").foregroundStyle(.secondary).monospacedDigit()
+                Text(String(format: L10n.t("%d 組"), groups.count)).foregroundStyle(.secondary).monospacedDigit()
             }
             if groups.isEmpty {
                 InspectorGuideCard(symbol: "waveform.badge.magnifyingglass", heading: "同じセリフのボイスクリップがありません", message: "同じセリフのテイクが複数あると、ここで聞き比べられます。")
@@ -29,9 +29,9 @@ struct TakeCompareSheet: View {
                 .frame(minHeight: 260, maxHeight: 460)
             }
             HStack {
-                Text("セリフの表情タグ・空白・全角半角の違いは同じ扱いです。").font(.caption).foregroundStyle(.secondary)
+                Text(L10n.t("セリフの表情タグ・空白・全角半角の違いは同じ扱いです。")).font(.caption).foregroundStyle(.secondary)
                 Spacer()
-                Button("閉じる") { model.stopTakePlayback(); model.showTakeSheet = false }
+                Button(L10n.t("閉じる")) { model.stopTakePlayback(); model.showTakeSheet = false }
                     .keyboardShortcut(.cancelAction)
             }
         }
@@ -50,20 +50,20 @@ struct TakeCompareSheet: View {
                     Button { if model.takePlayingId == t.clipId { model.stopTakePlayback() } else { model.playTake(clipId: t.clipId) } } label: {
                         Image(systemName: model.takePlayingId == t.clipId ? "stop.fill" : "play.fill")
                     }
-                    .help("このテイクを試聴")
+                    .help(L10n.t("このテイクを試聴"))
                     Text(t.trackName).frame(width: 74, alignment: .leading).lineLimit(1)
-                    Text(String(format: "%.2f 秒", t.start)).monospacedDigit().foregroundStyle(.secondary).frame(width: 70, alignment: .trailing)
-                    Text(String(format: "長さ %.2f", t.duration)).monospacedDigit().frame(width: 80, alignment: .trailing)
+                    Text(String(format: L10n.t("%.2f 秒"), t.start)).monospacedDigit().foregroundStyle(.secondary).frame(width: 70, alignment: .trailing)
+                    Text(String(format: L10n.t("長さ %.2f"), t.duration)).monospacedDigit().frame(width: 80, alignment: .trailing)
                         .foregroundStyle(abs(t.duration - shortest) < 1e-6 ? Color.green : Color.primary)
                     if let m = metrics[t.clipId] {
                         Text(Self.metricText(m)).monospacedDigit().font(.caption).foregroundStyle(.secondary)
                     } else {
-                        Text("測定中…").font(.caption).foregroundStyle(.tertiary)
+                        Text(L10n.t("測定中…")).font(.caption).foregroundStyle(.tertiary)
                     }
                     Spacer()
-                    Button("移動") { model.focusTake(t) }.controlSize(.small)
-                    Button("これだけ残す") { model.keepOnlyTake(t.clipId) }.controlSize(.small)
-                        .help("同じセリフの他のテイクを取り除きます(1 回で元に戻せます)")
+                    Button(L10n.t("移動")) { model.focusTake(t) }.controlSize(.small)
+                    Button(L10n.t("これだけ残す")) { model.keepOnlyTake(t.clipId) }.controlSize(.small)
+                        .help(L10n.t("同じセリフの他のテイクを取り除きます(1 回で元に戻せます)"))
                 }
             }
         }
@@ -73,7 +73,7 @@ struct TakeCompareSheet: View {
 
     static func metricText(_ m: TakeCompare.Metrics) -> String {
         guard let avg = m.averageDb, let peak = m.peakDb else { return "声なし" }
-        return String(format: "平均 %.1f dB  ピーク %.1f dB  頭 %.2f 秒  終わり %.2f 秒", avg, peak, m.leadSilence, m.trailSilence)
+        return String(format: L10n.t("平均 %.1f dB  ピーク %.1f dB  頭 %.2f 秒  終わり %.2f 秒"), avg, peak, m.leadSilence, m.trailSilence)
     }
 
     private func measure() async {

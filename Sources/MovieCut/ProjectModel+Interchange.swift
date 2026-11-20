@@ -17,8 +17,8 @@ extension ProjectModel {
         panel.allowedContentTypes = [UTType(filenameExtension: "xml") ?? .data]
         panel.nameFieldStringValue = documentName + ".xml"
         panel.canCreateDirectories = true
-        panel.title = "FCP XML形式(.xml)で書き出す"
-        panel.message = "Premiere Pro 等で開ける FCP XML(XMEML)として書き出します。対応できない要素は、書き出し後に一覧でお知らせします。"
+        panel.title = L10n.t("FCP XML形式(.xml)で書き出す")
+        panel.message = L10n.t("Premiere Pro 等で開ける FCP XML(XMEML)として書き出します。対応できない要素は、書き出し後に一覧でお知らせします。")
 
         let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
             guard resp == .OK, let picked = panel.url, let self else { return }
@@ -43,8 +43,8 @@ extension ProjectModel {
         panel.allowedContentTypes = [UTType(filenameExtension: "edl") ?? .data]
         panel.nameFieldStringValue = documentName + ".edl"
         panel.canCreateDirectories = true
-        panel.title = "EDL形式(.edl)で書き出す"
-        panel.message = "CMX 3600 形式のカットリストとして書き出します(映像 1 トラック + 音声最大 4 トラック)。対応できない要素は、書き出し後に一覧でお知らせします。"
+        panel.title = L10n.t("EDL形式(.edl)で書き出す")
+        panel.message = L10n.t("CMX 3600 形式のカットリストとして書き出します(映像 1 トラック + 音声最大 4 トラック)。対応できない要素は、書き出し後に一覧でお知らせします。")
 
         let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
             guard resp == .OK, let picked = panel.url, let self else { return }
@@ -72,8 +72,8 @@ extension ProjectModel {
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
         panel.allowsMultipleSelection = false
-        panel.title = "FCP XMLを読み込む"
-        panel.message = "FCP XML(XMEML)を読み込み、今のプロジェクトをその内容に置き換えます(取り消しで戻せます)。対応できない要素は、読み込み後に一覧でお知らせします。"
+        panel.title = L10n.t("FCP XMLを読み込む")
+        panel.message = L10n.t("FCP XML(XMEML)を読み込み、今のプロジェクトをその内容に置き換えます(取り消しで戻せます)。対応できない要素は、読み込み後に一覧でお知らせします。")
 
         let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
             guard resp == .OK, let url = panel.url, let self else { return }
@@ -99,8 +99,8 @@ extension ProjectModel {
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
         panel.allowsMultipleSelection = false
-        panel.title = "Premiere Pro プロジェクト(.prproj)を読み込む"
-        panel.message = "Premiere Pro プロジェクト(.prproj)を読み込み、今のプロジェクトをその内容に置き換えます(取り消しで戻せます)。対応できない要素は、読み込み後に一覧でお知らせします。"
+        panel.title = L10n.t("Premiere Pro プロジェクト(.prproj)を読み込む")
+        panel.message = L10n.t("Premiere Pro プロジェクト(.prproj)を読み込み、今のプロジェクトをその内容に置き換えます(取り消しで戻せます)。対応できない要素は、読み込み後に一覧でお知らせします。")
 
         let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
             guard resp == .OK, let url = panel.url, let self else { return }
@@ -120,7 +120,7 @@ extension ProjectModel {
 
     private func showInterchangeReport(title: String, lines: [String], hasLoss: Bool) {
         let alert = NSAlert()
-        alert.messageText = title
+        alert.messageText = L10n.t(title)
         if hasLoss { alert.alertStyle = .warning }
         alert.informativeText = lines.joined(separator: "\n")
         alert.addButton(withTitle: "OK")

@@ -44,11 +44,11 @@ extension ProjectModel {
 
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "欠けている素材が \(missing.count) 件あります"
+        alert.messageText = String(format: L10n.t("欠けている素材が %d 件あります"), missing.count)
         alert.informativeText = MissingMedia.blockMessage(missing, limit: 5)
-        alert.addButton(withTitle: "フォルダから探す")
-        alert.addButton(withTitle: "パッケージとして保存…")
-        alert.addButton(withTitle: "あとで")
+        alert.addButton(withTitle: L10n.t("フォルダから探す"))
+        alert.addButton(withTitle: L10n.t("パッケージとして保存…"))
+        alert.addButton(withTitle: L10n.t("あとで"))
         alert.beginSheetModal(for: window) { [weak self] resp in
             guard let self else { return }
             switch resp {
@@ -66,7 +66,7 @@ extension ProjectModel {
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
-        panel.title = "素材を探すフォルダを選ぶ(中のフォルダも探します)"
+        panel.title = L10n.t("素材を探すフォルダを選ぶ(中のフォルダも探します)")
         let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
             guard resp == .OK, let url = panel.url, let self else { return }
             self.relinkMedia(in: url)
@@ -116,8 +116,8 @@ extension ProjectModel {
         panel.canChooseDirectories = true
         panel.canCreateDirectories = true
         panel.allowsMultipleSelection = false
-        panel.title = "パッケージを作るフォルダを選ぶ"
-        panel.prompt = "ここに作る"
+        panel.title = L10n.t("パッケージを作るフォルダを選ぶ")
+        panel.prompt = L10n.t("ここに作る")
         let name = documentName
         let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
             guard resp == .OK, let parent = panel.url, let self else { return }

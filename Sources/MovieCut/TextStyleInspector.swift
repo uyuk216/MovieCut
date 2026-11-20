@@ -30,16 +30,16 @@ struct TextStyleInspector: View {
     // MARK: 吹き出し(B-2)
 
     @ViewBuilder private func bubbleSection(_ c: Clip) -> some View {
-        InspectorSection(title: "吹き出し")
-        Toggle("吹き出しを付ける", isOn: Binding(get: { c.bubble != nil }, set: { on in
+        InspectorSection(title: L10n.t("吹き出し"))
+        Toggle(L10n.t("吹き出しを付ける"), isOn: Binding(get: { c.bubble != nil }, set: { on in
             model.setBubble(on ? Bubble() : nil, name: on ? "吹き出しを付ける" : "吹き出しを外す", clipId: clipId)
         }))
         .toggleStyle(.checkbox).font(MCDesign.Font.callout).disabled(model.isLocked)
         if let b = c.bubble {
             VStack(alignment: .leading, spacing: 6) {
-                InspectorField(label: "形") {
+                InspectorField(label: L10n.t("形")) {
                     Picker("", selection: Binding(get: { b.shape }, set: { v in model.editBubble({ $0.shape = v }, name: "吹き出しの形の変更", clipId: clipId) })) {
-                        Text("丸角").tag("rounded"); Text("雲").tag("cloud"); Text("四角").tag("rect")
+                        Text(L10n.t("丸角")).tag("rounded"); Text(L10n.t("雲")).tag("cloud"); Text(L10n.t("四角")).tag("rect")
                     }
                     .pickerStyle(.segmented).labelsHidden()
                 }
@@ -50,7 +50,7 @@ struct TextStyleInspector: View {
                            begin: { model.beginGesture() },
                            change: { v in model.liveClipProperty({ if $0.bubble != nil { $0.bubble?.strokeWidth = v } }, name: "吹き出しの縁の変更", clipId: clipId) },
                            end: { model.commitGesture("吹き出しの縁の変更") })
-                Toggle("尾を付ける", isOn: Binding(get: { b.tail }, set: { on in model.editBubble({ $0.tail = on }, name: "尾の切り替え", clipId: clipId) }))
+                Toggle(L10n.t("尾を付ける"), isOn: Binding(get: { b.tail }, set: { on in model.editBubble({ $0.tail = on }, name: "尾の切り替え", clipId: clipId) }))
                     .toggleStyle(.checkbox).font(MCDesign.Font.callout)
                 if b.tail { bubbleTailControls(b) }
             }
@@ -61,16 +61,16 @@ struct TextStyleInspector: View {
 
     /// 尾の先: 画面上の点(正規化した x・y)か、キャラの位置(＋ずれ)。
     @ViewBuilder private func bubbleTailControls(_ b: Bubble) -> some View {
-        InspectorField(label: "尾の先") {
+        InspectorField(label: L10n.t("尾の先")) {
             Picker("", selection: Binding(get: { b.tailChar == nil ? "point" : "char" }, set: { v in
                 model.editBubble({ $0.tailChar = v == "char" ? model.project.characters.first?.id : nil }, name: "尾の先の変更", clipId: clipId)
             })) {
-                Text("画面上の点").tag("point"); Text("キャラ").tag("char")
+                Text(L10n.t("画面上の点")).tag("point"); Text(L10n.t("キャラ")).tag("char")
             }
             .pickerStyle(.segmented).labelsHidden()
         }
         if let cid = b.tailChar {
-            InspectorField(label: "キャラ") {
+            InspectorField(label: L10n.t("キャラ")) {
                 Picker("", selection: Binding(get: { cid }, set: { v in model.editBubble({ $0.tailChar = v }, name: "尾の先の変更", clipId: clipId) })) {
                     ForEach(model.project.characters, id: \.id) { Text($0.name).tag($0.id) }
                 }
@@ -97,21 +97,21 @@ struct TextStyleInspector: View {
     // MARK: スタイル
 
     @ViewBuilder private func styleSection(_ c: Clip) -> some View {
-        InspectorSection(title: "スタイル")
+        InspectorSection(title: L10n.t("スタイル"))
         HStack(spacing: 8) {
             Menu {
                 ForEach(TextStyleLibrary.builtins.filter { !$0.id.hasPrefix(TextStyleLibrary.titlePrefix) }) { s in Button(s.name) { model.applyTextStyle(id: s.id, clipId: clipId) } }
                 Divider()
-                Menu("アニメ付きタイトル") {
+                Menu(L10n.t("アニメ付きタイトル")) {
                     ForEach(TextStyleLibrary.animatedTitles) { s in Button(s.name) { model.applyTextStyle(id: s.id, clipId: clipId) } }
                 }
                 if !store.user.isEmpty {
                     Divider()
                     ForEach(store.user) { s in Button(s.name) { model.applyTextStyle(id: s.id, clipId: clipId) } }
                 }
-            } label: { Text("スタイルを適用") }
+            } label: { Text(L10n.t("スタイルを適用")) }
                 .menuStyle(.button).fixedSize().disabled(model.isLocked)
-            Button("現在の見た目を保存…") { draftName = ""; showSave = true }
+            Button(L10n.t("現在の見た目を保存…")) { draftName = ""; showSave = true }
                 .disabled(model.isLocked)
             Spacer()
         }
@@ -121,26 +121,26 @@ struct TextStyleInspector: View {
                 Menu {
                     ForEach(store.user) { s in
                         Menu(s.name) {
-                            Button("名前を変更…") { draftName = s.name; renamingId = s.id }
-                            Button("削除", role: .destructive) { model.deleteTextStyle(id: s.id) }
+                            Button(L10n.t("名前を変更…")) { draftName = s.name; renamingId = s.id }
+                            Button(L10n.t("削除"), role: .destructive) { model.deleteTextStyle(id: s.id) }
                         }
                     }
-                } label: { Text("保存したスタイルの管理") }
+                } label: { Text(L10n.t("保存したスタイルの管理")) }
                     .menuStyle(.button).fixedSize()
                 Spacer()
             }
             .controlSize(.small)
         }
         Color.clear.frame(height: 0)
-            .alert("スタイルの名前", isPresented: $showSave) {
-                TextField("名前", text: $draftName)
-                Button("保存") { model.saveCurrentTextStyle(named: draftName, clipId: clipId) }
-                Button("キャンセル", role: .cancel) {}
-            } message: { Text("色・縁・書体と、影や箱などの装飾を保存します。") }
-            .alert("名前を変更", isPresented: Binding(get: { renamingId != nil }, set: { if !$0 { renamingId = nil } })) {
-                TextField("名前", text: $draftName)
-                Button("変更") { if let id = renamingId { model.renameTextStyle(id: id, to: draftName) }; renamingId = nil }
-                Button("キャンセル", role: .cancel) { renamingId = nil }
+            .alert(L10n.t("スタイルの名前"), isPresented: $showSave) {
+                TextField(L10n.t("名前"), text: $draftName)
+                Button(L10n.t("保存")) { model.saveCurrentTextStyle(named: draftName, clipId: clipId) }
+                Button(L10n.t("キャンセル"), role: .cancel) {}
+            } message: { Text(L10n.t("色・縁・書体と、影や箱などの装飾を保存します。")) }
+            .alert(L10n.t("名前を変更"), isPresented: Binding(get: { renamingId != nil }, set: { if !$0 { renamingId = nil } })) {
+                TextField(L10n.t("名前"), text: $draftName)
+                Button(L10n.t("変更")) { if let id = renamingId { model.renameTextStyle(id: id, to: draftName) }; renamingId = nil }
+                Button(L10n.t("キャンセル"), role: .cancel) { renamingId = nil }
             }
     }
 
@@ -198,9 +198,9 @@ struct TextStyleInspector: View {
             if let h = st.highlight {
                 VStack(alignment: .leading, spacing: 6) {
                     color("色", hex: h.colorOrDefault, name: "カラオケの色の変更") { $0.highlight?.color = $1 }
-                    InspectorField(label: "単位") {
+                    InspectorField(label: L10n.t("単位")) {
                         Picker("", selection: Binding(get: { h.isWordMode ? "word" : "char" }, set: { v in edit("カラオケの単位の変更") { $0.highlight?.mode = v } })) {
-                            Text("1 文字").tag("char"); Text("単語").tag("word")
+                            Text(L10n.t("1 文字")).tag("char"); Text(L10n.t("単語")).tag("word")
                         }
                         .pickerStyle(.segmented).labelsHidden()
                     }
@@ -238,18 +238,18 @@ struct TextStyleInspector: View {
         slider("行間（倍）", value: st.lineHeightOrDefault, range: 0.8...2.5, step: 0.05, format: { String(format: "%.2f", $0) }, name: "行間の変更") {
             $0.lineHeight = abs($1 - TextStyle.defaultLineHeight) < 0.001 ? nil : $1
         }
-        InspectorField(label: "揃え") {
+        InspectorField(label: L10n.t("揃え")) {
             Picker("", selection: Binding(get: { st.alignOrDefault }, set: { a in edit("文字の揃えの変更") { $0.align = a == .center ? nil : a.rawValue } })) {
                 ForEach(TextStyle.Align.allCases, id: \.rawValue) { Text($0.label).tag($0) }
             }
             .pickerStyle(.segmented).labelsHidden()
         }
         toggle("縦書き（右の列から左へ）", isOn: st.verticalOrDefault, name: "縦書きの変更") { $0.vertical = $1 ? true : nil }
-        InspectorField(label: "太さ") {
+        InspectorField(label: L10n.t("太さ")) {
             Picker("", selection: Binding<String>(get: { st.weightValue?.rawValue ?? "" }, set: { v in
                 edit("太さの変更") { $0.weight = v.isEmpty ? nil : v }
             })) {
-                Text("自動").tag("")
+                Text(L10n.t("自動")).tag("")
                 ForEach(TextStyle.FontWeight.allCases, id: \.rawValue) { Text($0.label).tag($0.rawValue) }
             }
             .labelsHidden().disabled(model.isLocked)
@@ -261,7 +261,7 @@ struct TextStyleInspector: View {
             toggle("斜体", isOn: st.italicOrDefault, name: "斜体の変更") { $0.italic = $1 ? true : nil }
             Spacer()
         }
-        Button { model.setTextStyle({ $0 = TextStyle() }, name: "装飾をリセット", clipId: clipId) } label: { Text("装飾をリセット").frame(maxWidth: .infinity) }
+        Button { model.setTextStyle({ $0 = TextStyle() }, name: "装飾をリセット", clipId: clipId) } label: { Text(L10n.t("装飾をリセット")).frame(maxWidth: .infinity) }
             .controlSize(.small)
             .disabled(model.isLocked || c.textStyle == nil)
     }
@@ -269,33 +269,33 @@ struct TextStyleInspector: View {
     // MARK: カウントダウン(文字クリップ)
 
     @ViewBuilder private func counterSection(_ c: Clip) -> some View {
-        InspectorSection(title: "カウントダウン")
-        Toggle("カウントダウンを付ける", isOn: Binding(get: { c.counter != nil }, set: { on in
+        InspectorSection(title: L10n.t("カウントダウン"))
+        Toggle(L10n.t("カウントダウンを付ける"), isOn: Binding(get: { c.counter != nil }, set: { on in
             model.setCounter(on ? TextCounter() : nil, name: on ? "カウントダウンにする" : "カウントダウンを外す", clipId: clipId)
         }))
         .toggleStyle(.checkbox).font(MCDesign.Font.callout).disabled(model.isLocked)
         if let k = c.counter {
             VStack(alignment: .leading, spacing: 6) {
-                InspectorField(label: "開始（秒）") {
+                InspectorField(label: L10n.t("開始（秒）")) {
                     NumField(value: k.from, step: 1, decimals: 0, clamp: { min(max($0.rounded(), 0), 3600) },
                              onCommit: { v in model.editCounter({ $0.from = v }, name: "カウントダウンの開始の変更", clipId: clipId) },
                              onStep: { v in model.coalescedCounter({ $0.from = v }, name: "カウントダウンの開始の変更", clipId: clipId) })
                 }
-                InspectorField(label: "終わり（秒）") {
+                InspectorField(label: L10n.t("終わり（秒）")) {
                     NumField(value: k.to, step: 1, decimals: 0, clamp: { min(max($0.rounded(), 0), 3600) },
                              onCommit: { v in model.editCounter({ $0.to = v }, name: "カウントダウンの終わりの変更", clipId: clipId) },
                              onStep: { v in model.coalescedCounter({ $0.to = v }, name: "カウントダウンの終わりの変更", clipId: clipId) })
                 }
-                InspectorField(label: "表示") {
+                InspectorField(label: L10n.t("表示")) {
                     Picker("", selection: Binding(get: { k.format }, set: { v in model.editCounter({ $0.format = v }, name: "カウントダウンの表示の変更", clipId: clipId) })) {
-                        Text("分:秒").tag("mm:ss"); Text("秒だけ").tag("ss")
+                        Text(L10n.t("分:秒")).tag("mm:ss"); Text(L10n.t("秒だけ")).tag("ss")
                     }
                     .pickerStyle(.segmented).labelsHidden()
                 }
             }
             .padding(.leading, 10)
             .disabled(model.isLocked)
-            Text("クリップの頭から終わりまで、開始から終わりへ直線に変わります。文字は「テキスト」の後ろに続きます。").font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
+            Text(L10n.t("クリップの頭から終わりまで、開始から終わりへ直線に変わります。文字は「テキスト」の後ろに続きます。")).font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
         }
     }
 
@@ -303,34 +303,34 @@ struct TextStyleInspector: View {
 
     @ViewBuilder private func valueRefSection(_ c: Clip) -> some View {
         let cands = model.valueRefCandidates(for: c.id)
-        InspectorSection(title: "他のクリップの値")
-        Toggle("他のクリップの値を表示", isOn: Binding(get: { c.valueRef != nil }, set: { on in
+        InspectorSection(title: L10n.t("他のクリップの値"))
+        Toggle(L10n.t("他のクリップの値を表示"), isOn: Binding(get: { c.valueRef != nil }, set: { on in
             guard let first = cands.first else { return }
             model.setValueRef(on ? ValueRef(clipId: first.id) : nil, name: on ? "他のクリップの値を表示" : "値の表示を外す", clipId: clipId)
         }))
         .toggleStyle(.checkbox).font(MCDesign.Font.callout).disabled(model.isLocked || (c.valueRef == nil && cands.isEmpty))
         if let r = c.valueRef {
             VStack(alignment: .leading, spacing: 6) {
-                InspectorField(label: "クリップ") {
+                InspectorField(label: L10n.t("クリップ")) {
                     Picker("", selection: Binding(get: { r.clipId }, set: { v in model.editValueRef({ $0.clipId = v }, name: "参照クリップの変更", clipId: clipId) })) {
                         ForEach(cands, id: \.id) { Text(Self.candidateLabel($0)).tag($0.id) }
-                        if !cands.contains(where: { $0.id == r.clipId }) { Text("（見つかりません）").tag(r.clipId) }
+                        if !cands.contains(where: { $0.id == r.clipId }) { Text(L10n.t("（見つかりません）")).tag(r.clipId) }
                     }
                     .labelsHidden()
                 }
-                InspectorField(label: "項目") {
+                InspectorField(label: L10n.t("項目")) {
                     Picker("", selection: Binding(get: { r.param }, set: { v in model.editValueRef({ $0.param = v }, name: "参照する項目の変更", clipId: clipId) })) {
                         ForEach(ValueRef.params, id: \.self) { Text(ValueRef.label(of: $0)).tag($0) }
                     }
                     .labelsHidden()
                 }
-                InspectorField(label: "表示") {
+                InspectorField(label: L10n.t("表示")) {
                     Picker("", selection: Binding(get: { r.format }, set: { v in model.editValueRef({ $0.format = v }, name: "値の表示形式の変更", clipId: clipId) })) {
                         ForEach(ValueRef.formats, id: \.self) { Text(ValueRef.formatLabel($0)).tag($0) }
                     }
                     .pickerStyle(.segmented).labelsHidden()
                 }
-                InspectorField(label: "小数の桁") {
+                InspectorField(label: L10n.t("小数の桁")) {
                     NumField(value: Double(r.decimals), step: 1, decimals: 0, clamp: { min(max($0.rounded(), 0), 4) },
                              onCommit: { v in model.editValueRef({ $0.decimals = Int(v) }, name: "値の桁数の変更", clipId: clipId) },
                              onStep: { v in model.editValueRef({ $0.decimals = Int(v) }, name: "値の桁数の変更", clipId: clipId) })
@@ -338,7 +338,7 @@ struct TextStyleInspector: View {
             }
             .padding(.leading, 10)
             .disabled(model.isLocked)
-            Text("再生位置での値(キーフレーム反映)が「テキスト」の後ろに続きます。参照先が無いときは「—」。カウントダウンがあるときはそちらが先です。").font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
+            Text(L10n.t("再生位置での値(キーフレーム反映)が「テキスト」の後ろに続きます。参照先が無いときは「—」。カウントダウンがあるときはそちらが先です。")).font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
         }
     }
 
@@ -355,41 +355,41 @@ struct TextStyleInspector: View {
 
     @ViewBuilder private func animationSection(_ c: Clip) -> some View {
         let kind = c.textAnim?.known ?? .none
-        InspectorSection(title: "文字アニメーション")
-        InspectorField(label: "種類") {
+        InspectorSection(title: L10n.t("文字アニメーション"))
+        InspectorField(label: L10n.t("種類")) {
             Picker("", selection: Binding(get: { c.textAnim == nil ? TextAnimKind.none.rawValue : c.textAnim!.kind },
                                           set: { v in model.setTextAnim(TextAnimKind(rawValue: v) ?? .none, clipId: clipId) })) {
                 ForEach(TextAnimKind.allCases.filter { c.type == .text || !$0.isScroll }, id: \.rawValue) { Text($0.label).tag($0.rawValue) }
-                if let a = c.textAnim, a.known == nil { Text("（未対応: \(a.kind)）").tag(a.kind) }
+                if let a = c.textAnim, a.known == nil { Text(String(format: L10n.t("（未対応: %@）"), a.kind)).tag(a.kind) }
             }
             .labelsHidden()
         }
         if kind.isScroll {
-            InspectorField(label: "速さ（/秒）") {
+            InspectorField(label: L10n.t("速さ（/秒）")) {
                 NumField(value: c.textAnim?.speedOrDefault ?? TextAnim.defaultSpeed, step: 0.01, decimals: 2, clamp: { TextAnim.clampSpeed($0) },
                          onCommit: { model.setTextAnim(kind, speed: $0, clipId: clipId) },
                          onStep: { model.coalescedTextAnimSpeed($0, clipId: clipId) })
             }
-            Text("画面の高さ（上へ）・幅（左へ）に対する割合。クリップの終わりまで流れます。位置は基準の位置から、下端（右端）の外へ入ります。").font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
+            Text(L10n.t("画面の高さ（上へ）・幅（左へ）に対する割合。クリップの終わりまで流れます。位置は基準の位置から、下端（右端）の外へ入ります。")).font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
         } else if kind != .none {
-            InspectorField(label: "長さ（秒）") {
+            InspectorField(label: L10n.t("長さ（秒）")) {
                 NumField(value: c.textAnim?.durationOrDefault ?? 1, step: 0.1, decimals: 2, clamp: { TextAnim.clampDuration($0) },
                          onCommit: { model.setTextAnim(kind, duration: $0, clipId: clipId) },
                          onStep: { model.coalescedTextAnimDuration($0, clipId: clipId) })
             }
-            Toggle("1文字ずつ動かす", isOn: Binding(get: { c.textAnim?.perCharOrNil != nil },
+            Toggle(L10n.t("1文字ずつ動かす"), isOn: Binding(get: { c.textAnim?.perCharOrNil != nil },
                                                    set: { on in model.setTextAnimPerChar(on ? TextAnim.defaultPerChar : nil, clipId: clipId) }))
                 .toggleStyle(.checkbox).font(MCDesign.Font.callout).disabled(model.isLocked)
             if let g = c.textAnim?.perCharOrNil {
-                InspectorField(label: "文字の間隔（秒）") {
+                InspectorField(label: L10n.t("文字の間隔（秒）")) {
                     NumField(value: g, step: 0.01, decimals: 2, clamp: { TextAnim.clampPerChar($0) },
                              onCommit: { model.setTextAnimPerChar($0, clipId: clipId) },
                              onStep: { model.coalescedTextAnimPerChar($0, clipId: clipId) })
                 }
                 .padding(.leading, 10)
-                Text("1 文字ごとに、この間隔だけ遅れて同じ動きを始めます（縦書きでは上の文字から）。").font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
+                Text(L10n.t("1 文字ごとに、この間隔だけ遅れて同じ動きを始めます（縦書きでは上の文字から）。")).font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
             } else {
-                Text("クリップの頭からこの長さだけ動きます。").font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
+                Text(L10n.t("クリップの頭からこの長さだけ動きます。")).font(MCDesign.Font.subheadline).foregroundStyle(.secondary)
             }
         }
     }

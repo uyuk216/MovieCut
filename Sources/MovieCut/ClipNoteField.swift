@@ -9,7 +9,7 @@ struct ClipNoteField: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        TextField("作業メモ(書き出しには出ません)", text: $text, axis: .vertical)
+        TextField(L10n.t("作業メモ(書き出しには出ません)"), text: $text, axis: .vertical)
             .lineLimit(1...3)
             .textFieldStyle(.roundedBorder)
             .font(MCDesign.Font.callout)

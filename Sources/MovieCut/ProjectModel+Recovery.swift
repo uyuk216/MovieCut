@@ -32,12 +32,12 @@ enum RecoveryPrompt {
         let items = RecoveryFolder.list(in: dir)
         guard !items.isEmpty else { return }
         let alert = NSAlert()
-        alert.messageText = "前回の未保存の編集が残っています"
+        alert.messageText = L10n.t("前回の未保存の編集が残っています")
         alert.informativeText = items.map { AutosaveRecovery.title($0.entry) }.joined(separator: "\n")
             + "\n\n「復元」は新しい書類として開きます。元のファイルは書き換えません。"
-        alert.addButton(withTitle: "復元")
-        alert.addButton(withTitle: "捨てる")
-        alert.addButton(withTitle: "あとで")
+        alert.addButton(withTitle: L10n.t("復元"))
+        alert.addButton(withTitle: L10n.t("捨てる"))
+        alert.addButton(withTitle: L10n.t("あとで"))
         let r = alert.runModal()
         switch r {
         case .alertFirstButtonReturn:

@@ -19,7 +19,7 @@ struct ReviewCommentsSheet: View {
             HStack {
                 Text(L10n.t("レビューコメント")).font(.title3.bold())
                 Spacer()
-                Text("\(all.count) 件").foregroundStyle(.secondary).monospacedDigit()
+                Text(String(format: L10n.t("%d 件"), all.count)).foregroundStyle(.secondary).monospacedDigit()
             }
             HStack(spacing: 8) {
                 TextField(L10n.t("作成者名"), text: $author).textFieldStyle(.roundedBorder).frame(width: 140)

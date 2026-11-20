@@ -50,12 +50,12 @@ struct VST3Panel: View {
                                     }
                                 }
                             } else {
-                                Text("スキャン中…")
+                                Text(L10n.t("スキャン中…"))
                             }
                         } label: {
-                            Label("検出したプラグインを追加", systemImage: "plus")
+                            Label(L10n.t("検出したプラグインを追加"), systemImage: "plus")
                         }
-                        Button("再スキャン") { rescan() }
+                        Button(L10n.t("再スキャン")) { rescan() }
                     }
                     if let scanResult {
                         Text(scanSummary(scanResult))
@@ -117,7 +117,7 @@ struct VST3Panel: View {
                 Image(systemName: "trash")
             }
             .buttonStyle(.borderless)
-            .help("この VST3 指定を外す")
+            .help(L10n.t("この VST3 指定を外す"))
         }
         if slot.enabled { paramSliders(index: index, slot: slot) }
         }

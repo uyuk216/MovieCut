@@ -11,8 +11,8 @@ struct SubclipBatchSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("サブクリップを一括作成").font(MCDesign.Font.title3.bold())
-            Text("1 行に「素材 範囲」を書きます。例: intro.mov 0:05-0:12, 0:30-0:41。範囲だけの行は直前の素材の続き。# で始まる行は注釈。")
+            Text(L10n.t("サブクリップを一括作成")).font(MCDesign.Font.title3.bold())
+            Text(L10n.t("1 行に「素材 範囲」を書きます。例: intro.mov 0:05-0:12, 0:30-0:41。範囲だけの行は直前の素材の続き。# で始まる行は注釈。"))
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             TextEditor(text: $text)
                 .font(MCDesign.Font.monospaced(13))
@@ -20,7 +20,7 @@ struct SubclipBatchSheet: View {
                 .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.secondary.opacity(0.4)))
             summary
             HStack {
-                Menu("素材を挿入") {
+                Menu(L10n.t("素材を挿入")) {
                     ForEach(model.subclipPoolItems, id: \.self) { p in
                         Button((p as NSString).lastPathComponent) { insert(p) }
                     }
@@ -28,8 +28,8 @@ struct SubclipBatchSheet: View {
                 .disabled(model.subclipPoolItems.isEmpty)
                 .fixedSize()
                 Spacer()
-                Button("キャンセル") { model.showSubclipSheet = false }.keyboardShortcut(.cancelAction)
-                Button("作成") {
+                Button(L10n.t("キャンセル")) { model.showSubclipSheet = false }.keyboardShortcut(.cancelAction)
+                Button(L10n.t("作成")) {
                     creating = true
                     Task {
                         let n = await model.createSubclips(from: text)
@@ -51,9 +51,9 @@ struct SubclipBatchSheet: View {
             Text(p.specs.isEmpty ? "作成される範囲: なし" : "作成される範囲: \(p.specs.count) 件(合計 \(String(format: "%.1f", p.specs.reduce(0) { $0 + $1.length })) 秒)")
                 .font(.caption)
             ForEach(Array(p.errors.prefix(4).enumerated()), id: \.offset) { _, e in
-                Text("\(e.line) 行目: \(e.message)").font(.caption).foregroundStyle(.red)
+                Text(String(format: L10n.t("%d 行目: %@"), e.line, e.message)).font(.caption).foregroundStyle(.red)
             }
-            if p.errors.count > 4 { Text("ほか \(p.errors.count - 4) 件").font(.caption).foregroundStyle(.red) }
+            if p.errors.count > 4 { Text(String(format: L10n.t("ほか %d 件"), p.errors.count - 4)).font(.caption).foregroundStyle(.red) }
         }
     }
 

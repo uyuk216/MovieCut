@@ -73,14 +73,14 @@ extension ProjectModel {
         guard !isLocked, !transferIds.isEmpty else { return }
         let others = OpenProjects.others(excluding: self)
         let alert = NSAlert()
-        alert.messageText = "選択クリップを別プロジェクトへ複製"
-        alert.informativeText = "レイヤーと時刻はそのまま写します。このプロジェクトは変わりません。"
+        alert.messageText = L10n.t("選択クリップを別プロジェクトへ複製")
+        alert.informativeText = L10n.t("レイヤーと時刻はそのまま写します。このプロジェクトは変わりません。")
         let popup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 300, height: 26))
         popup.addItem(withTitle: "新しいプロジェクト")
         others.forEach { popup.addItem(withTitle: "「\($0.documentName)」に追加") }
         alert.accessoryView = popup
-        alert.addButton(withTitle: "複製")
-        alert.addButton(withTitle: "キャンセル")
+        alert.addButton(withTitle: L10n.t("複製"))
+        alert.addButton(withTitle: L10n.t("キャンセル"))
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         let i = popup.indexOfSelectedItem
         if i <= 0 { transferSelectionToNewDocument() }

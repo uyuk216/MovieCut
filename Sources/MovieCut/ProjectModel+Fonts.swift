@@ -11,8 +11,8 @@ extension ProjectModel {
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = true
         panel.allowedContentTypes = FontLibrary.fontExtensions.sorted().compactMap { UTType(filenameExtension: $0) }
-        panel.message = "追加するフォント(.ttf / .otf / .ttc)を選んでください"
-        panel.prompt = "追加"
+        panel.message = L10n.t("追加するフォント(.ttf / .otf / .ttc)を選んでください")
+        panel.prompt = L10n.t("追加")
         let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
             guard resp == .OK, let self else { return }
             self.addFonts(urls: panel.urls)

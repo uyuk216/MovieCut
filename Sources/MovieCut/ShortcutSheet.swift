@@ -94,15 +94,15 @@ struct ShortcutSheetView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("キーボードショートカット一覧").font(.headline)
-            Text("「変更」を押してから割り当てたいキーを押すと、変更できます(この Mac のこのアプリに保存されます)。通常キーは修飾キーなし、メニューの項目は ⌘・⌥・⌃ のどれかと一緒に押してください。")
+            Text(L10n.t("キーボードショートカット一覧")).font(.headline)
+            Text(L10n.t("「変更」を押してから割り当てたいキーを押すと、変更できます(この Mac のこのアプリに保存されます)。通常キーは修飾キーなし、メニューの項目は ⌘・⌥・⌃ のどれかと一緒に押してください。"))
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             if let t = captureTarget {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
-                    Text("「\(t.title)」のキーを押してください…").font(MCDesign.Font.calloutSemibold)
+                    Text(String(format: L10n.t("「%@」のキーを押してください…"), L10n.t(t.title))).font(MCDesign.Font.calloutSemibold)
                     Spacer()
-                    Button("やめる") { endCapture() }
+                    Button(L10n.t("やめる")) { endCapture() }
                 }
                 .padding(8).background(Color.accentColor.opacity(0.12)).cornerRadius(6)
             }
@@ -110,7 +110,7 @@ struct ShortcutSheetView: View {
                 Text(message).font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
             }
             List {
-                Section("通常キー") {
+                Section(L10n.t("通常キー")) {
                     ForEach(ShortcutList.plainKeyDefs.indices, id: \.self) { i in
                         let def = ShortcutList.plainKeyDefs[i]
                         editRow(title: def.title, keys: plainDisplay(def),
@@ -123,7 +123,7 @@ struct ShortcutSheetView: View {
                         HStack { Text(r.title); Spacer(); Text(r.keys).monospaced().foregroundStyle(.secondary) }
                     }
                 }
-                Section("メニューの項目") {
+                Section(L10n.t("メニューの項目")) {
                     ForEach(menuEntries) { entry in
                         editRow(title: entry.title, keys: entry.display,
                                 overridden: store.menuOverride(for: entry.id) != nil,
@@ -133,18 +133,18 @@ struct ShortcutSheetView: View {
                 }
             }
             HStack(spacing: 8) {
-                Button("Premiere互換プリセットを適用") { store.applyPremierePreset(); message = "Premiere互換プリセットを適用しました(C = 分割、I / O = 書き出し範囲、Q / W = リップルトリム、⌘K = 分割、⇧⌫ = すき間を詰めて削除)。プリセットが触らない割り当てはそのまま残ります" }
+                Button(L10n.t("Premiere互換プリセットを適用")) { store.applyPremierePreset(); message = "Premiere互換プリセットを適用しました(C = 分割、I / O = 書き出し範囲、Q / W = リップルトリム、⌘K = 分割、⇧⌫ = すき間を詰めて削除)。プリセットが触らない割り当てはそのまま残ります" }
                     .disabled(store.isPremierePresetApplied)
                 if store.hasPrePresetBackup {
-                    Button("プリセット適用前に戻す") { store.restorePrePresetBackup(); message = "プリセット適用前の割り当てに戻しました" }
+                    Button(L10n.t("プリセット適用前に戻す")) { store.restorePrePresetBackup(); message = "プリセット適用前の割り当てに戻しました" }
                 }
                 Spacer()
             }
             HStack {
-                Button("すべて既定に戻す") { store.resetAll(); message = "すべて既定に戻しました" }
+                Button(L10n.t("すべて既定に戻す")) { store.resetAll(); message = "すべて既定に戻しました" }
                     .disabled(!store.hasAnyOverride)
                 Spacer()
-                Button("閉じる", action: onClose).keyboardShortcut(.cancelAction)
+                Button(L10n.t("閉じる"), action: onClose).keyboardShortcut(.cancelAction)
             }
         }
         .padding(16)
@@ -155,13 +155,13 @@ struct ShortcutSheetView: View {
     private func editRow(title: String, keys: String, overridden: Bool,
                          onChange: @escaping () -> Void, onReset: @escaping () -> Void) -> some View {
         HStack(spacing: 8) {
-            Text(title)
+            Text(L10n.t(title))
             Spacer()
             Text(keys).monospaced().foregroundStyle(overridden ? .primary : .secondary)
             if overridden {
-                Button("既定に戻す", action: onReset).buttonStyle(.borderless).font(.caption)
+                Button(L10n.t("既定に戻す"), action: onReset).buttonStyle(.borderless).font(.caption)
             }
-            Button("変更", action: onChange).font(.caption)
+            Button(L10n.t("変更"), action: onChange).font(.caption)
         }
     }
 

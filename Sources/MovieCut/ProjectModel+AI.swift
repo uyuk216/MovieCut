@@ -150,7 +150,7 @@ extension ProjectModel {
         panel.allowedContentTypes = [UTType(filenameExtension: "srt")].compactMap { $0 }
         panel.nameFieldStringValue = documentName + "-" + lang.fileSuffix + ".srt"
         panel.canCreateDirectories = true
-        panel.title = "翻訳した字幕を書き出す"
+        panel.title = L10n.t("翻訳した字幕を書き出す")
         guard FilePanelPresenter.shared.runModal(panel) == .OK, let url = panel.url else { statusText = "翻訳は保存しませんでした"; return false }
         do { try r.text.write(to: url, atomically: true, encoding: .utf8) } catch { report(error); return false }
         statusText = "翻訳した字幕(\(lang.label))を書き出しました: \(url.lastPathComponent)"

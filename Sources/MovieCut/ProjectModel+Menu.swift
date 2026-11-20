@@ -58,7 +58,7 @@ extension ProjectModel {
         let range = project.exportRange
         var rangeBox: NSButton?
         if range != nil {
-            let box = NSButton(checkboxWithTitle: String(format: "範囲だけ書き出す(%.2f〜%.2f 秒)", range!.start, range!.end), target: nil, action: nil)
+            let box = NSButton(checkboxWithTitle: String(format: L10n.t("範囲だけ書き出す(%.2f〜%.2f 秒)"), range!.start, range!.end), target: nil, action: nil)
             box.state = .on
             box.setAccessibilityIdentifier("export-range-only")
             rangeBox = box
@@ -84,13 +84,13 @@ extension ProjectModel {
     func saveCurrentAsCustomPreset() {
         guard !isLocked else { return }
         let alert = NSAlert()
-        alert.messageText = "プリセットとして保存"
-        alert.informativeText = "\(project.width)×\(project.height) · \(project.codec == "hevc" ? "HEVC" : "H.264") · \(FrameRate.label(project.fps)) fps を、名前を付けて保存します。"
+        alert.messageText = L10n.t("プリセットとして保存")
+        alert.informativeText = String(format: L10n.t("%d×%d · %@ · %@ fps を、名前を付けて保存します。"), project.width, project.height, project.codec == "hevc" ? "HEVC" : "H.264", FrameRate.label(project.fps))
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
-        field.placeholderString = "例: 縦動画 8 Mbps"
+        field.placeholderString = L10n.t("例: 縦動画 8 Mbps")
         alert.accessoryView = field
-        alert.addButton(withTitle: "保存")
-        alert.addButton(withTitle: "キャンセル")
+        alert.addButton(withTitle: L10n.t("保存"))
+        alert.addButton(withTitle: L10n.t("キャンセル"))
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         let name = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard CustomExportPreset.isValidName(name) else {

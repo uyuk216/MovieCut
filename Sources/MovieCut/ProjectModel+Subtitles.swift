@@ -13,7 +13,7 @@ extension ProjectModel {
         panel.allowedContentTypes = [UTType(filenameExtension: "srt"), UTType(filenameExtension: "vtt"), UTType(filenameExtension: "scc"), UTType(filenameExtension: "stl")].compactMap { $0 }
         panel.nameFieldStringValue = documentName + ".srt"
         panel.canCreateDirectories = true
-        panel.title = "字幕を書き出す(拡張子 .srt / .vtt / .scc / .stl)"
+        panel.title = L10n.t("字幕を書き出す(拡張子 .srt / .vtt / .scc / .stl)")
         let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
             guard resp == .OK, let url = panel.url, let self else { return }
             self.writeSubtitles(to: url)
@@ -58,7 +58,7 @@ extension ProjectModel {
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.allowedContentTypes = [UTType(filenameExtension: "srt"), UTType(filenameExtension: "vtt")].compactMap { $0 }
-        panel.title = "字幕を読み込む"
+        panel.title = L10n.t("字幕を読み込む")
         let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
             guard resp == .OK, let url = panel.url, let self else { return }
             Task { @MainActor in
@@ -72,13 +72,13 @@ extension ProjectModel {
     /// 「全体を何秒ずらすか」を聞く小さな確認(キャンセルは nil)。
     private func askSubtitleOffset() -> Double? {
         let alert = NSAlert()
-        alert.messageText = "字幕を読み込む"
-        alert.informativeText = "字幕の時刻を何秒ずらしますか(0 でそのまま。マイナスで早く)。"
+        alert.messageText = L10n.t("字幕を読み込む")
+        alert.informativeText = L10n.t("字幕の時刻を何秒ずらしますか(0 でそのまま。マイナスで早く)。")
         let field = NSTextField(string: "0")
         field.frame = NSRect(x: 0, y: 0, width: 120, height: 24)
         alert.accessoryView = field
-        alert.addButton(withTitle: "読み込む")
-        alert.addButton(withTitle: "キャンセル")
+        alert.addButton(withTitle: L10n.t("読み込む"))
+        alert.addButton(withTitle: L10n.t("キャンセル"))
         guard alert.runModal() == .alertFirstButtonReturn else { return nil }
         let s = field.stringValue.trimmingCharacters(in: .whitespaces)
         return s.isEmpty ? 0 : (Double(s) ?? 0)

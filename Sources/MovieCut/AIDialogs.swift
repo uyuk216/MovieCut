@@ -26,22 +26,22 @@ enum AIDialogs {
     /// 送る前の確認。送り先と、送る文そのものを見せる。「送信」を押したときだけ true。
     static func confirmSend(destination: String, prompt: String) -> Bool {
         let a = NSAlert()
-        a.messageText = "AI に次の内容を送ります"
-        a.informativeText = "送信先: \(destination)\nこのウインドウで見えている内容だけが送られます。自動では送りません。"
+        a.messageText = L10n.t("AI に次の内容を送ります")
+        a.informativeText = String(format: L10n.t("送信先: %@\nこのウインドウで見えている内容だけが送られます。自動では送りません。"), destination)
         a.accessoryView = textView(prompt, editable: false)
-        a.addButton(withTitle: "送信")
-        a.addButton(withTitle: "キャンセル")
+        a.addButton(withTitle: L10n.t("送信"))
+        a.addButton(withTitle: L10n.t("キャンセル"))
         return a.runModal() == .alertFirstButtonReturn
     }
 
     /// 結果の確認。`buttons` の先頭が主ボタン、最後がキャンセル。
     static func review(title: String, message: String, text: String, editable: Bool, buttons: [String]) -> Review? {
         let a = NSAlert()
-        a.messageText = title
-        a.informativeText = message
+        a.messageText = L10n.t(title)
+        a.informativeText = L10n.t(message)
         let tv = textView(text, editable: editable)
         a.accessoryView = tv
-        buttons.forEach { a.addButton(withTitle: $0) }
+        buttons.forEach { a.addButton(withTitle: L10n.t($0)) }
         let r = a.runModal()
         let idx = r.rawValue - NSApplication.ModalResponse.alertFirstButtonReturn.rawValue
         guard idx >= 0, idx < buttons.count - 1 else { return nil }
@@ -51,14 +51,14 @@ enum AIDialogs {
     /// 1 行ずつの入力欄(ラベル, 初期値)。OK のとき値を返す。
     static func form(title: String, message: String, fields: [(String, String)], okTitle: String) -> [String]? {
         let a = NSAlert()
-        a.messageText = title
-        a.informativeText = message
+        a.messageText = L10n.t(title)
+        a.informativeText = L10n.t(message)
         let rowH: CGFloat = 28
         let box = NSView(frame: NSRect(x: 0, y: 0, width: 420, height: rowH * CGFloat(fields.count)))
         var inputs: [NSTextField] = []
         for (i, f) in fields.enumerated() {
             let y = box.frame.height - rowH * CGFloat(i + 1)
-            let label = NSTextField(labelWithString: f.0)
+            let label = NSTextField(labelWithString: L10n.t(f.0))
             label.frame = NSRect(x: 0, y: y + 4, width: 110, height: 20)
             let field = NSTextField(string: f.1)
             field.frame = NSRect(x: 115, y: y + 2, width: 305, height: 24)
@@ -66,8 +66,8 @@ enum AIDialogs {
             inputs.append(field)
         }
         a.accessoryView = box
-        a.addButton(withTitle: okTitle)
-        a.addButton(withTitle: "キャンセル")
+        a.addButton(withTitle: L10n.t(okTitle))
+        a.addButton(withTitle: L10n.t("キャンセル"))
         guard a.runModal() == .alertFirstButtonReturn else { return nil }
         return inputs.map(\.stringValue)
     }
@@ -76,26 +76,26 @@ enum AIDialogs {
     /// 翻訳先の言語を選ぶ(字幕の数を見せる)。キャンセルなら nil。
     static func chooseTranslateLanguage(count: Int) -> AITranslatePrompt.Language? {
         let a = NSAlert()
-        a.messageText = "字幕を翻訳して書き出す"
-        a.informativeText = "字幕 \(count) 件を AI で訳し、SRT にします(時刻はそのまま)。次の画面で、送る内容を確認できます。"
+        a.messageText = L10n.t("字幕を翻訳して書き出す")
+        a.informativeText = String(format: L10n.t("字幕 %d 件を AI で訳し、SRT にします(時刻はそのまま)。次の画面で、送る内容を確認できます。"), count)
         let pop = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 260, height: 26), pullsDown: false)
-        pop.addItems(withTitles: AITranslatePrompt.Language.allCases.map(\.label))
+        pop.addItems(withTitles: AITranslatePrompt.Language.allCases.map { L10n.t($0.label) })
         a.accessoryView = pop
-        a.addButton(withTitle: "次へ")
-        a.addButton(withTitle: "キャンセル")
+        a.addButton(withTitle: L10n.t("次へ"))
+        a.addButton(withTitle: L10n.t("キャンセル"))
         guard a.runModal() == .alertFirstButtonReturn else { return nil }
         return AITranslatePrompt.Language.allCases[max(0, pop.indexOfSelectedItem)]
     }
 
     static func chooseRewriteMode(original: String) -> AIRewritePrompt.Mode? {
         let a = NSAlert()
-        a.messageText = "セリフを AI で直す"
-        a.informativeText = "元のセリフ: \(original)\n\nどう直しますか。(次の画面で、送る内容を確認できます)"
+        a.messageText = L10n.t("セリフを AI で直す")
+        a.informativeText = String(format: L10n.t("元のセリフ: %@\n\nどう直しますか。(次の画面で、送る内容を確認できます)"), original)
         let pop = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 260, height: 26), pullsDown: false)
-        pop.addItems(withTitles: AIRewritePrompt.Mode.allCases.map(\.title))
+        pop.addItems(withTitles: AIRewritePrompt.Mode.allCases.map { L10n.t($0.title) })
         a.accessoryView = pop
-        a.addButton(withTitle: "次へ")
-        a.addButton(withTitle: "キャンセル")
+        a.addButton(withTitle: L10n.t("次へ"))
+        a.addButton(withTitle: L10n.t("キャンセル"))
         guard a.runModal() == .alertFirstButtonReturn else { return nil }
         return AIRewritePrompt.Mode.allCases[max(0, pop.indexOfSelectedItem)]
     }
@@ -104,23 +104,23 @@ enum AIDialogs {
     static func editSettings() {
         var s = AISettings.load()
         let a = NSAlert()
-        a.messageText = "AI の設定"
-        a.informativeText = "クラウドの鍵はこのアプリに保存しません。ご自分のコマンド(例: claude -p)を指定します。AI は、メニューから操作したときだけ呼ばれます。"
+        a.messageText = L10n.t("AI の設定")
+        a.informativeText = L10n.t("クラウドの鍵はこのアプリに保存しません。ご自分のコマンド(例: claude -p)を指定します。AI は、メニューから操作したときだけ呼ばれます。")
         let box = NSView(frame: NSRect(x: 0, y: 0, width: 460, height: 90))
         func row(_ label: String, _ y: CGFloat, _ view: NSView) {
-            let l = NSTextField(labelWithString: label); l.frame = NSRect(x: 0, y: y + 4, width: 120, height: 20)
+            let l = NSTextField(labelWithString: L10n.t(label)); l.frame = NSRect(x: 0, y: y + 4, width: 120, height: 20)
             view.frame = NSRect(x: 125, y: y, width: 335, height: 26)
             box.addSubview(l); box.addSubview(view)
         }
         let kind = NSPopUpButton(frame: .zero, pullsDown: false)
-        kind.addItems(withTitles: AIProviderKind.allCases.map(\.title))
+        kind.addItems(withTitles: AIProviderKind.allCases.map { L10n.t($0.title) })
         kind.selectItem(at: AIProviderKind.allCases.firstIndex(of: s.kind) ?? 0)
         let cmd = NSTextField(string: s.command); cmd.placeholderString = "claude -p"
         let timeout = NSTextField(string: String(s.timeoutSeconds))
         row("使い方", 60, kind); row("コマンド", 30, cmd); row("待つ秒数", 0, timeout)
         a.accessoryView = box
-        a.addButton(withTitle: "保存")
-        a.addButton(withTitle: "キャンセル")
+        a.addButton(withTitle: L10n.t("保存"))
+        a.addButton(withTitle: L10n.t("キャンセル"))
         guard a.runModal() == .alertFirstButtonReturn else { return }
         s.kind = AIProviderKind.allCases[max(0, kind.indexOfSelectedItem)]
         s.command = cmd.stringValue.trimmingCharacters(in: .whitespaces)

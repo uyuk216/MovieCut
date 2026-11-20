@@ -39,7 +39,7 @@ enum ProjectTemplateActions {
             NSDocumentController.shared.newDocument(nil)
         } catch {
             let alert = NSAlert()
-            alert.messageText = "テンプレート「\(name)」を開けませんでした"
+            alert.messageText = String(format: L10n.t("テンプレート「%@」を開けませんでした"), name)
             alert.informativeText = error.localizedDescription
             alert.runModal()
             ProjectTemplateLibrary.invalidate()
@@ -53,8 +53,8 @@ extension ProjectModel {
     /// 同じ名前があれば「名前 2」にする。
     func saveAsTemplate() {
         let alert = NSAlert()
-        alert.messageText = "テンプレートとして保存"
-        alert.informativeText = "含める項目を選びます。選ばなかった項目は新規プロジェクトの初期値になります。"
+        alert.messageText = L10n.t("テンプレートとして保存")
+        alert.informativeText = L10n.t("含める項目を選びます。選ばなかった項目は新規プロジェクトの初期値になります。")
         let field = NSTextField(string: "新しいテンプレート")
         field.frame = NSRect(x: 0, y: 0, width: 300, height: 24)
         var boxes: [(ProjectTemplate.Parts, NSButton)] = []
@@ -72,15 +72,15 @@ extension ProjectModel {
         let selectedCount = selectedClipIDs.count
         var clipBox: NSButton?
         if selectedCount > 0 {
-            let b = NSButton(checkboxWithTitle: "選んでいるクリップ(\(selectedCount) 個)を含める", target: nil, action: nil)
+            let b = NSButton(checkboxWithTitle: String(format: L10n.t("選んでいるクリップ(%d 個)を含める"), selectedCount), target: nil, action: nil)
             b.state = .off
             stack.addArrangedSubview(b)
             clipBox = b
         }
         stack.frame = NSRect(x: 0, y: 0, width: 320, height: CGFloat(30 + 22 * (titles.count + (selectedCount > 0 ? 1 : 0))))
         alert.accessoryView = stack
-        alert.addButton(withTitle: "保存")
-        alert.addButton(withTitle: "キャンセル")
+        alert.addButton(withTitle: L10n.t("保存"))
+        alert.addButton(withTitle: L10n.t("キャンセル"))
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         var parts: ProjectTemplate.Parts = []
         for (part, b) in boxes where b.state == .on { parts.insert(part) }
@@ -104,7 +104,7 @@ extension ProjectModel {
             return saved
         } catch {
             let err = NSAlert()
-            err.messageText = "テンプレートを保存できませんでした"
+            err.messageText = L10n.t("テンプレートを保存できませんでした")
             err.informativeText = error.localizedDescription
             err.runModal()
             return nil

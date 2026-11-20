@@ -16,8 +16,8 @@ struct EaseCurveButton: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help("次のキーフレームまでの動き方（イージング曲線）")
-        .accessibilityLabel("イージング曲線を編集")
+        .help(L10n.t("次のキーフレームまでの動き方（イージング曲線）"))
+        .accessibilityLabel(L10n.t("イージング曲線を編集"))
         .popover(isPresented: $shown, arrowEdge: .bottom) {
             EaseCurveEditor(ease: ease, onCommit: onCommit)
         }
@@ -65,7 +65,7 @@ struct EaseCurveEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("イージング曲線").font(.headline)
+            Text(L10n.t("イージング曲線")).font(.headline)
             canvas
                 .frame(width: Self.side + Self.pad * 2, height: Self.side + Self.pad * 2)
             presetButtons
@@ -76,7 +76,7 @@ struct EaseCurveEditor: View {
             HStack {
                 if let name = EaseCurve.presetLabel(of: draft) { Text(name).font(.caption).foregroundStyle(.secondary) }
                 Spacer()
-                Button("リセット") { apply(EaseCurve.reset) }
+                Button(L10n.t("リセット")) { apply(EaseCurve.reset) }
                     .disabled(draft == EaseCurve.reset)
             }
         }

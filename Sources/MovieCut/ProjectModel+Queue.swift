@@ -16,9 +16,9 @@ extension ProjectModel {
         panel.allowedContentTypes = [isProRes ? .quickTimeMovie : .mpeg4Movie]
         panel.nameFieldStringValue = documentName + "." + OutputPlan.fileExtension(forCodec: project.codec)
         panel.canCreateDirectories = true
-        panel.title = "書き出しキューに追加"
+        panel.title = L10n.t("書き出しキューに追加")
         let range = project.exportRange
-        panel.message = range.map { String(format: "今の設定のまま、範囲 %.2f〜%.2f 秒を \(isProRes ? "ProRes の .mov" : "MP4") にしてキューの最後に積みます。", $0.start, $0.end) }
+        panel.message = range.map { String(format: L10n.t("今の設定のまま、範囲 %.2f〜%.2f 秒を %@ にしてキューの最後に積みます。"), $0.start, $0.end, isProRes ? "ProRes の .mov" : "MP4") }
             ?? "今の設定のまま \(isProRes ? "ProRes の .mov" : "MP4") にして、キューの最後に積みます。"
         // 写しは保存先を選んだ時点で取る(パネルを開いている間の編集は含めない)
         let snapshot = project

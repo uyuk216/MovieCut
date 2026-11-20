@@ -51,13 +51,13 @@ enum QRCodeDialog {
     @MainActor
     static func askText() -> String? {
         let a = NSAlert()
-        a.messageText = "QRコードを追加"
-        a.informativeText = "QR コードにする文字(URL など)を入れてください。(\(QRCode.maxTextLength) 文字まで)"
+        a.messageText = L10n.t("QRコードを追加")
+        a.informativeText = String(format: L10n.t("QR コードにする文字(URL など)を入れてください。(%d 文字まで)"), QRCode.maxTextLength)
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 360, height: 24))
         field.placeholderString = "https://"
         a.accessoryView = field
-        a.addButton(withTitle: "追加")
-        a.addButton(withTitle: "キャンセル")
+        a.addButton(withTitle: L10n.t("追加"))
+        a.addButton(withTitle: L10n.t("キャンセル"))
         a.window.initialFirstResponder = field
         guard a.runModal() == .alertFirstButtonReturn else { return nil }
         let t = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)

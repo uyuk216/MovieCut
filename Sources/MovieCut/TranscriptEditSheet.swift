@@ -37,7 +37,7 @@ struct TranscriptEditSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("文字起こしで編集").font(.headline)
+            Text(L10n.t("文字起こしで編集")).font(.headline)
             Picker("", selection: $mode) {
                 Text(L10n.t("文を取り除く")).tag(Mode.remove)
                 Text(L10n.t("単語を取り除く")).tag(Mode.word)
@@ -49,15 +49,15 @@ struct TranscriptEditSheet: View {
             Group {
                 if let f = found {
                     if f.isEmpty {
-                        Text("文は見つかりませんでした。")
+                        Text(L10n.t("文は見つかりませんでした。"))
                     } else {
                         if mode == .remove {
-                            Text("\(f.count) 文あります。残す文にチェックを入れたまま、外した文は取り除かれます。")
+                            Text(String(format: L10n.t("%d 文あります。残す文にチェックを入れたまま、外した文は取り除かれます。"), f.count))
                         } else if mode == .word {
                             if hasAnyWordTiming {
                                 Text(L10n.t("取り除く単語にチェックを入れます"))
                             } else {
-                                Text("この素材は単語単位の時刻が無いため、単語単位では編集できません(文単位までです)")
+                                Text(L10n.t("この素材は単語単位の時刻が無いため、単語単位では編集できません(文単位までです)"))
                             }
                         } else if mode == .paper {
                             Text(L10n.t("行を押すと組み立てに追加されます。同じ行をもう一度押すと繰り返し追加されます。"))
@@ -65,7 +65,7 @@ struct TranscriptEditSheet: View {
                             if hasAnyWordTiming {
                                 Text(L10n.t("単語を押すと組み立てに追加されます。同じ単語をもう一度押すと繰り返し追加されます。"))
                             } else {
-                                Text("この素材は単語単位の時刻が無いため、単語単位では編集できません(文単位までです)")
+                                Text(L10n.t("この素材は単語単位の時刻が無いため、単語単位では編集できません(文単位までです)"))
                             }
                         }
                         ScrollView {
@@ -110,12 +110,12 @@ struct TranscriptEditSheet: View {
                 } else if let e = failure {
                     Text(e).foregroundStyle(.red)
                 } else {
-                    HStack(spacing: 6) { ProgressView().controlSize(.small); Text("音声を文字にしています…") }
+                    HStack(spacing: 6) { ProgressView().controlSize(.small); Text(L10n.t("音声を文字にしています…")) }
                 }
             }
             .font(.callout)
             if mode == .remove || mode == .word {
-                Toggle("後ろを詰める", isOn: $ripple).toggleStyle(.checkbox)
+                Toggle(L10n.t("後ろを詰める"), isOn: $ripple).toggleStyle(.checkbox)
             } else {
                 VStack(alignment: .leading, spacing: 6) {
                     Picker(L10n.t("配置先"), selection: $paperDestination) {
@@ -135,25 +135,25 @@ struct TranscriptEditSheet: View {
             }
             HStack {
                 Spacer()
-                Button("キャンセル") { model.showTranscriptEditSheet = false }
+                Button(L10n.t("キャンセル")) { model.showTranscriptEditSheet = false }
                     .keyboardShortcut(.cancelAction)
                 if mode == .remove {
-                    Button(removedCount > 0 ? "\(removedCount) 文を取り除く" : "取り除く") { commit() }
+                    Button(removedCount > 0 ? String(format: L10n.t("%d 文を取り除く"), removedCount) : L10n.t("取り除く")) { commit() }
                         .buttonStyle(.borderedProminent)
                         .keyboardShortcut(.defaultAction)
                         .disabled(found == nil || removedCount <= 0)
                 } else if mode == .word {
-                    Button(wordSelection.isEmpty ? L10n.t("単語を取り除く") : "\(wordSelection.count) 単語を取り除く") { commitWord() }
+                    Button(wordSelection.isEmpty ? L10n.t("単語を取り除く") : String(format: L10n.t("%d 単語を取り除く"), wordSelection.count)) { commitWord() }
                         .buttonStyle(.borderedProminent)
                         .keyboardShortcut(.defaultAction)
                         .disabled(found == nil || wordSelection.isEmpty)
                 } else if mode == .paper {
-                    Button(paperOrder.isEmpty ? L10n.t("組み立てる") : "\(paperOrder.count) 文で組み立てる") { commitPaper() }
+                    Button(paperOrder.isEmpty ? L10n.t("組み立てる") : String(format: L10n.t("%d 文で組み立てる"), paperOrder.count)) { commitPaper() }
                         .buttonStyle(.borderedProminent)
                         .keyboardShortcut(.defaultAction)
                         .disabled(found == nil || paperOrder.isEmpty || (paperDestination == .scene && paperSceneName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
                 } else {
-                    Button(wordPaperOrder.isEmpty ? L10n.t("組み立てる") : "\(wordPaperOrder.count) 単語で組み立てる") { commitWordPaper() }
+                    Button(wordPaperOrder.isEmpty ? L10n.t("組み立てる") : String(format: L10n.t("%d 単語で組み立てる"), wordPaperOrder.count)) { commitWordPaper() }
                         .buttonStyle(.borderedProminent)
                         .keyboardShortcut(.defaultAction)
                         .disabled(found == nil || wordPaperOrder.isEmpty || (paperDestination == .scene && paperSceneName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))

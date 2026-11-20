@@ -20,9 +20,9 @@ extension ProjectModel {
         panel.canChooseDirectories = true
         panel.canCreateDirectories = true
         panel.allowsMultipleSelection = false
-        panel.title = "サムネイル候補の書き出し先"
-        panel.message = "点数の高いコマを \(Self.thumbnailCandidateCount) 枚、1280×720 の PNG で書き出します"
-        panel.prompt = "書き出す"
+        panel.title = L10n.t("サムネイル候補の書き出し先")
+        panel.message = String(format: L10n.t("点数の高いコマを %d 枚、1280×720 の PNG で書き出します"), Self.thumbnailCandidateCount)
+        panel.prompt = L10n.t("書き出す")
         let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
             guard resp == .OK, let url = panel.url, let self else { return }
             Task { @MainActor in

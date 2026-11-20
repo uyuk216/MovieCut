@@ -114,7 +114,7 @@ extension ProjectModel {
         panel.canChooseDirectories = false
         panel.allowedContentTypes = [UTType(filenameExtension: "cube")].compactMap { $0 }
         panel.allowsOtherFileTypes = true
-        panel.title = "LUT（.cube）を読み込む"
+        panel.title = L10n.t("LUT（.cube）を読み込む")
         let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
             guard resp == .OK, let url = panel.url, let self else { return }
             Task { @MainActor in self.loadLUT(from: url, clipId: target) }
@@ -147,7 +147,7 @@ extension ProjectModel {
         panel.canChooseDirectories = false
         panel.allowedContentTypes = [.image]
         panel.allowsOtherFileTypes = true
-        panel.title = "色調転写の参照画像を選ぶ"
+        panel.title = L10n.t("色調転写の参照画像を選ぶ")
         let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
             guard resp == .OK, let url = panel.url, let self else { return }
             Task { @MainActor in self.loadColorTransferReference(from: url, clipId: target) }
@@ -205,7 +205,7 @@ extension ProjectModel {
                 return
             }
             self.setClipProperty({ _ = AutoWhiteBalance.apply(result, to: &$0) }, name: Self.autoWhiteBalanceUndoName, clipId: id)
-            self.statusText = String(format: "自動ホワイトバランス: 色温度 %+.2f・ティント %+.2f を設定しました", result.temperature, result.tint)
+            self.statusText = String(format: L10n.t("自動ホワイトバランス: 色温度 %+.2f・ティント %+.2f を設定しました"), result.temperature, result.tint)
         }
     }
 }

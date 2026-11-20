@@ -12,9 +12,9 @@ struct ClipListSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("使用クリップ一覧").font(.title3.bold())
+                Text(L10n.t("使用クリップ一覧")).font(.title3.bold())
                 Spacer()
-                Text("\(rows.count) 件").foregroundStyle(.secondary).monospacedDigit()
+                Text(String(format: L10n.t("%d 件"), rows.count)).foregroundStyle(.secondary).monospacedDigit()
             }
             if rows.isEmpty {
                 InspectorGuideCard(symbol: "film.stack", heading: "クリップがありません", message: "素材をタイムラインに置くと、ここに一覧が出ます。")
@@ -35,13 +35,13 @@ struct ClipListSheet: View {
                 }
             }
             HStack {
-                Text("行を選ぶとクリップへ移ります。").font(.caption).foregroundStyle(.secondary)
+                Text(L10n.t("行を選ぶとクリップへ移ります。")).font(.caption).foregroundStyle(.secondary)
                 Spacer()
-                Button("TSV をコピー") { model.copyClipListTSV() }
+                Button(L10n.t("TSV をコピー")) { model.copyClipListTSV() }
                     .disabled(rows.isEmpty)
-                Button("CSV を書き出す…") { model.chooseAndExportClipListCSV() }
+                Button(L10n.t("CSV を書き出す…")) { model.chooseAndExportClipListCSV() }
                     .disabled(rows.isEmpty)
-                Button("閉じる") { model.showClipListSheet = false }
+                Button(L10n.t("閉じる")) { model.showClipListSheet = false }
                     .keyboardShortcut(.cancelAction)
             }
         }

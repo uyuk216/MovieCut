@@ -37,9 +37,9 @@ struct RemixSheet: View {
             Group {
                 if let s = scan {
                     if s.usedFallback {
-                        Text("ビートが取れなかったため、音の切り替わり点 \(s.candidates.count) 個を候補にします。")
+                        Text(String(format: L10n.t("ビートが取れなかったため、音の切り替わり点 %d 個を候補にします。"), s.candidates.count))
                     } else {
-                        Text("ビート検出: 約 \(Int((s.bpm ?? 0).rounded())) BPM、候補 \(s.candidates.count) 個")
+                        Text(String(format: L10n.t("ビート検出: 約 %d BPM、候補 %d 個"), Int((s.bpm ?? 0).rounded()), s.candidates.count))
                     }
                 } else if let e = failure {
                     Text(e).foregroundStyle(.red)
@@ -52,7 +52,7 @@ struct RemixSheet: View {
                 Text(L10n.t("目標の尺(秒)"))
                 TextField(L10n.t("目標の尺(秒)"), text: $targetText)
                     .frame(width: 90)
-                Text("元の尺は \(String(format: "%.1f", sourceDuration)) 秒")
+                Text(String(format: L10n.t("元の尺は %.1f 秒"), sourceDuration))
                     .foregroundStyle(.secondary)
             }
             HStack {
@@ -64,11 +64,11 @@ struct RemixSheet: View {
             Group {
                 switch planResult {
                 case .success(let p):
-                    Text("出来上がり: 約 \(String(format: "%.1f", p.totalDuration)) 秒 / \(p.segments.count) 区間 / つなぎ目 \(max(0, p.segments.count - 1)) か所")
+                    Text(String(format: L10n.t("出来上がり: 約 %.1f 秒 / %d 区間 / つなぎ目 %d か所"), p.totalDuration, p.segments.count, max(0, p.segments.count - 1)))
                 case .failure(let e):
                     Text(e.message).foregroundStyle(.red)
                 case nil:
-                    Text("目標の尺を入力してください。").foregroundStyle(.secondary)
+                    Text(L10n.t("目標の尺を入力してください。")).foregroundStyle(.secondary)
                 }
             }
             .font(.callout)
@@ -76,7 +76,7 @@ struct RemixSheet: View {
                 .font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary)
             HStack {
                 Spacer()
-                Button("キャンセル") { model.showRemixSheet = false }
+                Button(L10n.t("キャンセル")) { model.showRemixSheet = false }
                     .keyboardShortcut(.cancelAction)
                 Button(L10n.t("Remixを作成")) { commit() }
                     .buttonStyle(.borderedProminent)
