@@ -5,7 +5,7 @@ import AVFoundation
 /// VST3 ホスト本体(W6-1)の検証。実プラグインは使わず、ブリッジバックエンドの
 /// フェイク(ゲイン処理)で「接続手順・バイパス不変条件・チェーン接続・ミックス経由」を固定する。
 /// 実プラグイン(MovieCutGain フィクスチャ)+実ブリッジでの検証は
-/// `Bridges/MovieCutVST3Host/Tests/smoke_test.py`(VM で実行済み)と Mac 実機手順に委ねる。
+/// `Bridges/MovieCutVST3Host/Tests/smoke_test.py`(Linux 環境で実行済み)と Mac 実機手順に委ねる。
 final class VST3HostTests: XCTestCase {
 
     // MARK: フェイクバックエンド(ゲイン 1 個のプラグインのつもり)

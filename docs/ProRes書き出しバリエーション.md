@@ -1,6 +1,6 @@
 # ProRes 書き出しバリエーション（HQ / LT / Proxy 追加）
 
-作成: 2026-11-19、ブランチ `feat/prores-variants`（起点 `feat/muse-access` e1c4305）
+作成: 2026-11-19、ブランチ `feat/prores-variants`
 起点資料: `~/workspace/moviecut-research/premiere-inventory.md` 書き出し節「ProRes 書き出し」（部分実装: 422 / 4444 のみ、HQ・LT・Proxy が不足）
 
 ## 対応バリエーションと実現経路

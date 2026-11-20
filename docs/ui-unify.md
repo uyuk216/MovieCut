@@ -1,8 +1,8 @@
 # MovieCut デザイン統一パス（feat/ui-unify）
 
 - 実施日: 2026-11-19
-- 起点: `feat/muse-access` 054e6b9（UI刷新案＝ツールバーの SF Symbols 化・配色の意味トークン集約・下部ステータスバー・節の開閉化・空状態カード、の統合後）
-- 目的: メイン画面（ContentView / InspectorView / TimelineView）以外の画面を、刷新後のデザイン言語に統一する。ユーザーの指示「統一感欲しい」への対応。
+- 起点: 基盤ブランチ（UI刷新案＝ツールバーの SF Symbols 化・配色の意味トークン集約・下部ステータスバー・節の開閉化・空状態カード、の統合後）
+- 目的: メイン画面（ContentView / InspectorView / TimelineView）以外の画面を、刷新後のデザイン言語に統一する。統一感の確保。
 - 前提資料: `~/workspace/moviecut-overnight-2026-11-19/UI-AUDIT.md`（問題点28件。うち U-01「DesignSystem トークンの未適用」が本パスの主対象）
 
 ## 統一の基準（刷新後のデザイン言語）
@@ -17,7 +17,7 @@
 
 - タイムラインの機能色 `TimelinePalette`（TimelineView.swift）
 - 機能ロジック・モデル・合成・書き出しの挙動すべて（見た目と文言の統一のみ）
-- 製品名表記（U-02「Movie Cut / MovieCut」の揺れ）はユーザーの名称決定待ちのため対象外
+- 製品名表記（U-02「Movie Cut / MovieCut」の揺れ）は名称の決定待ちのため対象外
 - ContentView / InspectorView / TimelineView の本体（刷新済み）。ただし ContentView.swift 内の `SettingsSheet` は独立した画面として対象に含める
 - `TextGenerationDialogs.swift`: NSAlert ベースの AppKit ダイアログで、システム外観に従うため SwiftUI トークン統一の対象外
 - `AppMenu.swift` / `AppCommands.swift` のメニュー本体: システム描画のため対象外（文言の確認のみ）
