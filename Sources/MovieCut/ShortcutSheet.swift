@@ -205,7 +205,7 @@ struct ShortcutSheetView: View {
                 return
             }
             guard let ch = c.characters?.first else { message = "そのキーは使えませんでした"; return }
-            let key = KeyEquivalent(ch.isLetter ? Character(ch.lowercased()) : ch)
+            let key = KeyEquivalent(ch.isLetter ? Swift.Character(ch.lowercased()) : ch)
             let shortcut = MenuShortcut(key: key, modifiers: mods)
             store.setMenuOverride(shortcut, for: id)
             let dup = AppMenuSpec.all(MenuState()).first { item in
