@@ -160,6 +160,143 @@ final class Mp4AAC51ExportTests: XCTestCase {
         XCTAssertLessThan(ra[3], 0.03, "右に LFE(110) は含めない")
     }
 
+    // MARK: Asset 経路用素材(5.1ch AAC 入り mp4 を AVAssetWriter で作る)
+
+    /// MPEG 5.1 A レイアウト(L R C LFE Ls Rs = WAV 順)で 6ch AAC + 映像入りの mp4 を作る。
+    private func writeTone51MP4(_ name: String) async throws -> URL {
+        let url = tmp.appendingPathComponent(name)
+        try? FileManager.default.removeItem(at: url)
+        var layout = AudioChannelLayout()
+        layout.mChannelLayoutTag = kAudioChannelLayoutTag_MPEG_5_1_A
+        layout.mNumberChannelDescriptions = 0
+        let layoutData = withUnsafeBytes(of: &layout) { Data($0) }
+
+        let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
+        let vInput = AVAssetWriterInput(mediaType: .video, outputSettings: [
+            AVVideoCodecKey: AVVideoCodecType.h264, AVVideoWidthKey: 160, AVVideoHeightKey: 90,
+        ])
+        vInput.expectsMediaDataInRealTime = false
+        let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: vInput, sourcePixelBufferAttributes: [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+            kCVPixelBufferWidthKey as String: 160, kCVPixelBufferHeightKey as String: 90,
+        ])
+        guard writer.canAdd(vInput) else { throw ExportError.cannotAddInput("映像") }
+        writer.add(vInput)
+        let aInput = AVAssetWriterInput(mediaType: .audio, outputSettings: [
+            AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: Self.sampleRate,
+            AVNumberOfChannelsKey: 6, AVEncoderBitRateKey: 256_000, AVChannelLayoutKey: layoutData,
+        ])
+        aInput.expectsMediaDataInRealTime = false
+        guard writer.canAdd(aInput) else { throw ExportError.cannotAddInput("音声") }
+        writer.add(aInput)
+
+        // 音声フォーマット記述(6ch Float32 インターリーブ、MPEG 5.1 A レイアウト)
+        var asbd = AudioStreamBasicDescription(mSampleRate: Self.sampleRate, mFormatID: kAudioFormatLinearPCM,
+            mFormatFlags: kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked, mBytesPerPacket: 24, mFramesPerPacket: 1,
+            mBytesPerFrame: 24, mChannelsPerFrame: 6, mBitsPerChannel: 32, mReserved: 0)
+        var fmtOut: CMAudioFormatDescription?
+        let lsize = MemoryLayout<AudioChannelLayout>.size
+        let st = withUnsafePointer(to: &layout) { lp in
+            CMAudioFormatDescriptionCreate(allocator: kCFAllocatorDefault, asbd: &asbd, layoutSize: lsize, layout: lp,
+                                           magicCookie: nil, magicCookieSize: 0, extensions: nil, formatDescriptionOut: &fmtOut)
+        }
+        guard st == noErr, let audioFmt = fmtOut else { throw ExportError.audioReadFailed(nil) }
+
+        guard writer.startWriting() else { throw writer.error ?? ExportError.cannotStartWriting(nil) }
+        writer.startSession(atSourceTime: .zero)
+        func waitReady(_ input: AVAssetWriterInput) async {
+            while !input.isReadyForMoreMediaData { try? await Task.sleep(nanoseconds: 2_000_000) }
+        }
+        // 映像: 36 コマ(1.2 秒 @30fps)の単色
+        let pool = adaptor.pixelBufferPool!
+        for i in 0..<36 {
+            await waitReady(vInput)
+            var pbOut: CVPixelBuffer?
+            CVPixelBufferPoolCreatePixelBuffer(nil, pool, &pbOut)
+            let pb = pbOut!
+            CVPixelBufferLockBaseAddress(pb, [])
+            if let base = CVPixelBufferGetBaseAddress(pb) {
+                memset(base, 0x40, CVPixelBufferGetDataSize(pb))
+            }
+            CVPixelBufferUnlockBaseAddress(pb, [])
+            adaptor.append(pb, withPresentationTime: CMTime(value: CMTimeValue(i), timescale: 30))
+        }
+        vInput.markAsFinished()
+        // 音声: 4096 フレームずつ
+        let total = Int(Self.duration * Self.sampleRate)
+        var frame = 0
+        while frame < total {
+            await waitReady(aInput)
+            let n = min(4096, total - frame)
+            var samples = [Float](repeating: 0, count: n * 6)
+            for c in 0..<6 {
+                let f = Self.freqs[c]
+                for i in 0..<n {
+                    samples[i * 6 + c] = Self.amp * Float(sin(2 * Double.pi * f * Double(frame + i) / Self.sampleRate))
+                }
+            }
+            var block: CMBlockBuffer?
+            let bytes = samples.count * MemoryLayout<Float>.size
+            CMBlockBufferCreateWithMemoryBlock(allocator: kCFAllocatorDefault, memoryBlock: nil, blockLength: bytes,
+                                               blockAllocator: kCFAllocatorDefault, customBlockSource: nil, offsetToData: 0,
+                                               dataLength: bytes, flags: 0, blockBufferOut: &block)
+            samples.withUnsafeBytes { _ = CMBlockBufferReplaceDataBytes(with: $0.baseAddress!, blockBuffer: block!, offsetIntoDestination: 0, dataLength: bytes) }
+            var timing = CMSampleTimingInfo(duration: CMTime(value: 1, timescale: 48000),
+                                            presentationTimeStamp: CMTime(value: CMTimeValue(frame), timescale: 48000),
+                                            decodeTimeStamp: .invalid)
+            var sbOut: CMSampleBuffer?
+            CMSampleBufferCreateReady(allocator: kCFAllocatorDefault, dataBuffer: block!, formatDescription: audioFmt,
+                                      sampleCount: n, sampleTimingEntryCount: 1, sampleTimingArray: &timing,
+                                      sampleSizeEntryCount: 1, sampleSizeArray: [24], sampleBufferOut: &sbOut)
+            guard let sb = sbOut, aInput.append(sb) else { throw writer.error ?? ExportError.appendFailed(frame: -1, underlying: nil) }
+            frame += n
+        }
+        aInput.markAsFinished()
+        await writer.finishWriting()
+        guard writer.status == .completed else { throw writer.error ?? ExportError.writerFailed(nil) }
+        return url
+    }
+
+    /// Asset 経路の実測: 5.1 AAC 素材(mp4)を動画クリップとして書き出し、AAC の中身を照合する。
+    func testExport51AACSourceViaAssetPath() async throws {
+        let src = try await writeTone51MP4("src51.mp4")
+        let sfmt = try audioFormat(of: src)
+        print("[mp451] source format codec=\(sfmt.codec) channels=\(sfmt.channels) sr=\(sfmt.sampleRate) layout=\(String(describing: sfmt.layoutTag))")
+        XCTAssertEqual(sfmt.channels, 6, "素材は 5.1(6ch)で作れている")
+
+        // 素材を素材チャンネル数のまま読んだときの並び(自前ダウンミックスへ切り替える場合の前提確認)
+        let native = try decodeChannels(src, channels: 6)
+        XCTAssertEqual(native.count, 6)
+        for c in 0..<6 { print("[mp451] native ch\(c) " + describe("", toneAmplitudes(native[c]))) }
+
+        // AVFoundation に 2ch 変換させた素の結果(AssetPCMSource 既定経路の実体)
+        let av2 = try decodeChannels(src, channels: 2)
+        print("[mp451] " + describe("AV2ch L", toneAmplitudes(av2[0])))
+        print("[mp451] " + describe("AV2ch R", toneAmplitudes(av2[1])))
+
+        // MovieCut の書き出し(動画クリップ = Asset 経路でミックス → AAC)
+        var p = Project.new(); p.width = 320; p.height = 180; p.fps = 30
+        var c = Clip(); c.type = .video; c.src = src.path; c.start = 0; c.duration = Self.duration; c.srcDuration = Self.duration
+        p.tracks[0].clips = [c]
+        let out = tmp.appendingPathComponent("out51-from-aac.mp4")
+        try await Exporter(project: p, assets: RenderAssets()).export(to: out, progress: nil)
+        let fmt = try audioFormat(of: out)
+        print("[mp451] asset-out format codec=\(fmt.codec) channels=\(fmt.channels) sr=\(fmt.sampleRate) layout=\(String(describing: fmt.layoutTag))")
+        XCTAssertEqual(fmt.codec, kAudioFormatMPEG4AAC)
+        XCTAssertEqual(fmt.channels, 2)
+        let ch = try decodeChannels(out, channels: 2)
+        let la = toneAmplitudes(ch[0]), ra = toneAmplitudes(ch[1])
+        print("[mp451] " + describe("asset-out Lch", la))
+        print("[mp451] " + describe("asset-out Rch", ra))
+        // センター・サラウンドが黙って落ちていないこと(係数の厳密値は AVFoundation 依存なので存在を固定する)
+        XCTAssertGreaterThan(la[2], 0.08, "センター(880) が左に含まれている")
+        XCTAssertGreaterThan(ra[2], 0.08, "センター(880) が右に含まれている")
+        XCTAssertGreaterThan(la[4], 0.08, "左サラウンド(1320) が左に含まれている")
+        XCTAssertGreaterThan(ra[5], 0.08, "右サラウンド(1760) が右に含まれている")
+        XCTAssertGreaterThan(la[0], 0.15, "L(440) が左に含まれている")
+        XCTAssertGreaterThan(ra[1], 0.15, "R(660) が右に含まれている")
+    }
+
     /// ステレオ素材の mp4 書き出しが従来どおり壊れていないこと(回帰)。
     func testExportStereoWavToMp4AACUnchanged() async throws {
         let wav = try writeToneWAV("tones2.wav", channels: 2)
