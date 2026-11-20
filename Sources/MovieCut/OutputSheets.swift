@@ -187,7 +187,7 @@ struct SilenceCutSheet: View {
                 } else if allSilent {
                     Text(L10n.t("全体が無音になるので、カットできません。しきい値を下げてください。")).foregroundStyle(.orange)
                 } else {
-                    Text(String(format: L10n.t("%d 箇所をカットします"), cuts.count)) + (cuts.isEmpty ? "" : String(format: L10n.t("（合計 %.2f 秒）"), removed))
+                    Text(String(format: L10n.t("%d 箇所をカットします"), cuts.count) + (cuts.isEmpty ? "" : String(format: L10n.t("（合計 %.2f 秒）"), removed)))
                 }
             }
             .font(.callout)

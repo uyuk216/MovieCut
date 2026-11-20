@@ -30,7 +30,7 @@ struct ScaleDuplicateSheet: View {
                     if plan.steps.isEmpty {
                         Text(L10n.t("音程が ±24 半音の範囲を超えるため、作れません。")).foregroundStyle(.orange)
                     } else {
-                        Text(String(format: L10n.t("%d 個を並べます"), plan.steps.count)) + (plan.truncated > 0 ? String(format: L10n.t("（音程の範囲を超える %d 個は作りません）"), plan.truncated) : "")
+                        Text(String(format: L10n.t("%d 個を並べます"), plan.steps.count) + (plan.truncated > 0 ? String(format: L10n.t("（音程の範囲を超える %d 個は作りません）"), plan.truncated) : ""))
                     }
                 }
             }.font(.callout)
@@ -80,7 +80,7 @@ struct BeatPlaceSheet: View {
                     if plan.steps.isEmpty {
                         Text(L10n.t("置ける位置がありません。")).foregroundStyle(.orange)
                     } else {
-                        Text(String(format: L10n.t("%d 個を並べます"), plan.steps.count)) + (plan.truncated > 0 ? String(format: L10n.t("（音程の範囲を超える %d 個は作りません）"), plan.truncated) : "")
+                        Text(String(format: L10n.t("%d 個を並べます"), plan.steps.count) + (plan.truncated > 0 ? String(format: L10n.t("（音程の範囲を超える %d 個は作りません）"), plan.truncated) : ""))
                     }
                 }
             }.font(.callout)
