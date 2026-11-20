@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import MovieCutCore
 
 /// アプリの情報(About パネル)。
 enum AppInfo {

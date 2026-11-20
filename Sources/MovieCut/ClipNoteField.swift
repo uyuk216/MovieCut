@@ -1,4 +1,5 @@
 import SwiftUI
+import MovieCutCore
 
 /// インスペクタの「注記」欄。書き出しには出ない作業用のメモ。Return かフォーカスを離したときに 1 回の編集として書く(200 字まで)。
 struct ClipNoteField: View {

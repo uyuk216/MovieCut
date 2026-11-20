@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import MovieCutCore
 
 /// キーボードショートカット一覧の 1 行(表示の文字だけ持つ。読み取り専用)。
 struct ShortcutRow: Equatable, Identifiable {
