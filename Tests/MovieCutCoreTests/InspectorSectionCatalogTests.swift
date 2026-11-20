@@ -30,10 +30,10 @@ final class InspectorSectionCatalogTests: XCTestCase {
             "inspector.blur.range", "inspector.blur.look",
             "inspector.visualizer.range", "inspector.visualizer.input", "inspector.visualizer.look",
             "inspector.shape.range", "inspector.shape.look",
-            "inspector.voice.subtitle", "inspector.voice.audio", "inspector.text.body",
+            "inspector.voice.subtitle", "inspector.voice.audio",
             "inspector.textStyle.balloon", "inspector.textStyle.style", "inspector.textStyle.decoration",
             "inspector.textStyle.countdown", "inspector.textStyle.otherClips", "inspector.textStyle.animation",
-            "inspector.tachie.main", "inspector.tachie.expression", "inspector.tachie.image", "inspector.tachie.mouth", "inspector.tachie.assets",
+            "inspector.tachie.main", "inspector.tachie.expression", "inspector.tachie.image", "inspector.tachie.mouth",
             "inspector.rig.parts", "inspector.rig.expressions",
         ]
         for k in ["filter", "peq", "dist", "tube", "chorus", "flanger", "phaser", "tremolo", "vibrato", "wah", "echo", "lowq", "robot"] {

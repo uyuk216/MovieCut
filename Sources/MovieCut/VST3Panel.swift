@@ -15,7 +15,7 @@ struct VST3Panel: View {
     /// 起動時に開いておくか(撮影・試験用)。
     var forceExpanded = false
 
-    @State private var open: Bool?
+    @State private var open: Bool? = InspectorDisclosurePersistence.saved("inspector.audioFx.vst3")
     @State private var scanResult: VST3ScanResult?
     /// 純正 GUI を開けなかったとき/持たないときの穏やかな通知(パラメータ一覧など従来表示は壊さない)。
     @State private var editorNote: String?
@@ -26,7 +26,7 @@ struct VST3Panel: View {
     var body: some View {
         if let c = clip, AudioFxEditing.supports(c) {
             DisclosureGroup(isExpanded: Binding(get: { open ?? (forceExpanded || !slots.isEmpty) },
-                                                set: { open = $0 })) {
+                                                set: { open = $0; InspectorDisclosurePersistence.save($0, id: "inspector.audioFx.vst3") })) {
                 VStack(alignment: .leading, spacing: 6) {
                     // 誤解させないための明示(到達状態の単一の置き場は Core の VST3HostAvailability)
                     Label(VST3HostAvailability.current.userFacingNote, systemImage: "info.circle")

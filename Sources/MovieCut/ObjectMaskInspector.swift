@@ -12,8 +12,8 @@ struct ObjectMaskSection: View {
 
     var body: some View {
         if model.canCreateObjectMask(clip) || clip.objectMask != nil {
+            InspectorTopSection("inspector.objectMask") {
             VStack(alignment: .leading, spacing: 6) {
-                InspectorSection(title: L10n.t("オブジェクトマスク"))
                 if let p = model.objectMaskProgress {
                     ProgressView(value: p) { Text(L10n.t("対象を追跡しています…")) }
                     Button(L10n.t("作成を中止")) { model.cancelObjectMaskCreation() }
@@ -59,6 +59,7 @@ struct ObjectMaskSection: View {
                 }
             }
             .disabled(model.isLocked && model.objectMaskProgress == nil)
+            }
         }
     }
 

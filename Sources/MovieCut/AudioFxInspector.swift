@@ -9,12 +9,12 @@ struct AudioFxPanel: View {
     /// 起動時に開いておく節(撮影・試験用。ふだんは、効いている節だけ開く)
     var forceExpanded = false
 
-    @State private var openEQ: Bool?
-    @State private var openComp: Bool?
-    @State private var openReverb: Bool?
-    @State private var openDelay: Bool?
-    @State private var openNorm: Bool?
-    @State private var openDuck: Bool?
+    @State private var openEQ: Bool? = InspectorDisclosurePersistence.saved("inspector.audioFx.eq")
+    @State private var openComp: Bool? = InspectorDisclosurePersistence.saved("inspector.audioFx.comp")
+    @State private var openReverb: Bool? = InspectorDisclosurePersistence.saved("inspector.audioFx.reverb")
+    @State private var openDelay: Bool? = InspectorDisclosurePersistence.saved("inspector.audioFx.delay")
+    @State private var openNorm: Bool? = InspectorDisclosurePersistence.saved("inspector.audioFx.norm")
+    @State private var openDuck: Bool? = InspectorDisclosurePersistence.saved("inspector.audioFx.duck")
 
     fileprivate var clip: Clip? { model.clip(clipId) }
 
@@ -33,8 +33,10 @@ struct AudioFxPanel: View {
         return p == 0 ? "中央" : (v < 0 ? "左 \(p)%" : "右 \(p)%")
     }
 
-    fileprivate func expanded(_ s: Binding<Bool?>, active: Bool) -> Binding<Bool> {
-        Binding(get: { s.wrappedValue ?? (forceExpanded || active) }, set: { s.wrappedValue = $0 })
+    /// 開閉の Binding。ユーザーが明示的に開閉した値だけを `mc.disclosure.<id>` へ保存し、未保存なら従来どおり「forceExpanded か効いている節だけ開く」。
+    fileprivate func expanded(_ s: Binding<Bool?>, id: String, active: Bool) -> Binding<Bool> {
+        Binding(get: { s.wrappedValue ?? (forceExpanded || active) },
+                set: { s.wrappedValue = $0; InspectorDisclosurePersistence.save($0, id: id) })
     }
 
     /// 数値スライダー(ドラッグ = 1 回の Undo)。
@@ -50,6 +52,7 @@ struct AudioFxPanel: View {
         if let c = clip, AudioFxEditing.supports(c) {
             VStack(alignment: .leading, spacing: 8) {
                 EssentialSoundPanel(model: model, clipId: clipId)
+                InspectorSubsection("inspector.audioFx.basic") {
                 fxSlider("パン", value: c.panOrDefault, range: -1...1, step: 0.01, format: Self.panText, undo: ProjectModel.panUndoName) {
                     _ = AudioFxEditing.setPan(&$0, $1)
                 }
@@ -91,6 +94,7 @@ struct AudioFxPanel: View {
                          format: { $0 < AudioFx.limiterRange.lowerBound ? "なし" : "天井 " + Self.db($0) }, undo: ProjectModel.limiterUndoName) {
                     _ = AudioFxEditing.setLimiter(&$0, $1 < AudioFx.limiterRange.lowerBound ? nil : $1)
                 }
+                }
                 eqGroup(c)
                 compressorGroup(c)
                 reverbGroup(c)
@@ -110,7 +114,7 @@ struct AudioFxPanel: View {
 
     @ViewBuilder private func eqGroup(_ c: Clip) -> some View {
         let eq = c.audioFx?.eq ?? AudioFx.EQ()
-        DisclosureGroup(isExpanded: expanded($openEQ, active: eq.isActive)) {
+        DisclosureGroup(isExpanded: expanded($openEQ, id: "inspector.audioFx.eq", active: eq.isActive)) {
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(AudioFxEditing.Band.allCases, id: \.self) { band in
                     fxSlider(band.label, value: band.value(of: eq), range: AudioFx.EQ.range, step: 0.5, format: Self.db, undo: ProjectModel.eqUndoName) {
@@ -134,7 +138,7 @@ struct AudioFxPanel: View {
     @ViewBuilder private func compressorGroup(_ c: Clip) -> some View {
         let comp = c.audioFx?.compressor
         let on = comp?.isActive ?? false
-        DisclosureGroup(isExpanded: expanded($openComp, active: on)) {
+        DisclosureGroup(isExpanded: expanded($openComp, id: "inspector.audioFx.comp", active: on)) {
             VStack(alignment: .leading, spacing: 6) {
                 Toggle(L10n.t("コンプレッサーを使う"), isOn: Binding(get: { on }, set: { v in
                     model.setAudioFx({ _ = AudioFxEditing.setCompressorEnabled(&$0, v) }, name: "コンプレッサーの切り替え", clipId: clipId)
@@ -161,7 +165,7 @@ struct AudioFxPanel: View {
     @ViewBuilder private func reverbGroup(_ c: Clip) -> some View {
         let rv = c.audioFx?.reverb
         let on = rv?.isActive ?? false
-        DisclosureGroup(isExpanded: expanded($openReverb, active: on)) {
+        DisclosureGroup(isExpanded: expanded($openReverb, id: "inspector.audioFx.reverb", active: on)) {
             VStack(alignment: .leading, spacing: 6) {
                 Toggle(L10n.t("リバーブを使う"), isOn: Binding(get: { rv?.enabled ?? false }, set: { v in
                     model.setAudioFx({ _ = AudioFxEditing.setReverbEnabled(&$0, v) }, name: "リバーブの切り替え", clipId: clipId)
@@ -195,7 +199,7 @@ struct AudioFxPanel: View {
     @ViewBuilder private func delayGroup(_ c: Clip) -> some View {
         let dl = c.audioFx?.delay
         let on = dl?.isActive ?? false
-        DisclosureGroup(isExpanded: expanded($openDelay, active: on)) {
+        DisclosureGroup(isExpanded: expanded($openDelay, id: "inspector.audioFx.delay", active: on)) {
             VStack(alignment: .leading, spacing: 6) {
                 Toggle(L10n.t("ディレイを使う"), isOn: Binding(get: { dl?.enabled ?? false }, set: { v in
                     model.setAudioFx({ _ = AudioFxEditing.setDelayEnabled(&$0, v) }, name: "ディレイの切り替え", clipId: clipId)
@@ -224,7 +228,7 @@ struct AudioFxPanel: View {
     @ViewBuilder private func normalizeGroup(_ c: Clip) -> some View {
         let nm = c.audioFx?.normalize
         let on = nm?.isActive ?? false
-        DisclosureGroup(isExpanded: expanded($openNorm, active: on)) {
+        DisclosureGroup(isExpanded: expanded($openNorm, id: "inspector.audioFx.norm", active: on)) {
             VStack(alignment: .leading, spacing: 6) {
                 Toggle(L10n.t("ノーマライズを使う"), isOn: Binding(get: { on }, set: { v in
                     model.setAudioFx({ _ = AudioFxEditing.setNormalizeEnabled(&$0, v) }, name: "ノーマライズの切り替え", clipId: clipId)
@@ -263,7 +267,7 @@ extension AudioFxPanel {
         if DuckEditing.supports(c) {
             let on = c.hasDuck
             let d = c.duck ?? Duck()
-            DisclosureGroup(isExpanded: expanded($openDuck, active: on)) {
+            DisclosureGroup(isExpanded: expanded($openDuck, id: "inspector.audioFx.duck", active: on)) {
                 VStack(alignment: .leading, spacing: 6) {
                     Toggle(L10n.t("声があるときに BGM を下げる"), isOn: Binding(get: { on }, set: { v in
                         model.setDuck({ _ = DuckEditing.setEnabled(&$0, v) }, name: v ? "自動ダッキングをオン" : "自動ダッキングをオフ", clipId: clipId)

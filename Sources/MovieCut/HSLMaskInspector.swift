@@ -15,8 +15,8 @@ struct HSLMaskSection: View {
 
     var body: some View {
         if Clip.supportsEffects(clip.type) {
+            InspectorTopSection("inspector.hslMask") {
             VStack(alignment: .leading, spacing: 6) {
-                InspectorSection(title: L10n.t("HSLマスク"))
                 Toggle(L10n.t("色の範囲で切り抜く（外は透明）"), isOn: Binding(get: { clip.hslMask != nil }, set: { on in
                     model.setHSLMask(on ? HSLMask() : nil, clipId: clip.id)
                 }))
@@ -54,6 +54,7 @@ struct HSLMaskSection: View {
                 }
             }
             .disabled(model.isLocked)
+            }
         }
     }
 

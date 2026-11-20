@@ -59,6 +59,46 @@ extension MCDisclosure where Label == Text {
     }
 }
 
+/// 開閉できる内側の節(見出しクリックで開閉・状態は `mc.disclosure.<id>` に保存)。
+/// 従来の `InspectorSection`(見出し+罫線だけで、中身は兄弟要素)の置き換え。中身はクロージャで包む。
+/// id・既定の開閉・見出しは `InspectorSectionCatalog` から引く(title は動的な見出しのときだけ渡す)。
+struct InspectorSubsection<Content: View>: View {
+    private let def: InspectorSectionDefinition
+    private let title: String?
+    private let content: Content
+
+    init(_ id: String, title: String? = nil, @ViewBuilder content: () -> Content) {
+        self.def = InspectorSectionCatalog.require(id)
+        self.title = title
+        self.content = content()
+    }
+
+    var body: some View {
+        MCDisclosure(def.id, defaultOpen: def.defaultOpen, label: {
+            Text(L10n.t(title ?? def.title))
+                .font(MCDesign.Font.calloutSemibold)
+                .foregroundStyle(MCDesign.Color.textSecondary)
+        }, content: { content })
+    }
+}
+
+/// 最上位の開閉できる節(InspectorView の `disclose` と同じ作法: `MCDisclosure` + カタログの id)。
+/// 他ファイルの節ビュー(トラッキング・マスク・カメラ等)が自前で使う。見出し・既定の開閉・保存キーはカタログから引く。
+/// ロック中でも見出しは開閉できるよう、`.disabled` は中身の側に付けること。
+struct InspectorTopSection<Content: View>: View {
+    private let def: InspectorSectionDefinition
+    private let content: Content
+
+    init(_ id: String, @ViewBuilder content: () -> Content) {
+        self.def = InspectorSectionCatalog.require(id)
+        self.content = content()
+    }
+
+    var body: some View {
+        MCDisclosure(def.id, title: def.title, defaultOpen: def.defaultOpen) { content }
+    }
+}
+
 /// 空状態の案内カード(アイコン + 見出し + 説明文)。未選択・複数選択のインスペクタで使う。
 struct InspectorGuideCard: View {
     let symbol: String
@@ -537,7 +577,7 @@ struct ClipInspector: View {
                             .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                     }
                 }
-                disclose("timing", "タイミング", open: true, hideHeader: true) {
+                disclose("timing", "タイミング", hideHeader: true) {
                     HStack(alignment: .top, spacing: 10) {
                         num("開始（秒）", .start, step: 0.1, decimals: 3)
                         num("長さ（秒）", .duration, step: 0.1, decimals: 3)
@@ -551,31 +591,31 @@ struct ClipInspector: View {
                         }
                     }
                 }
-                disclose("note", "注記", open: false, hideHeader: true) {
+                disclose("note", "注記", hideHeader: true) {
                     ClipNoteField(model: model, clipId: clipId, note: c.note ?? "").id(clipId)
                 }
-                disclose("group", "グループ", open: false, hideHeader: true) { groupSection(c) }
+                disclose("group", "グループ", hideHeader: true) { groupSection(c) }
                 TrackingSection(model: model, clip: c)
-                if c.type == .voice { disclose("voice", "セリフ", open: true) { voiceSections(c) } }
-                if c.type == .text { disclose("text", "文字", open: true, hideHeader: true) { textSections(c) } }
+                if c.type == .voice { disclose("voice", "セリフ") { voiceSections(c) } }
+                if c.type == .text { disclose("text", "文字", hideHeader: true) { textSections(c) } }
                 if c.type == .tachie { TachieClipSection(model: model, clip: c) }
-                if TextStyleEditing.supports(c.type) { disclose("textStyle", "文字のスタイル", open: true) { TextStyleInspector(model: model, store: model.textStyles, clipId: clipId) } }
-                if [ClipType.image, .video, .text, .compound, .scene, .tachie].contains(c.type) { disclose("place", "位置・変形", open: true) { placeSections(c) } }
-                if c.type == .compound { disclose("compound", "中身", open: false, hideHeader: true) { compoundSection(c) } }
-                if c.type == .scene { disclose("scene", "シーン", open: true, hideHeader: true) { sceneSection(c) } }
-                if EffectEditing.supports(c.type) { disclose("effect", "エフェクト", open: false, hideHeader: true) { effectSections(c) } }
-                if TransitionEditing.supportsVideo(c.type) { disclose("transition", "トランジション", open: false, hideHeader: true) { transitionSections(c) } }
-                if c.type == .blur { disclose("blur", "ぼかし", open: true) { blurSections(c) } }
-                if c.type == .visualizer { disclose("visualizer", "ビジュアライザ", open: true) { visualizerSections(c) } }
-                if c.type == .shape { disclose("shape", "図形", open: true) { shapeSections(c) } }
-                if Clip.supportsSpeed(c.type) { disclose("speed", c.isFreeze ? "フリーズフレーム" : "速度", open: false, hideHeader: true) { speedSections(c) } }
-                if StabilizeEditing.supports(c) { disclose("stabilize", "手ぶれ補正", open: false, hideHeader: true) { stabilizeSections(c) } }
-                if Clip.supportsEffects(c.type) { disclose("mask", "形のマスク", open: false, hideHeader: true) { maskSections(c) } }
+                if TextStyleEditing.supports(c.type) { disclose("textStyle", "文字のスタイル") { TextStyleInspector(model: model, store: model.textStyles, clipId: clipId) } }
+                if [ClipType.image, .video, .text, .compound, .scene, .tachie].contains(c.type) { disclose("place", "位置・変形") { placeSections(c) } }
+                if c.type == .compound { disclose("compound", "中身", hideHeader: true) { compoundSection(c) } }
+                if c.type == .scene { disclose("scene", "シーン", hideHeader: true) { sceneSection(c) } }
+                if EffectEditing.supports(c.type) { disclose("effect", "エフェクト", hideHeader: true) { effectSections(c) } }
+                if TransitionEditing.supportsVideo(c.type) { disclose("transition", "トランジション", hideHeader: true) { transitionSections(c) } }
+                if c.type == .blur { disclose("blur", "ぼかし") { blurSections(c) } }
+                if c.type == .visualizer { disclose("visualizer", "ビジュアライザ") { visualizerSections(c) } }
+                if c.type == .shape { disclose("shape", "図形") { shapeSections(c) } }
+                if Clip.supportsSpeed(c.type) { disclose("speed", c.isFreeze ? "フリーズフレーム" : "速度", hideHeader: true) { speedSections(c) } }
+                if StabilizeEditing.supports(c) { disclose("stabilize", "手ぶれ補正", hideHeader: true) { stabilizeSections(c) } }
+                if Clip.supportsEffects(c.type) { disclose("mask", "形のマスク", hideHeader: true) { maskSections(c) } }
                 ObjectMaskSection(model: model, clip: c)
                 HSLMaskSection(model: model, clip: c)
                 if Clip.supportsWarp(c.type) { warpSections(c) }
                 if (c.type == .video || c.type == .audio) && !c.isFreeze {
-                    disclose("audio", "音声", open: true, hideHeader: true) {
+                    disclose("audio", "音声", hideHeader: true) {
                         InspectorSection(title: L10n.t("音声"))
                         slider("音量", .volume, step: 0.05, format: Self.pct)
                         audioFadeFields(c)
@@ -589,8 +629,9 @@ struct ClipInspector: View {
     }
 
     /// 節を DisclosureGroup で包む。hideHeader が true なら、中の InspectorSection の見出しは出さない(外側の見出しと重なるため)。
-    @ViewBuilder private func disclose<C: View>(_ key: String, _ title: String, open: Bool, hideHeader: Bool = false, @ViewBuilder _ content: () -> C) -> some View {
-        MCDisclosure("inspector.\(key)", title: title, defaultOpen: open) {
+    @ViewBuilder private func disclose<C: View>(_ key: String, _ title: String, hideHeader: Bool = false, @ViewBuilder _ content: () -> C) -> some View {
+        let def = InspectorSectionCatalog.require("inspector.\(key)")  // 既定の開閉と保存キーはカタログが持つ
+        MCDisclosure(def.id, title: title, defaultOpen: def.defaultOpen) {
             content().environment(\.inspectorHidesSectionHeader, hideHeader)
         }
     }
@@ -646,15 +687,17 @@ struct ClipInspector: View {
         MultilineField(label: "字幕文（空なら読み上げ文と同じ）", value: noSubtitle ? "" : (c.subtitleText ?? ""), focusRequest: 0, onLive: { _ in },
                        onCommit: { t in model.setVoiceSubtitleText(clipId: clipId, text: t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : t) })
             .disabled(noSubtitle || model.isLocked)
-        InspectorSection(title: "字幕")
+        InspectorSubsection("inspector.voice.subtitle") {
         Toggle("字幕を出す", isOn: Binding(get: { c.subtitleOrDefault }, set: { v in model.setClipProperty({ $0.subtitle = v }, name: "字幕の切り替え", clipId: clipId) }))
             .toggleStyle(.checkbox)
         num("字幕の大きさ（px）", .fontSize, step: 1, decimals: 0)
         fontPicker(c)
-        InspectorSection(title: "音声")
+        }
+        InspectorSubsection("inspector.voice.audio") {
         slider("音量", .volume, step: 0.05, format: Self.pct)
         audioFadeFields(c)
         AudioFxPanel(model: model, clipId: clipId, forceExpanded: Self.expandAudioFx)
+        }
     }
 
     // MARK: 速度
@@ -846,7 +889,7 @@ struct ClipInspector: View {
     // MARK: メッシュ変形・パペット変形(数値編集 + プレビュー上のドラッグ + キーフレーム)
 
     @ViewBuilder private func warpSections(_ c: Clip) -> some View {
-        InspectorSection(title: L10n.t("メッシュ変形"))
+        InspectorTopSection("inspector.warpMesh") {
         Toggle(L10n.t("格子で変形する"), isOn: Binding(get: { c.meshWarp != nil }, set: { on in
             if on { model.ensureMeshWarp(clipId: clipId) } else { model.clearMeshWarp(clipId: clipId) }
         }))
@@ -880,7 +923,8 @@ struct ClipInspector: View {
             Text(L10n.t("制御点を元の位置からずらすと、その周りが引っ張られて変形します。全点が元の位置のときは変形しません。プレビュー上でも制御点をドラッグでき、◇ でキーフレームを付けると位置が時間で動きます。"))
                 .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
-        InspectorSection(title: L10n.t("パペット変形"))
+        }
+        InspectorTopSection("inspector.warpPuppet") {
         Toggle(L10n.t("ピンで変形する"), isOn: Binding(get: { c.puppetWarp != nil }, set: { on in
             if on { model.ensurePuppetWarp(clipId: clipId) } else { model.clearPuppetWarp(clipId: clipId) }
         }))
@@ -912,6 +956,7 @@ struct ClipInspector: View {
             }
             Text(L10n.t("ピンはプレビュー上でもドラッグでき、クリップの中をダブルクリックするとその場所にピンが増えます（Shift+ダブルクリックで固定ピン）。ピンを動かすと、影響半径の内側が滑らかに追従します。固定ピンの周りは動きません。◇ でキーフレームを付けると位置が時間で動きます。"))
                 .font(MCDesign.Font.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
         }
     }
 
@@ -1247,19 +1292,21 @@ struct ClipInspector: View {
     }
 
     @ViewBuilder private func placeSections(_ c: Clip) -> some View {
-        InspectorSection(title: L10n.t("位置"))
+        InspectorSubsection("inspector.place.position") {
         HStack(alignment: .top, spacing: 10) {
             num("横位置", .x)
             num("縦位置", .y)
         }
-        InspectorSection(title: L10n.t("変形"))
+        }
+        InspectorSubsection("inspector.place.transform") {
         HStack(alignment: .top, spacing: 10) {
             num("拡大", .scale, step: 0.05)
             rotationField()
         }
         flipToggles(c)
+        }
         if c.type != .tachie {
-            InspectorSection(title: L10n.t("切り抜き"))
+            InspectorSubsection("inspector.place.crop") {
             HStack(alignment: .top, spacing: 10) {
                 cropField(.left, c)
                 cropField(.top, c)
@@ -1268,15 +1315,17 @@ struct ClipInspector: View {
                 cropField(.right, c)
                 cropField(.bottom, c)
             }
+            }
         }
         Button { model.resetTransform(clipId: clipId) } label: { Text(L10n.t("変形をリセット")).frame(maxWidth: .infinity) }
             .controlSize(.small)
             .disabled(model.isLocked || !Self.hasTransform(c))
             .help(L10n.t("回転・反転・切り抜き・拡大を元に戻します"))
-        InspectorSection(title: L10n.t("見た目"))
+        InspectorSubsection("inspector.place.look") {
         slider("不透明度", .opacity, step: 0.01, format: Self.pct)
         slider("ぼかし（px）", .blur, step: 1, format: Self.px)
         InspectorField(label: L10n.t("合成方法")) { blendPicker(c) }
+        }
     }
 
     /// 下のレイヤーとの合成方法(ブレンドモード)。未設定 = 通常。
@@ -1295,7 +1344,7 @@ struct ClipInspector: View {
     }
 
     @ViewBuilder private func blurSections(_ c: Clip) -> some View {
-        InspectorSection(title: L10n.t("範囲"))
+        InspectorSubsection("inspector.blur.range") {
         HStack(alignment: .top, spacing: 10) {
             num("中心 横", .x)
             num("中心 縦", .y)
@@ -1312,7 +1361,8 @@ struct ClipInspector: View {
             .pickerStyle(.segmented)
             .labelsHidden()
         }
-        InspectorSection(title: L10n.t("見た目"))
+        }
+        InspectorSubsection("inspector.blur.look") {
         InspectorField(label: L10n.t("方式")) {
             Picker("", selection: Binding(get: { c.blurModeOrDefault }, set: { v in model.setClipProperty({ $0.blurMode = v == "blur" ? nil : v }, name: "ぼかしの方式の変更", clipId: clipId) })) {
                 Text(L10n.t("ぼかし")).tag("blur")
@@ -1336,6 +1386,7 @@ struct ClipInspector: View {
         } else {
             slider("強さ（px）", .strength, step: 1, format: Self.px)
         }
+        }
     }
 }
 
@@ -1343,7 +1394,7 @@ extension ClipInspector {
     /// 音声ビジュアライザ: 範囲(x・y・w・h は動かせる)と見た目(棒/波、色、本数)。
     @ViewBuilder func visualizerSections(_ c: Clip) -> some View {
         let vz = c.visualizerOrDefault
-        InspectorSection(title: L10n.t("範囲"))
+        InspectorSubsection("inspector.visualizer.range") {
         HStack(alignment: .top, spacing: 10) {
             num("中心 横", .x)
             num("中心 縦", .y)
@@ -1352,7 +1403,8 @@ extension ClipInspector {
             num("幅", .w)
             num("高さ", .h)
         }
-        InspectorSection(title: L10n.t("入力"))
+        }
+        InspectorSubsection("inspector.visualizer.input") {
         InspectorField(label: L10n.t("見方")) {
             Picker("", selection: Binding(get: { vz.modeOrDefault }, set: { v in model.setClipProperty({ $0.visualizer = Self.vizUpdated($0.visualizer) { $0.mode = v } }, name: "ビジュアライザの見方の変更", clipId: clipId) })) {
                 Text(L10n.t("音量")).tag("level")
@@ -1376,7 +1428,8 @@ extension ClipInspector {
             .labelsHidden()
             .help(L10n.t("選んだ音声クリップだけの音で動かします。「全体のミックス」は書き出しと同じ合成音声"))
         }
-        InspectorSection(title: L10n.t("見た目"))
+        }
+        InspectorSubsection("inspector.visualizer.look") {
         InspectorField(label: L10n.t("形")) {
             Picker("", selection: Binding(get: { vz.styleOrDefault }, set: { v in model.setClipProperty({ $0.visualizer = Self.vizUpdated($0.visualizer) { $0.style = v } }, name: "ビジュアライザの形の変更", clipId: clipId) })) {
                 Text(L10n.t("棒")).tag("bars")
@@ -1396,12 +1449,13 @@ extension ClipInspector {
                               onPressEnded: { model.commitStepperSession("ビジュアライザの本数の変更") },
                               monospacedDigits: true)
         }
+        }
     }
 
     /// 図形: 範囲(x・y・w・h は動かせる)と見た目(種類、塗り、線、太さ、角丸)。
     @ViewBuilder func shapeSections(_ c: Clip) -> some View {
         let f = c.figureOrDefault
-        InspectorSection(title: L10n.t("範囲"))
+        InspectorSubsection("inspector.shape.range") {
         HStack(alignment: .top, spacing: 10) {
             num("中心 横", .x)
             num("中心 縦", .y)
@@ -1410,7 +1464,8 @@ extension ClipInspector {
             num("幅", .w)
             num("高さ", .h)
         }
-        InspectorSection(title: L10n.t("見た目"))
+        }
+        InspectorSubsection("inspector.shape.look") {
         InspectorField(label: L10n.t("種類")) {
             Picker("", selection: Binding(get: { f.figureKind }, set: { k in model.setClipProperty({ $0.figure = Self.figUpdated($0.figure) { $0.kind = k.rawValue } }, name: "図形の種類の変更", clipId: clipId) })) {
                 ForEach(FigureKind.allCases, id: \.self) { Text($0.title).tag($0) }
@@ -1450,6 +1505,7 @@ extension ClipInspector {
                                   onPressEnded: { model.commitStepperSession("図形の角丸の変更") },
                                   monospacedDigits: true)
             }
+        }
         }
     }
 

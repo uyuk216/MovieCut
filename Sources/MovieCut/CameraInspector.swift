@@ -9,8 +9,8 @@ struct CameraSection: View {
     private static let positionKeys = ["x", "y", "targetX", "targetY"]
 
     var body: some View {
+        InspectorTopSection("inspector.camera") {
         VStack(alignment: .leading, spacing: 6) {
-            InspectorSection(title: L10n.t("カメラ"))
             if model.project.camera == nil {
                 Text(L10n.t("未設定（従来どおりの描画です）。値を変えるとカメラが付きます。"))
                     .font(.caption).foregroundStyle(.secondary)
@@ -28,6 +28,7 @@ struct CameraSection: View {
             }
         }
         .disabled(model.isLocked)
+        }
     }
 
     private func field(_ key: String, step: Double, decimals: Int) -> some View {
@@ -57,8 +58,8 @@ struct TrackingSection: View {
         let canFollow = model.canObjectTrack(clip)
         let isSource = (clip.type == .video || clip.type == .image) && clip.src != nil
         if canFollow || isSource || clip.tracking != nil {
+            InspectorTopSection("inspector.tracking") {
             VStack(alignment: .leading, spacing: 6) {
-                InspectorSection(title: L10n.t("トラッキング"))
                 if let p = model.objectTrackingProgress {
                     ProgressView(value: p) { Text(L10n.t("対象を追跡しています…")) }
                     Button(L10n.t("追跡を中止")) { model.cancelObjectTracking() }
@@ -90,6 +91,7 @@ struct TrackingSection: View {
                 }
             }
             .disabled(model.isLocked && model.objectTrackingProgress == nil)
+            }
         }
     }
 }

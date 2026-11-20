@@ -94,12 +94,11 @@ public enum InspectorSectionCatalog {
         sub("inspector.visualizer.range", "範囲"), sub("inspector.visualizer.input", "入力"), sub("inspector.visualizer.look", "見た目"),
         sub("inspector.shape.range", "範囲"), sub("inspector.shape.look", "見た目"),
         sub("inspector.voice.subtitle", "字幕"), sub("inspector.voice.audio", "音声"),
-        sub("inspector.text.body", "文字"),
         sub("inspector.textStyle.balloon", "吹き出し"), sub("inspector.textStyle.style", "スタイル"),
         sub("inspector.textStyle.decoration", "装飾"), sub("inspector.textStyle.countdown", "カウントダウン"),
         sub("inspector.textStyle.otherClips", "他のクリップの値"), sub("inspector.textStyle.animation", "文字アニメーション"),
         sub("inspector.tachie.main", "立ち絵"), sub("inspector.tachie.expression", "表情の切り替え（再生位置）"),
-        sub("inspector.tachie.image", "画像"), sub("inspector.tachie.mouth", "あいうえお（口の形）"), sub("inspector.tachie.assets", "立ち絵素材"),
+        sub("inspector.tachie.image", "画像"), sub("inspector.tachie.mouth", "あいうえお（口の形）"),
         sub("inspector.rig.parts", "立ち絵パーツ"), sub("inspector.rig.expressions", "表情（パーツの組み合わせ）"),
     ]
 

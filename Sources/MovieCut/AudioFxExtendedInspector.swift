@@ -8,7 +8,8 @@ struct AudioFxExtendedPanel: View {
     let clipId: String
     var forceExpanded = false
 
-    @State private var open: [String: Bool] = [:]
+    /// ユーザーが明示的に開閉した節だけを持つ(保存済みの値を読み込んで始める)。未登録の節は従来どおり forceExpanded か「効いている」で決まる。
+    @State private var open: [String: Bool] = InspectorDisclosurePersistence.savedExtended()
 
     fileprivate var clip: Clip? { model.clip(clipId) }
     private var fx: AudioFx.Extended? { clip?.audioFx?.extended }
@@ -17,7 +18,8 @@ struct AudioFxExtendedPanel: View {
     private static func pct(_ v: Double) -> String { "\(Int((v * 100).rounded()))%" }
 
     private func expanded(_ key: String, active: Bool) -> Binding<Bool> {
-        Binding(get: { open[key] ?? (forceExpanded || active) }, set: { open[key] = $0 })
+        Binding(get: { open[key] ?? (forceExpanded || active) },
+                set: { open[key] = $0; InspectorDisclosurePersistence.save($0, id: "inspector.audioFx.ext.\(key)") })
     }
 
     private func fxSlider(_ label: String, value: Double, range: ClosedRange<Double>, step: Double, format: @escaping (Double) -> String,
