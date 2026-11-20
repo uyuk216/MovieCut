@@ -27,6 +27,7 @@ struct DockPanelWindowRoot: View {
     @ObservedObject var model: ProjectModel
     let panel: DockPanel
     let store: DockStore
+    @State private var fontScaleEpoch = 0
     var body: some View {
         VStack(spacing: 0) {
             HStack {
@@ -39,6 +40,8 @@ struct DockPanelWindowRoot: View {
             Divider()
             DockPanelContent(panel: panel, model: model)
         }
+        .id(fontScaleEpoch)
+        .onReceive(NotificationCenter.default.publisher(for: FontScaleStore.didChange)) { _ in fontScaleEpoch += 1 }
         .background(MCDesign.Color.window)
         .preferredColorScheme(.dark)
     }

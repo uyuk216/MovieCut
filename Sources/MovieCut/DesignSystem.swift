@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import MovieCutCore
 
 // MARK: - デザインシステム(Apple Human Interface Guidelines に沿うための土台)
 //
@@ -64,21 +65,38 @@ enum MCDesign {
         static let accent = SwiftUI.Color.accentColor
     }
 
+    /// 文字サイズ(pt)だけを返す。現在の段(FontScaleStore.current)から計算する。
+    enum FontSize {
+        private static var step: FontScaleStep { FontScaleStore.current }
+        static var headline: CGFloat { step.headingSize }
+        static var largeTitle: CGFloat { step.headingScaled(base: 26) }
+        static var title: CGFloat { step.headingScaled(base: 22) }
+        static var title2: CGFloat { step.headingScaled(base: 17) }
+        static var title3: CGFloat { step.headingScaled(base: 15) }
+        static var body: CGFloat { step.bodyScaled(base: 13) }
+        static var callout: CGFloat { step.bodyScaled(base: 12) }
+        static var calloutSemibold: CGFloat { step.bodyScaled(base: 12) }
+        static var subheadline: CGFloat { step.bodyScaled(base: 11) }
+        static var footnote: CGFloat { step.bodyScaled(base: 10) }
+        static var caption: CGFloat { step.bodyScaled(base: 10) }
+        static var badge: CGFloat { step.bodyScaled(base: 10) }
+    }
+
     enum Font {
-        // macOS のテキストスタイル(括弧内は標準サイズ)。階層はこの段差で作る。
-        static let largeTitle = SwiftUI.Font.largeTitle   // 26pt
-        static let title = SwiftUI.Font.title             // 22pt
-        static let title2 = SwiftUI.Font.title2           // 17pt
-        static let title3 = SwiftUI.Font.title3           // 15pt
-        static let headline = SwiftUI.Font.headline       // 13pt semibold
-        static let body = SwiftUI.Font.body               // 13pt
-        static let callout = SwiftUI.Font.callout         // 12pt
-        static let calloutSemibold = SwiftUI.Font.system(size: 12, weight: .semibold)
-        static let subheadline = SwiftUI.Font.subheadline // 11pt
-        static let footnote = SwiftUI.Font.footnote       // 10pt
-        static let caption = SwiftUI.Font.caption         // 10pt
-        /// ごく小さい印(バッジ・つまみの字)。可読の下限として 10pt を使う。
-        static let badge = SwiftUI.Font.system(size: 10, weight: .semibold)
+        // 基準は macOS のテキストスタイル(括弧内)。段(設定)に応じて FontSize が換算する。
+        static var largeTitle: SwiftUI.Font { .system(size: FontSize.largeTitle) }   // 26pt
+        static var title: SwiftUI.Font { .system(size: FontSize.title) }             // 22pt
+        static var title2: SwiftUI.Font { .system(size: FontSize.title2) }           // 17pt
+        static var title3: SwiftUI.Font { .system(size: FontSize.title3) }           // 15pt
+        static var headline: SwiftUI.Font { .system(size: FontSize.headline, weight: .semibold) }
+        static var body: SwiftUI.Font { .system(size: FontSize.body) }               // 13pt
+        static var callout: SwiftUI.Font { .system(size: FontSize.callout) }         // 12pt
+        static var calloutSemibold: SwiftUI.Font { .system(size: FontSize.calloutSemibold, weight: .semibold) }
+        static var subheadline: SwiftUI.Font { .system(size: FontSize.subheadline) } // 11pt
+        static var footnote: SwiftUI.Font { .system(size: FontSize.footnote) }       // 10pt
+        static var caption: SwiftUI.Font { .system(size: FontSize.caption) }         // 10pt
+        /// ごく小さい印(バッジ・つまみの字)。可読の下限として 10pt(基準)を使う。
+        static var badge: SwiftUI.Font { .system(size: FontSize.badge, weight: .semibold) }
         /// 時刻など、等幅で読む数字
         static func monospaced(_ size: CGFloat) -> SwiftUI.Font {
             .system(size: size, design: .monospaced)

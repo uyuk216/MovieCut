@@ -47,6 +47,8 @@ struct ContentView: View {
     /// false なら、別ウインドウのパネルを画面に出さない(試験用)。
     private let presentsDockWindows: Bool
     @Environment(\.undoManager) private var undoManager
+    /// 文字サイズの段が変わったら進め、本体を作り直して新しいサイズに追随させる。
+    @State private var fontScaleEpoch = 0
 
     @MainActor init(model: ProjectModel, fileURL: URL?, dock: DockStore? = nil, presentsDockWindows: Bool = true) {
         self.model = model
@@ -65,6 +67,8 @@ struct ContentView: View {
             Divider()
             StatusBar(model: model)
         }
+        .id(fontScaleEpoch)
+        .onReceive(NotificationCenter.default.publisher(for: FontScaleStore.didChange)) { _ in fontScaleEpoch += 1 }
         .frame(minWidth: 1100, minHeight: 700)
         .background(MCDesign.Color.background)
         .preferredColorScheme(.dark)
@@ -665,6 +669,17 @@ struct SettingsSheet: View {
         return ResolutionPresets.isPreset(k) ? k : ResolutionPresets.customKey
     }
     @State private var language: AppLanguage = L10n.storedOverride()
+    /// 文字サイズの段(即時保存。変えるとこのシート自身も再描画される)。
+    @State private var fontScaleStep: FontScaleStep = FontScaleStore.current
+    static func fontScaleLabel(_ s: FontScaleStep) -> String {
+        switch s {
+        case .small: return L10n.t("小（見出し 13pt・本文 12pt）")
+        case .mediumSmall: return L10n.t("やや小（見出し 15pt・本文 13pt）")
+        case .standard: return L10n.t("標準（見出し 17pt・本文 14pt）")
+        case .large: return L10n.t("大（見出し 18pt・本文 16pt）")
+        case .extraLarge: return L10n.t("特大（見出し 20pt・本文 18pt）")
+        }
+    }
     private var fpsValid: Bool { if case .success = FrameRateInput.parse(fpsText) { return true } else { return false } }
     private var bgPreset: String {
         let b = draft.bg.lowercased()
@@ -748,6 +763,16 @@ struct SettingsSheet: View {
                     .labelsHidden().frame(width: 320)
                     .accessibilityIdentifier("settings-language")
                     Text(L10n.t("言語の切り替えは、メニューなどを開き直すと反映されます。")).font(MCDesign.Font.caption).foregroundStyle(MCDesign.Color.textSecondary)
+                }.padding(MCDesign.Spacing.s)
+            }
+            GroupBox(L10n.t("表示")) {
+                HStack {
+                    Text(L10n.t("文字サイズ"))
+                    Picker("", selection: Binding(get: { fontScaleStep }, set: { v in fontScaleStep = v; FontScaleStore.set(v) })) {
+                        ForEach(FontScaleStep.allCases, id: \.self) { Text(Self.fontScaleLabel($0)).tag($0) }
+                    }
+                    .labelsHidden().frame(width: 320)
+                    .accessibilityIdentifier("settings-font-scale")
                 }.padding(MCDesign.Spacing.s)
             }
             GroupBox(L10n.t("VOICEVOX（互換エンジンも可）")) {
