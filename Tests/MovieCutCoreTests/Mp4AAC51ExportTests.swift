@@ -119,7 +119,7 @@ final class Mp4AAC51ExportTests: XCTestCase {
         let codec = CMFormatDescriptionGetMediaSubType(fd)
         guard let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(fd) else { throw ExportError.audioReadFailed(nil) }
         var tag: AudioChannelLayoutTag? = nil
-        if let layout = CMAudioFormatDescriptionGetChannelLayout(fd, nil) { tag = layout.pointee.mChannelLayoutTag }
+        if let layout = CMAudioFormatDescriptionGetChannelLayout(fd, sizeOut: nil) { tag = layout.pointee.mChannelLayoutTag }
         return (codec, Int(asbd.pointee.mChannelsPerFrame), asbd.pointee.mSampleRate, tag)
     }
 
