@@ -521,6 +521,8 @@ final class PreviewCanvasView: NSView {
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func mouseDown(with event: NSEvent) {
+        // mouseUp が届かずに残ったドラッグ(ウインドウが閉じた等)があれば、次の操作の前に確定して Undo に載せる
+        if manipulation != nil { endManipulation() }
         // 入力欄にフォーカスが残っていると、Delete・Space がクリップに届かない。プレビューを押したら入力を終える
         if KeyRouter.isTextInput(window?.firstResponder) { window?.makeFirstResponder(nil) }
         let v = convert(event.locationInWindow, from: nil)
