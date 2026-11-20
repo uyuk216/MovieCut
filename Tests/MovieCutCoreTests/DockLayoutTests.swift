@@ -342,3 +342,37 @@ final class DockMinimumWidthTests: XCTestCase {
         XCTAssertEqual(w, (400 - 6) * 320 / 620, accuracy: 1e-9)
     }
 }
+
+final class DockDragClampTests: XCTestCase {
+    private let cases: [(total: Double, minFirst: Double, minSecond: Double)] = [
+        (1100, 640, 300), (1600, 320, 300), (2000, 120, 120), (900, 320, 300), (1500, 400, 200),
+    ]
+
+    /// ドラッグ可能な size の全域で、fraction 経由の表示サイズが size と一致する(往復一致・死に区間なし)。
+    func testDragRoundTripsAcrossWholeRange() {
+        for c in cases {
+            guard let r = DockMetrics.dragRange(total: c.total, minFirst: c.minFirst, minSecond: c.minSecond) else { XCTFail("\(c)"); continue }
+            for i in 0...50 {
+                let size = r.lowerBound + (r.upperBound - r.lowerBound) * Double(i) / 50
+                let f = DockMetrics.dragFraction(forFirstSize: size, total: c.total, minFirst: c.minFirst, minSecond: c.minSecond)!
+                let shown = DockMetrics.firstSize(total: c.total, fraction: f, minFirst: c.minFirst, minSecond: c.minSecond)
+                XCTAssertEqual(shown, size, accuracy: 1e-6, "\(c) size=\(size)")
+            }
+        }
+    }
+
+    /// 範囲外へ引いても、表示は許容範囲の端まで追従する(端で止まる)。最小は表示側の値(300/320 等)を守る。
+    func testDragBeyondRangeStopsAtDisplayedMinimum() {
+        let c = (total: 1100.0, minFirst: 640.0, minSecond: 300.0)
+        let lo = DockMetrics.dragFraction(forFirstSize: 120, total: c.total, minFirst: c.minFirst, minSecond: c.minSecond)!
+        XCTAssertEqual(DockMetrics.firstSize(total: c.total, fraction: lo, minFirst: c.minFirst, minSecond: c.minSecond), 640, accuracy: 1e-6)
+        let hi = DockMetrics.dragFraction(forFirstSize: 5000, total: c.total, minFirst: c.minFirst, minSecond: c.minSecond)!
+        XCTAssertEqual(1100 - 6 - DockMetrics.firstSize(total: c.total, fraction: hi, minFirst: c.minFirst, minSecond: c.minSecond), 300, accuracy: 1e-6)
+    }
+
+    /// 両側の最小を同時に満たせないほど狭いときは表示が比例配分になるため、ドラッグは無効(nil)で構わない。
+    func testTooNarrowToDragIsDisabled() {
+        XCTAssertNil(DockMetrics.dragRange(total: 400, minFirst: 320, minSecond: 300))
+        XCTAssertNil(DockMetrics.dragFraction(forFirstSize: 200, total: 400, minFirst: 320, minSecond: 300))
+    }
+}

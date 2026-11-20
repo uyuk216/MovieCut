@@ -108,7 +108,9 @@ struct DockSplitView: View {
                 DockNodeView(node: first, path: path + [false], model: model, store: store)
                     .frame(width: horizontal ? firstSize : nil, height: horizontal ? nil : firstSize)
                     .clipped()
-                divider(total: total, currentFirst: Double(firstSize))
+                divider(total: total, currentFirst: Double(firstSize),
+                        minFirst: DockMetrics.minExtent(of: first, axis: ax),
+                        minSecond: DockMetrics.minExtent(of: second, axis: ax))
                 DockNodeView(node: second, path: path + [true], model: model, store: store)
                     .clipped()
             }
@@ -116,7 +118,7 @@ struct DockSplitView: View {
     }
 
     /// 仕切り(1pt の線 + つかみやすい幅)。ドラッグ中は保存せず、離したときに保存する。
-    private func divider(total: Double, currentFirst: Double) -> some View {
+    private func divider(total: Double, currentFirst: Double, minFirst: Double, minSecond: Double) -> some View {
         let horizontal = axis == .horizontal
         let t = CGFloat(DockMetrics.dividerThickness)
         return ZStack {
@@ -135,8 +137,9 @@ struct DockSplitView: View {
                     let start = dragStartSize ?? currentFirst
                     dragStartSize = start
                     let delta = Double(horizontal ? v.translation.width : v.translation.height)
-                    let size = min(max(start + delta, DockMetrics.minPanelSize), max(total - DockMetrics.dividerThickness - DockMetrics.minPanelSize, DockMetrics.minPanelSize))
-                    store.setFraction(at: path, to: DockMetrics.fraction(forFirstSize: size, total: total), persist: false)
+                    // 表示側と同じ最小(minExtent)で丸める。両側の最小を満たせない狭さでは nil(ドラッグ無効)。
+                    guard let f = DockMetrics.dragFraction(forFirstSize: start + delta, total: total, minFirst: minFirst, minSecond: minSecond) else { return }
+                    store.setFraction(at: path, to: f, persist: false)
                 }
                 .onEnded { _ in dragStartSize = nil; store.commit() }
         )

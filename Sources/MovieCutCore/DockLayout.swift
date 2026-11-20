@@ -627,6 +627,23 @@ public enum DockMetrics {
         return min(max(avail * DockLayout.clamp(fraction), lo), hi)
     }
 
+    /// ドラッグで first を動かせる範囲。表示側 `firstSize(total:fraction:minFirst:minSecond:)` が実際に取り得る範囲と同じ
+    /// (各側の最小 + 保存比率の下限/上限)。両側の最小を同時に満たせないほど狭いとき(表示は比例配分)は nil = ドラッグ無効。
+    public static func dragRange(total: Double, minFirst: Double, minSecond: Double) -> ClosedRange<Double>? {
+        let avail = max(total - dividerThickness, 0)
+        let lo = max(minFirst, minPanelSize), hi = avail - max(minSecond, minPanelSize)
+        guard hi >= lo else { return nil }
+        let a = max(lo, avail * DockLayout.clamp(0)), b = min(hi, avail * DockLayout.clamp(1))
+        return a <= b ? a...b : nil
+    }
+
+    /// ドラッグ用: first を `size` にしたい要求を表示側と同じ範囲へ丸めた比率。範囲が無ければ nil(保存しない)。
+    /// 返した比率を `firstSize(total:fraction:minFirst:minSecond:)` に通すと、丸めた大きさに戻る(死に区間なし)。
+    public static func dragFraction(forFirstSize size: Double, total: Double, minFirst: Double, minSecond: Double) -> Double? {
+        guard let r = dragRange(total: total, minFirst: minFirst, minSecond: minSecond) else { return nil }
+        return fraction(forFirstSize: min(max(size, r.lowerBound), r.upperBound), total: total)
+    }
+
     /// ドラッグで first を `size` にしたときの比率。
     public static func fraction(forFirstSize size: Double, total: Double) -> Double {
         let avail = max(total - dividerThickness, 1)
