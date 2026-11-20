@@ -434,11 +434,11 @@ public struct VideoGenerationSettings: Equatable, Sendable {
 
     public init() {}
 
-    public static func load(from d: UserDefaults = DataLocations.current.defaults) -> VideoGenerationSettings {
+    public static func load(from d: UserDefaults = DataLocations.current.defaults, secrets: SecretStore = .shared) -> VideoGenerationSettings {
         var s = VideoGenerationSettings()
         s.endpoint = d.string(forKey: endpointKey) ?? ""
         s.model = d.string(forKey: modelKey) ?? ""
-        s.apiKey = d.string(forKey: apiKeyKey) ?? ""
+        s.apiKey = secrets.load(account: apiKeyKey, migratingFrom: d)
         let t = d.integer(forKey: timeoutKey)
         s.timeoutSeconds = t == 0 ? 300 : min(max(t, timeoutRange.lowerBound), timeoutRange.upperBound)
         if d.object(forKey: pollIntervalKey) != nil {
@@ -453,10 +453,11 @@ public struct VideoGenerationSettings: Equatable, Sendable {
         return s
     }
 
-    public func save(to d: UserDefaults = DataLocations.current.defaults) {
+    public func save(to d: UserDefaults = DataLocations.current.defaults, secrets: SecretStore = .shared) {
         d.set(endpoint, forKey: Self.endpointKey)
         d.set(model, forKey: Self.modelKey)
-        d.set(apiKey, forKey: Self.apiKeyKey)
+        secrets.set(apiKey, account: Self.apiKeyKey)
+        d.removeObject(forKey: Self.apiKeyKey)
         d.set(timeoutSeconds, forKey: Self.timeoutKey)
         d.set(pollIntervalSeconds, forKey: Self.pollIntervalKey)
         d.set(maxPollAttempts, forKey: Self.pollAttemptsKey)
@@ -538,11 +539,11 @@ public struct AudioGenerationSettings: Equatable, Sendable {
 
     public init() {}
 
-    public static func load(from d: UserDefaults = DataLocations.current.defaults) -> AudioGenerationSettings {
+    public static func load(from d: UserDefaults = DataLocations.current.defaults, secrets: SecretStore = .shared) -> AudioGenerationSettings {
         var s = AudioGenerationSettings()
         s.endpoint = d.string(forKey: endpointKey) ?? ""
         s.model = d.string(forKey: modelKey) ?? ""
-        s.apiKey = d.string(forKey: apiKeyKey) ?? ""
+        s.apiKey = secrets.load(account: apiKeyKey, migratingFrom: d)
         let t = d.integer(forKey: timeoutKey)
         s.timeoutSeconds = t == 0 ? 300 : min(max(t, timeoutRange.lowerBound), timeoutRange.upperBound)
         let dur = d.double(forKey: durationKey)
@@ -551,10 +552,11 @@ public struct AudioGenerationSettings: Equatable, Sendable {
         return s
     }
 
-    public func save(to d: UserDefaults = DataLocations.current.defaults) {
+    public func save(to d: UserDefaults = DataLocations.current.defaults, secrets: SecretStore = .shared) {
         d.set(endpoint, forKey: Self.endpointKey)
         d.set(model, forKey: Self.modelKey)
-        d.set(apiKey, forKey: Self.apiKeyKey)
+        secrets.set(apiKey, account: Self.apiKeyKey)
+        d.removeObject(forKey: Self.apiKeyKey)
         d.set(timeoutSeconds, forKey: Self.timeoutKey)
         d.set(durationSeconds, forKey: Self.durationKey)
         d.set(outputFormat, forKey: Self.formatKey)

@@ -198,21 +198,22 @@ public struct ImageGenerationSettings: Equatable, Sendable {
 
     public init() {}
 
-    public static func load(from d: UserDefaults = DataLocations.current.defaults) -> ImageGenerationSettings {
+    public static func load(from d: UserDefaults = DataLocations.current.defaults, secrets: SecretStore = .shared) -> ImageGenerationSettings {
         var s = ImageGenerationSettings()
         s.endpoint = d.string(forKey: endpointKey) ?? ""
         s.model = d.string(forKey: modelKey) ?? ""
-        s.apiKey = d.string(forKey: apiKeyKey) ?? ""
+        s.apiKey = secrets.load(account: apiKeyKey, migratingFrom: d)
         let t = d.integer(forKey: timeoutKey)
         s.timeoutSeconds = t == 0 ? 120 : min(max(t, timeoutRange.lowerBound), timeoutRange.upperBound)
         s.size = d.string(forKey: sizeKey) ?? ImageGenerationSize.square.rawValue
         return s
     }
 
-    public func save(to d: UserDefaults = DataLocations.current.defaults) {
+    public func save(to d: UserDefaults = DataLocations.current.defaults, secrets: SecretStore = .shared) {
         d.set(endpoint, forKey: Self.endpointKey)
         d.set(model, forKey: Self.modelKey)
-        d.set(apiKey, forKey: Self.apiKeyKey)
+        secrets.set(apiKey, account: Self.apiKeyKey)
+        d.removeObject(forKey: Self.apiKeyKey)
         d.set(timeoutSeconds, forKey: Self.timeoutKey)
         d.set(size, forKey: Self.sizeKey)
     }
