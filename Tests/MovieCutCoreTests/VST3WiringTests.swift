@@ -160,6 +160,26 @@ final class VST3WiringTests: XCTestCase {
         XCTAssertEqual(wetMax, dryMax * 0.5, accuracy: 0.02, "解析用のミックスも書き出しと同じ音になる")
     }
 
+    /// 回帰: `mixEnvelope` / `vizEnvelope` はインスタンスの `lock` を握ったまま `computeMix` を呼ぶ。
+    /// プロバイダの getter が同じ `lock` を取ると自己デッドロックし、ビジュアライザ描画が固まる
+    /// (KitchenSink の描画テストが実際に止まった)。lock 越しでもエンベロープが返り、
+    /// プロバイダの効果(ゲイン 0.5)が反映されることを固定する。
+    func testMixEnvelopeThroughLockAppliesVST3WithoutDeadlock() throws {
+        let p = try project()
+        let dryAssets = RenderAssets()
+        let dry = try XCTUnwrap(dryAssets.mixEnvelope(for: p))
+        let wetAssets = RenderAssets()
+        wetAssets.setVST3Provider(gainProvider)
+        let wet = try XCTUnwrap(wetAssets.mixEnvelope(for: p))
+        let dryMax = dry.max() ?? 0, wetMax = wet.max() ?? 0
+        XCTAssertGreaterThan(dryMax, 0.1)
+        XCTAssertEqual(wetMax, dryMax * 0.5, accuracy: 0.02, "lock 越しのミックスにも VST3 が効く")
+        // vizEnvelope の source 指定分岐(もう 1 つの lock 保持側の呼び出し)も同じく返ること。
+        let clipID = try XCTUnwrap(p.allClips.first?.id)
+        let viz = try XCTUnwrap(wetAssets.vizEnvelope(for: p, source: clipID))
+        XCTAssertEqual(viz.max() ?? 0, wetMax, accuracy: 0.02)
+    }
+
     // MARK: 生成元の一本化
 
     func testStandardProviderIsBuiltFromStandardScan() {

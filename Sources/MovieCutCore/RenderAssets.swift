@@ -63,14 +63,18 @@ public final class RenderAssets {
 
     /// VST3 音声プロバイダ(再生/書き出し配線)。合成音声の解析(ビジュアライザ・口パク)が
     /// 書き出しと同じ音になるよう、`computeMix` のミックスへ渡す。未設定(nil)なら従来どおり。
+    /// 注意: 読み書きは共有の `lock` ではなく専用の `vst3Lock` で守る。`computeMix` は
+    /// `mixEnvelope` などが `lock` を握ったまま呼ぶため、getter が `lock` を取ると
+    /// 非再帰ロックで自己デッドロックする(実際に KitchenSink の描画テストが止まった)。
     private var vst3Provider: (any AudioEffectProviding)?
+    private let vst3Lock = NSLock()
     /// VST3 プロバイダを設定する(nil で解除)。
     public func setVST3Provider(_ provider: (any AudioEffectProviding)?) {
-        lock.lock(); vst3Provider = provider; lock.unlock()
+        vst3Lock.lock(); vst3Provider = provider; vst3Lock.unlock()
     }
     /// 設定中の VST3 プロバイダ(`computeMix` 用)。
     var currentVST3Provider: (any AudioEffectProviding)? {
-        lock.lock(); defer { lock.unlock() }; return vst3Provider
+        vst3Lock.lock(); defer { vst3Lock.unlock() }; return vst3Provider
     }
 
     /// プレビュー再生の動画フレームの縮小率。0 < scale ≤ 1 にそろえる。次の `beginExportMode(preview: true)` から効く。
