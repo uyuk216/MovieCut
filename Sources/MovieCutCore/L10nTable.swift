@@ -362,7 +362,7 @@ enum L10nTable {
         "モデルが未配置です。": "No model is installed.",
         "モデルは .bin のファイルを選んでください。": "Please choose a .bin model file.",
         "置き場所(Application Support 内)に whisper-cli と ggml-*.bin を置くか、上のボタンで選びます。Homebrew の whisper-cpp も自動で探します。": "Place whisper-cli and ggml-*.bin in the folder below (inside Application Support), or choose them with the buttons above. Homebrew's whisper-cpp is also found automatically.",
-        "モデルはアプリに入っていません。初回に自分で ggml-base.bin などをダウンロードしてください(日本語は base 以上がおすすめ)。認識は端末内で行い、音声は外に送りません。": "Models are not bundled with the app. Download one such as ggml-base.bin yourself the first time (base or larger is recommended for Japanese). Recognition runs on this Mac; audio is not sent anywhere.",
+        "モデルはアプリに入っていません。初回に自分でダウンロードしてください(精度を重視するなら ggml-large-v3.bin・約3.1GB がおすすめ)。認識は端末内で行い、音声は外に送りません。": "Models are not bundled with the app. Download one yourself the first time (for the best accuracy, ggml-large-v3.bin, about 3.1 GB, is recommended). Recognition runs on this Mac; audio is not sent anywhere.",
         "音声から字幕を作る（Whisper）…": "Make Subtitles from Audio (Whisper)…",
         "文字起こしを書き出す…": "Export Transcript…",
         "文字起こしを書き出す（Whisper）…": "Export Transcript (Whisper)…",

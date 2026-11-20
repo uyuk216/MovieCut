@@ -67,7 +67,7 @@ public enum TranscriptionError: Error, LocalizedError, Equatable {
         case .whisperNotInstalled:
             return "whisper.cpp(whisper-cli)が見つかりません。設定の「Whisper(文字起こし)」で実行ファイルを選ぶか、\(WhisperLocator.supportFolderDisplayPath) に置いてください(Homebrew なら brew install whisper-cpp)。手順は docs/Whisper文字起こし.md を参照してください。"
         case .whisperModelMissing:
-            return "Whisper のモデル(ggml-*.bin)が見つかりません。\(WhisperLocator.supportFolderDisplayPath) に置くか、設定の「Whisper(文字起こし)」でモデルを選んでください。日本語は ggml-base 以上を推奨します。"
+            return "Whisper のモデル(ggml-*.bin)が見つかりません。\(WhisperLocator.supportFolderDisplayPath) に置くか、設定の「Whisper(文字起こし)」でモデルを選んでください。精度を重視するなら ggml-large-v3.bin(約3.1GB)がおすすめです。"
         }
     }
 }
