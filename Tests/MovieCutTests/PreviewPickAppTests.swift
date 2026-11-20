@@ -71,20 +71,24 @@ final class PreviewPickAppTests: XCTestCase {
         XCTAssertFalse(v.pickOverlapping(atViewPoint: CGPoint(x: 1, y: 1)))
     }
 
-    func testMouseDownWithOptionPicksAndWithoutOptionDoesNot() throws {
+    func testMouseDownWithOptionCyclesAndWithoutOptionSelectsTopmostAndStartsDrag() throws {
         let m = try model()
         let v = makePreview(m)
         let c = v.viewPoint(CGPoint(x: 640, y: 360), canvas: CGSize(width: 1280, height: 720))
         func down(_ flags: NSEvent.ModifierFlags) -> NSEvent {
             NSEvent.mouseEvent(with: .leftMouseDown, location: c, modifierFlags: flags, timestamp: 0, windowNumber: 0, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
         }
+        // 通常クリック: いちばん手前(枠で選べる種類なら何でも)を選び、そのままドラッグを始める(従来は立ち絵だけだった)
         v.mouseDown(with: down([]))
-        XCTAssertNil(m.selectedClipId, "⌥ なしでは、選択していないクリップは動かない")
-        v.mouseDown(with: down([.option]))
-        XCTAssertEqual(m.selectedClipId, "small")
-        XCTAssertNil(v.manipulation, "⌥ クリックではドラッグを始めない")
+        XCTAssertEqual(m.selectedClipId, "small", "通常クリックで最前面の画像クリップが選ばれる")
+        XCTAssertNotNil(v.manipulation, "通常クリックでは続けてドラッグできる")
+        v.endManipulation()
+        // ⌥ クリック: 巡回して選ぶ(ドラッグは始めない)
         v.mouseDown(with: down([.option]))
         XCTAssertEqual(m.selectedClipId, "mid")
+        XCTAssertNil(v.manipulation, "⌥ クリックではドラッグを始めない")
+        v.mouseDown(with: down([.option]))
+        XCTAssertEqual(m.selectedClipId, "big")
     }
 
     func testLockedModelDoesNotPick() throws {

@@ -13,10 +13,9 @@ enum PreviewGuideStore {
         return PreviewGuide.resolve(DataLocations.current.defaults.stringArray(forKey: PreviewGuide.defaultsKey))
     }
 
-    /// 1 つ切り替える(表示 ▸ ガイド線 ▸ 項目)。
+    /// 1 つ切り替える(表示 ▸ ガイド線 ▸ 項目)。グリッド系(2×2・3×3・4×4)は排他で、Core の `PreviewGuide.toggled` に従う。
     static func toggle(_ g: PreviewGuide, defaults: UserDefaults? = DataLocations.current.defaults) {
-        var s = current
-        if s.contains(g) { s.remove(g) } else { s.insert(g) }
+        let s = PreviewGuide.toggled(current, g)
         if DebugHooks.isQuiet { memory = s } else { defaults?.set(PreviewGuide.encode(s), forKey: PreviewGuide.defaultsKey) }
         NotificationCenter.default.post(name: didChange, object: nil)
     }

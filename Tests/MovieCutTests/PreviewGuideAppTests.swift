@@ -2,7 +2,7 @@ import XCTest
 import MovieCutCore
 @testable import MovieCut
 
-/// 表示 ▸ ガイド線: 4 項目、ショートカットなし、出しているものにチェック。
+/// 表示 ▸ ガイド線: 6 項目(セーフ 2・中心線・グリッド 3)、ショートカットなし、出しているものにチェック。
 final class PreviewGuideAppTests: XCTestCase {
     func testGuideItemsAreChecksWithoutShortcuts() {
         var s = MenuState(); s.hasDocument = true
