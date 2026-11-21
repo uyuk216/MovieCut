@@ -4,7 +4,47 @@
   "fps": 30,
   "bg": "#101010",
   "codec": "h264",
-  "characters": [],
+  "characters": [
+    {
+      "alwaysShow": true,
+      "color": "#e8384f",
+      "engine": "voicevox",
+      "flip": true,
+      "id": "ch1",
+      "imgClosed": null,
+      "imgOpen": null,
+      "name": "キャラ1",
+      "scale": 1,
+      "x": 0.18,
+      "y": 0.72
+    },
+    {
+      "alwaysShow": true,
+      "color": "#f2c53d",
+      "engine": "voicevox",
+      "flip": false,
+      "id": "ch2",
+      "imgClosed": null,
+      "imgOpen": null,
+      "name": "キャラ2",
+      "scale": 1,
+      "x": 0.82,
+      "y": 0.72
+    },
+    {
+      "alwaysShow": true,
+      "color": "#7ac943",
+      "engine": "voicevox",
+      "flip": false,
+      "id": "ch3",
+      "imgClosed": null,
+      "imgOpen": null,
+      "name": "キャラ3",
+      "scale": 1,
+      "x": 0.82,
+      "y": 0.72
+    }
+  ],
   "tracks": [
     {
       "id": "tl1",

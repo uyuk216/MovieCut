@@ -3,18 +3,96 @@
   "projectFormatVersion": 2,
   "spec": "01-project-format.md",
   "cases": [
-    {"id": "rich", "kind": "roundtrip-canonical", "input": "inputs/rich.ymproj", "expected": "expected/rich.canonical.json", "notes": "代表構成（多トラック・主な種別・キャラクター・素材メタ）"},
-    {"id": "electron-made", "kind": "roundtrip-canonical", "input": "inputs/electron-made.ymproj", "expected": "expected/electron-made.canonical.json", "notes": "Electron 版で作られたプロジェクト"},
-    {"id": "keyframes", "kind": "roundtrip-canonical", "input": "inputs/keyframes.ymproj", "expected": "expected/keyframes.canonical.json", "notes": "キーフレーム"},
-    {"id": "transitions", "kind": "roundtrip-canonical", "input": "inputs/transitions.ymproj", "expected": "expected/transitions.canonical.json", "notes": "トランジション"},
-    {"id": "effects", "kind": "roundtrip-canonical", "input": "inputs/effects.ymproj", "expected": "expected/effects.canonical.json", "notes": "エフェクト"},
-    {"id": "speed", "kind": "roundtrip-canonical", "input": "inputs/speed.ymproj", "expected": "expected/speed.canonical.json", "notes": "速度変更"},
-    {"id": "audiofx", "kind": "roundtrip-canonical", "input": "inputs/audiofx.ymproj", "expected": "expected/audiofx.canonical.json", "notes": "音声エフェクト"},
-    {"id": "subtitles", "kind": "roundtrip-canonical", "input": "inputs/subtitles.ymproj", "expected": "expected/subtitles.canonical.json", "notes": "字幕"},
-    {"id": "timeline", "kind": "roundtrip-canonical", "input": "inputs/timeline.ymproj", "expected": "expected/timeline.canonical.json", "notes": "タイムライン構成"},
-    {"id": "duck", "kind": "roundtrip-canonical", "input": "inputs/duck.ymproj", "expected": "expected/duck.canonical.json", "notes": "ダッキング"},
-    {"id": "rich", "kind": "roundtrip-byte-mac", "input": "inputs/rich.ymproj", "expected": "expected/rich.byte.json", "notes": "Mac参照バイト形（Swift JSONEncoder の字面）"},
-    {"id": "electron-made", "kind": "roundtrip-byte-mac", "input": "inputs/electron-made.ymproj", "expected": "expected/electron-made.byte.json", "notes": "Mac参照バイト形（Swift JSONEncoder の字面）"},
-    {"id": "fixed-json-1", "kind": "fixed-json", "input": "inputs/fixed-json-1.json", "expected": "expected/fixed-json-1.canonical.json", "notes": "未知キー・未知クリップ種別・メディア系辞書を含む固定 JSON（ProjectGoldenRoundTripTests 由来）"}
+    {
+      "id": "rich",
+      "kind": "roundtrip-canonical",
+      "input": "inputs/rich.ymproj",
+      "expected": "expected/rich.canonical.json",
+      "notes": "代表構成（多トラック・主な種別・キャラクター・素材メタ）"
+    },
+    {
+      "id": "electron-made",
+      "kind": "roundtrip-canonical",
+      "input": "inputs/electron-made.ymproj",
+      "expected": "expected/electron-made.canonical.json",
+      "notes": "Electron 版で作られたプロジェクト"
+    },
+    {
+      "id": "keyframes",
+      "kind": "roundtrip-canonical",
+      "input": "inputs/keyframes.ymproj",
+      "expected": "expected/keyframes.canonical.json",
+      "notes": "キーフレーム（characters が空だと既定3人がランダムIDで生成され決定的でないため、既定3人を id 固定で明示した入力）"
+    },
+    {
+      "id": "transitions",
+      "kind": "roundtrip-canonical",
+      "input": "inputs/transitions.ymproj",
+      "expected": "expected/transitions.canonical.json",
+      "notes": "トランジション（characters が空だと既定3人がランダムIDで生成され決定的でないため、既定3人を id 固定で明示した入力）"
+    },
+    {
+      "id": "effects",
+      "kind": "roundtrip-canonical",
+      "input": "inputs/effects.ymproj",
+      "expected": "expected/effects.canonical.json",
+      "notes": "エフェクト（characters が空だと既定3人がランダムIDで生成され決定的でないため、既定3人を id 固定で明示した入力）"
+    },
+    {
+      "id": "speed",
+      "kind": "roundtrip-canonical",
+      "input": "inputs/speed.ymproj",
+      "expected": "expected/speed.canonical.json",
+      "notes": "速度変更（characters が空だと既定3人がランダムIDで生成され決定的でないため、既定3人を id 固定で明示した入力）"
+    },
+    {
+      "id": "audiofx",
+      "kind": "roundtrip-canonical",
+      "input": "inputs/audiofx.ymproj",
+      "expected": "expected/audiofx.canonical.json",
+      "notes": "音声エフェクト（characters が空だと既定3人がランダムIDで生成され決定的でないため、既定3人を id 固定で明示した入力）"
+    },
+    {
+      "id": "subtitles",
+      "kind": "roundtrip-canonical",
+      "input": "inputs/subtitles.ymproj",
+      "expected": "expected/subtitles.canonical.json",
+      "notes": "字幕"
+    },
+    {
+      "id": "timeline",
+      "kind": "roundtrip-canonical",
+      "input": "inputs/timeline.ymproj",
+      "expected": "expected/timeline.canonical.json",
+      "notes": "タイムライン構成（characters が空だと既定3人がランダムIDで生成され決定的でないため、既定3人を id 固定で明示した入力）"
+    },
+    {
+      "id": "duck",
+      "kind": "roundtrip-canonical",
+      "input": "inputs/duck.ymproj",
+      "expected": "expected/duck.canonical.json",
+      "notes": "ダッキング（characters が空だと既定3人がランダムIDで生成され決定的でないため、既定3人を id 固定で明示した入力）"
+    },
+    {
+      "id": "rich",
+      "kind": "roundtrip-byte-mac",
+      "input": "inputs/rich.ymproj",
+      "expected": "expected/rich.byte.json",
+      "notes": "Mac参照バイト形（Swift JSONEncoder の字面）"
+    },
+    {
+      "id": "electron-made",
+      "kind": "roundtrip-byte-mac",
+      "input": "inputs/electron-made.ymproj",
+      "expected": "expected/electron-made.byte.json",
+      "notes": "Mac参照バイト形（Swift JSONEncoder の字面）"
+    },
+    {
+      "id": "fixed-json-1",
+      "kind": "fixed-json",
+      "input": "inputs/fixed-json-1.json",
+      "expected": "expected/fixed-json-1.canonical.json",
+      "notes": "未知キー・未知クリップ種別・メディア系辞書を含む固定 JSON（ProjectGoldenRoundTripTests 由来）"
+    }
   ]
 }

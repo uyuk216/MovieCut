@@ -36,3 +36,6 @@ MOVIECUT_GENERATE_GOLDEN=1 swift test --filter GoldenDatasetTests/testGenerateEx
 1. `manifest.json` を読む。
 2. 各ケースで `input` を自前の Project として decode → encode する。
 3. 上記の canonical 規則で整形し、`expected` の内容と文字列一致を確認する（`roundtrip-byte-mac` は任意でバイト比較）。
+
+## 決定性についての注意（ケース追加時の規則）
+期待値は全プラットフォームで機械比較するため、入力は decode が決定的でなければならない。ランダムな ID 生成に依存する入力（例: `characters` が空で、既定キャラクターがランダム ID で生成される形）は、そのままではケースにできない。その場合は、生成される既定の内容を id 固定で入力に明示してからケース化すること（本データセットの roundtrip-canonical 7件がこの形。manifest の notes に明記してある）。既定値そのものの検証は Mac 版の単体テスト（ProjectGoldenRoundTripTests 等）の担当範囲とする。
