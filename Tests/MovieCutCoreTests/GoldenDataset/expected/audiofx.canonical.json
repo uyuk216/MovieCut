@@ -1,0 +1,140 @@
+{
+  "aquestalkCommand": "/Applications/AquesTalkPlayer.app/Contents/MacOS/AquesTalkPlayer -P {voice} -T {text} -W {out}",
+  "bg": "#101010",
+  "characters": [
+    {
+      "alwaysShow": true,
+      "color": "#e8384f",
+      "engine": "voicevox",
+      "flip": true,
+      "id": "gtkrfne9",
+      "imgClosed": null,
+      "imgOpen": null,
+      "name": "キャラ1",
+      "scale": 1,
+      "x": 0.18,
+      "y": 0.72
+    },
+    {
+      "alwaysShow": true,
+      "color": "#f2c53d",
+      "engine": "voicevox",
+      "flip": false,
+      "id": "z1d6ityl",
+      "imgClosed": null,
+      "imgOpen": null,
+      "name": "キャラ2",
+      "scale": 1,
+      "x": 0.82,
+      "y": 0.72
+    },
+    {
+      "alwaysShow": true,
+      "color": "#7ac943",
+      "engine": "voicevox",
+      "flip": false,
+      "id": "27dsvbt8",
+      "imgClosed": null,
+      "imgOpen": null,
+      "name": "キャラ3",
+      "scale": 1,
+      "x": 0.82,
+      "y": 0.72
+    }
+  ],
+  "codec": "h264",
+  "formatVersion": 2,
+  "fps": 30,
+  "height": 720,
+  "tracks": [
+    {
+      "clips": [
+        {
+          "audioFx": {
+            "compressor": {
+              "attack": 6,
+              "makeup": 2.5,
+              "ratio": 4,
+              "release": 150,
+              "threshold": -24
+            },
+            "eq": {
+              "band4": 1,
+              "high": 4.5,
+              "low": 3,
+              "mid": -2
+            },
+            "futureFx": "keep",
+            "normalize": {
+              "mode": "loudness",
+              "targetDb": -14
+            },
+            "reverb": {
+              "mix": 0.3,
+              "size": "hall"
+            }
+          },
+          "duration": 6,
+          "futureClipKey": [
+            1,
+            2
+          ],
+          "id": "afull",
+          "keyframes": {
+            "volume": [
+              {
+                "t": 0,
+                "v": 0.2
+              },
+              {
+                "ease": "easeInOut",
+                "t": 2,
+                "v": 1
+              },
+              {
+                "t": 5,
+                "v": 0.6
+              }
+            ]
+          },
+          "offset": 0,
+          "pan": -0.35,
+          "src": "/tmp/none.wav",
+          "srcDuration": 10,
+          "start": 0,
+          "type": "audio",
+          "volume": 0.9
+        },
+        {
+          "audioFx": {
+            "compressor": {
+              "enabled": false,
+              "ratio": 8
+            },
+            "reverb": {}
+          },
+          "duration": 2,
+          "id": "aoff",
+          "offset": 0,
+          "src": "/tmp/none.wav",
+          "start": 6,
+          "type": "voice"
+        },
+        {
+          "audioFx": "not an object",
+          "duration": 2,
+          "id": "abad",
+          "offset": 0,
+          "pan": "left",
+          "src": "/tmp/none.mp4",
+          "start": 8,
+          "type": "video"
+        }
+      ],
+      "id": "at1",
+      "name": "音声エフェクト"
+    }
+  ],
+  "voicevoxUrl": "http://127.0.0.1:50021",
+  "width": 1280
+}

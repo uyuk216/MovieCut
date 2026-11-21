@@ -1,0 +1,113 @@
+{
+  "aquestalkCommand": "/Applications/AquesTalkPlayer.app/Contents/MacOS/AquesTalkPlayer -P {voice} -T {text} -W {out}",
+  "bg": "#000000",
+  "characters": [
+    {
+      "color": "#e8384f",
+      "engine": "aquestalk",
+      "id": "c1",
+      "name": "キャラ1"
+    }
+  ],
+  "codec": "h264",
+  "formatVersion": 2,
+  "fps": 30,
+  "height": 720,
+  "markers": [
+    {
+      "id": "k1",
+      "name": "はじめに",
+      "time": 0
+    },
+    {
+      "id": "k2",
+      "name": "本題",
+      "time": 65.9
+    },
+    {
+      "id": "k3",
+      "name": "おわり",
+      "time": 3725
+    }
+  ],
+  "tracks": [
+    {
+      "clips": [
+        {
+          "charId": "c1",
+          "duration": 2.5,
+          "id": "v1",
+          "offset": 0,
+          "src": "/tmp/none.wav",
+          "start": 0,
+          "subtitle": true,
+          "text": "こんにちは\nこんにちは",
+          "type": "voice"
+        },
+        {
+          "charId": "c1",
+          "duration": 1.4,
+          "id": "v2",
+          "offset": 0,
+          "src": "/tmp/none.wav",
+          "start": 2.6,
+          "subtitle": false,
+          "text": "字幕なし",
+          "type": "voice"
+        },
+        {
+          "charId": "c1",
+          "duration": 3,
+          "id": "v3",
+          "offset": 0,
+          "src": "/tmp/none.wav",
+          "start": 12.0345,
+          "text": "二番目",
+          "type": "voice"
+        }
+      ],
+      "id": "t1",
+      "name": "セリフ"
+    },
+    {
+      "clips": [
+        {
+          "duration": 2,
+          "id": "x1",
+          "offset": 0,
+          "start": 5,
+          "text": "文字クリップ",
+          "type": "text"
+        }
+      ],
+      "id": "t2",
+      "name": "字幕"
+    },
+    {
+      "clips": [
+        {
+          "duration": 1,
+          "id": "x2",
+          "offset": 0,
+          "start": 1,
+          "text": "ふつうの文字",
+          "type": "text"
+        },
+        {
+          "duration": 2,
+          "id": "m1",
+          "offset": 0,
+          "speed": 2,
+          "src": "/tmp/none.mp4",
+          "srcDuration": 8,
+          "start": 20,
+          "type": "video"
+        }
+      ],
+      "id": "t3",
+      "name": "レイヤー3"
+    }
+  ],
+  "voicevoxUrl": "http://127.0.0.1:50021",
+  "width": 1280
+}

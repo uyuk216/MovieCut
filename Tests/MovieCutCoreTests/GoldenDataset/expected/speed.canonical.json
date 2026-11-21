@@ -1,0 +1,121 @@
+{
+  "aquestalkCommand": "/Applications/AquesTalkPlayer.app/Contents/MacOS/AquesTalkPlayer -P {voice} -T {text} -W {out}",
+  "bg": "#101010",
+  "characters": [
+    {
+      "alwaysShow": true,
+      "color": "#e8384f",
+      "engine": "voicevox",
+      "flip": true,
+      "id": "u6w264xh",
+      "imgClosed": null,
+      "imgOpen": null,
+      "name": "キャラ1",
+      "scale": 1,
+      "x": 0.18,
+      "y": 0.72
+    },
+    {
+      "alwaysShow": true,
+      "color": "#f2c53d",
+      "engine": "voicevox",
+      "flip": false,
+      "id": "vbcdf9rw",
+      "imgClosed": null,
+      "imgOpen": null,
+      "name": "キャラ2",
+      "scale": 1,
+      "x": 0.82,
+      "y": 0.72
+    },
+    {
+      "alwaysShow": true,
+      "color": "#7ac943",
+      "engine": "voicevox",
+      "flip": false,
+      "id": "jcho3j35",
+      "imgClosed": null,
+      "imgOpen": null,
+      "name": "キャラ3",
+      "scale": 1,
+      "x": 0.82,
+      "y": 0.72
+    }
+  ],
+  "codec": "h264",
+  "formatVersion": 2,
+  "fps": 30,
+  "height": 720,
+  "tracks": [
+    {
+      "clips": [
+        {
+          "duration": 2,
+          "futureClipKey": {
+            "keep": [
+              1,
+              2,
+              3
+            ]
+          },
+          "id": "sfast",
+          "offset": 1,
+          "speed": 2,
+          "src": "/tmp/none.mp4",
+          "srcDuration": 8,
+          "start": 0,
+          "type": "video",
+          "volume": 1
+        },
+        {
+          "duration": 4,
+          "id": "srev",
+          "keepPitch": false,
+          "offset": 0.5,
+          "reverse": true,
+          "speed": 0.5,
+          "src": "/tmp/none.mp4",
+          "srcDuration": 8,
+          "start": 2,
+          "type": "video"
+        },
+        {
+          "duration": 2,
+          "freeze": true,
+          "id": "sfreeze",
+          "offset": 3.25,
+          "src": "/tmp/none.mp4",
+          "srcDuration": 8,
+          "start": 6,
+          "type": "video"
+        },
+        {
+          "duration": 4,
+          "id": "saud",
+          "offset": 0,
+          "speed": 0.5,
+          "src": "/tmp/none.wav",
+          "srcDuration": 10,
+          "start": 8,
+          "type": "audio"
+        },
+        {
+          "duration": 2,
+          "freeze": [],
+          "id": "sbad",
+          "keepPitch": "no",
+          "offset": 0,
+          "reverse": 1,
+          "speed": "fast",
+          "src": "/tmp/none.mp4",
+          "start": 12,
+          "type": "video"
+        }
+      ],
+      "id": "st1",
+      "name": "速度"
+    }
+  ],
+  "voicevoxUrl": "http://127.0.0.1:50021",
+  "width": 1280
+}

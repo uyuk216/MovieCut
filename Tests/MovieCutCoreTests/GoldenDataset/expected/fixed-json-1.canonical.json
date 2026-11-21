@@ -1,0 +1,86 @@
+{
+  "aquestalkCommand": "say {text}",
+  "bg": "#112233",
+  "characters": [
+    {
+      "color": "#e8384f",
+      "engine": "voicevox",
+      "futureChar": 1,
+      "id": "ch1",
+      "name": "A",
+      "speaker": 3,
+      "speed": 1.5
+    }
+  ],
+  "codec": "hevc",
+  "formatVersion": 2,
+  "fps": 30,
+  "futureTop": {
+    "a": [
+      1,
+      null,
+      "s"
+    ]
+  },
+  "height": 720,
+  "markers": [
+    {
+      "id": "m1",
+      "name": "A",
+      "time": 1.5
+    }
+  ],
+  "mediaFingerprints": {
+    "/a/x.mp4": {
+      "fileName": "x.mp4",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "size": 3
+    }
+  },
+  "mediaHints": {
+    "/a/x.mp4": {
+      "relative": "media/x.mp4",
+      "size": 3
+    }
+  },
+  "mediaPool": [
+    "/a/x.mp4"
+  ],
+  "proxyLinks": {
+    "/a/x.mp4": "/p/x.mp4"
+  },
+  "rangeIn": 0.5,
+  "rangeOut": 9,
+  "scriptText": "台本",
+  "subtitleY": 0.8,
+  "targetTrackId": "t1",
+  "tracks": [
+    {
+      "clips": [
+        {
+          "color": "#ffffff",
+          "duration": 2,
+          "fontSize": 80,
+          "id": "c1",
+          "offset": 0,
+          "start": 0,
+          "text": "こんにちは",
+          "type": "text"
+        },
+        {
+          "duration": 1,
+          "id": "c2",
+          "offset": 0,
+          "start": 2,
+          "type": "hologram",
+          "weird": true
+        }
+      ],
+      "hidden": true,
+      "id": "t1",
+      "name": "L1"
+    }
+  ],
+  "voicevoxUrl": "http://127.0.0.1:50021",
+  "width": 1280
+}

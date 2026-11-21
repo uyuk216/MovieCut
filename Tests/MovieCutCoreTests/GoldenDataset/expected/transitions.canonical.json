@@ -1,0 +1,135 @@
+{
+  "aquestalkCommand": "/Applications/AquesTalkPlayer.app/Contents/MacOS/AquesTalkPlayer -P {voice} -T {text} -W {out}",
+  "bg": "#102030",
+  "characters": [
+    {
+      "alwaysShow": true,
+      "color": "#e8384f",
+      "engine": "voicevox",
+      "flip": true,
+      "id": "hm08nytd",
+      "imgClosed": null,
+      "imgOpen": null,
+      "name": "キャラ1",
+      "scale": 1,
+      "x": 0.18,
+      "y": 0.72
+    },
+    {
+      "alwaysShow": true,
+      "color": "#f2c53d",
+      "engine": "voicevox",
+      "flip": false,
+      "id": "358g3k86",
+      "imgClosed": null,
+      "imgOpen": null,
+      "name": "キャラ2",
+      "scale": 1,
+      "x": 0.82,
+      "y": 0.72
+    },
+    {
+      "alwaysShow": true,
+      "color": "#7ac943",
+      "engine": "voicevox",
+      "flip": false,
+      "id": "qj1fmer8",
+      "imgClosed": null,
+      "imgOpen": null,
+      "name": "キャラ3",
+      "scale": 1,
+      "x": 0.82,
+      "y": 0.72
+    }
+  ],
+  "codec": "h264",
+  "formatVersion": 2,
+  "fps": 30,
+  "height": 720,
+  "tracks": [
+    {
+      "clips": [
+        {
+          "duration": 4,
+          "futureClipKey": "keep",
+          "id": "timg",
+          "offset": 0,
+          "opacity": 1,
+          "scale": 1,
+          "src": "/tmp/none.png",
+          "start": 0,
+          "transitionIn": {
+            "duration": 0.8,
+            "ease": "easeOut",
+            "kind": "zoom"
+          },
+          "transitionOut": {
+            "duration": 0.6,
+            "futureTransitionKey": [
+              1,
+              2
+            ],
+            "kind": "slideLeft"
+          },
+          "type": "image",
+          "x": 0.5,
+          "y": 0.5
+        },
+        {
+          "duration": 3,
+          "fontSize": 80,
+          "id": "ttxt",
+          "offset": 0,
+          "start": 1,
+          "text": "ぼかして登場",
+          "transitionIn": {
+            "duration": 1,
+            "kind": "blur"
+          },
+          "transitionOut": {
+            "duration": 0.5,
+            "kind": "someFutureKind",
+            "params": {
+              "angle": 30
+            }
+          },
+          "type": "text",
+          "x": 0.5,
+          "y": 0.2
+        },
+        {
+          "duration": 2,
+          "id": "tbad",
+          "offset": 0,
+          "src": "/tmp/none.png",
+          "start": 5,
+          "transitionIn": "this is not a transition",
+          "type": "image"
+        }
+      ],
+      "id": "tt1",
+      "name": "トランジション"
+    },
+    {
+      "clips": [
+        {
+          "duration": 6,
+          "fadeCurve": "equalPower",
+          "fadeIn": 0.5,
+          "fadeOut": 1.25,
+          "id": "taud",
+          "offset": 0,
+          "src": "/tmp/none.wav",
+          "srcDuration": 6,
+          "start": 0,
+          "type": "audio",
+          "volume": 1
+        }
+      ],
+      "id": "tt2",
+      "name": "音声"
+    }
+  ],
+  "voicevoxUrl": "http://127.0.0.1:50021",
+  "width": 1280
+}

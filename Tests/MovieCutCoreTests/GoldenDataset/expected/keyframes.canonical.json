@@ -1,0 +1,266 @@
+{
+  "aquestalkCommand": "/Applications/AquesTalkPlayer.app/Contents/MacOS/AquesTalkPlayer -P {voice} -T {text} -W {out}",
+  "bg": "#102030",
+  "characters": [
+    {
+      "alwaysShow": true,
+      "color": "#e8384f",
+      "engine": "voicevox",
+      "flip": true,
+      "id": "frii6hx0",
+      "imgClosed": null,
+      "imgOpen": null,
+      "name": "キャラ1",
+      "scale": 1,
+      "x": 0.18,
+      "y": 0.72
+    },
+    {
+      "alwaysShow": true,
+      "color": "#f2c53d",
+      "engine": "voicevox",
+      "flip": false,
+      "id": "oxs3meh9",
+      "imgClosed": null,
+      "imgOpen": null,
+      "name": "キャラ2",
+      "scale": 1,
+      "x": 0.82,
+      "y": 0.72
+    },
+    {
+      "alwaysShow": true,
+      "color": "#7ac943",
+      "engine": "voicevox",
+      "flip": false,
+      "id": "tm21qbcq",
+      "imgClosed": null,
+      "imgOpen": null,
+      "name": "キャラ3",
+      "scale": 1,
+      "x": 0.82,
+      "y": 0.72
+    }
+  ],
+  "codec": "h264",
+  "formatVersion": 2,
+  "fps": 30,
+  "height": 720,
+  "tracks": [
+    {
+      "clips": [
+        {
+          "blur": 0,
+          "crop": {
+            "b": 0.05,
+            "l": 0.1,
+            "r": 0.2,
+            "t": 0
+          },
+          "duration": 4,
+          "flipH": true,
+          "flipV": false,
+          "futureClipKey": "keep",
+          "id": "kimg",
+          "keyframes": {
+            "blur": [
+              {
+                "t": 0,
+                "v": 12
+              },
+              {
+                "t": 1,
+                "v": 0
+              }
+            ],
+            "futureProperty": [
+              {
+                "t": 0,
+                "v": 1
+              }
+            ],
+            "opacity": [
+              {
+                "t": 0,
+                "v": 0
+              },
+              {
+                "t": 1,
+                "v": 1
+              },
+              {
+                "t": 3,
+                "v": 1
+              },
+              {
+                "t": 4,
+                "v": 0
+              }
+            ],
+            "rotation": [
+              {
+                "t": 0,
+                "v": 0
+              },
+              {
+                "t": 4,
+                "v": 360
+              }
+            ],
+            "scale": [
+              {
+                "ease": "bezier:0.25,0.1,0.25,1",
+                "t": 0,
+                "v": 0.5
+              },
+              {
+                "t": 4,
+                "v": 1.5
+              }
+            ],
+            "x": [
+              {
+                "t": 0,
+                "v": 0.2
+              },
+              {
+                "ease": "easeInOut",
+                "t": 2,
+                "v": 0.8
+              },
+              {
+                "ease": "hold",
+                "t": 4,
+                "v": 0.5
+              }
+            ],
+            "y": [
+              {
+                "ease": "easeIn",
+                "t": 0,
+                "v": 0.3
+              },
+              {
+                "ease": "easeOut",
+                "t": 3,
+                "v": 0.7
+              }
+            ]
+          },
+          "offset": 0,
+          "opacity": 1,
+          "rotation": 15,
+          "scale": 1,
+          "src": "/tmp/none.png",
+          "start": 1,
+          "type": "image",
+          "x": 0.5,
+          "y": 0.5
+        },
+        {
+          "color": "#ffffff",
+          "duration": 3,
+          "font": "Hiragino Sans",
+          "fontSize": 80,
+          "id": "ktxt",
+          "keyframes": {
+            "x": [
+              {
+                "ease": "easeOut",
+                "t": 0,
+                "v": -0.2
+              },
+              {
+                "t": 1,
+                "v": 0.5
+              }
+            ]
+          },
+          "offset": 0,
+          "opacity": 1,
+          "outline": "#000000",
+          "rotation": -10,
+          "start": 0,
+          "text": "動く文字",
+          "type": "text",
+          "x": 0.5,
+          "y": 0.15
+        },
+        {
+          "duration": 3,
+          "h": 0.3,
+          "id": "kblur",
+          "keyframes": {
+            "h": [
+              {
+                "t": 0,
+                "v": 0.1
+              },
+              {
+                "t": 3,
+                "v": 0.4
+              }
+            ],
+            "strength": [
+              {
+                "t": 0,
+                "v": 5
+              },
+              {
+                "t": 3,
+                "v": 40
+              }
+            ],
+            "w": [
+              {
+                "t": 0,
+                "v": 0.1
+              },
+              {
+                "t": 3,
+                "v": 0.4
+              }
+            ],
+            "x": [
+              {
+                "t": 0,
+                "v": 0.2
+              },
+              {
+                "t": 3,
+                "v": 0.8
+              }
+            ],
+            "y": [
+              {
+                "t": 0,
+                "v": 0.5
+              }
+            ]
+          },
+          "offset": 0,
+          "shape": "rect",
+          "start": 0,
+          "strength": 24,
+          "type": "blur",
+          "w": 0.3,
+          "x": 0.5,
+          "y": 0.5
+        },
+        {
+          "duration": 1,
+          "id": "kbad",
+          "keyframes": "this is not a keyframe table",
+          "offset": 0,
+          "src": "/tmp/none.png",
+          "start": 6,
+          "type": "image"
+        }
+      ],
+      "id": "kt1",
+      "name": "変形"
+    }
+  ],
+  "voicevoxUrl": "http://127.0.0.1:50021",
+  "width": 1280
+}

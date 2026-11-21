@@ -1,0 +1,119 @@
+{
+  "aquestalkCommand": "/Applications/AquesTalkPlayer.app/Contents/MacOS/AquesTalkPlayer -P {voice} -T {text} -W {out}",
+  "bg": "#101010",
+  "characters": [
+    {
+      "alwaysShow": true,
+      "color": "#e8384f",
+      "engine": "voicevox",
+      "flip": true,
+      "id": "zaiuswjf",
+      "imgClosed": null,
+      "imgOpen": null,
+      "name": "キャラ1",
+      "scale": 1,
+      "x": 0.18,
+      "y": 0.72
+    },
+    {
+      "alwaysShow": true,
+      "color": "#f2c53d",
+      "engine": "voicevox",
+      "flip": false,
+      "id": "duqrkfq6",
+      "imgClosed": null,
+      "imgOpen": null,
+      "name": "キャラ2",
+      "scale": 1,
+      "x": 0.82,
+      "y": 0.72
+    },
+    {
+      "alwaysShow": true,
+      "color": "#7ac943",
+      "engine": "voicevox",
+      "flip": false,
+      "id": "5bmhad5q",
+      "imgClosed": null,
+      "imgOpen": null,
+      "name": "キャラ3",
+      "scale": 1,
+      "x": 0.82,
+      "y": 0.72
+    }
+  ],
+  "codec": "h264",
+  "formatVersion": 2,
+  "fps": 30,
+  "height": 720,
+  "tracks": [
+    {
+      "clips": [
+        {
+          "duration": 6,
+          "id": "tbg",
+          "offset": 0,
+          "src": "/tmp/none.png",
+          "start": 0,
+          "type": "image"
+        }
+      ],
+      "height": "large",
+      "id": "tl1",
+      "layerFutureKey": {
+        "keep": true
+      },
+      "locked": true,
+      "name": "背景(ロック)"
+    },
+    {
+      "clips": [
+        {
+          "duration": 6,
+          "id": "tbgm",
+          "offset": 2,
+          "src": "/tmp/none.wav",
+          "srcDuration": 20,
+          "start": 0,
+          "type": "audio"
+        }
+      ],
+      "height": "small",
+      "id": "tl2",
+      "muted": false,
+      "name": "BGM",
+      "solo": true
+    },
+    {
+      "clips": [
+        {
+          "duration": 3,
+          "id": "ttx",
+          "offset": 0,
+          "start": 1,
+          "text": "こんにちは",
+          "type": "text"
+        },
+        {
+          "duration": 2,
+          "id": "ttx2",
+          "offset": 0,
+          "start": 4,
+          "text": "二つ目",
+          "type": "text"
+        }
+      ],
+      "height": "huge",
+      "id": "tl3",
+      "locked": "yes",
+      "name": "字幕"
+    },
+    {
+      "clips": [],
+      "id": "tl4",
+      "name": "標準"
+    }
+  ],
+  "voicevoxUrl": "http://127.0.0.1:50021",
+  "width": 1280
+}

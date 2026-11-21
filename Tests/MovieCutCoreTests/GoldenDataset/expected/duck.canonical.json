@@ -1,0 +1,105 @@
+{
+  "aquestalkCommand": "/Applications/AquesTalkPlayer.app/Contents/MacOS/AquesTalkPlayer -P {voice} -T {text} -W {out}",
+  "bg": "#101010",
+  "characters": [
+    {
+      "alwaysShow": true,
+      "color": "#e8384f",
+      "engine": "voicevox",
+      "flip": true,
+      "id": "qrbfk6bm",
+      "imgClosed": null,
+      "imgOpen": null,
+      "name": "キャラ1",
+      "scale": 1,
+      "x": 0.18,
+      "y": 0.72
+    },
+    {
+      "alwaysShow": true,
+      "color": "#f2c53d",
+      "engine": "voicevox",
+      "flip": false,
+      "id": "gayjsm8b",
+      "imgClosed": null,
+      "imgOpen": null,
+      "name": "キャラ2",
+      "scale": 1,
+      "x": 0.82,
+      "y": 0.72
+    },
+    {
+      "alwaysShow": true,
+      "color": "#7ac943",
+      "engine": "voicevox",
+      "flip": false,
+      "id": "twrjl5rh",
+      "imgClosed": null,
+      "imgOpen": null,
+      "name": "キャラ3",
+      "scale": 1,
+      "x": 0.82,
+      "y": 0.72
+    }
+  ],
+  "codec": "h264",
+  "formatVersion": 2,
+  "fps": 30,
+  "height": 720,
+  "tracks": [
+    {
+      "clips": [
+        {
+          "duck": {
+            "amount": -15,
+            "attack": 0.2,
+            "futureDuckKey": "keep",
+            "release": 0.8
+          },
+          "duration": 20,
+          "id": "bgm",
+          "offset": 0,
+          "src": "/tmp/none.wav",
+          "srcDuration": 20,
+          "start": 0,
+          "type": "audio",
+          "volume": 0.8
+        },
+        {
+          "duck": {
+            "amount": -9,
+            "enabled": false
+          },
+          "duration": 5,
+          "id": "bgmOff",
+          "offset": 0,
+          "src": "/tmp/none.wav",
+          "start": 20,
+          "type": "audio"
+        },
+        {
+          "duck": {},
+          "duration": 5,
+          "id": "bgmDefault",
+          "offset": 0,
+          "src": "/tmp/none.wav",
+          "start": 25,
+          "type": "audio"
+        },
+        {
+          "duck": "not an object",
+          "duration": 5,
+          "id": "bgmBad",
+          "offset": 0,
+          "src": "/tmp/none.wav",
+          "start": 30,
+          "type": "audio"
+        }
+      ],
+      "id": "dt1",
+      "name": "BGM"
+    }
+  ],
+  "voicevoxUrl": "http://127.0.0.1:50021",
+  "width": 1280
+}
