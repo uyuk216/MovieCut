@@ -1,0 +1,185 @@
+{
+ "width": 1920,
+ "height": 1080,
+ "fps": 30,
+ "bg": "#ffffff",
+ "codec": "hevc",
+ "voicevoxUrl": "http://127.0.0.1:50021",
+ "aquestalkCommand": "say {text}",
+ "futureProjectKey": {
+  "n": 1,
+  "s": "x",
+  "l": [
+   true,
+   null
+  ]
+ },
+ "characters": [
+  {
+   "id": "ch1",
+   "name": "A",
+   "engine": "voicevox",
+   "speaker": 3,
+   "speed": 1,
+   "pitch": 0,
+   "intonation": 1,
+   "color": "#7ac943",
+   "imgClosed": "/a/c.png",
+   "imgOpen": "/a/o.png",
+   "x": 0.8,
+   "y": 0.7,
+   "scale": 1.2,
+   "flip": false,
+   "alwaysShow": false,
+   "futureCharKey": [
+    1,
+    2
+   ]
+  },
+  {
+   "id": "ch2",
+   "name": "B",
+   "engine": "aquestalk",
+   "voice": "れいむ",
+   "speed": 100,
+   "color": "#e8384f",
+   "imgClosed": null,
+   "imgOpen": null,
+   "x": 0.2,
+   "y": 0.7,
+   "scale": 1,
+   "flip": true,
+   "alwaysShow": true
+  }
+ ],
+ "tracks": [
+  {
+   "id": "t1",
+   "name": "背景",
+   "futureTrackKey": {
+    "a": [
+     1,
+     2,
+     {
+      "b": null
+     }
+    ]
+   },
+   "clips": [
+    {
+     "start": 0,
+     "duration": 2,
+     "offset": 0,
+     "id": "c1",
+     "type": "image",
+     "src": "/a/b.png",
+     "x": 0.5,
+     "y": 0.5,
+     "scale": 1.5,
+     "opacity": 0.8,
+     "blur": 4,
+     "futureClipKey": "keep"
+    },
+    {
+     "start": 0,
+     "duration": 2,
+     "offset": 1.25,
+     "id": "c2",
+     "type": "video",
+     "src": "/a/v.mp4",
+     "srcDuration": 12.5,
+     "volume": 0.5,
+     "blur": 0
+    }
+   ]
+  },
+  {
+   "id": "t2",
+   "name": "音",
+   "muted": true,
+   "clips": [
+    {
+     "start": 0,
+     "duration": 2,
+     "offset": 0,
+     "id": "c3",
+     "type": "audio",
+     "src": "/a/s.wav",
+     "srcDuration": 3,
+     "volume": 1.5
+    }
+   ]
+  },
+  {
+   "id": "t3",
+   "name": "文字",
+   "hidden": true,
+   "clips": [
+    {
+     "start": 0,
+     "duration": 2,
+     "offset": 0,
+     "id": "c4",
+     "type": "text",
+     "text": "こんにちは",
+     "x": 0.5,
+     "y": 0.15,
+     "fontSize": 96,
+     "color": "#ffffff",
+     "outline": "#000000",
+     "font": "YuGothic",
+     "opacity": 1,
+     "blur": 24
+    },
+    {
+     "start": 0,
+     "duration": 2,
+     "offset": 0,
+     "id": "c5",
+     "type": "voice",
+     "src": "/a/v.wav",
+     "text": "やあ",
+     "charId": "ch1",
+     "volume": 1,
+     "subtitle": true,
+     "fontSize": 64,
+     "font": "Klee"
+    },
+    {
+     "start": 0,
+     "duration": 2,
+     "offset": 0,
+     "id": "c6",
+     "type": "blur",
+     "x": 0.5,
+     "y": 0.5,
+     "w": 0.3,
+     "h": 0.2,
+     "strength": 24,
+     "shape": "rect"
+    },
+    {
+     "start": 0,
+     "duration": 2,
+     "offset": 0,
+     "id": "c7",
+     "type": "blur",
+     "x": 0.3,
+     "y": 0.6,
+     "w": 0.2,
+     "h": 0.2,
+     "strength": 30,
+     "shape": "ellipse"
+    },
+    {
+     "start": 0,
+     "duration": 2,
+     "offset": 0,
+     "id": "c8",
+     "type": "hologram",
+     "weird": true
+    }
+   ]
+  }
+ ]
+}

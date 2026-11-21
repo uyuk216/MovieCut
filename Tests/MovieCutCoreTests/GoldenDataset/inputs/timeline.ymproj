@@ -1,0 +1,45 @@
+{
+  "width": 1280,
+  "height": 720,
+  "fps": 30,
+  "bg": "#101010",
+  "codec": "h264",
+  "characters": [],
+  "tracks": [
+    {
+      "id": "tl1",
+      "name": "背景(ロック)",
+      "locked": true,
+      "height": "large",
+      "layerFutureKey": { "keep": true },
+      "clips": [
+        { "id": "tbg", "type": "image", "src": "/tmp/none.png", "start": 0, "duration": 6, "offset": 0 }
+      ]
+    },
+    {
+      "id": "tl2",
+      "name": "BGM",
+      "solo": true,
+      "muted": false,
+      "height": "small",
+      "clips": [
+        { "id": "tbgm", "type": "audio", "src": "/tmp/none.wav", "srcDuration": 20, "start": 0, "duration": 6, "offset": 2 }
+      ]
+    },
+    {
+      "id": "tl3",
+      "name": "字幕",
+      "height": "huge",
+      "locked": "yes",
+      "clips": [
+        { "id": "ttx", "type": "text", "text": "こんにちは", "start": 1, "duration": 3 },
+        { "id": "ttx2", "type": "text", "text": "二つ目", "start": 4, "duration": 2 }
+      ]
+    },
+    {
+      "id": "tl4",
+      "name": "標準",
+      "clips": []
+    }
+  ]
+}

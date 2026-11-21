@@ -1,0 +1,72 @@
+{
+  "width": 1280,
+  "height": 720,
+  "fps": 30,
+  "bg": "#101010",
+  "codec": "h264",
+  "characters": [],
+  "tracks": [
+    {
+      "id": "st1",
+      "name": "速度",
+      "clips": [
+        {
+          "id": "sfast",
+          "type": "video",
+          "src": "/tmp/none.mp4",
+          "srcDuration": 8,
+          "start": 0,
+          "duration": 2,
+          "offset": 1,
+          "speed": 2,
+          "volume": 1,
+          "futureClipKey": { "keep": [1, 2, 3] }
+        },
+        {
+          "id": "srev",
+          "type": "video",
+          "src": "/tmp/none.mp4",
+          "srcDuration": 8,
+          "start": 2,
+          "duration": 4,
+          "offset": 0.5,
+          "speed": 0.5,
+          "reverse": true,
+          "keepPitch": false
+        },
+        {
+          "id": "sfreeze",
+          "type": "video",
+          "src": "/tmp/none.mp4",
+          "srcDuration": 8,
+          "start": 6,
+          "duration": 2,
+          "offset": 3.25,
+          "freeze": true
+        },
+        {
+          "id": "saud",
+          "type": "audio",
+          "src": "/tmp/none.wav",
+          "srcDuration": 10,
+          "start": 8,
+          "duration": 4,
+          "offset": 0,
+          "speed": 0.5
+        },
+        {
+          "id": "sbad",
+          "type": "video",
+          "src": "/tmp/none.mp4",
+          "start": 12,
+          "duration": 2,
+          "offset": 0,
+          "speed": "fast",
+          "reverse": 1,
+          "keepPitch": "no",
+          "freeze": []
+        }
+      ]
+    }
+  ]
+}

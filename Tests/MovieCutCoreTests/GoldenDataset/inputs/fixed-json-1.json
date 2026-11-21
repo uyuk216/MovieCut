@@ -1,0 +1,26 @@
+{
+  "formatVersion": 2,
+  "width": 1280, "height": 720, "fps": 30,
+  "bg": "#112233", "codec": "hevc",
+  "voicevoxUrl": "http://127.0.0.1:50021",
+  "aquestalkCommand": "say {text}",
+  "characters": [
+    {"id": "ch1", "name": "A", "engine": "voicevox", "color": "#e8384f", "speaker": 3, "speed": 1.5, "futureChar": 1}
+  ],
+  "tracks": [
+    {"id": "t1", "name": "L1", "hidden": true, "clips": [
+      {"id": "c1", "type": "text", "start": 0, "duration": 2, "offset": 0, "text": "こんにちは", "fontSize": 80, "color": "#ffffff"},
+      {"id": "c2", "type": "hologram", "start": 2, "duration": 1, "offset": 0, "weird": true}
+    ]}
+  ],
+  "markers": [{"id": "m1", "time": 1.5, "name": "A"}],
+  "rangeIn": 0.5, "rangeOut": 9,
+  "mediaPool": ["/a/x.mp4"],
+  "mediaHints": {"/a/x.mp4": {"relative": "media/x.mp4", "size": 3}},
+  "mediaFingerprints": {"/a/x.mp4": {"fileName": "x.mp4", "size": 3, "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},
+  "proxyLinks": {"/a/x.mp4": "/p/x.mp4"},
+  "targetTrackId": "t1",
+  "subtitleY": 0.8,
+  "scriptText": "台本",
+  "futureTop": {"a": [1, null, "s"]}
+}
