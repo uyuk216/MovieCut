@@ -81,9 +81,9 @@ final class AquesTalkSpeedTests: XCTestCase {
         let expected = try Data(contentsOf: ref)
         let b = AquesTalkSynthesizer(cache: freshCache("rb"))
         let p = AquesTalkPluginSynthesizer(cache: freshCache("rp"))
-        let bu = try await b.synthesize(text: "ゆっくりしていってね", voice: "女声1", speed: nil)
+        let bu = try await b.synthesize(text: "ゆっくりしていってね", voice: "女声1（AquesTalk1）", speed: nil)
         XCTAssertEqual(try Data(contentsOf: bu), expected, "内蔵: 速さ未指定は無変換で参照 WAV とバイト一致")
-        let pu = try await p.synthesize(text: "ゆっくりしていってね", voice: "女声1", speed: nil)
+        let pu = try await p.synthesize(text: "ゆっくりしていってね", voice: "女声1（AquesTalk1）", speed: nil)
         XCTAssertEqual(try Data(contentsOf: pu), expected, "プラグイン: 速さ未指定は無変換で参照 WAV とバイト一致")
     }
 

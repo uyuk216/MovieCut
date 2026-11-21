@@ -1,14 +1,26 @@
 import Foundation
 
+/// 声名とプレイヤーのプリセットの対応。
+/// 女声1・女声2 は AquesTalk2 の「女性A」「女性G」に割り当てる。AquesTalk1(れいむ・まりさ)は濁音の子音の閉鎖区間に
+/// 有声成分が無く、「ボタン→ホタン」のように濁点が落ちる(波形測定で確認)。AquesTalk2 の女性A・女性G は有声成分を確認済み。
+/// AquesTalk1 の声も選択肢として残すため、「女声1（AquesTalk1）」「女声2（AquesTalk1）」を別の声名として用意した。
 public enum AquesTalkPresets {
-    /// 標準で入っているプリセット(実機で -P を試して確認したもの)。
-    public static let all = ["女声1", "女声2", "中性", "機械", "ロボット"]
+    /// 標準で入っているプリセット(実機で -P を試して確認したもの)。先頭が新規キャラの既定の声。
+    public static let all = ["女声1", "女声2", "女声1（AquesTalk1）", "女声2（AquesTalk1）", "中性", "機械", "ロボット"]
 
     /// 旧名(古いプロジェクトファイルに保存されている名前)との対応表。
-    /// 【旧ファイル互換のため】Sources で旧名が残ってよい唯一の場所。
+    /// 【旧ファイル互換のため】Sources で旧名が残ってよい唯一の場所(`playerNames` の AquesTalk1 側の名前は別)。
     /// - 読み込み時: 旧名 → 新名(`canonicalVoice`)。保存し直すと新名になる。
-    /// - 合成時: AquesTalkPlayer の `-P` は旧名の登録名しか受け付けない(実機確認: 新名はエラー)ため、新名 → 旧名(`playerName`)。
+    /// 旧名「れいむ」「まりさ」は従来どおり女声1・女声2 に読み替える(AquesTalk1 版を使いたい場合は新声名を選び直す)。
     static let legacyAliases: [(legacy: String, current: String)] = [("れいむ", "女声1"), ("まりさ", "女声2")]
+
+    /// 声名 → AquesTalkPlayer の `-P` に渡すプリセット名。ここに無い声名はそのまま渡す。
+    static let playerNames: [String: String] = [
+        "女声1": "女性A",
+        "女声2": "女性G",
+        "女声1（AquesTalk1）": "れいむ",
+        "女声2（AquesTalk1）": "まりさ",
+    ]
 
     /// 旧名なら新名に直す。それ以外(新名・未知の名前・nil)はそのまま。
     public static func canonicalVoice(_ v: String?) -> String? {
@@ -18,8 +30,8 @@ public enum AquesTalkPresets {
 
     /// AquesTalkPlayer の `-P` に渡す名前(旧名・新名のどちらでも同じ結果)。未知の名前はそのまま。
     public static func playerName(_ v: String?) -> String? {
-        guard let v else { return nil }
-        return legacyAliases.first { $0.current == v }?.legacy ?? v
+        guard let c = canonicalVoice(v) else { return nil }
+        return playerNames[c] ?? c
     }
 }
 

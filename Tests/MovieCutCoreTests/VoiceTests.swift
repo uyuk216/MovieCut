@@ -151,7 +151,7 @@ final class VoiceUnitTests: XCTestCase {
         // 引数は配列(シェルを通さない)。セリフに何が入っていても 1 つの引数のまま
         let inv = have.invocation(text: "$(rm -rf /); `x` 'y'", voice: "女声1", out: URL(fileURLWithPath: "/tmp/a b.wav"))
         XCTAssertEqual(inv.executable.lastPathComponent, "ls")
-        XCTAssertEqual(inv.arguments, ["-P", "れいむ", "-T", "$(rm -rf /); `x` 'y'", "-W", "/tmp/a b.wav"])
+        XCTAssertEqual(inv.arguments, ["-P", "女性A", "-T", "$(rm -rf /); `x` 'y'", "-W", "/tmp/a b.wav"])
         let say = none.invocation(text: "-v", voice: nil, out: URL(fileURLWithPath: "/tmp/o.wav"))
         XCTAssertEqual(say.executable.path, "/usr/bin/say")
         XCTAssertEqual(say.arguments.suffix(2), ["--", "-v"])
@@ -281,7 +281,7 @@ final class RealEngineTests: XCTestCase {
         // Electron 版で作った参照 WAV(Tests/MovieCutCoreTests/Fixtures/aq_reimu.wav)
         let ref = try XCTUnwrap(Bundle.module.url(forResource: "aq_reimu", withExtension: "wav", subdirectory: "Fixtures"))
         let aq = AquesTalkSynthesizer(cache: VoiceCache(directory: tmp))
-        let out = try await aq.synthesize(text: "ゆっくりしていってね", voice: "女声1", speed: 100)
+        let out = try await aq.synthesize(text: "ゆっくりしていってね", voice: "女声1（AquesTalk1）", speed: 100)
         let a = try Data(contentsOf: out), b = try Data(contentsOf: ref)
         XCTAssertEqual(a.count, b.count, "サイズ")
         XCTAssertTrue(a == b, "Electron 版の WAV とバイト単位で同一")
@@ -364,7 +364,20 @@ final class RealEngineTests: XCTestCase {
         let aq = AquesTalkSynthesizer(cache: VoiceCache(directory: tmp), playerPath: "/bin/ls")
         let o = URL(fileURLWithPath: "/tmp/o.wav")
         XCTAssertEqual(aq.invocation(text: "t", voice: "れいむ", out: o).arguments, aq.invocation(text: "t", voice: "女声1", out: o).arguments)
-        XCTAssertEqual(aq.invocation(text: "t", voice: "女声2", out: o).arguments.prefix(2), ["-P", "まりさ"])
+        XCTAssertEqual(aq.invocation(text: "t", voice: "女声2", out: o).arguments.prefix(2), ["-P", "女性G"])
+    }
+    func testVoiceToPlayerNameTable() {
+        XCTAssertEqual(AquesTalkPresets.playerName("女声1"), "女性A")
+        XCTAssertEqual(AquesTalkPresets.playerName("女声2"), "女性G")
+        XCTAssertEqual(AquesTalkPresets.playerName("女声1（AquesTalk1）"), "れいむ")
+        XCTAssertEqual(AquesTalkPresets.playerName("女声2（AquesTalk1）"), "まりさ")
+        XCTAssertEqual(AquesTalkPresets.playerName("れいむ"), "女性A")
+    }
+    func testAquesTalk1VoiceNamesNotRewritten() {
+        for v in ["女声1（AquesTalk1）", "女声2（AquesTalk1）"] { XCTAssertEqual(AquesTalkPresets.canonicalVoice(v), v) }
+    }
+    func testPresetListContents() {
+        XCTAssertEqual(AquesTalkPresets.all, ["女声1", "女声2", "女声1（AquesTalk1）", "女声2（AquesTalk1）", "中性", "機械", "ロボット"])
     }
     func testUnknownVoiceNamesUnchanged() {
         XCTAssertEqual(AquesTalkPresets.playerName("中性"), "中性")

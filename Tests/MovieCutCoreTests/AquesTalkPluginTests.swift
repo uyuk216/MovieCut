@@ -139,7 +139,7 @@ final class AquesTalkPluginTests: XCTestCase {
         try XCTSkipUnless(FileManager.default.fileExists(atPath: AquesTalkSynthesizer.playerPath), "AquesTalkPlayer 未インストール")
         let ref = try XCTUnwrap(Bundle.module.url(forResource: "aq_reimu", withExtension: "wav", subdirectory: "Fixtures"))
         let synth = AquesTalkPluginSynthesizer(cache: freshCache("real"))
-        let out = try await synth.synthesize(text: "ゆっくりしていってね", voice: "女声1", speed: 100)
+        let out = try await synth.synthesize(text: "ゆっくりしていってね", voice: "女声1（AquesTalk1）", speed: 100)
         let a = try Data(contentsOf: out), b = try Data(contentsOf: ref)
         XCTAssertEqual(a.count, b.count, "サイズ")
         XCTAssertTrue(a == b, "Electron 版の WAV とバイト単位で同一(プラグイン経由)")
