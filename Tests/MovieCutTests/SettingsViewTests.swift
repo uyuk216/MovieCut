@@ -30,7 +30,10 @@ final class SettingsViewTests: XCTestCase {
         XCTAssertNil(docs.model)
         let r = texts(SettingsView(documents: docs))
         XCTAssertFalse(r.labels.contains(L10n.t("動画")), "モデル無しでは動画の節は出ない")
-        XCTAssertTrue(r.ids.contains("settings-font-scale") || r.ids.contains("settings-language"), "アプリ設定の節は出る")
+        // SwiftUI の中身は画面の外では木に出ないので、ビューが使う節の題の定数で確かめる
+        let titles = SettingsContent.Section.titles(hasProject: docs.model != nil)
+        XCTAssertTrue(titles.contains(L10n.t("言語")) && titles.contains(L10n.t("表示")), "アプリ設定の節は出る")
+        XCTAssertFalse(titles.contains(L10n.t("動画")))
     }
 
     func testShowsVideoSectionWhenProjectIsActive() {
@@ -44,8 +47,9 @@ final class SettingsViewTests: XCTestCase {
 
     func testFontScalePickerStaysInSettingsView() {
         let docs = ActiveDocument()
-        let r = texts(SettingsView(documents: docs))
-        XCTAssertTrue(r.ids.contains("settings-font-scale"), "文字サイズの Picker は設定ウィンドウから到達できる")
+        _ = texts(SettingsView(documents: docs))   // モデル無しでも組み立てられる
+        XCTAssertTrue(SettingsContent.Section.titles(hasProject: false).contains(L10n.t("表示")), "文字サイズの Picker は「表示」の節にあり、モデル無しでも出る")
+        XCTAssertEqual(SettingsContent.Section.fontScaleID, "settings-font-scale")
         XCTAssertEqual(SettingsContent.fontScaleLabel(.standard), L10n.t("標準（見出し 17pt・本文 14pt）"))
     }
 

@@ -18,6 +18,20 @@ struct SettingsView: View {
 }
 
 struct SettingsContent: View {
+    /// 設定ウィンドウの節の題と識別子。ビューが実際に使う定数で、構成テストもこれを見る
+    /// (SwiftUI の中身は画面の外では NSView/アクセシビリティの木に出てこないため)。
+    enum Section {
+        static var video: String { L10n.t("動画") }
+        static var language: String { L10n.t("言語") }
+        static var display: String { L10n.t("表示") }
+        static let languageID = "settings-language"
+        static let fontScaleID = "settings-font-scale"
+        /// プロジェクトの有無で出る節の題(アプリ設定は常に出し、動画だけプロジェクトが要る)。
+        static func titles(hasProject: Bool) -> [String] {
+            (hasProject ? [video] : []) + [language, display]
+        }
+    }
+
     /// 音声サーバーの URL が送れない先なら、その理由(日本語)。
     private var voiceEndpointProblem: String? {
         do { try VoiceEndpointPolicy.current.validate(draft.voicevoxUrl); return nil }
@@ -169,7 +183,7 @@ struct SettingsContent: View {
                     .accessibilityIdentifier("settings-no-project-note")
             }
             if model != nil {
-            GroupBox(L10n.t("動画")) {
+            GroupBox(Section.video) {
                 Grid(alignment: .leading, horizontalSpacing: MCDesign.Spacing.m, verticalSpacing: MCDesign.Spacing.s) {
                     GridRow(alignment: .top) {
                         Text(L10n.t("サイズ"))
@@ -234,24 +248,24 @@ struct SettingsContent: View {
             }
             .disabled(projectLocked)
             }
-            GroupBox(L10n.t("言語")) {
+            GroupBox(Section.language) {
                 VStack(alignment: .leading, spacing: MCDesign.Spacing.xs) {
                     Picker("", selection: Binding(get: { language }, set: { v in language = v; L10n.setOverride(v) })) {
                         ForEach(AppLanguage.allCases, id: \.self) { Text($0.label).tag($0) }
                     }
                     .labelsHidden().frame(width: 320)
-                    .accessibilityIdentifier("settings-language")
+                    .accessibilityIdentifier(Section.languageID)
                     Text(L10n.t("言語の切り替えは、メニューなどを開き直すと反映されます。")).font(MCDesign.Font.caption).foregroundStyle(MCDesign.Color.textSecondary)
                 }.padding(MCDesign.Spacing.s)
             }
-            GroupBox(L10n.t("表示")) {
+            GroupBox(Section.display) {
                 HStack {
                     Text(L10n.t("文字サイズ"))
                     Picker("", selection: Binding(get: { fontScaleStep }, set: { v in fontScaleStep = v; FontScaleStore.set(v) })) {
                         ForEach(FontScaleStep.allCases, id: \.self) { Text(Self.fontScaleLabel($0)).tag($0) }
                     }
                     .labelsHidden().frame(width: 320)
-                    .accessibilityIdentifier("settings-font-scale")
+                    .accessibilityIdentifier(Section.fontScaleID)
                 }.padding(MCDesign.Spacing.s)
             }
             GroupBox(L10n.t("VOICEVOX（互換エンジンも可）")) {
