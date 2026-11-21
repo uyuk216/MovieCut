@@ -18,10 +18,12 @@ enum AudioRemap {
     /// 素材を開く関数(ミキサーの openSource と同じもの)。範囲の長さを渡す。
     typealias OpenSource = (_ clip: Clip, _ offset: Double, _ span: Double) throws -> PCMSource?
 
-    static func render(clip c: Clip, open: OpenSource, in dir: URL) throws -> URL {
+    /// `speedOverride` があるときは、その速さで素材の範囲 [offset, offset + duration × speed] を伸縮する(ボイスの伸縮用。逆再生・速度ランプは通らない)。
+    /// nil のときは従来どおり(クリップ自身の速度・逆再生・ランプ)。
+    static func render(clip c: Clip, open: OpenSource, in dir: URL, speedOverride: Double? = nil) throws -> URL {
         let sr = sampleRate
-        let speed = c.effectiveSpeed
-        let span = ClipTiming.sourceSpan(c)   // 速度ランプは積分(素材の長さ)
+        let speed = speedOverride ?? c.effectiveSpeed
+        let span = speedOverride.map { c.duration * $0 } ?? ClipTiming.sourceSpan(c)   // 速度ランプは積分(素材の長さ)
         let spanFrames = max(1, Int((span * sr).rounded()))
         let outFrames = max(1, Int((c.duration * sr).rounded()))
         guard let src = try open(c, c.offset, span) else { throw Failure.noSource }
@@ -58,7 +60,7 @@ enum AudioRemap {
 
         // 2. 逆順
         var cur = aURL
-        if c.effectiveReverse {
+        if speedOverride == nil, c.effectiveReverse {
             let bURL = dir.appendingPathComponent("\(id)-b.caf")
             let inFile = try AVAudioFile(forReading: cur)
             let out = try AVAudioFile(forWriting: bURL, settings: settings, commonFormat: .pcmFormatFloat32, interleaved: false)
@@ -80,7 +82,7 @@ enum AudioRemap {
         }
 
         // 3. 速度
-        if let ramp = c.rampPoints {
+        if speedOverride == nil, let ramp = c.rampPoints {
             // 速度ランプ: 出力のコマごとに、積分で決まる素材の位置を直線補間で読む(音程は速度に従って変わる)
             let cURL = dir.appendingPathComponent("\(id)-c.caf")
             try resampleRamp(from: cur, to: cURL, points: ramp, outFrames: outFrames, settings: settings)

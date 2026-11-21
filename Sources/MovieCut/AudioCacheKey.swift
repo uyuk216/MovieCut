@@ -30,6 +30,8 @@ struct AudioCacheKey: Hashable {
                     if c.effectiveSpeed != 1 && !c.keepPitchOrDefault { remap += ",pitch=0" }
                     if let r = c.rampPoints { remap += "|ramp=" + r.map { "\($0.t):\($0.v):\($0.ease.token)" }.joined(separator: ",") }   // 速度ランプの点(あるときだけ)
                 }
+                // ボイスのミックス時伸縮(speed が保存されたボイスだけ。無いプロジェクトの鍵は従来と同じ)
+                if let vs = c.voiceStretchSpeed { remap += "|vspeed=\(vs)" }
                 // 音声エフェクト・パン・音量のキーも、あるときだけ鍵に足す(どれも無いクリップの鍵は従来と同じ)
                 var extras = ""
                 if let fx = c.audioFx, fx.isActive { extras += "|fx=\(fx.cacheToken)" }

@@ -28,6 +28,18 @@ public extension Clip {
     var hasTimeRemap: Bool { effectiveSpeed != 1 || effectiveReverse || isFreeze || rampPoints != nil }
     /// 音声の処理(伸び縮み・逆順・速度ランプ)が必要か。フリーズは無音なので含めない。
     var hasAudioRemap: Bool { !isFreeze && (effectiveSpeed != 1 || effectiveReverse || rampPoints != nil) }
+    /// ボイスクリップの「ミックス時の伸縮」速度。`type == .voice` で `speed` が保存されているときだけ、範囲(0.25〜4)に整えた値。
+    /// 整えた値が 1 のとき(未設定・1・不正値)は nil。
+    /// 合成時の速さ(`Character.speed`、%)とは別物。生成済みの wav は通常、合成時に伸縮済みで、クリップの `speed` は未設定。
+    /// `speed` が保存されたボイスクリップ(既存 wav を参照するもの)だけが、ミックス時に伸縮の対象になる。
+    /// `supportsSpeed`/`effectiveSpeed`/`hasAudioRemap` はボイスでは変わらない(タイミングモデルには影響しない)。
+    var voiceStretchSpeed: Double? {
+        guard type == .voice, let s = speed else { return nil }
+        let v = ClipTiming.clampSpeed(s)
+        return v == 1 ? nil : v
+    }
+    /// ミックス時にボイスの伸縮が必要か。
+    var hasVoiceStretch: Bool { voiceStretchSpeed != nil }
     /// コマの補間(フレームブレンドかオプティカルフロー)が設定されているか(動画・順再生・フリーズでない)。実際に効くのは速度が 1 未満のときだけ(`ClipTiming.blendsFrames`)。
     var frameBlendOn: Bool { (frameBlend == true || frameFlow == true) && type == .video && !isFreeze && !effectiveReverse }
     /// 補間にオプティカルフローを使うか(`frameBlendOn` のうち、`frameFlow` が true のもの)。

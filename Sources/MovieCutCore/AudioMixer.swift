@@ -559,6 +559,8 @@ public enum AudioMixer {
         var offset: Double
         /// 速度・逆再生のかかったクリップ(音声を一時ファイルに作ってから読む。`offset` はその一時ファイルの中の位置)
         var remapped = false
+        /// ボイスクリップのミックス時の伸縮速度(`Clip.voiceStretchSpeed`。あるときだけ)
+        var voiceSpeed: Double? = nil
         var gain: Float
         /// フェード(クリップ本来の頭からのサンプル数)。`fadeStart` は負の開始を切る前の頭、`length` はクリップ全体の長さ。
         var fadeStart = 0
@@ -602,12 +604,14 @@ public enum AudioMixer {
                 let ef = min(total, sf + fullLength)
                 // 速度・逆再生・音程のかかったクリップは、タイムライン上の長さに直した一時ファイルを読む(音程だけのときも同じ経路)
                 let pitched = (c.audioFx?.pitchSemitones ?? 0) != 0
-                let remap = c.hasAudioRemap || pitched
+                let voiceSpeed = c.voiceStretchSpeed
+                let remap = c.hasAudioRemap || pitched || voiceSpeed != nil
                 // 速度・逆再生は、タイムライン上の長さに直した一時ファイルを読む(その中の位置 = クリップの頭からの秒)
                 var off = remap ? 0 : c.offset
                 if sf < 0 { off += Double(-sf) / sr; sf = 0 }  // 負の開始は頭を切る
                 guard ef > sf else { continue }
                 var item = Item(clip: c, startFrame: sf, endFrame: ef, offset: off, remapped: remap, gain: Float(c.volume ?? 1))
+                item.voiceSpeed = voiceSpeed
                 item.fullStart = fullStart
                 item.trackL = tmix.l; item.trackR = tmix.r
                 if c.hasAudioFade {
@@ -774,7 +778,7 @@ public enum AudioMixer {
         let c = it.clip
         let url: URL
         do {
-            url = try AudioRemap.render(clip: c, open: { clip, off, span in try openSource(clip, offset: off, span: span) }, in: remapDir)
+            url = try AudioRemap.render(clip: c, open: { clip, off, span in try openSource(clip, offset: off, span: span) }, in: remapDir, speedOverride: it.voiceSpeed)
         } catch {
             if case AudioMixerError.cannotRead = error { throw error }
             if case AudioRemap.Failure.noSource = error { return nil }   // 音声トラックが無い動画: 無音でよい(警告は要らない)
@@ -855,11 +859,13 @@ extension AudioMixer {
             let fullStart = sf, fullLength = Int((c.duration * sr).rounded())
             let ef = min(total, sf + fullLength)
             let pitched = (c.audioFx?.pitchSemitones ?? 0) != 0
-            let remap = c.hasAudioRemap || pitched
+            let voiceSpeed = c.voiceStretchSpeed
+            let remap = c.hasAudioRemap || pitched || voiceSpeed != nil
             var off = remap ? 0 : c.offset
             if sf < 0 { off += Double(-sf) / sr; sf = 0 }
             guard ef > sf else { continue }
             var item = Item(clip: c, startFrame: sf, endFrame: ef, offset: off, remapped: remap, gain: Float(c.volume ?? 1))
+            item.voiceSpeed = voiceSpeed
             item.fullStart = fullStart
             item.trackL = tmix.l; item.trackR = tmix.r
             if c.hasAudioFade {
