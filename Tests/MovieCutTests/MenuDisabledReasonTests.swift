@@ -22,7 +22,11 @@ final class MenuDisabledReasonTests: XCTestCase {
         let n = check(s)
         XCTAssertGreaterThan(n.disabled, 50)
         let settings = AppMenuSpec.settings(s)
-        XCTAssertEqual(AppMenuSpec.disabledReason(for: settings, state: s), "プロジェクトを開いてから使えます")
+        XCTAssertTrue(settings.enabled, "設定… はアプリ設定なのでプロジェクト無しでも有効")
+        XCTAssertNil(AppMenuSpec.disabledReason(for: settings, state: s), "有効なので無効理由は不要")
+        // 理由の仕組み自体は健在: プロジェクトが必要な項目には従来どおりの理由が出る
+        let vs = AppMenuSpec.videoSettings(s)
+        XCTAssertEqual(AppMenuSpec.disabledReason(for: vs, state: s), "プロジェクトを開いてから使えます")
     }
 
     func testLockedReason() {

@@ -105,7 +105,8 @@ final class MenuTests: XCTestCase {
         XCTAssertFalse(s.hasDocument)
         for spec in AppMenuSpec.all(s) {
             switch spec.command {
-            case .about, .checkForUpdates, .welcomeAtLaunchToggle, .helpShortcuts, .helpVoicevox, .helpAquestalk, .helpLicense, .helpThirdParty, .previewBackground, .previewTier, .previewProxyToggle, .proxyAutoCreateToggle, .guide, .previewSnapToggle, .previewGuidesVisibilityToggle, .addFont: XCTAssertTrue(spec.enabled, "\(spec.title)")
+            // 設定… はアプリ設定のため、プロジェクト無しでも常時有効
+            case .settings, .about, .checkForUpdates, .welcomeAtLaunchToggle, .helpShortcuts, .helpVoicevox, .helpAquestalk, .helpLicense, .helpThirdParty, .previewBackground, .previewTier, .previewProxyToggle, .proxyAutoCreateToggle, .guide, .previewSnapToggle, .previewGuidesVisibilityToggle, .addFont: XCTAssertTrue(spec.enabled, "\(spec.title)")
             default: XCTAssertFalse(spec.enabled, "\(spec.title) が有効です")
             }
         }
@@ -153,7 +154,8 @@ final class MenuTests: XCTestCase {
         let s = state { $0.isLocked = true; $0.hasSelection = true; $0.canSplit = true }
         for spec in AppMenuSpec.all(s) {
             switch spec.command {
-            case .about, .checkForUpdates, .welcomeAtLaunchToggle, .helpShortcuts, .helpVoicevox, .helpAquestalk, .helpLicense, .helpThirdParty, .fullScreen, .previewBackground, .previewTier, .previewProxyToggle, .proxyAutoCreateToggle, .guide, .previewSnapToggle, .previewGuidesVisibilityToggle, .addFont: XCTAssertTrue(spec.enabled, "\(spec.title)")
+            // 設定… はアプリ設定のため、書き出し中でも常時有効
+            case .settings, .about, .checkForUpdates, .welcomeAtLaunchToggle, .helpShortcuts, .helpVoicevox, .helpAquestalk, .helpLicense, .helpThirdParty, .fullScreen, .previewBackground, .previewTier, .previewProxyToggle, .proxyAutoCreateToggle, .guide, .previewSnapToggle, .previewGuidesVisibilityToggle, .addFont: XCTAssertTrue(spec.enabled, "\(spec.title)")
             default: XCTAssertFalse(spec.enabled, "\(spec.title) が書き出し中も有効です")
             }
         }
