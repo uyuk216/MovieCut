@@ -65,7 +65,8 @@ public enum SpeedRamp {
             let dt = b.t - a.t
             guard dt > 0 else { return b.v }
             if a.ease == .linear { return a.v + (b.v - a.v) * (t - a.t) / dt }
-            return a.v + (b.v - a.v) * a.ease.apply((t - a.t) / dt)
+            // 行き過ぎる曲線(バウンス風など)でも速度は 0.25〜4 に収める(積分が単調という前提を守るため)
+            return ClipTiming.clampSpeed(a.v + (b.v - a.v) * a.ease.apply((t - a.t) / dt))
         }
         return l.v
     }
@@ -85,6 +86,8 @@ public enum SpeedRamp {
                 total += (end - a.t) * (a.v + vEnd) / 2
             } else if a.ease == .hold {
                 total += (end - a.t) * a.v   // 階段: 次の点まで始点の速度のまま
+            } else if overshoots(a.ease) {
+                total += clampedIntegral(a, b, upTo: end)
             } else {
                 let u = (end - a.t) / dt
                 total += dt * (a.v * u + (b.v - a.v) * a.ease.integral(u))
@@ -92,6 +95,41 @@ public enum SpeedRamp {
         }
         if t > last.t { total += (t - last.t) * last.v }
         return total
+    }
+
+    /// 曲線の進み具合が 0〜1 の外へはみ出すか(バウンス風など)。制御点が範囲内なら曲線も範囲内。
+    /// はみ出す区間では解析的な積分が「丸めた速度」の積分と合わないので、数値積分に切り替える。
+    static func overshoots(_ ease: Ease) -> Bool {
+        guard case .bezier(_, let y1, _, let y2) = ease else { return false }
+        guard y1 < 0 || y1 > 1 || y2 < 0 || y2 > 1 else { return false }
+        for i in 0...20 {
+            let v = ease.apply(Double(i) / 20)
+            if v < -1e-9 || v > 1 + 1e-9 { return true }
+        }
+        return false
+    }
+
+    /// 区間 [a.t, end] の、範囲に丸めた速度の積分(台形・細分)。行き過ぎる曲線のときだけ使う。
+    /// 分割は区間の頭から固定幅にする(end を伸ばしても過去の分の近似が変わらず、積分が単調になる)。
+    static func clampedIntegral(_ a: SpeedKey, _ b: SpeedKey, upTo end: Double) -> Double {
+        let span = end - a.t
+        let dt = b.t - a.t
+        guard span > 0, dt > 0 else { return 0 }
+        let w = dt / 400
+        func v(_ t: Double) -> Double { ClipTiming.clampSpeed(a.v + (b.v - a.v) * a.ease.apply((t - a.t) / dt)) }
+        var sum = 0.0
+        var t0 = a.t
+        var prev = v(a.t)
+        while t0 + w <= end {
+            let cur = v(t0 + w)
+            sum += (prev + cur) / 2 * w
+            prev = cur
+            t0 += w
+        }
+        if end > t0 {
+            sum += (prev + v(end)) / 2 * (end - t0)
+        }
+        return sum
     }
 
     /// 素材の長さ `s`(秒)に達するクリップの時刻(`integral` の逆)。単調なので二分法で求める。s ≤ 0 は 0。

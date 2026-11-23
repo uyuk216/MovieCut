@@ -173,4 +173,22 @@ final class SpeedRampEaseTests: XCTestCase {
         XCTAssertEqual(ClipTiming.clipTime(of: c, forSourceTime: 1 + span) ?? -1, 2, accuracy: 1e-6)
         XCTAssertEqual(ClipTiming.speed(of: c, atClipTime: 1), 1 + 2 * Ease.easeIn.apply(0.5), accuracy: 1e-12)
     }
+
+    /// 行き過ぎるベジェ(バウンス風プリセット)でも、速度は正の範囲に収まり、積分は単調で逆変換が戻ること。
+    func testOvershootingEaseKeepsSpeedPositiveAndIntegralMonotonic() {
+        let pts = [SpeedKey(t: 0, v: 4, ease: .bezier(0.34, 1.56, 0.64, 1)), SpeedKey(t: 4, v: 0.25)]
+        for i in 0...40 {
+            let v = SpeedRamp.speed(pts, at: Double(i) / 10)
+            XCTAssertGreaterThanOrEqual(v, 0.25, "t=\(Double(i) / 10)")
+            XCTAssertLessThanOrEqual(v, 4, "t=\(Double(i) / 10)")
+        }
+        var prev = 0.0
+        for i in 0...80 {
+            let v = SpeedRamp.integral(pts, upTo: Double(i) / 20)
+            XCTAssertGreaterThanOrEqual(v, prev - 1e-9, "積分が減った t=\(Double(i) / 20)")
+            prev = v
+        }
+        let s = SpeedRamp.integral(pts, upTo: 2.0)
+        XCTAssertEqual(SpeedRamp.time(pts, forIntegral: s), 2.0, accuracy: 0.01)
+    }
 }
