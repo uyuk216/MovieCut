@@ -41,6 +41,13 @@ public struct GIFPlan: Equatable {
     public var frames: Int
     /// 1 コマの表示時間(秒)。GIF は 1/100 秒で書くので、実際の表示時間は ImageIO が丸める。
     public var delay: Double
+
+    /// コマ i の表示時間(秒)。1/100 秒への丸めを累積時刻の差分で配るので、全部の合計が本来の長さに一致する
+    /// (1 コマずつ丸めると 30fps では各コマ 0.03 秒になり、全体が約 1 割縮む)。
+    public func frameDelay(at i: Int) -> Double {
+        let cs = 100 * delay
+        return ((Double(i + 1) * cs).rounded() - (Double(i) * cs).rounded()) / 100
+    }
 }
 
 // MARK: - GIF の書き出し
@@ -102,7 +109,7 @@ public enum GIFExporter {
                 if Task.isCancelled { cleanup(); throw CancellationError() }
                 let frame: CGImage? = autoreleasepool { renderer.renderImage(t: t0 + Double(i) / fps) }
                 guard let img = frame else { cleanup(); throw ExportError.pixelBufferFailed(-1) }
-                CGImageDestinationAddImage(dest, img, [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFDelayTime: p.delay]] as CFDictionary)
+                CGImageDestinationAddImage(dest, img, [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFDelayTime: p.frameDelay(at: i)]] as CFDictionary)
                 let v = Double(i + 1) / Double(p.frames)
                 if v - last >= 0.001 || i + 1 == p.frames { last = v; progress?(v) }
             }

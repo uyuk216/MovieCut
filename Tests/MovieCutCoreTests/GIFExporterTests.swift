@@ -162,4 +162,19 @@ final class GIFExporterTests: XCTestCase {
         let leftovers = try FileManager.default.contentsOfDirectory(atPath: tmp.path).filter { $0.hasSuffix(".part") }
         XCTAssertEqual(leftovers, [], "一時ファイルを残さない")
     }
+
+    /// コマごとの遅延は 1/100 秒への丸めを累積で配るので、合計が本来の長さと一致すること。
+    func testGIFFrameDelaysSumToDuration() {
+        let p = GIFPlan(width: 320, height: 180, frames: 300, delay: 1.0 / 30)
+        var total = 0.0
+        for i in 0..<p.frames {
+            let d = p.frameDelay(at: i)
+            XCTAssertTrue(d == 0.03 || d == 0.04, "i=\(i) d=\(d)")
+            total += d
+        }
+        XCTAssertEqual(total, 10.0, accuracy: 0.001)
+        // 24fps(4.166cs)でも同様
+        let p24 = GIFPlan(width: 320, height: 180, frames: 240, delay: 1.0 / 24)
+        XCTAssertEqual((0..<p24.frames).map { p24.frameDelay(at: $0) }.reduce(0, +), 10.0, accuracy: 0.001)
+    }
 }
