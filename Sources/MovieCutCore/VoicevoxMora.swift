@@ -32,12 +32,15 @@ public enum VoicevoxMora {
     }
 
     /// 辞書版。accent_phrases を順に辿り、prePhonemeLength を先頭に、各モーラ長を speedScale で割って積む。
+    /// 先頭の無音(prePhonemeLength)もエンジン側では speedScale で割られる(前後無音を足してから話速を掛ける)ため、同じく割る。
+    /// 疑問形(is_interrogative)で末尾モーラが有声(pitch > 0)の句には、エンジンが同じ母音の 0.15 秒モーラを
+    /// 末尾へ足す(合成 API の既定で有効)ため、その分も積む。
     /// pause_mora は閉じた口で、長さに pauseLengthScale を掛ける。postPhonemeLength は足さない(範囲外は閉じ扱い)。
     public static func parse(_ query: [String: Any]) -> [TimedViseme] {
         func num(_ v: Any?) -> Double? { (v as? NSNumber)?.doubleValue }
         let speed = (num(query["speedScale"]) ?? 1) > 0 ? (num(query["speedScale"]) ?? 1) : 1
         let pauseScale = num(query["pauseLengthScale"]) ?? 1
-        var t = max(0, num(query["prePhonemeLength"]) ?? 0)
+        var t = max(0, num(query["prePhonemeLength"]) ?? 0) / speed
         var out: [TimedViseme] = []
         func push(_ v: Viseme, _ length: Double) {
             let len = max(0, length) / speed
@@ -48,6 +51,12 @@ public enum VoicevoxMora {
             for mora in phrase["moras"] as? [[String: Any]] ?? [] {
                 let length = (num(mora["consonant_length"]) ?? 0) + (num(mora["vowel_length"]) ?? 0)
                 push(viseme(ofVowel: mora["vowel"] as? String), length)
+            }
+            // 疑問形の語尾上げ(エンジンの _apply_interrogative_upspeak と同じ条件・長さ)。
+            if (phrase["is_interrogative"] as? Bool) == true,
+               let last = (phrase["moras"] as? [[String: Any]])?.last,
+               (num(last["pitch"]) ?? 0) > 0 {
+                push(viseme(ofVowel: last["vowel"] as? String), 0.15)
             }
             if let pause = phrase["pause_mora"] as? [String: Any] {
                 push(.closed, (num(pause["vowel_length"]) ?? 0) * pauseScale)

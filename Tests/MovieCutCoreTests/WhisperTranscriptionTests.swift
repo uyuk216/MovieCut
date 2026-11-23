@@ -198,6 +198,50 @@ final class WhisperTranscriptionTests: XCTestCase {
                                 "ggml-base.bin", "ggml-base.en.bin", "ggml-tiny.bin", "ggml-zzz.bin"])
     }
 
+    func testSortedModelNamesExcludesVADModels() throws {
+        // VAD 専用モデル(silero / vad)は文字起こし用モデルの候補に入らない。
+        let names = ["ggml-silero-v5.1.2.bin", "ggml-vad.bin", "ggml-base.bin"]
+        XCTAssertEqual(WhisperLocator.sortedModelNames(names), ["ggml-base.bin"])
+        // フォルダに VAD モデルしか無ければ、認識用モデルは「無し」になる(変なモデルで起動しない)。
+        let dir = tmp.appendingPathComponent("Whisper")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try Data([0]).write(to: dir.appendingPathComponent("ggml-silero-v5.1.2.bin"))
+        XCTAssertNil(WhisperLocator.resolveModel(userSetting: nil, supportRoot: tmp))
+    }
+
+    func testParserGluesSubwordTokens() throws {
+        // 英単語が複数トークンに割れても、単語の中に空白が入らない。
+        let js = """
+        {"transcription":[{"offsets":{"from":0,"to":600},"text":" transcription","tokens":[
+          {"text":" trans","offsets":{"from":0,"to":200}},
+          {"text":"cription","offsets":{"from":200,"to":600}}]}]}
+        """
+        let segs = try WhisperJSONParser.parse(json(js))
+        XCTAssertEqual(segs.map(\.text), ["transcription"])
+        // 句読点トークンは直前の単語に付き、次の単語とは空白でつながる。
+        let js2 = """
+        {"transcription":[{"offsets":{"from":0,"to":900},"text":" Hello, world","tokens":[
+          {"text":" Hello","offsets":{"from":0,"to":300}},
+          {"text":",","offsets":{"from":300,"to":350}},
+          {"text":" world","offsets":{"from":350,"to":900}}]}]}
+        """
+        let segs2 = try WhisperJSONParser.parse(json(js2))
+        XCTAssertEqual(segs2.map(\.text), ["Hello, world"])
+    }
+
+    func testRunForceKillsProcessIgnoringSIGTERM() async throws {
+        // SIGTERM を無視するプロセスでも、タイムアウト後に必ず終わってエラーが返る。
+        let path = try makeScript("stubborn", body: "trap '' TERM\nwhile true; do sleep 1; done")
+        let start = Date()
+        do {
+            try await WhisperTranscriber.run(executable: URL(fileURLWithPath: path), arguments: [], timeout: 0.5, onProgress: { _ in })
+            XCTFail("タイムアウトで失敗するはず")
+        } catch let e as TranscriptionError {
+            guard case .failed = e else { XCTFail("failed でない: \(e)"); return }
+        }
+        XCTAssertLessThan(Date().timeIntervalSince(start), 15, "SIGKILL への格上げで有限時間に終わる")
+    }
+
     func testResolveModelPrefersUserSettingThenSupportFolder() throws {
         let dir = tmp.appendingPathComponent("Whisper")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

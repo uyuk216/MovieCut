@@ -186,8 +186,7 @@ public struct VoicevoxFamilyPluginClient {
         let wav = try await send(sreq, "synthesis")
         let tmp = out.appendingPathExtension("part-\(UUID().uuidString)")
         try wav.write(to: tmp)
-        _ = try? FileManager.default.removeItem(at: out)
-        try FileManager.default.moveItem(at: tmp, to: out)
+        try VoiceCache.replaceItem(at: out, with: tmp)
         return out
     }
 }

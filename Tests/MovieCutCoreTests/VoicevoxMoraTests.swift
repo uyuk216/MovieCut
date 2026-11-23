@@ -46,8 +46,9 @@ final class VoicevoxMoraTests: XCTestCase {
 
     func testParserSpeedPreAndPauseScale() {
         let fast = VoicevoxMora.parse(fixture(speed: 2, pre: 0.2, pauseScale: 1))
-        XCTAssertEqual(fast[0].start, 0.2, accuracy: 1e-9)
-        XCTAssertEqual(fast[0].end, 0.2 + 0.075, accuracy: 1e-9)          // 0.15 / 2
+        // 先頭の無音も話速で割られる(エンジンは前後無音を足してから speedScale を掛ける)。
+        XCTAssertEqual(fast[0].start, 0.1, accuracy: 1e-9)               // 0.2 / 2
+        XCTAssertEqual(fast[0].end, 0.1 + 0.075, accuracy: 1e-9)          // 0.15 / 2
         XCTAssertEqual(fast[2].end - fast[2].start, 0.4 / 2, accuracy: 1e-9) // pause 1.0 倍 / 速度 2
         // speedScale が 0 以下・欠落は 1
         let zero = VoicevoxMora.parse(fixture(speed: 0))
@@ -56,6 +57,35 @@ final class VoicevoxMoraTests: XCTestCase {
         XCTAssertEqual(missing, zero)
         // pre 欠落は 0 始まり
         XCTAssertEqual(VoicevoxMora.parse(fixture(pre: nil))[0].start, 0, accuracy: 1e-9)
+    }
+
+    /// 疑問形の語尾上げ: is_interrogative かつ末尾モーラが有声(pitch > 0)なら、同じ母音の 0.15 秒が末尾に付く。
+    func testParserInterrogativeUpspeak() {
+        func q(interrogative: Bool, pitch: Double, speed: Double = 1) -> Data {
+            let query: [String: Any] = [
+                "accent_phrases": [
+                    ["moras": [
+                        ["text": "カ", "consonant": "k", "consonant_length": 0.05, "vowel": "a", "vowel_length": 0.10, "pitch": pitch],
+                    ], "is_interrogative": interrogative],
+                ] as [[String: Any]],
+                "speedScale": speed,
+                "prePhonemeLength": 0,
+            ]
+            return try! JSONSerialization.data(withJSONObject: query)
+        }
+        // 有声の疑問形: 本体 0.15 + 語尾上げ 0.15 = 2 区間とも母音 a
+        let up = VoicevoxMora.parse(q(interrogative: true, pitch: 5.0))
+        XCTAssertEqual(up.count, 2)
+        XCTAssertEqual(up[1].vowel, .a)
+        XCTAssertEqual(up[1].start, 0.15, accuracy: 1e-9)
+        XCTAssertEqual(up[1].end, 0.30, accuracy: 1e-9)
+        // 話速 2 では語尾上げも半分になる
+        let upFast = VoicevoxMora.parse(q(interrogative: true, pitch: 5.0, speed: 2))
+        XCTAssertEqual(upFast.count, 2)
+        XCTAssertEqual(upFast[1].end - upFast[1].start, 0.075, accuracy: 1e-9)
+        // 無声(pitch 0)・疑問形でない場合は付かない
+        XCTAssertEqual(VoicevoxMora.parse(q(interrogative: true, pitch: 0)).count, 1)
+        XCTAssertEqual(VoicevoxMora.parse(q(interrogative: false, pitch: 5.0)).count, 1)
     }
 
     func testParserBrokenIsEmpty() {

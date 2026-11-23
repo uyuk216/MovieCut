@@ -55,6 +55,18 @@ public struct VoiceCache {
         return directory.appendingPathComponent("\(key).wav")
     }
 
+    /// 差し替え(消してから移す)を直列化するロック。同じキーへの並列合成で、
+    /// 相手が消した直後に移して失敗したり、返した直後のファイルが相手に消されたりする競合を防ぐ。
+    private static let replaceLock = NSLock()
+
+    /// 一時ファイルで作った中身を、保存先へ差し替える(並列呼び出しでも壊れない)。
+    public static func replaceItem(at out: URL, with tmp: URL) throws {
+        try replaceLock.withLock {
+            _ = try? FileManager.default.removeItem(at: out)
+            try FileManager.default.moveItem(at: tmp, to: out)
+        }
+    }
+
     /// キャッシュにあればそのパス。
     public func hit(forKey key: String) -> URL? {
         let u = directory.appendingPathComponent("\(key).wav")

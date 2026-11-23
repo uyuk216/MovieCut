@@ -228,8 +228,7 @@ public struct CoeiroinkV2Client {
         guard !wav.isEmpty else { throw VoiceError.badResponse("v1/synthesis") }
         let tmp = out.appendingPathExtension("part-\(UUID().uuidString)")
         try wav.write(to: tmp)
-        _ = try? FileManager.default.removeItem(at: out)
-        try FileManager.default.moveItem(at: tmp, to: out)
+        try VoiceCache.replaceItem(at: out, with: tmp)
         return out
     }
 

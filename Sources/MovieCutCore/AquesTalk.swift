@@ -87,8 +87,7 @@ public struct AquesTalkSynthesizer {
             defer { try? FileManager.default.removeItem(at: tmp) }
             let inv = invocation(text: text, voice: voice, out: tmp)
             try await Self.run(executable: inv.executable, arguments: inv.arguments, expecting: tmp)
-            _ = try? FileManager.default.removeItem(at: out)
-            try FileManager.default.moveItem(at: tmp, to: out)
+            try VoiceCache.replaceItem(at: out, with: tmp)
             return out
         }
         // 速さは AquesTalkPlayer の引数に無いので、一度テンポラリへ生成してから音程保持の
@@ -101,8 +100,7 @@ public struct AquesTalkSynthesizer {
         let stretched = FileManager.default.temporaryDirectory.appendingPathComponent("moviecut-aq-stretch-\(UUID().uuidString).wav")
         defer { try? FileManager.default.removeItem(at: stretched) }
         try VoiceTimeStretch.apply(input: raw, speedPercent: speed, output: stretched)
-        _ = try? FileManager.default.removeItem(at: out)
-        try FileManager.default.moveItem(at: stretched, to: out)
+        try VoiceCache.replaceItem(at: out, with: stretched)
         return out
     }
 

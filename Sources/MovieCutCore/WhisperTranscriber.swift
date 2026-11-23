@@ -213,9 +213,19 @@ public struct WhisperTranscriber: Transcriber {
     }
 
     /// プロセスを起こして終わるまで待つ。キャンセルで terminate、タイムアウトでも terminate。
+    /// terminate(SIGTERM)を無視するプロセスは 2 秒後に SIGKILL する(終了ハンドラが必ず呼ばれ、待ちが戻るように)。
     /// 非 0 終了は `TranscriptionError.failed`(stderr の末尾つき)。
     static func run(executable: URL, arguments: [String], timeout: TimeInterval,
                     onProgress: @escaping @Sendable (Double) -> Void) async throws {
+        /// SIGTERM → 猶予 2 秒 → SIGKILL の順で確実に止める。
+        func terminateForcefully(_ p: Process) {
+            guard p.isRunning else { return }
+            p.terminate()
+            let pid = p.processIdentifier
+            DispatchQueue.global().asyncAfter(deadline: .now() + 2) {
+                if p.isRunning { kill(pid, SIGKILL) }
+            }
+        }
         final class State: @unchecked Sendable {
             let lock = NSLock()
             var process: Process?
@@ -276,14 +286,14 @@ public struct WhisperTranscriber: Transcriber {
                     return
                 }
                 // run() とキャンセルのすれ違い対策(起動後にもう一度確かめる)。
-                if state.lock.withLock({ state.cancelled }), p.isRunning { p.terminate() }
+                if state.lock.withLock({ state.cancelled }), p.isRunning { terminateForcefully(p) }
                 DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
-                    if p.isRunning { state.lock.withLock { state.timedOut = true }; p.terminate() }
+                    if p.isRunning { state.lock.withLock { state.timedOut = true }; terminateForcefully(p) }
                 }
             }
         } onCancel: {
             let p: Process? = state.lock.withLock { state.cancelled = true; return state.process }
-            if let p, p.isRunning { p.terminate() }
+            if let p, p.isRunning { terminateForcefully(p) }
         }
     }
 }
@@ -376,7 +386,10 @@ public enum WhisperChunking {
     public static func readMono(_ url: URL) throws -> (samples: [Float], sampleRate: Double) {
         let file = try AVAudioFile(forReading: url)
         let rate = file.processingFormat.sampleRate
-        let total = Int(file.length)
+        // フレーム数が AVAudioFrameCount(UInt32)に収まらない音声は、変換で落とさずエラーにする。
+        guard let total = Int(exactly: file.length), total <= Int(AVAudioFrameCount.max) else {
+            throw TranscriptionError.failed("音声が長すぎて読み込めません。")
+        }
         guard total > 0 else { return ([], rate) }
         guard let buf = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(total)),
               let data = buf.floatChannelData else {
@@ -460,6 +473,8 @@ public enum WhisperLocator {
         }
         return names
             .filter { $0.hasPrefix("ggml-") && $0.hasSuffix(".bin") }
+            // VAD(音声区間検出)専用モデルは文字起こしに使えないので、認識用モデルの候補から除く。
+            .filter { let l = $0.lowercased(); return !l.contains("silero") && !l.contains("vad") }
             .sorted { (rank($0), $0) < (rank($1), $1) }
     }
 
@@ -593,7 +608,10 @@ public enum WhisperPreprocessing {
         let ch = Int(fmt.channelCount)
         var channels = [[Float]](repeating: [], count: ch)
 
-        let total = Int(file.length)
+        // フレーム数が AVAudioFrameCount(UInt32)に収まらない音声は、変換で落とさずエラーにする。
+        guard let total = Int(exactly: file.length), total <= Int(AVAudioFrameCount.max) else {
+            throw TranscriptionError.failed("音声が長すぎて読み込めません。")
+        }
         if total > 0 {
             guard let buf = AVAudioPCMBuffer(pcmFormat: fmt, frameCapacity: AVAudioFrameCount(total)),
                   let data = buf.floatChannelData else {
@@ -711,16 +729,38 @@ public enum WhisperJSONParser {
             if let tokens = seg.tokens {
                 let usable = tokens.filter { !($0.text ?? "").hasPrefix("[_") }
                 if !usable.contains(where: { ($0.text ?? "").contains("\u{FFFD}") || $0.offsets == nil }) {
-                    let words = usable.compactMap { t -> TranscriptSegment? in
-                        guard let text = t.text, let o = t.offsets, o.from.isFinite, o.to.isFinite else { return nil }
-                        return TranscriptSegment(text: text, start: o.from / 1000, end: o.to / 1000)
-                    }
-                    let phrases = TranscriptGrouping.phrases(from: words)
+                    let phrases = TranscriptGrouping.phrases(from: words(fromTokens: usable))
                     if !phrases.isEmpty { out += phrases; continue }
                 }
             }
             out.append(TranscriptSegment(text: body, start: start, end: end))
         }
         return out
+    }
+
+    /// トークン列を単語の列にする。whisper のトークンは単語の途中でも割れる(サブワード)ため、
+    /// そのまま連結すると "trans cription" のように単語内に空白が入る。
+    /// 先頭に空白が無く、直前が欧文で始まりも欧文・句読点のトークンは直前の単語の続きとしてくっつける。
+    /// 日本語のトークンは従来どおりトークン単位のまま(文の区切り・間隔での分割を保つ)。
+    private static func words(fromTokens tokens: [Token]) -> [TranscriptSegment] {
+        var out: [TranscriptSegment] = []
+        for t in tokens {
+            guard let text = t.text, let o = t.offsets, o.from.isFinite, o.to.isFinite else { continue }
+            let start = o.from / 1000, end = o.to / 1000
+            if let last = out.last, isContinuation(text, after: last.text) {
+                out[out.count - 1] = TranscriptSegment(text: last.text + text, start: last.start, end: max(last.end, end))
+            } else {
+                out.append(TranscriptSegment(text: text, start: start, end: end))
+            }
+        }
+        return out
+    }
+
+    /// トークンが直前の単語の続きかどうか(英文のサブワード・直前に付く句読点)。
+    private static func isContinuation(_ token: String, after prev: String) -> Bool {
+        guard let f = token.first, let l = prev.last else { return false }
+        if f.isWhitespace { return false }
+        if TranscriptGrouping.isCJK(f) || TranscriptGrouping.isCJK(l) { return false }
+        return f.isLetter || f.isNumber || ",.!?;:'%)".contains(f)
     }
 }

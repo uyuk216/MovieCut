@@ -100,11 +100,13 @@ public enum TranscriptGrouping {
             if let c = cur {
                 let gap = w.start - c.end
                 let endsSentence = c.text.last.map { sentenceEnders.contains($0) } ?? false
-                if gap > maxGap || endsSentence || c.text.count + t.count > maxChars {
+                let joined = join(c.text, t)
+                // 最大文字数は「連結後の文字数」で見る(join が入れる空白も数える)。
+                if gap > maxGap || endsSentence || joined.count > maxChars {
                     out.append(c)
                     cur = TranscriptSegment(text: t, start: w.start, end: end, words: [one])
                 } else {
-                    cur = TranscriptSegment(text: join(c.text, t), start: c.start, end: max(c.end, end), words: c.words + [one])
+                    cur = TranscriptSegment(text: joined, start: c.start, end: max(c.end, end), words: c.words + [one])
                 }
             } else {
                 cur = TranscriptSegment(text: t, start: w.start, end: end, words: [one])
@@ -114,10 +116,26 @@ public enum TranscriptGrouping {
         return out
     }
 
-    /// 英数字どうしが隣り合うときだけ空白を入れる(日本語は詰める)。
+    /// 単語の境界に空白を入れるか決める。日本語(かな・漢字・和文記号)に接する境界は詰める。
+    /// それ以外は、英字・数字・ラテン文字・欧文句読点に単語が続けば空白を入れる
+    /// ("Hello," + "world" や "café" + "noir" で空白が消えないように)。
+    /// ただし数字どうしの小数点・桁区切りは詰める("3." + "5" → "3.5"、"1," + "000" → "1,000")。
     static func join(_ a: String, _ b: String) -> String {
-        guard let l = a.last, let f = b.first, l.isASCII, f.isASCII, l.isLetter || l.isNumber, f.isLetter || f.isNumber else { return a + b }
-        return a + " " + b
+        guard let l = a.last, let f = b.first else { return a + b }
+        if isCJK(l) || isCJK(f) { return a + b }
+        if f.isNumber && (l == "." || l == ",") { return a + b }
+        let leftPunct: Set<Swift.Character> = [",", ".", "!", "?", ";", ":", "'", "\"", ")", "]"]
+        let leftOK = l.isLetter || l.isNumber || leftPunct.contains(l)
+        let rightOK = f.isLetter || f.isNumber
+        return (leftOK && rightOK) ? a + " " + b : a + b
+    }
+
+    /// かな・漢字・和文記号かどうか(最初のスカラで判定)。
+    static func isCJK(_ c: Swift.Character) -> Bool {
+        guard let v = c.unicodeScalars.first?.value else { return false }
+        return (0x3000...0x30FF).contains(v) || (0x3400...0x4DBF).contains(v)
+            || (0x4E00...0x9FFF).contains(v) || (0xF900...0xFAFF).contains(v)
+            || (0xFF66...0xFF9D).contains(v)
     }
 }
 
@@ -146,7 +164,7 @@ public enum TranscriptSubtitles {
 public enum TranscriptionAudio {
     /// クリップが使う範囲([offset, offset + 長さ])の音を、モノラル 16 ビット WAV(48 kHz)に書く。
     /// ミキサーと同じ経路で読むので、動画の音声も音声クリップと同じに扱える。音が無ければ `TranscriptionError.noAudio`。
-    public static func writeWAV(clip c: Clip, to url: URL) throws {
+    public static func writeWAV(clip c: Clip, to url: URL, isCancelled: @Sendable () -> Bool = { false }) throws {
         guard let src = try? AudioMixer.openSource(c, offset: c.offset, span: c.duration) else { throw TranscriptionError.noAudio }
         let sr = AudioMixer.sampleRate
         let total = Int((c.duration * sr).rounded())
@@ -166,6 +184,8 @@ public enum TranscriptionAudio {
         var done = 0
         var wrote = 0
         while done < total {
+            // 抽出は素材が長いと時間がかかるため、チャンクごとにキャンセルを見る。
+            if isCancelled() { throw CancellationError() }
             let want = min(chunk, total - done)
             let got = src.read(left: l, right: r, frames: want)
             if got <= 0 { break }
@@ -180,6 +200,14 @@ public enum TranscriptionAudio {
     }
 }
 
+/// キャンセルを detached タスクへ伝えるためのフラグ。
+private final class TranscriptionCancelFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = false
+    func set() { lock.withLock { value = true } }
+    var isSet: Bool { lock.withLock { value } }
+}
+
 // MARK: - 実行(音を書き出す → 認識する → 字幕レイヤーへ)
 
 public enum SubtitleTranscription {
@@ -191,7 +219,13 @@ public enum SubtitleTranscription {
         guard TranscriptionSupport.supports(clip) else { return [] }
         let url = tempDirectory.appendingPathComponent("moviecut-transcribe-\(UUID().uuidString).wav")
         defer { try? FileManager.default.removeItem(at: url) }
-        try await Task.detached(priority: .userInitiated) { try TranscriptionAudio.writeWAV(clip: clip, to: url) }.value
+        // detached タスクにはキャンセルが伝わらないため、フラグ経由で抽出ループへ伝える。
+        let flag = TranscriptionCancelFlag()
+        try await withTaskCancellationHandler {
+            try await Task.detached(priority: .userInitiated) {
+                try TranscriptionAudio.writeWAV(clip: clip, to: url, isCancelled: { flag.isSet })
+            }.value
+        } onCancel: { flag.set() }
         try Task.checkCancellation()
         let segments = try await transcriber.transcribe(audioURL: url, duration: clip.duration, onProgress: onProgress)
         try Task.checkCancellation()

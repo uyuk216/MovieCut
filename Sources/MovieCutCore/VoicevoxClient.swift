@@ -113,8 +113,7 @@ public struct VoicevoxClient {
         let wav = try await send(sreq, "synthesis")
         let tmp = out.appendingPathExtension("part-\(UUID().uuidString)")
         try wav.write(to: tmp)
-        _ = try? FileManager.default.removeItem(at: out)
-        try FileManager.default.moveItem(at: tmp, to: out)
+        try VoiceCache.replaceItem(at: out, with: tmp)
         return out
     }
 
@@ -185,17 +184,21 @@ public final class VoicevoxEngine {
               VoiceEndpointPolicy.isLocalHost(host) else { return false }
         guard FileManager.default.isExecutableFile(atPath: binaryPath) else { return false }
         let port = comps.port ?? 50021
-        let alreadyStarted: Bool = lock.withLock { process?.isRunning == true }
-        if !alreadyStarted {
+        // 確認→起動→登録をロックの中で一息にやる。並列呼び出しが両方とも「未起動」と判定して
+        // 二重に起動し、片方のプロセスが管理外になる(止められなくなる)のを防ぐ。
+        let launchFailed: Bool = lock.withLock {
+            if process?.isRunning == true { return false }
             let p = Process()
             p.executableURL = URL(fileURLWithPath: binaryPath)
             p.arguments = ["--host", "127.0.0.1", "--port", String(port), "--cpu_num_threads", String(Self.cpuThreads())]
             p.standardOutput = FileHandle.nullDevice
             p.standardError = FileHandle.nullDevice
             p.standardInput = FileHandle.nullDevice
-            do { try p.run() } catch { return false }
-            lock.withLock { process = p }
+            do { try p.run() } catch { return true }
+            process = p
+            return false
         }
+        if launchFailed { return false }
         for _ in 0..<60 {
             if await Self.isAlive(baseURL: baseURL) { return true }
             try? await Task.sleep(nanoseconds: 500_000_000)

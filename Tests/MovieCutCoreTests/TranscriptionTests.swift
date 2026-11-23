@@ -115,6 +115,38 @@ final class TranscriptionTests: XCTestCase {
         XCTAssertEqual(TranscriptGrouping.phrases(from: words).map(\.text), [long, "い"])
     }
 
+    func testPhrasesJoinAfterPunctuationAndAccentedLatin() {
+        // 句読点の後ろの単語にも空白が要る("Hello,world" にならない)。
+        let punct = [
+            TranscriptSegment(text: "Hello,", start: 0, end: 0.3),
+            TranscriptSegment(text: "world", start: 0.3, end: 0.6),
+        ]
+        XCTAssertEqual(TranscriptGrouping.phrases(from: punct).map(\.text), ["Hello, world"])
+        // 非 ASCII のラテン文字(é)で終わる単語も、続く単語と空白でつなぐ。
+        let accent = [
+            TranscriptSegment(text: "café", start: 0, end: 0.3),
+            TranscriptSegment(text: "noir", start: 0.3, end: 0.6),
+        ]
+        XCTAssertEqual(TranscriptGrouping.phrases(from: accent).map(\.text), ["café noir"])
+        // 数字の小数点は詰めたまま("3.5")。
+        let decimal = [
+            TranscriptSegment(text: "3.", start: 0, end: 0.2),
+            TranscriptSegment(text: "5", start: 0.2, end: 0.4),
+        ]
+        XCTAssertEqual(TranscriptGrouping.phrases(from: decimal).map(\.text), ["3.5"])
+    }
+
+    func testPhrasesMaxCharsCountsInsertedSpace() {
+        // 29 文字 + 空白 + 1 文字 = 連結後 31 文字で上限を超えるため、2 件に分かれる。
+        let w29 = String(repeating: "a", count: 29)
+        let words = [TranscriptSegment(text: w29, start: 0, end: 1), TranscriptSegment(text: "x", start: 1, end: 1.2)]
+        XCTAssertEqual(TranscriptGrouping.phrases(from: words).map(\.text), [w29, "x"])
+        // 28 文字 + 空白 + 1 文字 = 30 文字ちょうどは 1 件のまま。
+        let w28 = String(repeating: "a", count: 28)
+        let words2 = [TranscriptSegment(text: w28, start: 0, end: 1), TranscriptSegment(text: "x", start: 1, end: 1.2)]
+        XCTAssertEqual(TranscriptGrouping.phrases(from: words2).map(\.text), [w28 + " x"])
+    }
+
     func testPhrasesJoinLatinWordsWithSpaceAndDropBlanks() {
         let words = [
             TranscriptSegment(text: "Hello", start: 0, end: 0.3),
@@ -141,6 +173,16 @@ final class TranscriptionTests: XCTestCase {
     }
 
     // MARK: 実行(偽の認識器)
+
+    func testWriteWAVStopsWhenCancelled() throws {
+        // 抽出ループはチャンクごとにキャンセルを見て、CancellationError で止まる。
+        let c = try audioClip(start: 0, duration: 1)
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("tr-\(UUID().uuidString).wav")
+        defer { try? FileManager.default.removeItem(at: url) }
+        XCTAssertThrowsError(try TranscriptionAudio.writeWAV(clip: c, to: url, isCancelled: { true })) { e in
+            XCTAssertTrue(e is CancellationError, "CancellationError のはず: \(e)")
+        }
+    }
 
     func testWriteWAVIsMonoAndRightLength() throws {
         let c = try audioClip(start: 0, duration: 1)
