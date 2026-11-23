@@ -195,4 +195,23 @@ final class VisualizerTests: XCTestCase {
         louder.tracks[0].clips[1].volume = 0.5
         XCTAssertNotEqual(RenderAssets.mixKey(a), RenderAssets.mixKey(louder), "音量の変更では作り直す")
     }
+
+    /// ミックスの指紋は、実際のミックスが平らにして使う複合・シーンの中身も見ること
+    /// (最上位しか見ておらず、中身の変更で古い解析が再利用されていた不具合の回帰)。
+    func testMixKeySeesInsideCompoundsAndScenes() {
+        var inner = Clip(); inner.id = "in"; inner.type = .audio; inner.src = "/x.wav"; inner.start = 0; inner.duration = 1; inner.volume = 1
+        var innerTrack = Track(); innerTrack.clips = [inner]
+        var comp = Clip(); comp.id = "comp"; comp.type = .compound; comp.start = 0; comp.duration = 1; comp.tracks = [innerTrack]
+        var p = Project.new(); p.tracks[0].clips = [comp]
+        let k1 = RenderAssets.mixKey(p)
+        var q = p; q.tracks[0].clips[0].tracks?[0].clips[0].volume = 0.5
+        XCTAssertNotEqual(RenderAssets.mixKey(q), k1, "複合の中の音量変更で作り直す")
+
+        var sceneClip = Clip(); sceneClip.id = "sc"; sceneClip.type = .scene; sceneClip.sceneId = "s1"; sceneClip.start = 0; sceneClip.duration = 1
+        var r = Project.new(); r.tracks[0].clips = [sceneClip]
+        r.scenes = [SceneDefinition(id: "s1", name: "", tracks: [innerTrack])]
+        let k2 = RenderAssets.mixKey(r)
+        var r2 = r; r2.scenes[0].tracks[0].clips[0].volume = 0.25
+        XCTAssertNotEqual(RenderAssets.mixKey(r2), k2, "シーンの中の音量変更で作り直す")
+    }
 }

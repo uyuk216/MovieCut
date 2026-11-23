@@ -319,16 +319,13 @@ public final class RenderAssets {
         }
     }
 
-    /// 音に関わる部分の指紋(音のあるクリップと、トラックが鳴るかどうか)。映像・文字だけの変更では変わらない。
+    /// 音に関わる部分の指紋。実際のミックス(`AudioMixer`)が使う平坦化した音のクリップと、
+    /// レイヤーから掛かるゲインで作る(複合・シーンの中身の変更でも変わる)。映像・文字だけの変更では変わらない。
     static func mixKey(_ project: Project) -> String {
-        // volume / pan はトラックミキサーの設定。標準のときは nil にして書かない(設定が無いプロジェクトの指紋は従来と同じ)
-        struct AudioTrack: Encodable { let audible: Bool; let volume: Double?; let pan: Double?; let clips: [Clip] }
-        let parts = project.tracks.map { tr in
-            AudioTrack(audible: project.isAudible(tr),
-                       volume: tr.trackVolumeOrDefault == 1 ? nil : tr.trackVolumeOrDefault,
-                       pan: tr.trackPanOrDefault == 0 ? nil : tr.trackPanOrDefault,
-                       clips: tr.clips.filter { [ClipType.audio, .voice, .video].contains($0.type) })
-        }
+        struct Entry: Encodable { let clip: Clip; let l: Float; let r: Float }
+        let parts = CompoundEditing.audibleClipsWithTrackMix(in: project)
+            .filter { [ClipType.audio, .voice, .video].contains($0.clip.type) }
+            .map { Entry(clip: $0.clip, l: $0.mix.l, r: $0.mix.r) }
         let enc = JSONEncoder()
         enc.outputFormatting = [.sortedKeys]
         guard let data = try? enc.encode(parts) else { return UUID().uuidString }
