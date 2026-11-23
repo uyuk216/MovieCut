@@ -44,7 +44,8 @@ public enum PreviewPicking {
     public static func stack(in project: Project, at t: Double) -> [String] {
         project.tracks.filter { !$0.isHidden }.flatMap { tr in
             tr.clips.filter {
-                $0.duration > 0 && t >= $0.start - ClipEditing.timeEpsilon && t < $0.start + $0.duration - ClipEditing.timeEpsilon
+                !$0.isDisabled
+                    && $0.duration > 0 && t >= $0.start - ClipEditing.timeEpsilon && t < $0.start + $0.duration - ClipEditing.timeEpsilon
                     && ($0.type == .image || $0.type == .video || $0.type == .text || $0.type == .compound || $0.type == .tachie || $0.type == .shape || $0.type == .visualizer)
             }.map(\.id)
         }

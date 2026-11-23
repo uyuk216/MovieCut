@@ -43,8 +43,9 @@ final class DragNeighborFramesTests: XCTestCase {
     func testTimesSnapToTheFrameGrid() throws {
         let r = FrameRate.from(30)
         let t = try XCTUnwrap(DragNeighborFrames.times(start: 2.01, end: 4.0, rate: r))
-        XCTAssertEqual(t.headAfter, 2.0, accuracy: 1e-9, "格子へ")
-        XCTAssertEqual(try XCTUnwrap(t.headBefore), 2.0 - 1.0 / 30, accuracy: 1e-9)
+        // 2.01 秒開始のクリップが映る最初のコマは 61/30(2.0 ではまだ映っていない)
+        XCTAssertEqual(t.headAfter, 2.0 + 1.0 / 30, accuracy: 1e-9, "映る最初のコマへ")
+        XCTAssertEqual(try XCTUnwrap(t.headBefore), 2.0, accuracy: 1e-9)
         XCTAssertEqual(t.tailBefore, 4.0 - 1.0 / 30, accuracy: 1e-9, "最後のコマ")
         XCTAssertEqual(t.tailAfter, 4.0, accuracy: 1e-9, "終わりの次のコマ")
         XCTAssertEqual(t.ordered.count, 4)

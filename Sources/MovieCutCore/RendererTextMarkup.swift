@@ -282,8 +282,8 @@ extension Renderer {
                         if let rotated = combined.copy(using: &t) { path = rotated }
                     }
                     if path.isEmpty {
-                        // 輪郭の無い文字(絵文字など)は CoreText で描く
-                        let segText = String(plainChars[line.startIndex + gi..<line.startIndex + gj])
+                        // 輪郭の無い文字(絵文字など)は CoreText で描く。見えている文字だけ(未表示の分まで描かない)
+                        let segText = String((gi..<gj).filter { visibleInLine[$0] }.map { plainChars[line.startIndex + $0] })
                         if segText.unicodeScalars.contains(where: { $0.properties.isEmojiPresentation }) {
                             Renderer.drawColorGlyphs(segText, f: gFont, spacing: st.letterSpacing ?? (style?.letterSpacingOrDefault ?? 0),
                                                      italic: st.italic ?? (style?.italicOrDefault ?? false),

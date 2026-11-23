@@ -28,7 +28,9 @@ public enum DragNeighborFrames {
     public static func times(start: Double, end: Double, rate: FrameRate) -> Times? {
         guard start.isFinite, end.isFinite, end > start else { return nil }
         let d = rate.frameDuration
-        let s = rate.snapped(max(0, start))
+        // 頭は「クリップが映る最初のコマ」。格子へ切り下げると開始前のコマになり、クリップが映っていない絵になる
+        let s0 = rate.snapped(max(0, start))
+        let s = s0 >= max(0, start) - 1e-9 ? s0 : s0 + d
         let after = rate.snapped(end)
         let lastIndex = max(rate.frameIndex(at: s), rate.frameIndex(at: end - 1e-6))
         let last = rate.time(ofFrame: lastIndex)

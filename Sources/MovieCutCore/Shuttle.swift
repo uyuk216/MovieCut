@@ -25,7 +25,9 @@ public struct ShuttleState: Equatable {
 
     /// step が正なら L 側(速く)、負なら J 側(遅く・逆へ)に一段動かす。段の外には出ない。
     public func moved(by step: Int) -> ShuttleState {
-        ShuttleState(index: min(max(index + step, 0), Self.ladder.count - 1))
+        // 先に step を残りの幅で丸める(index + step の加算が溢れないように)
+        let clamped = min(max(step, -index), Self.ladder.count - 1 - index)
+        return ShuttleState(index: index + clamped)
     }
 
     /// K: 停止。

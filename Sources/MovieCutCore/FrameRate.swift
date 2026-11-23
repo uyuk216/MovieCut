@@ -86,20 +86,27 @@ public struct FrameRate: Equatable, Hashable, Sendable {
     /// 長さ(秒)に必要なコマ数 = ceil(長さ × fps)。3.7×60=222.00000000000003 で 1 コマ増えないよう少し引く。
     public func frameCount(duration: Double) -> Int {
         guard duration > 0, duration.isFinite else { return 0 }
-        return Int(ceil(duration * value - 1e-6))
+        let n = ceil(duration * value - 1e-6)
+        return n >= Double(Int.max) ? Int.max : Int(n)
     }
 
     /// 時刻 t を含むコマの番号(コマの先頭に丸める。誤差を見込んで少し足す)。
-    public func frameIndex(at t: Double) -> Int { Int(floor(max(0, t) * value + 1e-6)) }
+    public func frameIndex(at t: Double) -> Int {
+        guard t.isFinite else { return 0 }
+        let n = floor(max(0, t) * value + 1e-6)
+        return n >= Double(Int.max) ? Int.max : Int(n)
+    }
 
     /// 時刻 t をコマの境目にそろえた時刻(floor)。
     public func snapped(_ t: Double) -> Double { time(ofFrame: frameIndex(at: t)) }
 
     /// コマ送り: frames コマ動かした時刻(0 未満にはならない)。コマの途中にいるときは、進むなら次の境目、戻るなら今の境目から数える。
     public func stepped(from t: Double, frames: Int) -> Double {
+        guard t.isFinite else { return 0 }
         let pos = max(0, t) * value
-        let base = frames < 0 ? Int(ceil(pos - 1e-6)) : Int(floor(pos + 1e-6))
-        return time(ofFrame: max(0, base + frames))
+        let base = frames < 0 ? ceil(pos - 1e-6) : floor(pos + 1e-6)
+        let target = base + Double(frames)
+        return time(ofFrame: target >= Double(Int.max) ? Int.max : Int(max(0, target)))
     }
 
     /// 1 コマの長さ(ミリ秒)の表記。

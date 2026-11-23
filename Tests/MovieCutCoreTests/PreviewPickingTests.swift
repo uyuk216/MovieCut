@@ -99,3 +99,19 @@ final class PreviewPickingTests: XCTestCase {
         XCTAssertNil(PreviewPicking.next(after: "x", in: []))
     }
 }
+
+
+// MARK: - バグ確認 第2部 C13: 無効化したクリップは選べない
+
+final class PreviewPickingDisabledTests: XCTestCase {
+    func testStackExcludesDisabledClips() {
+        func img(_ id: String, disabled: Bool) -> Clip {
+            var c = Clip(); c.id = id; c.type = .image; c.start = 0; c.duration = 4
+            if disabled { c.disabled = true }
+            return c
+        }
+        var tr = Track(name: "L"); tr.clips = [img("on", disabled: false), img("off", disabled: true)]
+        var p = Project(); p.tracks = [tr]
+        XCTAssertEqual(PreviewPicking.stack(in: p, at: 1), ["on"])
+    }
+}

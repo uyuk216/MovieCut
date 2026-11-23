@@ -218,3 +218,17 @@ final class EditSupportCoreTests: XCTestCase {
         try file.write(from: buf)
     }
 }
+
+
+// MARK: - バグ確認 第2部 C13: レベル包絡の不整合な入力
+
+final class PlaybackLevelEnvelopeSafetyTests: XCTestCase {
+    func testMismatchedArraysAndInfiniteTimeDoNotCrash() {
+        let env = PlaybackLevelEnvelope(peaks: [1], energies: [])
+        XCTAssertEqual(env.momentaryLoudness(at: 0), -.infinity)
+        XCTAssertNil(env.hopIndex(at: .infinity))
+        let ok = PlaybackLevelEnvelope(peaks: [0.5, 0.5], energies: [0.25, 0.25])
+        XCTAssertEqual(ok.hopIndex(at: 0), 0)
+        XCTAssertNil(ok.hopIndex(at: .infinity))
+    }
+}

@@ -45,9 +45,11 @@ public struct PlaybackLevelEnvelope: Equatable, Sendable {
 
     /// 時刻 t の区切り番号。範囲外は nil。
     public func hopIndex(at t: Double) -> Int? {
-        guard t >= 0, !peaks.isEmpty else { return nil }
+        // peaks と energies の長さが食い違う作り方をされても、短い方に合わせる(ラウドネス計算が範囲外を読まない)
+        let count = min(peaks.count, energies.count)
+        guard t >= 0, t.isFinite, count > 0 else { return nil }
         let i = Int(t / Self.hopDuration)
-        return peaks.indices.contains(i) ? i : nil
+        return i < count ? i : nil
     }
 
     /// 時刻 t のピーク(dBFS)。範囲外・無音は −∞。

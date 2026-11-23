@@ -200,3 +200,14 @@ final class PreviewTierTests: XCTestCase {
         XCTAssertEqual(PreviewTier.minimal.effectiveTier(for: .video), .minimal)
     }
 }
+
+
+// MARK: - バグ確認 第2部 C13: プレビュー階級の巨大な寸法
+
+final class PreviewTierHugeSizeTests: XCTestCase {
+    func testEffectiveSizeSurvivesHugeDimensions() {
+        let s = PreviewTier.full.effectiveSize(width: Int.max, height: 1)
+        XCTAssertEqual(s.width, Int.max)
+        XCTAssertEqual(s.height, 1)
+    }
+}

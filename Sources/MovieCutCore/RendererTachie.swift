@@ -9,7 +9,7 @@ extension Renderer {
     func activeVoices(at t: Double) -> [Clip] {
         var out: [Clip] = []
         for tr in project.tracks where !tr.isHidden {
-            for c in tr.clips where c.type == .voice && t >= c.start && t < c.start + c.duration { out.append(c) }
+            for c in tr.clips where c.type == .voice && !c.isDisabled && t >= c.start && t < c.start + c.duration { out.append(c) }
         }
         return out
     }

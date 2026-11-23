@@ -188,3 +188,17 @@ final class FrameRateAndOutputTests: XCTestCase {
         XCTAssertEqual(CMFormatDescriptionGetMediaSubType(fd[0]), kCMVideoCodecType_HEVC)
     }
 }
+
+
+// MARK: - バグ確認 第2部 C13: コマ計算の巨大な値
+
+final class FrameRateHugeValueTests: XCTestCase {
+    func testHugeValuesDoNotTrap() {
+        let r = FrameRate.from(60)
+        XCTAssertEqual(r.frameCount(duration: 1e18), Int.max)
+        XCTAssertEqual(r.frameIndex(at: .infinity), 0)
+        XCTAssertEqual(r.frameIndex(at: 1e18), Int.max)
+        XCTAssertEqual(r.stepped(from: .infinity, frames: 1), 0)
+        XCTAssertGreaterThan(r.stepped(from: 0, frames: 1), 0)
+    }
+}

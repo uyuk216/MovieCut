@@ -9,6 +9,11 @@ import CoreGraphics
 // 呼び出し側が原点をキャンバスへ移してから塗る。
 
 extension Renderer {
+    /// キャッシュ鍵用の色の表記(成分を 0〜255 に丸めたもの)。
+    func colorKey(_ col: CGColor) -> String {
+        (col.components ?? []).map { String(Int(($0 * 255).rounded())) }.joined(separator: ",")
+    }
+
     /// `line` の中にあるルビを描く。`segments` は行頭から数えた Character 単位の (開始, 終わり, 読み)。
     /// `lineLeftX` は行の左端(キャンバス座標・y 下向き)、`baseline` は親文字の基準線の y。
     func drawRubyReadings(_ segments: [(start: Int, end: Int, reading: String)], line: String,
@@ -40,7 +45,7 @@ extension Renderer {
             if cacheable {
                 let ix = floor(lineLeftX), iy = floor(rBaseline)
                 let fx = lineLeftX - ix, fy = rBaseline - iy
-                let key = "R|\(fontName)|\(rsize)|\(seg.reading)|\((x1 - x0).rounded())|\(fx)|\(fy)|\(bold)|\(lineStyle?.lineKey ?? "")"
+                let key = "R|\(fontName)|\(rsize)|\(seg.reading)|\((x1 - x0).rounded())|\(x0)|\(fx)|\(fy)|\(bold)|\(lineStyle?.lineKey ?? "")|\(colorKey(fill))|\(colorKey(outline))"
                 let build = { Renderer.rasterizeLine(item, rf, size: rsize, fill: fill, outline: outline, fx: fx, fy: fy, style: lineStyle) }
                 if let bm = TextCache.bitmap(key: key, build: build) {
                     drawCG(ctx, bm.image, CGRect(x: ix + bm.x, y: iy + bm.y, width: Double(bm.image.width) / bm.k, height: Double(bm.image.height) / bm.k))

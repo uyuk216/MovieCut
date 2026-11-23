@@ -45,3 +45,15 @@ final class ShuttleTests: XCTestCase {
         XCTAssertEqual(ShuttleState.ladder[ShuttleState.normalIndex], 1)
     }
 }
+
+
+// MARK: - バグ確認 第2部 C13: シャトルの極端な移動量
+
+final class ShuttleOverflowTests: XCTestCase {
+    func testExtremeStepsClampInsteadOfOverflowing() {
+        let top = ShuttleState.normal.moved(by: Int.max)
+        XCTAssertEqual(top.speed, ShuttleState.ladder.last)
+        let bottom = top.moved(by: Int.min)
+        XCTAssertEqual(bottom.speed, ShuttleState.ladder.first)
+    }
+}

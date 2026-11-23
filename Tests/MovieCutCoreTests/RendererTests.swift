@@ -381,3 +381,33 @@ final class RendererTests: XCTestCase {
         XCTAssertEqual(d[2], 255); XCTAssertEqual(d[1], 0)  // BGRA の R
     }
 }
+
+
+// MARK: - バグ確認 第2部 C13: 混在行の絵文字
+
+final class RendererEmojiMixedLineTests: XCTestCase {
+    func hasEmojiColoredPixel(_ p: Project) throws -> Bool {
+        let img = try XCTUnwrap(Renderer(project: p, assets: RenderAssets()).renderImage(t: 1))
+        var d = [UInt8](repeating: 0, count: img.width * img.height * 4)
+        let c = CGContext(data: &d, width: img.width, height: img.height, bitsPerComponent: 8, bytesPerRow: img.width * 4,
+                          space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        c.draw(img, in: CGRect(x: 0, y: 0, width: img.width, height: img.height))
+        // 絵文字の黄色: R と G が高く、B が低い(白文字・黒背景と区別できる)
+        for i in stride(from: 0, to: d.count, by: 4) where Int(d[i]) > 150 && Int(d[i + 1]) > 100 && Int(d[i + 2]) < 120 { return true }
+        return false
+    }
+
+    func project(_ text: String) -> Project {
+        var c = Clip(); c.id = "t"; c.type = .text; c.text = text; c.start = 0; c.duration = 4
+        c.fontSize = 90; c.color = "#ffffff"; c.x = 0.5; c.y = 0.5
+        var p = Project(); p.width = 400; p.height = 200; p.bg = "#000000"; p.characters = []
+        var tr = Track(name: "L"); tr.clips = [c]
+        p.tracks = [tr]
+        return p
+    }
+
+    func testEmojiInMixedLineIsDrawn() throws {
+        XCTAssertTrue(try hasEmojiColoredPixel(project("A\u{1F600}")), "通常文字と混ざった絵文字も描かれる")
+        XCTAssertFalse(try hasEmojiColoredPixel(project("AB")), "絵文字が無ければ黄色い画素は無い")
+    }
+}

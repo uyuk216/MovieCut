@@ -357,3 +357,54 @@ final class CompoundUngroupWindowAndMixTests: XCTestCase {
         }
     }
 }
+
+
+// MARK: - バグ確認 第2部 C13: 複合クリップの反転が高速経路でも効く
+
+final class CompoundFlipFastPathTests: XCTestCase {
+    let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("compound-flip-\(UUID().uuidString)")
+    override func setUpWithError() throws { try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true) }
+    override func tearDownWithError() throws { try? FileManager.default.removeItem(at: tmp) }
+
+    /// 左半分が赤・右半分が青の 80×80 PNG
+    func halfPNG() throws -> String {
+        let c = CGContext(data: nil, width: 80, height: 80, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        c.setFillColor(CGColor(srgbRed: 1, green: 0, blue: 0, alpha: 1)); c.fill(CGRect(x: 0, y: 0, width: 40, height: 80))
+        c.setFillColor(CGColor(srgbRed: 0, green: 0, blue: 1, alpha: 1)); c.fill(CGRect(x: 40, y: 0, width: 40, height: 80))
+        let url = tmp.appendingPathComponent("half.png")
+        let dest = try XCTUnwrap(CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil))
+        CGImageDestinationAddImage(dest, try XCTUnwrap(c.makeImage()), nil)
+        XCTAssertTrue(CGImageDestinationFinalize(dest))
+        return url.path
+    }
+
+    func project(_ path: String, flip: Bool) -> Project {
+        var img = Clip(); img.id = "i"; img.type = .image; img.src = path; img.start = 0; img.duration = 4
+        img.x = 0.5; img.y = 0.5; img.scale = 1
+        var inner = Track(name: "in"); inner.clips = [img]
+        var comp = Clip(); comp.id = "comp"; comp.type = .compound; comp.start = 0; comp.duration = 4; comp.tracks = [inner]
+        if flip { comp.flipH = true }
+        var p = Project(); p.width = 80; p.height = 80; p.characters = []
+        var tr = Track(name: "L"); tr.clips = [comp]
+        p.tracks = [tr]
+        return p
+    }
+
+    func leftPixel(_ p: Project) throws -> [Int] {
+        let img = try XCTUnwrap(Renderer(project: p, assets: RenderAssets()).renderImage(t: 1))
+        var d = [UInt8](repeating: 0, count: img.width * img.height * 4)
+        let c = CGContext(data: &d, width: img.width, height: img.height, bitsPerComponent: 8, bytesPerRow: img.width * 4,
+                          space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        c.draw(img, in: CGRect(x: 0, y: 0, width: img.width, height: img.height))
+        let i = (40 * img.width + 10) * 4
+        return [Int(d[i]), Int(d[i + 1]), Int(d[i + 2])]
+    }
+
+    func testCompoundFlipHApplies() throws {
+        let path = try halfPNG()
+        let plain = try leftPixel(project(path, flip: false))
+        XCTAssertGreaterThan(plain[0], 150); XCTAssertLessThan(plain[2], 100)   // 左は赤
+        let flipped = try leftPixel(project(path, flip: true))
+        XCTAssertGreaterThan(flipped[2], 150); XCTAssertLessThan(flipped[0], 100)   // 反転で左は青
+    }
+}

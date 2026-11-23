@@ -128,7 +128,7 @@ extension Renderer {
         let lineStyle: TextStyle? = (style?.affectsLine ?? false) ? style : nil
         let build = { Renderer.rasterizeLine(line, f, size: size, fill: fillC, outline: outC, fx: fx, fy: fy, style: lineStyle, k: k) }
         var key = "V|\(font)|\(size)|\(text)|\(visible ?? -1)|\(color)|\(outline)|\(fx)|\(fy)|\(lineHeight)|\(align.rawValue)|\(spacing)|\(style?.boldOrDefault ?? true)|\(lineStyle?.lineKey ?? "")"
-        if vertical, !markupRubies.isEmpty { key += "|RB" + markupRubies.map { "\($0.start),\($0.end),\($0.reading),\($0.sizeRatio)" }.joined(separator: ";") }
+        if vertical, !markupRubies.isEmpty { key += "|RB" + markupRubies.map { "\($0.start),\($0.end),\($0.reading),\($0.sizeRatio),\($0.fontName ?? "-"),\($0.bold == nil ? "-" : ($0.bold! ? "1" : "0"))" }.joined(separator: ";") }
         if let bm = cacheable ? TextCache.bitmap(key: key, build: build) : build() {
             drawCG(ctx, bm.image, CGRect(x: ix + bm.x, y: iy + bm.y, width: Double(bm.image.width) / bm.k, height: Double(bm.image.height) / bm.k))
         }

@@ -119,3 +119,66 @@ final class AdjustmentLayerTests: XCTestCase {
         XCTAssertFalse(Animation.keys(for: a).contains("x"), "位置や大きさは持たない")
     }
 }
+
+
+// MARK: - バグ確認 第2部 C13: カメラ併用時の調整レイヤー
+
+final class AdjustmentWithCameraTests: XCTestCase {
+    struct Px {
+        let w: Int
+        var d: [UInt8]
+        func rgb(_ x: Int, _ y: Int) -> [Int] { let i = (y * w + x) * 4; return [Int(d[i]), Int(d[i + 1]), Int(d[i + 2])] }
+    }
+    func pixels(_ img: CGImage) -> Px {
+        var d = [UInt8](repeating: 0, count: img.width * img.height * 4)
+        let c = CGContext(data: &d, width: img.width, height: img.height, bitsPerComponent: 8, bytesPerRow: img.width * 4,
+                          space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        c.draw(img, in: CGRect(x: 0, y: 0, width: img.width, height: img.height))
+        return Px(w: img.width, d: d)
+    }
+    let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("adjust-cam-\(UUID().uuidString)")
+    override func setUpWithError() throws { try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true) }
+    override func tearDownWithError() throws { try? FileManager.default.removeItem(at: tmp) }
+
+    /// 左半分が赤・右半分が黒の 40×40 PNG
+    func halfPNG() throws -> String {
+        let c = CGContext(data: nil, width: 40, height: 40, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        c.setFillColor(CGColor(srgbRed: 1, green: 0, blue: 0, alpha: 1)); c.fill(CGRect(x: 0, y: 0, width: 20, height: 40))
+        c.setFillColor(CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 1)); c.fill(CGRect(x: 20, y: 0, width: 20, height: 40))
+        let url = tmp.appendingPathComponent("half.png")
+        let dest = try XCTUnwrap(CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil))
+        CGImageDestinationAddImage(dest, try XCTUnwrap(c.makeImage()), nil)
+        XCTAssertTrue(CGImageDestinationFinalize(dest))
+        return url.path
+    }
+
+    func project(_ path: String, withAdjustment: Bool) -> Project {
+        var img = Clip(); img.id = "i"; img.type = .image; img.src = path; img.start = 0; img.duration = 4
+        img.x = 0.5; img.y = 0.5; img.scale = 1
+        var p = Project(); p.width = 200; p.height = 200; p.bg = "#000000"; p.characters = []
+        var cam = CameraSettings(); cam.x = 0.75
+        p.camera = cam
+        var base = Track(name: "素材"); base.clips = [img]
+        p.tracks = [base]
+        if withAdjustment {
+            var a = Clip(); a.id = "a"; a.type = .adjustment; a.start = 0; a.duration = 4; a.effects = [Effect(.mono)]
+            var top = Track(name: "調整"); top.clips = [a]
+            p.tracks = [base, top]
+        }
+        return p
+    }
+
+    /// 中段の行で、明るい画素が終わる x(二値の境界)
+    func boundary(_ px: Px) -> Int {
+        var last = -1
+        for x in 0..<px.w where px.rgb(x, 100)[0] > 40 { last = x }
+        return last
+    }
+
+    func testAdjustmentDoesNotMoveThePictureUnderCamera() throws {
+        let path = try halfPNG()
+        let plain = pixels(try XCTUnwrap(Renderer(project: project(path, withAdjustment: false), assets: RenderAssets()).renderImage(t: 1)))
+        let adjusted = pixels(try XCTUnwrap(Renderer(project: project(path, withAdjustment: true), assets: RenderAssets()).renderImage(t: 1)))
+        XCTAssertEqual(boundary(adjusted), boundary(plain), accuracy: 2, "調整レイヤーを足しても、カット位置は変わらない(スナップショットの丸めで 2px まで許容)")
+    }
+}

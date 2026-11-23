@@ -296,7 +296,7 @@ public struct Renderer {
     func drawClipStack(_ c: Clip, pose: ClipPose, mask: TransitionMask?, t: Double, ctx: CGContext, W: Double, H: Double, layerSourceOver: Bool) {
         // 複合クリップで、キャンバスいっぱいに・効果なし・不透明度 100% なら、中身を親の画面に直接描く(中間の画像を作らない)。
         // 直接描くので、まとめる前のクリップを描いたときと画素が完全に一致する
-        if (c.type == .compound || c.type == .scene), mask == nil, c.mask == nil, c.objectMask == nil, c.hslMask == nil, c.blendMode == nil, pose.isFullCanvasCompound, !c.hasActiveEffects, !c.hasActiveWarp(at: t - c.start), !c.hasActivePluginEffect(effectIDs: pluginEffectIDs), pose.pixelate < 2, pose.feather <= 0.01, let child = nestedRenderer(c) {
+        if (c.type == .compound || c.type == .scene), mask == nil, c.mask == nil, c.objectMask == nil, c.hslMask == nil, c.blendMode == nil, pose.isFullCanvasCompound, (c.crop?.isEmpty ?? true), !c.flipHOrDefault, !c.flipVOrDefault, pose.skew == 0, !c.hasActiveEffects, !c.hasActiveWarp(at: t - c.start), !c.hasActivePluginEffect(effectIDs: pluginEffectIDs), pose.pixelate < 2, pose.feather <= 0.01, let child = nestedRenderer(c) {
             ctx.saveGState()
             child.drawFrame(t: t - c.start + c.offset, into: ctx)
             ctx.restoreGState()
@@ -569,7 +569,8 @@ public struct Renderer {
         guard let nFrame = morphNeighborFrame(n, edge: st.isIn ? .in : .out) else { return raw }
         let (a, b) = st.isIn ? (nFrame, raw) : (raw, nFrame)
         // フロー(境界ペアでキャッシュ。相手→自分の向きで A→B)
-        let key = "morph|\(st.isIn ? n.id : c.id)|\(st.isIn ? c.id : n.id)"
+        // 相手のコマは境界で固定だが、自分のコマ(raw)は時刻で変わる。時刻と素材位置を鍵に含めないと、最初のフローを別のコマ対に使い回す
+        let key = "morph|\(st.isIn ? n.id : c.id)|\(st.isIn ? c.id : n.id)|\(Int((t * 1000).rounded()))|\(c.offset)|\(n.offset)"
         let flow = assets.flowCache.flow(forKey: key) { OpticalFlowInterpolator.flow(from: a, to: b) }
         // 顔(位置合わせ優先のときだけ検出。キャッシュ経由)
         let tr = st.isIn ? c.transitionIn : c.transitionOut
@@ -992,7 +993,8 @@ public struct Renderer {
 
     /// 顔の検出枠(0〜1・左上原点)。鍵は クリップ・時刻(ms)・配置・素材・画像の大きさ。配置や素材が変われば別の鍵になる。
     func faceRects(for c: Clip, t: Double, pose: ClipPose, image: CGImage) -> [CGRect] {
-        let key = "\(c.id)|\(c.src ?? "")|\(Int((t * 1000).rounded()))|\(pose)|\(image.width)x\(image.height)"
+        // offset・速度・逆再生・反転・切り抜きが変わると、同じ時刻でも映るコマが変わる。鍵に含めないと古い検出枠が残る
+        let key = "\(c.id)|\(c.src ?? "")|\(Int((t * 1000).rounded()))|\(pose)|\(image.width)x\(image.height)|\(c.offset)|\(String(describing: c.speed))|\(c.effectiveReverse)|\(c.flipHOrDefault)|\(c.flipVOrDefault)|\(String(describing: c.crop))"
         return FaceDetectionCache.shared.rects(key: key, image: image)
     }
 
@@ -1003,7 +1005,7 @@ public struct Renderer {
         let dets: [(time: Double, faces: [CGRect])] = FaceTrack.sampleTimes(duration: c.duration).map { s in
             let at = c.start + s
             let pose = ClipPose(c, at: at)
-            let key = "track|\(c.id)|\(c.src ?? "")|\(Int((s * 1000).rounded()))|\(pose)|\(Int(W))x\(Int(H))"
+            let key = "track|\(c.id)|\(c.src ?? "")|\(Int((s * 1000).rounded()))|\(pose)|\(Int(W))x\(Int(H))|\(c.offset)|\(String(describing: c.speed))|\(c.effectiveReverse)|\(c.flipHOrDefault)|\(c.flipVOrDefault)|\(String(describing: c.crop))"
             let normalized = FaceDetectionCache.shared.rects(key: key) { () -> CGImage? in
                 guard let ctx = Renderer.makeContext(width: Int(W), height: Int(H)) else { return nil }
                 ctx.translateBy(x: 0, y: CGFloat(H))
@@ -1030,6 +1032,10 @@ public struct Renderer {
         let ci = EffectPipeline.apply(CIImage(cgImage: snap), effects: fx, bounds: canvas, scale: resScale, pluginProviders: pluginEffectProviders)
         guard let out = EffectPipeline.makeImage(ci, from: canvas, context: ciCtx) else { return }
         ctx.saveGState()
+        // スナップショットは画面の画素そのもの。カメラ変換が掛かったまま描き戻すと、変換が二重に掛かるので逆変換で打ち消す
+        if let cam = project.camera, !cam.state(at: t).isIdentity {
+            ctx.concatenate(CameraMath.transform(state: cam.state(at: t), width: W, height: H).inverted())
+        }
         ctx.setAlpha(CGFloat(opacity))
         drawCG(ctx, out, canvas)
         ctx.restoreGState()
@@ -1174,8 +1180,26 @@ public struct Renderer {
             case .left: ox = x - blockW / 2
             case .right: ox = x + blockW / 2 - full[i].width
             }
+            // 輪郭に含まれない絵文字(カラー字形)を、本来の位置へ CoreText で描く(混在行では輪郭だけだと絵文字が抜ける)
+            let drawEmojiRuns: () -> Void = {
+                guard shown.unicodeScalars.contains(where: { $0.properties.isEmojiPresentation }) else { return }
+                var prefix = ""
+                for ch in shown {
+                    if ch.unicodeScalars.contains(where: { $0.properties.isEmojiPresentation }) {
+                        let w = prefix.isEmpty ? 0 : TextCache.layout(f, font: font, line: prefix, spacing: spacing, italic: italic).width
+                        Renderer.drawColorGlyphs(String(ch), f: f, spacing: spacing, italic: italic, x: ox + w, baseline: baseline, ctx: ctx)
+                    }
+                    prefix.append(ch)
+                }
+            }
             if lineStyled, let st = style {
-                guard !line.path.isEmpty else { continue }
+                if line.path.isEmpty {
+                    // 絵文字だけの行は輪郭が無い。装飾は付かないが、絵文字そのものは描く
+                    if shown.unicodeScalars.contains(where: { $0.properties.isEmojiPresentation }) {
+                        Renderer.drawColorGlyphs(shown, f: f, spacing: spacing, italic: italic, x: ox, baseline: baseline, ctx: ctx)
+                    }
+                    continue
+                }
                 let ix = floor(ox), iy = floor(baseline)
                 let fx = ox - ix, fy = baseline - iy
                 let k = cacheable ? 1.0 : min(4, max(1, Double(hypot(ctx.ctm.a, ctx.ctm.b))))
@@ -1184,6 +1208,7 @@ public struct Renderer {
                 if let bm = cacheable ? TextCache.bitmap(key: key, build: build) : build() {
                     drawCG(ctx, bm.image, CGRect(x: ix + bm.x, y: iy + bm.y, width: Double(bm.image.width) / bm.k, height: Double(bm.image.height) / bm.k))
                 }
+                drawEmojiRuns()
                 continue
             }
             if cacheable, !line.path.isEmpty {
@@ -1192,6 +1217,7 @@ public struct Renderer {
                 let key = "\(font)|\(size)|\(shown)|\(color)|\(outline)|\(fx)|\(fy)"
                 if let bm = TextCache.bitmap(key: key, build: { Renderer.rasterizeLine(line, f, size: size, fill: fillC, outline: outC, fx: fx, fy: fy) }) {
                     drawCG(ctx, bm.image, CGRect(x: ix + bm.x, y: iy + bm.y, width: Double(bm.image.width), height: Double(bm.image.height)))
+                    drawEmojiRuns()
                     continue
                 }
             }
@@ -1204,6 +1230,7 @@ public struct Renderer {
             ctx.translateBy(x: CGFloat(ox), y: CGFloat(baseline))
             Renderer.paintLine(line, f, size: size, fill: fillC, outline: outC, ctx: ctx, style: style)
             ctx.restoreGState()
+            drawEmojiRuns()
         }
         // ルビ: 行を全部描いたあとに、読みを親文字の上へ重ねる(見えている範囲の分だけ)
         if !resolvedRuby.isEmpty {

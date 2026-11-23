@@ -621,3 +621,42 @@ final class TachieTests: XCTestCase {
         }
     }
 }
+
+
+// MARK: - バグ確認 第2部 C13: 無効化したボイスは立ち絵を動かさない
+
+final class TachieDisabledVoiceTests: XCTestCase {
+    let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("tachie-disabled-\(UUID().uuidString)")
+    override func setUpWithError() throws { try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true) }
+    override func tearDownWithError() throws { try? FileManager.default.removeItem(at: tmp) }
+
+    func png() throws -> String {
+        let c = CGContext(data: nil, width: 40, height: 40, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        c.setFillColor(CGColor(srgbRed: 0.9, green: 0.8, blue: 0.7, alpha: 1)); c.fill(CGRect(x: 0, y: 0, width: 40, height: 40))
+        let url = tmp.appendingPathComponent("face.png")
+        let dest = try XCTUnwrap(CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil))
+        CGImageDestinationAddImage(dest, try XCTUnwrap(c.makeImage()), nil)
+        XCTAssertTrue(CGImageDestinationFinalize(dest))
+        return url.path
+    }
+
+    func project(voiceDisabled: Bool, face: String) -> (Project, Clip) {
+        var tachie = Tachie(name: "t1"); tachie.id = "t1"; tachie.imgClosed = face
+        var voice = Clip(); voice.id = "v"; voice.type = .voice; voice.start = 0; voice.duration = 4; voice.text = "こんにちは"
+        if voiceDisabled { voice.disabled = true }
+        var tc = Clip(); tc.id = "tc"; tc.type = .tachie; tc.tachieId = "t1"; tc.start = 0; tc.duration = 4
+        tc.mouthDrive = .all; tc.speakingOnly = true
+        var p = Project(); p.width = 200; p.height = 200; p.tachies = [tachie]
+        var tr = Track(name: "L"); tr.clips = [voice, tc]
+        p.tracks = [tr]
+        return (p, tc)
+    }
+
+    func testDisabledVoiceDoesNotShowSpeakingOnlyTachie() throws {
+        let face = try png()
+        let (p1, tc1) = project(voiceDisabled: true, face: face)
+        XCTAssertNil(Renderer(project: p1, assets: RenderAssets()).tachieFrame(tc1, t: 1, height: 100), "無効化した声では speakingOnly の立ち絵は出ない")
+        let (p2, tc2) = project(voiceDisabled: false, face: face)
+        XCTAssertNotNil(Renderer(project: p2, assets: RenderAssets()).tachieFrame(tc2, t: 1, height: 100), "有効な声では出る")
+    }
+}

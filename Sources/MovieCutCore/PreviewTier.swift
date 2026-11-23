@@ -45,8 +45,14 @@ public enum PreviewTier: String, Equatable, Sendable, CaseIterable {
 
     /// 実効描画サイズ(動画レイヤー用)。最小 1 ピクセルを保証する。
     public func effectiveSize(width: Int, height: Int) -> (width: Int, height: Int) {
-        (max(1, Int((Double(width) * resolutionScale).rounded())),
-         max(1, Int((Double(height) * resolutionScale).rounded())))
+        (scaledSize(width), scaledSize(height))
+    }
+
+    /// 寸法の換算(最小 1)。Int へ変える前に Double の範囲で丸める(巨大な寸法で落ちない)。
+    private func scaledSize(_ v: Int) -> Int {
+        let d = (Double(v) * resolutionScale).rounded()
+        guard d.isFinite, d > 1 else { return 1 }
+        return d >= Double(Int.max) ? Int.max : Int(d)
     }
 
     // MARK: - 判定
