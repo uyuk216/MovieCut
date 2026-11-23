@@ -51,7 +51,7 @@ public final class RealVoiceProvider: VoicevoxAccentProviding {
             url = try await voicevox.synthesize(text: text, speaker: character.speaker ?? 3, speed: character.speed, pitch: character.pitch, intonation: character.intonation, prePhonemeLength: character.prePhonemeLength, postPhonemeLength: character.postPhonemeLength, pauseLengthScale: character.pauseLengthScale, accentPhrases: accentPhrases)
             lock.withLock { _ = enginesUsed.insert("voicevox") }
             // あいうえお口パク用のモーラタイミングは、合成の返却を待たせないよう切り離して取得する(ベストエフォート)
-            scheduleVoicevoxSidecar(wavURL: url, text: text, character: character)
+            scheduleVoicevoxSidecar(wavURL: url, text: text, character: character, accentPhrases: accentPhrases)
         } else {
             url = try await aquestalk.synthesize(text: text, voice: character.voice, speed: character.speed)
             lock.withLock { _ = enginesUsed.insert(usingFallback ? "say" : "aquestalk") }
@@ -73,7 +73,7 @@ public final class RealVoiceProvider: VoicevoxAccentProviding {
 
     /// VOICEVOX のモーラタイミングをサイドカーへ保存する処理をスケジュールする(合成本体からは await しない)。
     /// 既に有効なサイドカーがあれば何もしない。無い・壊れている場合は取得し、.atomic で書く(壊れた既存ファイルは上書きして直す)。
-    private func scheduleVoicevoxSidecar(wavURL: URL, text: String, character: Character) {
+    private func scheduleVoicevoxSidecar(wavURL: URL, text: String, character: Character, accentPhrases: [VoicevoxAccentPhrase]? = nil) {
         let sidecar = VoicevoxMora.sidecarURL(forWav: wavURL.path)
         Self.sidecarLock.lock()
         guard Self.sidecarInFlight.insert(sidecar.path).inserted else { Self.sidecarLock.unlock(); return }
@@ -87,7 +87,7 @@ public final class RealVoiceProvider: VoicevoxAccentProviding {
                 Self.sidecarLock.lock(); Self.sidecarInFlight.remove(sidecar.path); Self.sidecarLock.unlock()
             }
             if let existing = try? Data(contentsOf: sidecar), VoicevoxMora.decodeSidecar(existing) != nil { return }
-            guard let segs = try? await client.moraTimeline(text: text, speaker: speaker, speed: speed, pitch: pitch, intonation: intonation, pre: pre, post: post, pause: pause),
+            guard let segs = try? await client.moraTimeline(text: text, speaker: speaker, speed: speed, pitch: pitch, intonation: intonation, pre: pre, post: post, pause: pause, accentPhrases: accentPhrases),
                   !segs.isEmpty, let data = VoicevoxMora.encodeSidecar(segs) else { return }
             try? data.write(to: sidecar, options: .atomic)
         }

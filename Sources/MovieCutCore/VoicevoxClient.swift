@@ -120,7 +120,7 @@ public struct VoicevoxClient {
 
     /// 読み取り専用: 同じ設定で /audio_query を 1 回だけ叩き、モーラの発音タイミングを返す(合成・キャッシュには触らない)。
     /// 設定の既定値は `synthesize` と同じ。
-    public func moraTimeline(text: String, speaker: Int, speed: Double? = nil, pitch: Double? = nil, intonation: Double? = nil, pre: Double? = nil, post: Double? = nil, pause: Double? = nil) async throws -> [TimedViseme] {
+    public func moraTimeline(text: String, speaker: Int, speed: Double? = nil, pitch: Double? = nil, intonation: Double? = nil, pre: Double? = nil, post: Double? = nil, pause: Double? = nil, accentPhrases: [VoicevoxAccentPhrase]? = nil) async throws -> [TimedViseme] {
         var qreq = URLRequest(url: try url("/audio_query?text=\(Self.encode(text))&speaker=\(speaker)"))
         qreq.httpMethod = "POST"
         let qdata = try await send(qreq, "audio_query")
@@ -131,6 +131,8 @@ public struct VoicevoxClient {
         query["prePhonemeLength"] = pre ?? Self.defaultPrePhonemeLength
         query["postPhonemeLength"] = post ?? Self.defaultPostPhonemeLength
         query["pauseLengthScale"] = pause ?? Self.defaultPauseLengthScale
+        // アクセントの手修正があるときは、合成と同じく差し替えてから数える(タイミングが音声とずれないように)
+        if let accentPhrases { query["accent_phrases"] = try VoicevoxAccent.jsonObject(from: accentPhrases) }
         return VoicevoxMora.parse(query)
     }
 }
