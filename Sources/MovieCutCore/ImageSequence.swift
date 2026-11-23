@@ -173,7 +173,7 @@ public enum ImageSequenceImporter {
         let base = PSDImporter.cacheKey(path: sequence.frames.map(\.path).joined(separator: "|"),
                                         modified: attrs?[.modificationDate] as? Date,
                                         size: (attrs?[.size] as? NSNumber)?.int64Value)
-        return base + "-\(sequence.frameCount)f-\(Int(ImageSequence.validFPS(fps)))fps"
+        return base + "-\(sequence.frameCount)f-\(ImageSequence.validFPS(fps))fps"
     }
 
     /// コマを 1 枚の画像として読む(読めなければ nil)。

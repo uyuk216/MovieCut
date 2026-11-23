@@ -32,7 +32,10 @@ public enum ClipListingExport {
     }
 
     public static func csvCell(_ s: String) -> String {
-        guard s.contains(where: { $0 == "," || $0 == "\"" || $0 == "\n" || $0 == "\r" }) else { return s }
+        // 改行の判定は unicodeScalars で見る("\r\n" は Character では1文字になり "\n" とも "\r" とも一致しない)
+        let needsQuote = s.contains(",") || s.contains("\"")
+            || s.unicodeScalars.contains { $0 == "\n" || $0 == "\r" }
+        guard needsQuote else { return s }
         return "\"" + s.replacingOccurrences(of: "\"", with: "\"\"") + "\""
     }
 }
