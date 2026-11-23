@@ -73,7 +73,7 @@ public enum MediaPackage {
             if fileManager.fileExists(atPath: dest.path) { try fileManager.removeItem(at: dest) }
             try fileManager.copyItem(atPath: c.from, toPath: dest.path)
         }
-        let file = folder.appendingPathComponent("\(projectName).mcpjc")
+        let file = folder.appendingPathComponent("\(projectName).\(ProjectFileExtension.current)")
         try plan.project.save(to: file)
         return file
     }

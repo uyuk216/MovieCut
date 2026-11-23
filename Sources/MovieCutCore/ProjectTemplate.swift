@@ -5,7 +5,7 @@ import Foundation
 /// キャラクター・レイヤー(トラック)・設定・マーカーを残す。文字スタイルはアプリ全体の設定(UserDefaults)なので中身には入らない。
 public enum ProjectTemplate {
     /// 保存に使う拡張子(プロジェクトと同じ形式)。
-    public static let fileExtension = "mcpjc"
+    public static let fileExtension = ProjectFileExtension.current
     /// Application Support/MovieCut の下のフォルダ名。
     public static let folderName = "Templates"
     /// 名前の最大の長さ(文字数)。

@@ -5,6 +5,11 @@ import XCTest
 final class ProjectTemplateTests: XCTestCase {
     private var dir: URL!
 
+    func testFileExtensionFollowsProjectFileExtensionAndIsMcpjc() {
+        XCTAssertEqual(ProjectTemplate.fileExtension, ProjectFileExtension.current)
+        XCTAssertEqual(ProjectTemplate.fileExtension, "mcpjc")
+    }
+
     override func setUpWithError() throws {
         dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("MovieCutTemplateTests-\(UUID().uuidString)", isDirectory: true)
