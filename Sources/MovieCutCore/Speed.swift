@@ -289,6 +289,7 @@ extension SpeedEditing {
         let new: [SpeedKey]? = pts.flatMap { SpeedRamp.sanitized($0, duration: c.duration) }
         if pts != nil && new == nil { return false }
         if new == current { return false }
+        c.extra["speed"] = nil   // 型違いで退避された古い speed を残さない(setSpeed と同じ)
         if let n = new {
             c.speedRamp = n
             c.speed = nil

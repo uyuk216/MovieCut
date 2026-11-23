@@ -36,7 +36,8 @@ public enum Chapters {
             return Result(text: "", count: 0, warnings: ["\(color.title)のマーカーがありません"])
         }
         guard !markers.isEmpty else { return Result(text: "", count: 0, warnings: ["マーカーがありません。再生位置にマーカーを追加してください"]) }
-        var items = MarkerEditing.sorted(markers).map { (time: $0.time, title: title($0.name)) }
+        // 負・非有限の時刻は 0 に寄せる(Int 変換で落ちたり、0:00 が重なったりしないように)
+        var items = MarkerEditing.sorted(markers).map { (time: $0.time.isFinite ? max(0, $0.time) : 0, title: title($0.name)) }
         var warnings: [String] = []
         if Int(items[0].time.rounded(.down)) != 0 {
             items.insert((0, introTitle), at: 0)

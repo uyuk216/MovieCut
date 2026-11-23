@@ -22,6 +22,48 @@ final class BugHuntFollowupsTests: XCTestCase {
         XCTAssertTrue(audio.suggestedFileName(documentName: "d").hasSuffix(".m4a"))
     }
 
+    /// 速度ランプを付けたとき、退避されていた壊れた speed が残らないこと(setSpeed と同じ扱い)。
+    func testSetRampClearsRetreatedSpeed() throws {
+        var c = Clip(); c.type = .video; c.duration = 4
+        c.extra["speed"] = .string("速い")
+        XCTAssertTrue(SpeedEditing.setRamp(&c, [SpeedKey(t: 0, v: 1), SpeedKey(t: 4, v: 2)]))
+        XCTAssertNil(c.extra["speed"])
+        let back = try JSONDecoder().decode(Clip.self, from: JSONEncoder().encode(c))
+        XCTAssertNil(back.extra["speed"])
+        XCTAssertNotNil(back.rampPoints)
+    }
+
+    /// チャプター生成で、負・非有限のマーカー時刻が 0:00 の重複や異常にならないこと。
+    func testChaptersClampNegativeAndNonFiniteTimes() {
+        var m1 = Marker(); m1.time = -5; m1.name = "前"
+        var m2 = Marker(); m2.time = 30; m2.name = "本編"
+        var m3 = Marker(); m3.time = 70; m3.name = "終わり"
+        let r = Chapters.make(from: [m1, m2, m3])
+        let lines = r.text.split(separator: "\n").map(String.init)
+        XCTAssertEqual(lines.filter { $0.hasPrefix("0:00") }.count, 1, r.text)
+        var n1 = Marker(); n1.time = .nan; n1.name = "壊"
+        let r2 = Chapters.make(from: [n1, m2, m3])
+        XCTAssertFalse(r2.text.isEmpty)
+    }
+
+    /// 縦横比固定の解像度入力で、巨大な値でも Int 変換で落ちないこと。
+    func testResolutionInputAspectLockSurvivesHugeValues() {
+        var r = ResolutionInput(width: 100, height: 200)
+        r.setLock(true)
+        r.setWidth("9000000000000000000")
+        XCTAssertEqual(r.width, 9000000000000000000)
+        XCTAssertEqual(r.height, 200, "変換できないときは相手方を変えない")
+    }
+
+    /// カスタムプリセットの書き出しで、非有限の fps・ビットレートが落ちずに落ちる(黙って捨てる)こと。
+    func testCustomExportPresetEncodeDropsNonFinite() {
+        let p = CustomExportPreset(name: "x", width: 320, height: 180, codec: "h264", fps: .nan, bitrateMbps: .infinity)
+        let back = CustomExportPresetStore.decode(CustomExportPresetStore.encode([p]))
+        XCTAssertEqual(back.count, 1)
+        XCTAssertNil(back[0].fps)
+        XCTAssertNil(back[0].bitrateMbps)
+    }
+
     /// AquesTalk の合成が途中で失敗したとき、壊れた WAV がキャッシュに残らないこと
     /// (残ると次回に「当たった」として壊れた音声が使われ続けていた不具合の回帰)。
     /// 同じプレイヤーが「失敗 → 成功」と変わる形で確かめる(キーはプレイヤーのパスで決まるため)。
