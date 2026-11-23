@@ -343,3 +343,34 @@ final class PluginFoundationTests: XCTestCase {
         XCTAssertEqual(loader.lastProvider?.synthesizedTexts, ["あ"])
     }
 }
+
+
+/// 初回ロードが並行しても、ローダは 1 回だけ走る(第2部 C10)。
+final class PluginHostConcurrentLoadTests: XCTestCase {
+    func testConcurrentFirstLoadRunsLoaderOnce() throws {
+        let counter = NSLock()
+        var loads = 0
+        let loader = ClosurePluginLoader { manifest, directory in
+            counter.withLock { loads += 1 }
+            Thread.sleep(forTimeInterval: 0.3)
+            return LoadedPlugin(manifest: manifest, directory: directory, voiceProvider: nil)
+        }
+        let host = PluginHost(loader: loader)
+        let manifest = PluginManifest(id: "jp.local.moviecut.test.concurrent", name: "t", version: "1.0.0",
+                                      hooks: [], entryPoint: "X", minimumAppVersion: nil)
+        host.register(manifest: manifest, directory: URL(fileURLWithPath: "/tmp"))
+        let group = DispatchGroup()
+        let resultsLock = NSLock()
+        var results = 0
+        for _ in 0..<2 {
+            group.enter()
+            DispatchQueue.global().async {
+                if (try? host.loadIfNeeded(pluginID: manifest.id)) != nil { resultsLock.withLock { results += 1 } }
+                group.leave()
+            }
+        }
+        group.wait()
+        XCTAssertEqual(loads, 1, "初回ロードが並行してもローダは 1 回だけ")
+        XCTAssertEqual(results, 2)
+    }
+}

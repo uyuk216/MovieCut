@@ -100,6 +100,8 @@ private var registrationOrder: [String] = []
 private var loadedByID: [String: LoadedPlugin] = [:]
 private var licenseCodes: [String: String] = [:]
 private let lock = NSLock()
+/// 初回ロードの直列化用(キャッシュ確認とロードの間に割り込まれて、ローダが二重に走らないように)。
+private let loadLock = NSLock()
 
 public init(loader: any PluginLoader,
 licenseVerifier: (any LicenseVerifying)? = nil,
@@ -179,6 +181,11 @@ return licenseVerifier.verify(pluginID: pluginID, licenseCode: code, deviceID: d
 public func loadIfNeeded(pluginID: String) throws -> LoadedPlugin {
 let already: LoadedPlugin? = lock.withLock { loadedByID[pluginID]}
 if let already { return already}
+// 初回ロードは 1 回だけに直列化する(並行した初回アクセスでローダの初期化が二重に走らないよう、
+// loadLock の中でキャッシュを確かめ直してからロードする)。
+return try loadLock.withLock {
+let cached: LoadedPlugin? = lock.withLock { loadedByID[pluginID]}
+if let cached { return cached}
 
 let discovered: DiscoveredPlugin? = lock.withLock { discoveredByID[pluginID]}
 guard let discovered else { throw PluginError.notRegistered(pluginID: pluginID)}
@@ -202,9 +209,7 @@ throw PluginError.licenseDenied(pluginID: pluginID, result: result)
 }
 
 let loaded = try loader.loadPlugin(manifest: manifest, directory: discovered.directory)
-return lock.withLock {
-if let existing = loadedByID[pluginID] { return existing}
-loadedByID[pluginID] = loaded
+lock.withLock { loadedByID[pluginID] = loaded }
 return loaded
 }
 }

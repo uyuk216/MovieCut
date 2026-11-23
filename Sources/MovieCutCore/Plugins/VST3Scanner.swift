@@ -261,6 +261,9 @@ public enum VST3Scanner {
             }
             return out
         }
+        // 単一 Mach-O は CPU 種別と亜種(8〜11 バイト目)まで読む。断片が 12 バイト未満なら
+        // 判定しない(8 バイトのガードのままだと、8〜11 バイトの断片で範囲外を読んで落ちる)。
+        guard b.count >= 12 else { return [] }
         // 単一 64 ビット: CF FA ED FE(LE) / FE ED FA CF(BE)
         if b[0] == 0xCF && b[1] == 0xFA && b[2] == 0xED && b[3] == 0xFE {
             return [architectureName(cpuType: le32(4), cpuSubtype: le32(8))].compactMap { $0 }

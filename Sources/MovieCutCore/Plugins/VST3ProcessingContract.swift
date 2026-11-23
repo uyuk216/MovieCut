@@ -125,10 +125,13 @@ public enum VST3ContractError: Error, Equatable, Sendable {
     case channelCountMismatch(expected: Int, actual: Int, isInput: Bool)
     case invalidChangePoints(reason: String)
 
+    /// Hz 表示用の安全な整数化(非有限・巨大な値でも整数変換で落ちない)。
+    private static func hz(_ v: Double) -> Int { v.isFinite ? Int(min(max(v, 0), 9_000_000_000_000_000)) : 0 }
+
     public var userFacingNote: String {
         switch self {
         case .invalidSampleRate: return "サンプルレートが不正なため VST3 処理を確定できません"
-        case .sampleRateUnsupported(let sr, let range): return "サンプルレート \(Int(sr)) Hz はプラグインの対応範囲 \(Int(range.lowerBound))〜\(Int(range.upperBound)) Hz の外です"
+        case .sampleRateUnsupported(let sr, let range): return "サンプルレート \(Self.hz(sr)) Hz はプラグインの対応範囲 \(Self.hz(range.lowerBound))〜\(Self.hz(range.upperBound)) Hz の外です"
         case .invalidBlockSize: return "ブロック長が不正なため VST3 処理を確定できません"
         case .frameCountOutOfRange(let f, let m): return "ブロックのフレーム数 \(f) が上限 \(m) を超えています"
         case .channelCountMismatch(let e, let a, let isInput): return "\(isInput ? "入力" : "出力")のチャンネル数が合いません(期待 \(e) / 実際 \(a))"
@@ -218,9 +221,11 @@ public struct VST3LatencyTail: Equatable, Sendable {
     public var headTrimFrames: Int { latencyFrames }
     /// 入力の末尾に、余韻を受け取るために足すべき無音フレーム数。
     public var tailPaddingFrames: Int { tailFrames }
-    /// 入力 N フレームに対して、プラグインへ流す総フレーム数(本体 + テール受け)。
+    /// 入力 N フレームに対して、プラグインへ流す総フレーム数(本体 + テール受け + 遅延の吐き出し分)。
+    /// 遅延のある処理器は、先頭の遅延分を切り落とすと末尾がその分だけ足りなくなる。
+    /// テールが遅延より短い場合でも本体を取り切れるよう、遅延分も流す。
     public func totalInputFrames(forContentFrames content: Int) -> Int {
-        max(0, content) + tailPaddingFrames
+        max(0, content) + latencyFrames + tailPaddingFrames
     }
     /// 補償後に最終成果物へ残るフレーム数(入力と同じ長さに戻るのが原則)。
     public func outputFrames(forContentFrames content: Int) -> Int { max(0, content) }

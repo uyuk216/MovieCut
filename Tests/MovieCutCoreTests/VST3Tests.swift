@@ -65,6 +65,11 @@ final class VST3Tests: XCTestCase {
         XCTAssertEqual(VST3Scanner.machOArchitectures(fatMachO([(0x0100_000C, 0), (0x0100_0007, 3)])), ["arm64", "x86_64"])
         XCTAssertEqual(VST3Scanner.machOArchitectures(fatMachO([(0x0100_000C, 2)])), ["arm64e"], "亜種 2 は arm64e")
         XCTAssertEqual(VST3Scanner.machOArchitectures(thinArm64MachO()), ["arm64"])
+        // 8〜11 バイトに切れた単一 Mach-O ヘッダでは、範囲外を読んで落ちずに空を返す
+        let thinHeader: [UInt8] = [0xCF, 0xFA, 0xED, 0xFE, 0x0C, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00]
+        XCTAssertEqual(VST3Scanner.machOArchitectures(Data(thinHeader.prefix(8))), [])
+        XCTAssertEqual(VST3Scanner.machOArchitectures(Data(thinHeader.prefix(11))), [])
+        XCTAssertEqual(VST3Scanner.machOArchitectures(Data(thinHeader)), ["arm64"], "12 バイトあれば判定できる")
         XCTAssertEqual(VST3Scanner.machOArchitectures(Data("ただのテキスト".utf8)), [])
         XCTAssertEqual(VST3Scanner.machOArchitectures(Data()), [])
     }

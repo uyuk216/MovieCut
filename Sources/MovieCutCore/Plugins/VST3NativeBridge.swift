@@ -374,6 +374,8 @@ public final class VST3NativeBridgeBackend: VST3BridgeBackend {
         var count: Int32 = 0
         let cs = status(library.paramCountFn(instance, &count))
         guard cs == .ok else { return (cs, []) }
+        // プラグインが負の件数を返しても、範囲生成(0..<count)で落ちずに不正値として扱う。
+        guard count >= 0 else { return (.invalidArgument, []) }
         var out: [VST3ParameterDescriptor] = []
         for i in 0..<count {
             var buf = [UInt8](repeating: 0, count: VST3CABI.parameterInfoSize)

@@ -202,11 +202,21 @@ final class VST3NextTests: XCTestCase {
         let lt = VST3LatencyTail(latencyFrames: 128, tailFrames: 4800)
         XCTAssertEqual(lt.headTrimFrames, 128)
         XCTAssertEqual(lt.tailPaddingFrames, 4800)
-        XCTAssertEqual(lt.totalInputFrames(forContentFrames: 48000), 52800)
+        XCTAssertEqual(lt.totalInputFrames(forContentFrames: 48000), 52928, "本体 + 遅延の吐き出し分 + テール受け")
         XCTAssertEqual(lt.outputFrames(forContentFrames: 48000), 48000, "補償後の長さは入力と一致する")
         let neg = VST3LatencyTail(latencyFrames: -5, tailFrames: -1)
         XCTAssertEqual(neg.headTrimFrames, 0, "負の申告は 0 に丸める")
         XCTAssertEqual(neg.totalInputFrames(forContentFrames: -10), 0)
+        // テールが遅延より短い場合も、先頭を切り落とした後に本体が全部残るだけ流す
+        let shortTail = VST3LatencyTail(latencyFrames: 128, tailFrames: 0)
+        XCTAssertEqual(shortTail.totalInputFrames(forContentFrames: 1000), 1128)
+        XCTAssertEqual(shortTail.totalInputFrames(forContentFrames: 1000) - shortTail.headTrimFrames, 1000)
+    }
+
+    func testSampleRateUnsupportedNoteToleratesHugeValues() {
+        // 巨大な有限値でも、エラー表示の整数化で落ちない
+        let e = VST3ContractError.sampleRateUnsupported(sampleRate: .greatestFiniteMagnitude, supported: 44100...96000)
+        XCTAssertTrue(e.userFacingNote.contains("Hz"))
     }
 
     // MARK: ブリッジプロトコル定義
