@@ -54,7 +54,10 @@ public enum AutosaveRecovery {
     /// 写しを書く。復元フォルダの外・危険な名前・シンボリックリンクの上書き・大きすぎる中身は断る(書けたら true)。
     @discardableResult
     public static func write(_ entry: Entry, sessionID: String, in dir: URL) -> Bool {
-        guard let url = safeURL(sessionID: sessionID, in: dir), let data = try? encode(entry), data.count <= maxFileBytes else { return false }
+        // 読む側はプロジェクト本体に maxProjectBytes の上限がある。それを超える写しは書けても
+        // 読み戻せず、一覧で黙って消えるだけなので、最初から書かない。
+        guard entry.project.count <= InputLimits.maxProjectBytes,
+              let url = safeURL(sessionID: sessionID, in: dir), let data = try? encode(entry), data.count <= maxFileBytes else { return false }
         var st = stat()
         if lstat(url.path, &st) == 0, (st.st_mode & S_IFMT) != S_IFREG { return false }   // リンクなどには書かない
         return (try? data.write(to: url, options: .atomic)) != nil

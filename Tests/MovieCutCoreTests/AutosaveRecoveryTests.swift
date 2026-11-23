@@ -86,6 +86,16 @@ final class AutosaveRecoveryTests: XCTestCase {
         }
     }
 
+    /// 開くときの上限(64MB)を超えるプロジェクトは、書けても読み戻せないので最初から書かないこと
+    /// (上限の食い違いで、書けた写しが一覧で黙って消えていた不具合の回帰)。
+    func testWriteRejectsProjectTooLargeToLoad() throws {
+        let dir = try tmpDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let big = AutosaveRecovery.Entry(name: "n", originalPath: nil, savedAt: Date(timeIntervalSince1970: 5),
+                                         project: Data(count: InputLimits.maxProjectBytes + 1))
+        XCTAssertFalse(AutosaveRecovery.write(big, sessionID: "abc", in: dir))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dir.appendingPathComponent("abc.mcrecover").path))
+    }
+
     // MARK: 失敗の数え方
 
     func testFailureTrackerWarnsOnceAfterTwoConsecutiveFailuresAndClearsOnSuccess() {
