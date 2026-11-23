@@ -211,3 +211,69 @@ final class AquesTalkPluginTests: XCTestCase {
         XCTAssertEqual(fb.engines, ["aquestalk"])
     }
 }
+
+
+/// AquesTalk プラグインの合成まわりの回帰(第2部 C09)。
+/// 内蔵側は第1部で直っていた「失敗時のキャッシュ汚染」が、プラグイン側では最終パスへ直接生成していた。
+/// また `run` の標準エラー読みとタイムアウトは、内蔵・プラグイン両方に同じ欠けがあった。
+final class AquesTalkPluginRunTests: XCTestCase {
+    var tmp: URL!
+
+    override func setUpWithError() throws {
+        tmp = FileManager.default.temporaryDirectory.appendingPathComponent("aqplugin-run-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+    }
+    override func tearDownWithError() throws { try? FileManager.default.removeItem(at: tmp) }
+
+    private func makeScript(_ name: String, _ body: String) throws -> URL {
+        let url = tmp.appendingPathComponent(name)
+        try ("#!/bin/sh\n" + body).write(to: url, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
+        return url
+    }
+
+    /// 失敗した合成の壊れた WAV が、プラグインのキャッシュに残らないこと(内蔵側の回帰と対)。
+    func testPluginFailedSynthesisDoesNotPoisonCache() async throws {
+        let flag = tmp.appendingPathComponent("failflag")
+        let player = try makeScript("player.sh",
+            "while [ $# -gt 0 ]; do if [ \"$1\" = \"-W\" ]; then out=\"$2\"; fi; shift; done\n"
+            + "if [ -f \"\(flag.path)\" ]; then printf 'PARTIAL' > \"$out\"; exit 1; fi\n"
+            + "printf 'FULLWAV' > \"$out\"\nexit 0\n")
+        let cache = VoiceCache(directory: tmp.appendingPathComponent("cache"))
+        let synth = AquesTalkPluginSynthesizer(cache: cache, playerPath: player.path)
+        try Data().write(to: flag)
+        do { _ = try await synth.synthesize(text: "テスト", voice: nil, speed: nil); XCTFail("失敗するはず") } catch {}
+        let leftovers = (try? FileManager.default.contentsOfDirectory(atPath: cache.directory.path)) ?? []
+        XCTAssertTrue(leftovers.filter { $0.hasSuffix(".wav") }.isEmpty,
+                      "失敗した合成の壊れた WAV がキャッシュに残っている: \(leftovers)")
+        try FileManager.default.removeItem(at: flag)
+        let url = try await synth.synthesize(text: "テスト", voice: nil, speed: nil)
+        XCTAssertEqual(try String(contentsOf: url, encoding: .utf8), "FULLWAV")
+    }
+
+    /// 標準エラーへ大量に出力するコマンドでも、パイプが満杯になって止まらないこと(プラグイン・内蔵の両方)。
+    func testRunDrainsLargeStderr() async throws {
+        let script = try makeScript("noisy.sh",
+            "i=0; while [ $i -lt 6000 ]; do echo 'diagnostic line padding padding padding' >&2; i=$((i+1)); done\n"
+            + "printf 'FULLWAV' > \"$1\"\nexit 0\n")
+        let out1 = tmp.appendingPathComponent("o1.wav")
+        try await AquesTalkPluginSynthesizer.run(executable: script, arguments: [out1.path], expecting: out1, timeout: 20)
+        XCTAssertEqual(try String(contentsOf: out1, encoding: .utf8), "FULLWAV")
+        let out2 = tmp.appendingPathComponent("o2.wav")
+        try await AquesTalkSynthesizer.run(executable: script, arguments: [out2.path], expecting: out2, timeout: 20)
+        XCTAssertEqual(try String(contentsOf: out2, encoding: .utf8), "FULLWAV")
+    }
+
+    /// 終了要求(SIGTERM)を無視するコマンドでも、強制終了して待ちが戻ること。
+    func testRunForceKillsProcessIgnoringSIGTERM() async throws {
+        let script = try makeScript("stubborn.sh",
+            "trap '' TERM\nprintf 'X' > \"$1\"\nsleep 30\n")
+        let out = tmp.appendingPathComponent("o.wav")
+        let start = Date()
+        do {
+            try await AquesTalkPluginSynthesizer.run(executable: script, arguments: [out.path], expecting: out, timeout: 0.5)
+            XCTFail("タイムアウトで失敗するはず")
+        } catch {}
+        XCTAssertLessThan(Date().timeIntervalSince(start), 10, "SIGKILL へ格上げされず待ちが戻らなかった")
+    }
+}

@@ -46,9 +46,16 @@ public struct AquesTalkPluginSynthesizer {
         if let hit = cache.hit(forKey: key) { return hit }
         let out = try cache.url(forKey: key)
         // 速さ 100・未指定では従来どおり無変換で作る(参照 WAV とのバイト一致を保つ互換条件)。
+        // ただしキャッシュの場所へ直接書くと、途中終了したときに壊れた WAV が残り、
+        // 次回に「キャッシュに当たった」として使われ続ける。隣の一時ファイルへ作ってから移す
+        // (移すだけなので中身のバイト列は変わらない)。内蔵 AquesTalkSynthesizer と同じ手順。
         guard VoiceTimeStretch.needsStretch(speed: speed), let speed else {
-            let inv = invocation(text: text, voice: voice, out: out)
-            try await Self.run(executable: inv.executable, arguments: inv.arguments, expecting: out)
+            // 一時ファイルも .wav で終わる名前にする(プレイヤーが拡張子で形式を判定するため)
+            let tmp = out.deletingLastPathComponent().appendingPathComponent("\(key).part-\(UUID().uuidString).wav")
+            defer { try? FileManager.default.removeItem(at: tmp) }
+            let inv = invocation(text: text, voice: voice, out: tmp)
+            try await Self.run(executable: inv.executable, arguments: inv.arguments, expecting: tmp)
+            try VoiceCache.replaceItem(at: out, with: tmp)
             return out
         }
         // 速さは AquesTalkPlayer の引数に無いので、一度テンポラリへ生成してから音程保持の
@@ -57,7 +64,11 @@ public struct AquesTalkPluginSynthesizer {
         defer { try? FileManager.default.removeItem(at: raw) }
         let inv = invocation(text: text, voice: voice, out: raw)
         try await Self.run(executable: inv.executable, arguments: inv.arguments, expecting: raw)
-        try VoiceTimeStretch.apply(input: raw, speedPercent: speed, output: out)
+        // 伸縮の書き込みも、途中で失敗したときに壊れた WAV がキャッシュに残らないよう一時ファイル経由にする
+        let stretched = FileManager.default.temporaryDirectory.appendingPathComponent("moviecut-aq-stretch-\(UUID().uuidString).wav")
+        defer { try? FileManager.default.removeItem(at: stretched) }
+        try VoiceTimeStretch.apply(input: raw, speedPercent: speed, output: stretched)
+        try VoiceCache.replaceItem(at: out, with: stretched)
         return out
     }
 
@@ -72,17 +83,44 @@ public struct AquesTalkPluginSynthesizer {
             p.standardInput = FileHandle.nullDevice
             final class Flag: @unchecked Sendable { let lock = NSLock(); var on = false }
             let flag = Flag()
+            // 標準エラーは溜めながら読む(終了後にまとめて読むと、出力が多いときにパイプが
+            // 満杯になって子プロセスが書き込み待ちで止まってしまう)。
+            final class ErrBox: @unchecked Sendable { let lock = NSLock(); var data = Data(); var eof = false }
+            let errBox = ErrBox()
+            err.fileHandleForReading.readabilityHandler = { h in
+                let d = h.availableData
+                if d.isEmpty {
+                    h.readabilityHandler = nil
+                    errBox.lock.withLock { errBox.eof = true }
+                } else { errBox.lock.withLock { errBox.data.append(d) } }
+            }
             p.terminationHandler = { proc in
-                let data = err.fileHandleForReading.readDataToEndOfFile()
+                // 終了直後は読み取りの完了(EOF)がまだ届いていないことがあるので少しだけ待つ。
+                // 孫プロセスがパイプを受け継いでいると EOF が来ないため、上限を付ける
+                // (終了ハンドラで読み切ろうとすると、待ちが戻らなくなる)。
+                for _ in 0..<50 {
+                    if errBox.lock.withLock({ errBox.eof }) { break }
+                    Thread.sleep(forTimeInterval: 0.01)
+                }
+                err.fileHandleForReading.readabilityHandler = nil
+                let data = errBox.lock.withLock { errBox.data }
                 let msg = String(String(decoding: data, as: UTF8.self).suffix(400))
                 let late = flag.lock.withLock { flag.on }
                 if late { cont.resume(throwing: VoiceError.message("コマンドが \(Int(timeout)) 秒以内に終わらなかったので止めました。")) }
                 else if proc.terminationStatus == 0 && FileManager.default.fileExists(atPath: out.path) { cont.resume() }
                 else { cont.resume(throwing: VoiceError.message("コマンド失敗 (\(proc.terminationStatus)): \(msg)")) }
             }
-            do { try p.run() } catch { cont.resume(throwing: error); return }
+            do { try p.run() } catch { err.fileHandleForReading.readabilityHandler = nil; cont.resume(throwing: error); return }
             DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
-                if p.isRunning { flag.lock.withLock { flag.on = true }; p.terminate() }
+                if p.isRunning {
+                    flag.lock.withLock { flag.on = true }
+                    p.terminate()
+                    // 終了要求を無視するプロセスは 2 秒後に強制終了する(終了ハンドラが必ず呼ばれ、待ちが戻るように)。
+                    let pid = p.processIdentifier
+                    DispatchQueue.global().asyncAfter(deadline: .now() + 2) {
+                        if p.isRunning { kill(pid, SIGKILL) }
+                    }
+                }
             }
         }
     }
