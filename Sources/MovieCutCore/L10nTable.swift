@@ -1621,6 +1621,8 @@ enum L10nTable {
         "書き出しをキャンセルしました": "Export cancelled",
         "書き出せませんでした": "Could not export",
         "クリップ %d 個": "%d clips",
+        "%d個のクリップを選択中": "%d clips selected",
+        "項目を編集するには、クリップを 1 つだけ選びます。移動・削除・コピーは選んだ全部にかかります。": "Select a single clip to edit its settings. Move, delete, and copy apply to all selected clips.",
         "%d 件の文が一致": "%d sentences match",
         "自身": "Itself",
         "下のレイヤー": "The Layer Below",

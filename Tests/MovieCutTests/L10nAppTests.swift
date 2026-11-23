@@ -69,4 +69,14 @@ final class L10nAppTests: XCTestCase {
         for p in DockPanel.allCases { XCTAssertTrue(L10n.hasEnglish(p.title), p.title) }
         for l in DockPreset.allCases { XCTAssertTrue(L10n.hasEnglish(l.title), l.title) }
     }
+
+    func testMultiSelectionGuideCopyIsTranslated() {
+        L10n.force(.ja)
+        XCTAssertEqual(MultiSelectionInspector.Title.selected(3), "3個のクリップを選択中")
+        XCTAssertEqual(MultiSelectionInspector.Title.hint, "項目を編集するには、クリップを 1 つだけ選びます。移動・削除・コピーは選んだ全部にかかります。")
+        L10n.force(.en)
+        XCTAssertEqual(MultiSelectionInspector.Title.selected(3), "3 clips selected")
+        XCTAssertTrue(L10n.hasEnglish(MultiSelectionInspector.Title.hint))
+        XCTAssertEqual(L10n.t(MultiSelectionInspector.Title.hint, in: .en), "Select a single clip to edit its settings. Move, delete, and copy apply to all selected clips.")
+    }
 }

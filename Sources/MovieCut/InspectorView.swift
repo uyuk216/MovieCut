@@ -417,7 +417,7 @@ struct MultiSelectionInspector: View {
     let count: Int
 
     enum Title {
-        static func selected(_ n: Int) -> String { "\(n)個のクリップを選択中" }
+        static func selected(_ n: Int) -> String { String(format: L10n.t("%d個のクリップを選択中"), n) }
         static let duplicate = "複製"
         static let delete = "削除"
         static let rippleDelete = "すき間を詰めて削除"
