@@ -58,7 +58,7 @@ public enum FaceBlurBulk {
         if let i = clip.effects.firstIndex(where: { $0.kind == EffectKind.faceBlur.rawValue }) {
             guard options.replaceExisting else { return false }
             let fresh = makeEffect(options)
-            guard clip.effects[i].params != fresh.params || !clip.effects[i].enabled else { return false }
+            guard clip.effects[i].params != fresh.params else { return false }
             var updated = fresh
             updated.enabled = clip.effects[i].enabled
             updated.extra = clip.effects[i].extra

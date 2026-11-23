@@ -107,6 +107,8 @@ public enum LipSync {
     /// (音が大きい所ほど拍が速く進み、無音には拍を置かない)。拍が無ければ nil(従来の開閉に戻す)。
     public static func frames(moras: [Viseme], envelope: [Float], range: Range<Int>? = nil) -> [Viseme]? {
         guard !moras.isEmpty, !envelope.isEmpty else { return nil }
+        // 非有限の音量は無音として扱う(そのまま積算すると inf / inf = NaN を Int 化して落ちる)
+        let envelope = envelope.map { $0.isFinite ? $0 : 0 }
         let lo = max(0, range?.lowerBound ?? 0), hi = min(envelope.count, range?.upperBound ?? envelope.count)
         guard lo < hi else { return nil }
         let open = MouthGate.states(Array(envelope[lo..<hi]))

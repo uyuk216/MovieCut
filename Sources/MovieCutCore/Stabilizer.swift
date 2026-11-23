@@ -350,6 +350,8 @@ public extension Clip {
 
     /// 解析結果のキャッシュ鍵。素材・配置・時間の取り方・強さが変われば別の鍵になる。
     func stabilizeCacheKey(src: String) -> String {
-        "\(id)|\(src)|\(offset)|\(duration)|\(effectiveSpeed)|\(effectiveReverse)|\(hasTimeRemap)|\(stabilizeStrength)" + (stabilizeRollOn ? "|roll" : "")
+        // 平均速度が同じでも、ランプの形が違えば解析するコマが違う。点列そのものを鍵に含める
+        let ramp = (speedRamp ?? []).map { "\($0.t):\($0.v)" }.joined(separator: ",")
+        return "\(id)|\(src)|\(offset)|\(duration)|\(effectiveSpeed)|\(effectiveReverse)|\(hasTimeRemap)|\(stabilizeStrength)|ramp:\(ramp)" + (stabilizeRollOn ? "|roll" : "")
     }
 }

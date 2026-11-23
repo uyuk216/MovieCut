@@ -64,3 +64,18 @@ final class FaceTrackTests: XCTestCase {
         XCTAssertEqual(FaceTrack.iou(a, b), 0)
     }
 }
+
+
+// MARK: - バグ確認 第2部 C16: 長いクリップのサンプル時刻
+
+final class FaceTrackSampleTimesLongClipTests: XCTestCase {
+    func testSamplesReachTheEndOfLongClips() {
+        let ts = FaceTrack.sampleTimes(duration: 600)
+        XCTAssertEqual(ts.count, 601)
+        XCTAssertEqual(ts.last!, 600, accuracy: 1e-9)
+    }
+    func testHugeDurationDoesNotTrap() {
+        XCTAssertLessThanOrEqual(FaceTrack.sampleTimes(duration: 1e20).count, 601)
+        XCTAssertEqual(FaceTrack.sampleTimes(duration: 1), [0, 0.5, 1])
+    }
+}

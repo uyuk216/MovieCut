@@ -395,3 +395,17 @@ final class StabilizerSimilarityTests: XCTestCase {
         XCTAssertNil(c.stabilizeRoll)
     }
 }
+
+
+// MARK: - バグ確認 第2部 C17: 手ぶれ補正のキャッシュ鍵にランプの形を含める
+
+final class StabilizerCacheKeyRampTests: XCTestCase {
+    func testRampShapeChangesTheKey() {
+        var a = Clip(); a.id = "c"; a.type = .video; a.duration = 10; a.stabilize = 0.5
+        a.speedRamp = [SpeedKey(t: 0, v: 0.5), SpeedKey(t: 10, v: 1.5)]
+        var b = a
+        b.speedRamp = [SpeedKey(t: 0, v: 1.5), SpeedKey(t: 10, v: 0.5)]
+        XCTAssertEqual(a.effectiveSpeed, b.effectiveSpeed, accuracy: 1e-9, "平均速度は同じ")
+        XCTAssertNotEqual(a.stabilizeCacheKey(src: "s"), b.stabilizeCacheKey(src: "s"), "形が違えば鍵も違う")
+    }
+}

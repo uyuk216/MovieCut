@@ -24,8 +24,16 @@ public enum FaceTrack {
 
     /// 0 から `duration` までの検出時刻(両端を含む)。`duration` が 0 以下なら [0]。
     public static func sampleTimes(duration: Double, interval: Double = interval) -> [Double] {
-        guard duration.isFinite, duration > 0, interval > 0 else { return [0] }
-        let n = min(maxSamples, Int((duration / interval).rounded(.up)))
+        guard duration.isFinite, duration > 0, interval.isFinite, interval > 0 else { return [0] }
+        // 件数は Double のまま上限と比べる(巨大な商を先に Int 化すると落ちる)
+        let stepsD = (duration / interval).rounded(.up)
+        if stepsD > Double(maxSamples) {
+            // 上限に当たる長いクリップは、間隔を伸ばして末尾まで届かせる(後半で追従が消えないように)
+            var out: [Double] = []
+            for i in 0...maxSamples { out.append(duration * Double(i) / Double(maxSamples)) }
+            return out
+        }
+        let n = max(1, Int(stepsD))
         var out: [Double] = []
         for i in 0...n { out.append(min(duration, Double(i) * interval)) }
         // 重なり(末尾の同時刻)を除く

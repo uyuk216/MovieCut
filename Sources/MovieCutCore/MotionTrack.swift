@@ -198,7 +198,8 @@ public enum MotionTrack {
 
     /// `track` の見失い情報つき版。見失いで打ち切った場合は `lostAt` が入る。
     public static func trackRun(duration: Double, tracker: RectTracking, frame: (Double) -> CGImage?) -> TrackingRun {
-        let n = max(1, Int((max(duration, 0) * sampleRate).rounded(.up)) + 1)
+        let nd = (max(duration.isFinite ? duration : 0, 0) * sampleRate).rounded(.up)
+        let n = max(1, (nd.isFinite && nd < 10_000_000) ? Int(nd) + 1 : 1)
         var out: [CGRect?] = []
         out.reserveCapacity(n)
         var started = false

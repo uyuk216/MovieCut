@@ -92,7 +92,7 @@ public struct ObjectMask: Codable, Equatable, Sendable {
         o.feather = ClipMask.clampUnit(feather)
         if let s = o.seedMask, s.isEmpty { o.seedMask = nil }
         o.samples = samples.filter { $0.t.isFinite && $0.t >= 0 }
-            .map { ObjectMaskSample(t: $0.t, rect: $0.rect?.normalized, mask: ($0.mask?.isEmpty == true) ? nil : $0.mask) }
+            .map { ObjectMaskSample(t: $0.t, rect: $0.rect.flatMap { $0.isValid ? $0.normalized : nil }, mask: ($0.mask?.isEmpty == true) ? nil : $0.mask) }
             .sorted { $0.t < $1.t }
         return o
     }

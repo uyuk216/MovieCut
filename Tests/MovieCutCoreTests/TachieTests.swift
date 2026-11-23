@@ -660,3 +660,32 @@ final class TachieDisabledVoiceTests: XCTestCase {
         XCTAssertNotNil(Renderer(project: p2, assets: RenderAssets()).tachieFrame(tc2, t: 1, height: 100), "有効な声では出る")
     }
 }
+
+
+// MARK: - バグ確認 第2部 C16: 立ち絵素材の削除は入れ子の中まで
+
+final class TachieRemoveNestedTests: XCTestCase {
+    func tachieClip() -> Clip { var c = Clip(); c.type = .tachie; c.tachieId = "t1"; return c }
+    func testRemoveStripsCompoundAndSceneReferences() {
+        var def = Tachie(name: "t1"); def.id = "t1"
+        var p = Project(); p.tachies = [def]
+        var inner = Track(name: "中"); inner.clips = [tachieClip()]
+        var comp = Clip(); comp.type = .compound; comp.tracks = [inner]
+        p.tracks[0].clips = [tachieClip(), comp]
+        var st = Track(name: "場面内"); st.clips = [tachieClip()]
+        p.scenes = [SceneDefinition(id: "s1", name: "場面", tracks: [st])]
+        let r = TachieEditing.remove(p, id: "t1")
+        XCTAssertTrue(r.tachies.isEmpty)
+        XCTAssertEqual(r.tracks[0].clips.count, 1, "最上位の立ち絵クリップは消え、複合だけ残る")
+        XCTAssertTrue(r.tracks[0].clips[0].tracks![0].clips.isEmpty, "複合の内側も消える")
+        XCTAssertTrue(r.scenes[0].tracks[0].clips.isEmpty, "シーン定義の中も消える")
+    }
+}
+
+final class BlinkNonFiniteHorizonTests: XCTestCase {
+    func testStartsWithNonFiniteHorizonReturnsEmpty() {
+        XCTAssertEqual(Blink.starts(seed: "x", until: .infinity), [])
+        XCTAssertEqual(Blink.starts(seed: "x", until: .nan), [])
+        XCTAssertFalse(Blink.starts(seed: "x", until: 10).isEmpty)
+    }
+}

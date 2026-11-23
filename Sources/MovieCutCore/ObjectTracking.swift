@@ -83,7 +83,7 @@ public struct ObjectTrack: Codable, Equatable, Sendable {
         var o = self
         o.startRect = startRect.normalized
         o.samples = samples.filter { $0.t.isFinite && $0.t >= 0 }
-            .map { TrackSample(t: $0.t, rect: $0.rect?.normalized) }
+            .map { TrackSample(t: $0.t, rect: $0.rect.flatMap { $0.isValid ? $0.normalized : nil }) }
             .sorted { $0.t < $1.t }
         if let l = o.lostAt {
             if l.isFinite && l >= 0 {
@@ -177,7 +177,8 @@ public enum ObjectTracking {
                                   frame: (Double) -> CGImage?,
                                   progress: ((Double) -> Void)? = nil,
                                   shouldCancel: (() -> Bool)? = nil) -> TrackingRun? {
-        let n = max(1, Int((max(duration, 0) * sampleRate).rounded(.up)) + 1)
+        let nd = (max(duration.isFinite ? duration : 0, 0) * sampleRate).rounded(.up)
+        let n = max(1, (nd.isFinite && nd < 10_000_000) ? Int(nd) + 1 : 1)
         var out: [CGRect?] = []
         out.reserveCapacity(n)
         var started = false
@@ -305,7 +306,8 @@ public enum ObjectTracking {
         guard canFollow(clip), let ks = keyframes(track: track, follower: clip) else { return false }
         let before = clip
         clip.tracking = track
-        for key in followKeys(for: clip) { clip.keyframes[key] = nil }
+        // 再生成されるキーだけを置き換える(大きさが一定で scale キーが生成されないとき、既存の scale キーまで消さない)
+        for key in followKeys(for: clip) where ks[key] != nil { clip.keyframes[key] = nil }
         for (k, v) in ks { clip.keyframes[k] = v }
         return clip != before
     }

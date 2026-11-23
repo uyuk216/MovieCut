@@ -424,3 +424,46 @@ final class ObjectTrackingTests: XCTestCase {
         XCTAssertTrue(ks.values.allSatisfy { $0.allSatisfy { $0.t < lostAt } }, "見失い以降のキーは作られない")
     }
 }
+
+
+// MARK: - バグ確認 第2部 C16: 追従の適用と、正規化での無効矩形
+
+private final class NullTracker: RectTracking {
+    func start(rect: CGRect, image: CGImage) {}
+    func next(image: CGImage) -> CGRect? { nil }
+}
+
+final class ObjectTrackingFollowupTests: XCTestCase {
+    func testApplyKeepsUserScaleKeysWhenTrackHasConstantSize() {
+        let track = ObjectTrack(sourceClipId: "src", startRect: TrackRect(x: 0.4, y: 0.4, w: 0.2, h: 0.2), samples: [
+            TrackSample(t: 0, rect: TrackRect(x: 0.4, y: 0.4, w: 0.2, h: 0.2)),
+            TrackSample(t: 1, rect: TrackRect(x: 0.5, y: 0.4, w: 0.2, h: 0.2)),
+            TrackSample(t: 2, rect: TrackRect(x: 0.6, y: 0.4, w: 0.2, h: 0.2)),
+        ])
+        var c = Clip(); c.type = .text; c.x = 0.3; c.y = 0.4; c.scale = 1; c.start = 0; c.duration = 2
+        c.keyframes["scale"] = [Keyframe(t: 0, v: 2)]
+        XCTAssertTrue(ObjectTracking.apply(track: track, to: &c))
+        XCTAssertEqual(c.keyframes["scale"], [Keyframe(t: 0, v: 2)], "大きさが一定の追従で、既存の scale キーを消さない")
+    }
+    func testNormalizedKeepsInvalidRectsAbsent() {
+        let track = ObjectTrack(sourceClipId: "s", startRect: TrackRect(x: 0, y: 0, w: 1, h: 1), samples: [
+            TrackSample(t: 0, rect: TrackRect(x: 0.1, y: 0.1, w: 0, h: 0.5)),
+            TrackSample(t: 1, rect: TrackRect(x: 0.1, y: 0.1, w: 0.5, h: 0.5)),
+        ])
+        let n = track.normalized
+        XCTAssertNil(n.samples[0].rect, "幅 0 の矩形は、正規化で小さな有効矩形に化けない")
+        XCTAssertNotNil(n.samples[1].rect)
+        var mask = ObjectMask(sourceClipId: "s", seedRect: TrackRect(x: 0, y: 0, w: 1, h: 1))
+        mask.samples = [
+            ObjectMaskSample(t: 0, rect: TrackRect(x: 0.1, y: 0.1, w: 0, h: 0.5)),
+            ObjectMaskSample(t: 1, rect: TrackRect(x: 0.1, y: 0.1, w: 0.5, h: 0.5)),
+        ]
+        let mn = mask.normalized
+        XCTAssertNil(mn.samples[0].rect)
+        XCTAssertNotNil(mn.samples[1].rect)
+    }
+    func testTrackRunWithNonFiniteDurationDoesNotTrap() {
+        let run = MotionTrack.trackRun(duration: .nan, tracker: NullTracker(), frame: { _ in nil })
+        XCTAssertEqual(run.rects.count, 1)
+    }
+}

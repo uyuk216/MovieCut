@@ -117,7 +117,7 @@ public struct CameraSettings: Codable, Equatable, Sendable {
     /// 既定値そのものか(キーフレームも無い)。このとき Project はファイルに書かず、描画も従来経路のまま。
     public var isDefault: Bool {
         x == 0.5 && y == 0.5 && targetX == 0.5 && targetY == 0.5 && orbit == 0 && fov == Self.defaultFov
-            && keyframes.values.allSatisfy { $0.isEmpty }
+            && keyframes.values.allSatisfy { $0.isEmpty } && extra.isEmpty
     }
 
     /// 値とキーを範囲・整列に直したもの(読み込み時に使う)。
@@ -127,9 +127,15 @@ public struct CameraSettings: Codable, Equatable, Sendable {
         o.targetX = Self.clamp("targetX", targetX); o.targetY = Self.clamp("targetY", targetY)
         o.orbit = Self.clamp("orbit", orbit); o.fov = Self.clamp("fov", fov)
         var ks: [String: [Keyframe]] = [:]
-        for (key, list) in keyframes where Self.paramKeys.contains(key) {
-            let n = Animation.normalized(list.map { Keyframe(t: max(0, $0.t), v: Self.clamp(key, $0.v), ease: $0.ease) })
-            if !n.isEmpty { ks[key] = n }
+        for (key, list) in keyframes {
+            if Self.paramKeys.contains(key) {
+                let n = Animation.normalized(list.map { Keyframe(t: max(0, $0.t), v: Self.clamp(key, $0.v), ease: $0.ease) })
+                if !n.isEmpty { ks[key] = n }
+            } else {
+                // 未知の項目は、値域が分からないので丸めずにそのまま残す(往復で消さない)
+                let n = Animation.normalized(list.map { Keyframe(t: max(0, $0.t), v: $0.v, ease: $0.ease) })
+                if !n.isEmpty { ks[key] = n }
+            }
         }
         o.keyframes = ks
         return o

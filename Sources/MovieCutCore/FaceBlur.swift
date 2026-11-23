@@ -44,7 +44,7 @@ public struct VisionFaceDetector: FaceDetecting {
 public final class FaceDetectionCache: @unchecked Sendable {
     /// テストでは検出器を差し替える(本番の既定は変えない)。
     public static var shared = FaceDetectionCache()
-    public static let capacity = 600
+    public static let capacity = 1024
 
     private let lock = NSLock()
     private var store: [String: [CGRect]] = [:]
@@ -62,7 +62,10 @@ public final class FaceDetectionCache: @unchecked Sendable {
         guard let image = make() else { return [] }
         let v = detector.faces(in: image)   // 検出は鍵の外で(他のスレッドを待たせない)
         lock.lock()
-        if store.count >= Self.capacity { store.removeAll(keepingCapacity: true) }
+        // 全消しだと、サンプル列を巡回する描画が毎周まるごと再検出になる。一部だけ捨てる
+        if store.count >= Self.capacity {
+            for k in store.keys.prefix(store.count / 4) { store.removeValue(forKey: k) }
+        }
         store[key] = v
         lock.unlock()
         return v

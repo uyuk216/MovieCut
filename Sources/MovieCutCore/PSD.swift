@@ -123,6 +123,7 @@ public enum PSDParser {
 
         var doc = PSDDocument(width: width, height: height, depth: depth, channels: channels, colorMode: mode,
                               layers: [], layerError: nil, composite: nil)
+        var mergedAlpha = false
         // カラーモードデータ、画像リソース: 読み飛ばす
         try r.skip(Int(try r.u32()))
         try r.skip(Int(try r.u32()))
@@ -134,7 +135,9 @@ public enum PSDParser {
         if miscLen > 0 {
             do {
                 var sub = PSDReader(bytes: r.slice(r.pos, miscEnd))
-                doc.layers = try parseLayerInfo(&sub, depth: depth)
+                let parsed = try parseLayerInfo(&sub, depth: depth)
+                doc.layers = parsed.layers
+                mergedAlpha = parsed.mergedAlpha
                 resolveVisibility(&doc.layers)
             } catch {
                 doc.layers = []
@@ -145,7 +148,7 @@ public enum PSDParser {
 
         // 統合済みの画像(レイヤーが読めなかったときの代わり)
         do {
-            doc.composite = try parseComposite(&r, width: width, height: height, channels: channels, depth: depth)
+            doc.composite = try parseComposite(&r, width: width, height: height, channels: channels, depth: depth, mergedAlpha: mergedAlpha)
         } catch {
             if doc.layers.isEmpty && doc.layerError != nil { throw error }
             doc.composite = nil
@@ -158,14 +161,16 @@ public enum PSDParser {
 
     private struct ChannelInfo { var id: Int; var length: Int }
 
-    private static func parseLayerInfo(_ r: inout PSDReader, depth: Int) throws -> [PSDLayer] {
+    private static func parseLayerInfo(_ r: inout PSDReader, depth: Int) throws -> (layers: [PSDLayer], mergedAlpha: Bool) {
         let layerInfoLen = Int(try r.u32())
-        if layerInfoLen == 0 { return [] }
+        if layerInfoLen == 0 { return ([], false) }
         let infoEnd = r.pos + layerInfoLen
         guard infoEnd <= r.count else { throw PSDError.truncated }
         var count = Int(try r.i16())
-        if count < 0 { count = -count }   // 先頭のアルファは統合画像の透明度(レイヤー数には関係ない)
-        if count == 0 { return [] }
+        // 符号が負のときだけ、先頭のアルファは統合画像の透明度(正のときの第 4 チャンネルは選択範囲などの別チャンネル)
+        let mergedAlpha = count < 0
+        if count < 0 { count = -count }
+        if count == 0 { return ([], mergedAlpha) }
         guard count <= maxLayers else { throw PSDError.corrupt("レイヤー数 \(count)") }
 
         var layers: [PSDLayer] = []
@@ -254,7 +259,7 @@ public enum PSDParser {
                 layers[i].raster = PSDRaster(width: w, height: h, rgba: interleave(planes, count: w * h))
             }
         }
-        return layers
+        return (layers, mergedAlpha)
     }
 
     private static func interleave(_ planes: [Int: [UInt8]], count: Int) -> [UInt8] {
@@ -382,7 +387,7 @@ public enum PSDParser {
 
     // MARK: 統合済みの画像
 
-    private static func parseComposite(_ r: inout PSDReader, width: Int, height: Int, channels: Int, depth: Int) throws -> PSDRaster {
+    private static func parseComposite(_ r: inout PSDReader, width: Int, height: Int, channels: Int, depth: Int, mergedAlpha: Bool) throws -> PSDRaster {
         let comp = try r.u16()
         let bpr = width * (depth / 8)
         let used = min(channels, 4)
@@ -429,7 +434,8 @@ public enum PSDParser {
             throw PSDError.unsupported("圧縮方式 \(comp)")
         }
         var map: [Int: [UInt8]] = [0: planes[0], 1: planes[1], 2: planes[2]]
-        if planes.count > 3 { map[-1] = planes[3] }
+        // 第 4 チャンネルを透明度として使うのは、レイヤー数の符号が「統合画像の透明度あり」を示したときだけ
+        if planes.count > 3, mergedAlpha { map[-1] = planes[3] }
         return PSDRaster(width: width, height: height, rgba: interleave(map, count: width * height))
     }
 }

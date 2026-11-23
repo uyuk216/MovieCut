@@ -349,3 +349,18 @@ final class PSDTests: XCTestCase {
         assertNoLayerOverlaps(p)
     }
 }
+
+
+// MARK: - バグ確認 第2部 C17: 統合画像の第 4 チャンネルは透明度とは限らない
+
+final class PSDCompositeExtraChannelTests: XCTestCase {
+    func testSavedSelectionChannelIsNotTreatedAsTransparency() throws {
+        // レイヤー数の符号が正(= 統合画像の透明度なし)で、第 4 チャンネルが全 0 の保存選択範囲。
+        // 赤い不透明な絵として読めること(第 4 チャンネルを透明度と誤ると、全体が透明になる)
+        var b = PSDBuilder(width: 2, height: 1)
+        b.composite = [[255, 0, 0, 0], [255, 0, 0, 0]]
+        let doc = try PSDParser.parse(b.build())
+        let comp = try XCTUnwrap(doc.composite)
+        XCTAssertEqual(Array(comp.rgba[0..<4]), [255, 0, 0, 255])
+    }
+}

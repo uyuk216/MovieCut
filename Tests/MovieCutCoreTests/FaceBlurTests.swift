@@ -191,3 +191,16 @@ extension FaceBlurTests {
         XCTAssertEqual(a, c)
     }
 }
+
+
+// MARK: - バグ確認 第2部 C16: 無効な顔ぼかしへの一括付与は変更と数えない
+
+final class FaceBlurBulkDisabledEffectTests: XCTestCase {
+    func testDisabledEffectWithSameSettingsIsNotAChange() {
+        var clip = Clip(); clip.type = .video; clip.src = "/nonexistent/v.mp4"
+        XCTAssertTrue(FaceBlurBulk.apply(to: &clip))
+        clip.effects[0].enabled = false
+        XCTAssertFalse(FaceBlurBulk.apply(to: &clip), "同じ設定の無効な効果は、付与しても何も変わらない")
+        XCTAssertFalse(clip.effects[0].enabled, "無効のままであること自体は仕様(設定だけ合わせる)")
+    }
+}

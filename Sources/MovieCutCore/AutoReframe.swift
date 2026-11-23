@@ -143,6 +143,12 @@ extension Renderer {
             }
         }
         guard let s = size else { return nil }
+        // 左右反転したクリップでは、被写体は表示上は鏡像の位置にいる。検出結果を反転後の座標へ直してから計画させる
+        if c.flipH == true {
+            out = out.map { smp in
+                SubjectSample(t: smp.t, rects: smp.rects.map { CGRect(x: 1 - $0.maxX, y: $0.minY, width: $0.width, height: $0.height) })
+            }
+        }
         return (s.w, s.h, out)
     }
 }

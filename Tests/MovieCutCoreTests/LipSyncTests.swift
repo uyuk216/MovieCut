@@ -71,3 +71,13 @@ final class LipSyncTests: XCTestCase {
         XCTAssertNil(empty.imgVowels)
     }
 }
+
+
+// MARK: - バグ確認 第2部 C16: 非有限の音量エンベロープ
+
+final class LipSyncInfiniteEnvelopeTests: XCTestCase {
+    func testInfiniteEnvelopeDoesNotTrap() {
+        let out = LipSync.frames(moras: [.a], envelope: [.infinity, 1, 1, 0, 0])
+        XCTAssertNotNil(out)
+    }
+}

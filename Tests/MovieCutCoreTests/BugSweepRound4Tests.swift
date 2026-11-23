@@ -68,3 +68,15 @@ extension BugSweepRound4Tests {
         XCTAssertEqual(orphans, ["/cache/img-2.png"])
     }
 }
+
+
+// MARK: - バグ確認 第2部 C17: 背景抜き PNG の参照判定はシーン内も見る
+
+final class CutoutCacheSceneReferenceTests: XCTestCase {
+    func testSceneOnlyReferenceCountsAsUsed() {
+        var img = Clip(); img.type = .image; img.src = "/x/cut.png"
+        var st = Track(name: "場面内"); st.clips = [img]
+        var p = Project(); p.scenes = [SceneDefinition(id: "s1", name: "場面", tracks: [st])]
+        XCTAssertEqual(CutoutCache.unreferenced(["/x/cut.png", "/x/other.png"], in: p), ["/x/other.png"])
+    }
+}

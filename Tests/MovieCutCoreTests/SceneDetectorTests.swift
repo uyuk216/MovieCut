@@ -83,3 +83,22 @@ final class SceneDetectorTests: XCTestCase {
         XCTAssertNil(SceneDetector.splitAtScenes(in: p, clipId: "missing", cuts: [2]))
     }
 }
+
+
+// MARK: - バグ確認 第2部 C17: シーン分割は対象クリップの断片だけを割る
+
+final class SceneSplitOverlappingClipsTests: XCTestCase {
+    func testSplitDoesNotTouchTheOtherOverlappingClip() {
+        var a = Clip(); a.id = "a"; a.type = .video; a.src = "/x/a.mp4"; a.start = 0; a.duration = 10
+        var b = Clip(); b.id = "b"; b.type = .video; b.src = "/x/b.mp4"; b.start = 0; b.duration = 10
+        var tr = Track(name: "V"); tr.clips = [a, b]
+        var p = Project(); p.tracks = [tr]
+        let r = SceneDetector.splitAtScenes(in: p, clipId: "b", cuts: [5])
+        XCTAssertNotNil(r)
+        let clips = r!.project.tracks[0].clips
+        XCTAssertEqual(clips.filter { $0.id == "a" }.count, 1, "無関係な A は割らない")
+        XCTAssertEqual(clips.filter { $0.id == "a" }[0].duration, 10)
+        XCTAssertEqual(clips.count, 3, "B だけが 2 つに割れる")
+        XCTAssertFalse(r!.clipIds.contains("a"))
+    }
+}

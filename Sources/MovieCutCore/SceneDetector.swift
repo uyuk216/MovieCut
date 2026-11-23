@@ -142,17 +142,21 @@ public enum SceneDetector {
               let origin = project.tracks[ti].clips.first(where: { $0.id == clipId }) else { return nil }
         var p = project
         var ids: [String] = []
+        // 割るのは対象クリップの断片だけ(同じトラックで重なっている無関係なクリップを割らない)
+        var fragments: Set<String> = [origin.id]
         for cut in cuts.sorted() {
             let global = origin.start + cut
             guard let target = p.tracks[ti].clips.first(where: {
-                global - $0.start >= ClipEditing.minDuration - 1e-9 && $0.start + $0.duration - global >= ClipEditing.minDuration - 1e-9
+                fragments.contains($0.id)
+                    && global - $0.start >= ClipEditing.minDuration - 1e-9 && $0.start + $0.duration - global >= ClipEditing.minDuration - 1e-9
             }), let r = ClipEditing.split(in: p, clipId: target.id, at: global) else { continue }
             p = r.project
+            fragments.insert(r.rightId)
             ids.append(r.rightId)
         }
         guard !ids.isEmpty else { return nil }
         // 分割でできた全断片(元のクリップと右側たち)の id を並べ直す
-        let all = p.tracks[ti].clips.filter { $0.start >= origin.start - 1e-9 && $0.start < origin.start + origin.duration - 1e-9 }.map { $0.id }
+        let all = p.tracks[ti].clips.filter { fragments.contains($0.id) }.sorted { $0.start < $1.start }.map { $0.id }
         return (p, all.isEmpty ? ids : all)
     }
 }

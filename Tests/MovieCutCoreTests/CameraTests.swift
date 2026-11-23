@@ -195,3 +195,22 @@ final class CameraTests: XCTestCase {
         XCTAssertTrue(isRed(late, 140), "キーフレームでカメラが動くと描画も動く")
     }
 }
+
+
+// MARK: - バグ確認 第2部 C17: カメラの未知項目の往復
+
+final class CameraUnknownKeysRoundTripTests: XCTestCase {
+    func testUnknownKeyframeParamSurvivesRoundTrip() throws {
+        let json = #"{"x":0.6,"keyframes":{"futureZoom":[{"t":0,"v":2}]}}"#
+        let cam = try JSONDecoder().decode(CameraSettings.self, from: Data(json.utf8))
+        let out = String(decoding: try JSONEncoder().encode(cam), as: UTF8.self)
+        XCTAssertTrue(out.contains("futureZoom"), "未知のキーフレーム項目が往復で消えない: \(out)")
+    }
+    func testExtraOnlyCameraIsNotDefault() throws {
+        let json = #"{"futureSetting":123}"#
+        let cam = try JSONDecoder().decode(CameraSettings.self, from: Data(json.utf8))
+        XCTAssertFalse(cam.isDefault, "未知項目だけでも、既定とは扱わない(保存で丸ごと消えるため)")
+        let out = String(decoding: try JSONEncoder().encode(cam), as: UTF8.self)
+        XCTAssertTrue(out.contains("futureSetting"))
+    }
+}

@@ -173,7 +173,19 @@ public enum TachieEditing {
         guard project.tachies.contains(where: { $0.id == id }) else { return project }
         var p = project
         p.tachies.removeAll { $0.id == id }
-        for ti in p.tracks.indices { p.tracks[ti].clips.removeAll { $0.type == .tachie && $0.tachieId == id } }
+        // 最上位だけでなく、複合クリップの内側・シーン定義の中の参照も一緒に消す(参照切れを残さない)
+        func strip(_ tracks: inout [Track]) {
+            for ti in tracks.indices {
+                tracks[ti].clips.removeAll { $0.type == .tachie && $0.tachieId == id }
+                for ci in tracks[ti].clips.indices where tracks[ti].clips[ci].tracks != nil {
+                    var inner = tracks[ti].clips[ci].tracks!
+                    strip(&inner)
+                    tracks[ti].clips[ci].tracks = inner
+                }
+            }
+        }
+        strip(&p.tracks)
+        for si in p.scenes.indices { strip(&p.scenes[si].tracks) }
         return p
     }
 

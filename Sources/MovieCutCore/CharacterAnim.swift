@@ -43,6 +43,8 @@ public enum Blink {
 
     /// t 以前(t を含む)に始まる瞬きの開始時刻。決定的。
     public static func starts(seed: String, until t: Double) -> [Double] {
+        // 終端が非有限だと at が追いつけず無限に増え続ける
+        guard t.isFinite else { return [] }
         var rng = SplitMix64(seed: fnv1a(seed))
         var out: [Double] = []
         var at = 0.0

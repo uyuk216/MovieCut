@@ -283,7 +283,7 @@ extension Clip {
 
     /// 一番大きな合成変位(割合)。描画の作業範囲の余白の目安。
     public var warpMaxDisplacement: Double {
-        max(meshWarp?.maxDisplacement ?? 0, puppetWarp?.maxDisplacement ?? 0)
+        (meshWarp?.maxDisplacement ?? 0) + (puppetWarp?.maxDisplacement ?? 0)
     }
 }
 
@@ -651,7 +651,7 @@ extension Clip {
     /// 時刻 `t` での一番大きな合成変位(割合)。描画の作業範囲の余白の目安。
     public func warpMaxDisplacement(at t: Double) -> Double {
         guard hasWarpKeyframes else { return warpMaxDisplacement }
-        return max(meshWarp(at: t)?.maxDisplacement ?? 0, puppetWarp(at: t)?.maxDisplacement ?? 0)
+        return (meshWarp(at: t)?.maxDisplacement ?? 0) + (puppetWarp(at: t)?.maxDisplacement ?? 0)
     }
 
     /// 時刻 `t` の変形を静的な値へ焼き込んだ複製(変形のキーは外してある)。
