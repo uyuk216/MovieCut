@@ -226,7 +226,7 @@ public struct CoeiroinkV2Client {
         req.httpBody = try JSONSerialization.data(withJSONObject: Self.synthesisRequestBody(text: text, speakerUuid: speakerUuid, styleId: styleId, speed: speed, pitch: pitch, intonation: intonation, volume: volume, prePhonemeLength: pre, postPhonemeLength: post, outputSamplingRate: rate))
         let wav = try await send(req, "v1/synthesis")
         guard !wav.isEmpty else { throw VoiceError.badResponse("v1/synthesis") }
-        let tmp = out.appendingPathExtension("part")
+        let tmp = out.appendingPathExtension("part-\(UUID().uuidString)")
         try wav.write(to: tmp)
         _ = try? FileManager.default.removeItem(at: out)
         try FileManager.default.moveItem(at: tmp, to: out)

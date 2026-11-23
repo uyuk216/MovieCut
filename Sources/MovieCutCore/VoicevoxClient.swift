@@ -111,7 +111,7 @@ public struct VoicevoxClient {
         sreq.setValue("application/json", forHTTPHeaderField: "Content-Type")
         sreq.httpBody = try JSONSerialization.data(withJSONObject: query)
         let wav = try await send(sreq, "synthesis")
-        let tmp = out.appendingPathExtension("part")
+        let tmp = out.appendingPathExtension("part-\(UUID().uuidString)")
         try wav.write(to: tmp)
         _ = try? FileManager.default.removeItem(at: out)
         try FileManager.default.moveItem(at: tmp, to: out)
