@@ -154,8 +154,15 @@ public enum WebVideoFormat: String, CaseIterable, Sendable {
         case .webmVP9:
             return ["-c:v", videoEncoder, "-b:v", "0", "-crf", "\(crf)", "-c:a", "libopus", "-b:a", "128k"]
         case .webmAV1:
+            // libaom-av1 には -preset が無く(起動エラーになる)、速度は -cpu-used、CRF には -b:v 0 が要る
+            if videoEncoder == "libaom-av1" {
+                return ["-c:v", videoEncoder, "-b:v", "0", "-crf", "\(crf)", "-cpu-used", "5", "-c:a", "libopus", "-b:a", "128k"]
+            }
             return ["-c:v", videoEncoder, "-crf", "\(crf)", "-preset", "8", "-c:a", "libopus", "-b:a", "128k"]
         case .mp4AV1:
+            if videoEncoder == "libaom-av1" {
+                return ["-c:v", videoEncoder, "-b:v", "0", "-crf", "\(crf)", "-cpu-used", "5", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart"]
+            }
             return ["-c:v", videoEncoder, "-crf", "\(crf)", "-preset", "8", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart"]
         case .animatedWebP:
             return ["-c:v", videoEncoder, "-loop", "0", "-an"]

@@ -172,4 +172,17 @@ final class FFmpegExportTests: XCTestCase {
         XCTAssertGreaterThan(data.count, 21)
         XCTAssertTrue(data[20] & 0x02 != 0, "アニメーション WebP として成立している")
     }
+
+    /// AV1 の予備エンコーダ libaom-av1 には -preset が無い(起動エラーになる)ので、専用の引数になること。
+    func testAV1ArgumentsForLibaom() {
+        for format in [WebVideoFormat.webmAV1, WebVideoFormat.mp4AV1] {
+            let args = format.ffmpegArguments(videoEncoder: "libaom-av1", crf: 30)
+            XCTAssertFalse(args.contains("-preset"), "\(format): \(args)")
+            XCTAssertTrue(args.contains("-cpu-used"), "\(format): \(args)")
+            // CRF を効かせるには -b:v 0 が要る(VP9 と同じ)
+            if let i = args.firstIndex(of: "-b:v") { XCTAssertEqual(args[i + 1], "0") } else { XCTFail("\(format): -b:v が無い") }
+            let svt = format.ffmpegArguments(videoEncoder: "libsvtav1", crf: 30)
+            XCTAssertTrue(svt.contains("-preset"), "\(format): SVT 側は従来どおり")
+        }
+    }
 }
