@@ -283,3 +283,23 @@ final class EffectsExpansionTests: XCTestCase {
         XCTAssertEqual(px(out, 120, 10, 60)[0], 0, accuracy: 2, "境界から遠い黒は黒いまま")
     }
 }
+
+
+// MARK: - バグ確認 第2部 C19: 効果 LUT のキャッシュ鍵
+
+final class EffectsExpansionCacheKeyTests: XCTestCase {
+    func testSolarizeThresholdsDoNotCollide() {
+        let d1 = Solarize.cubeData(threshold: 0.321, amount: 1)
+        let d2 = Solarize.cubeData(threshold: 0.324, amount: 1)
+        XCTAssertNotEqual(d1, d2)
+    }
+    func testTritoneAmountsDoNotCollide() {
+        let d1 = Tritone.cubeData(palette: 0, amount: 0.321)
+        let d2 = Tritone.cubeData(palette: 0, amount: 0.324)
+        XCTAssertNotEqual(d1, d2)
+    }
+    func testApertureShapeHugeValueDoesNotTrap() {
+        XCTAssertEqual(ApertureShape(value: 1e100), ApertureShape.allCases.last)
+        XCTAssertEqual(ApertureShape(value: -1e100), ApertureShape.allCases.first)
+    }
+}

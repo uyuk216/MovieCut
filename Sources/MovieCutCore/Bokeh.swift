@@ -50,7 +50,8 @@ public enum ApertureShape: Int, CaseIterable, Sendable {
     /// エフェクトの引数の値(0〜7。小数・範囲外は丸めて収める。数でないものは円)。
     public init(value v: Double) {
         guard v.isFinite else { self = .circle; return }
-        self = ApertureShape(rawValue: min(max(Int(v.rounded()), 0), ApertureShape.allCases.count - 1)) ?? .circle
+        let c = min(max(v.rounded(), 0), Double(ApertureShape.allCases.count - 1))
+        self = ApertureShape(rawValue: Int(c)) ?? .circle
     }
 
     /// 外接円の半径 1 の多角形(円は nil)。最初の頂点は真上。回転は度(時計回りが正)。座標は y 上向き。

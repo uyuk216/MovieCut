@@ -118,7 +118,7 @@ public enum AutoWhiteBalance {
 
     /// RGBA8(sRGB の符号化値、アルファは無視)から。`count` は画素数。
     public static func averageColor(rgba: [UInt8], count: Int) -> (r: Double, g: Double, b: Double)? {
-        guard count > 0, rgba.count >= count * 4 else { return nil }
+        guard count > 0, count <= rgba.count / 4 else { return nil }
         let lut = (0..<256).map { Double($0) / 255 }
         var sums = (r: 0.0, g: 0.0, b: 0.0), n = 0
         var all = (r: 0.0, g: 0.0, b: 0.0)
@@ -148,7 +148,9 @@ public enum AutoWhiteBalance {
         c.effects = []
         c.keyframes = c.keyframes.filter { EffectKey.parse($0.key) == nil && $0.key != "opacity" }
         c.opacity = nil; c.transitionIn = nil; c.transitionOut = nil; c.mask = nil; c.blur = nil; c.stabilize = nil; c.stabilizeRoll = nil
+        c.hslMask = nil; c.objectMask = nil   // 選択マスクが付いたまま測ると、選ばれた部分の色だけで推定してしまう
         var p = project
+        p.bg = "#000000"   // 余白の背景色が推定に混ざらないように、測定では黒にする(黒は明るさの範囲外として数えられない)
         let aspect = Double(max(1, project.height)) / Double(max(1, project.width))
         p.width = width
         p.height = max(2, Int((Double(width) * aspect).rounded()))

@@ -232,3 +232,28 @@ final class ColorTransferTests: XCTestCase {
         XCTAssertNil(e.color)
     }
 }
+
+
+// MARK: - バグ確認 第2部 C18: 色調転写の境界
+
+final class ColorTransferBoundaryTests: XCTestCase {
+    func testShortStdArraysReturnInput() {
+        let src = ColorTransfer.Stats(mean: [0.5, 0.5, 0.5], std: [])
+        let ref = ColorTransfer.Stats(mean: [0.5, 0.5, 0.5], std: [0.2, 0.2, 0.2])
+        XCTAssertEqual(ColorTransfer.transferred([0.52, 0.4, 0.3], src: src, ref: ref, strength: 1), [0.52, 0.4, 0.3])
+    }
+    func testStatsWithHugeCountReturnsNil() {
+        XCTAssertNil(ColorTransfer.stats(rgba: [], count: Int.max))
+    }
+    func testCacheKeySeparatesCloseStats() {
+        // 標準偏差 0.01001 と 0.01049 は、3 桁丸めでは同じ鍵になり結果が混ざっていた
+        let ref = ColorTransfer.Stats(mean: [0.5, 0.5, 0.5], std: [0.2, 0.2, 0.2])
+        let a = ColorTransfer.Stats(mean: [0.5, 0.5, 0.5], std: [0.01001, 0.01001, 0.01001])
+        let b = ColorTransfer.Stats(mean: [0.5, 0.5, 0.5], std: [0.01049, 0.01049, 0.01049])
+        let da = ColorTransfer.cachedCubeData(src: a, ref: ref, strength: 1)
+        let db = ColorTransfer.cachedCubeData(src: b, ref: ref, strength: 1)
+        XCTAssertNotEqual(da, db)
+        XCTAssertEqual(da, ColorTransfer.cubeData(src: a, ref: ref, strength: 1))
+        XCTAssertEqual(db, ColorTransfer.cubeData(src: b, ref: ref, strength: 1))
+    }
+}

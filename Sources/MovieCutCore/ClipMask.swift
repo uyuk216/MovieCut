@@ -282,7 +282,7 @@ public enum ShapeMask {
         ctx.fill(CGRect(x: 0, y: 0, width: iw, height: ih))
         ctx.addPath(m.penCGPath(canvasWidth: W, canvasHeight: H))
         ctx.setFillColor(CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1))
-        ctx.fillPath()
+        ctx.fillPath(using: .evenOdd)   // 内外判定(penContains)の偶奇規則とそろえる
         guard let cg = ctx.makeImage() else { return nil }
         return CIImage(cgImage: cg)
     }

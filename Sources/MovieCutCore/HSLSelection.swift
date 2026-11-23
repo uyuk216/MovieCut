@@ -37,7 +37,9 @@ public struct HSLSelection: Equatable, Sendable {
         if hueWidth >= 360 { return 1 }
         var c = hueCenter.isFinite ? hueCenter.truncatingRemainder(dividingBy: 360) : 0
         if c < 0 { c += 360 }
-        var d = abs((hueDegrees.isFinite ? hueDegrees : 0).truncatingRemainder(dividingBy: 360) - c)
+        var h = (hueDegrees.isFinite ? hueDegrees : 0).truncatingRemainder(dividingBy: 360)
+        if h < 0 { h += 360 }
+        var d = abs(h - c)
         if d > 180 { d = 360 - d }
         let half = max(hueWidth, 0) / 2
         if d <= half { return 1 }

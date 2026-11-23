@@ -217,3 +217,16 @@ final class HSLMaskTests: XCTestCase {
         XCTAssertGreaterThan(plain(0.75, 0.5)[2], 200)
     }
 }
+
+
+// MARK: - バグ確認 第2部 C18: 負の色相の円周距離
+
+final class HSLSelectionNegativeHueTests: XCTestCase {
+    func testNegativeHueMatchesItsPositiveEquivalent() {
+        var sel = HSLSelection()
+        sel.hueCenter = 350; sel.hueWidth = 20; sel.hueFeather = 0
+        XCTAssertEqual(sel.weight(hueDegrees: -60, saturation: 0.5, lightness: 0.5),
+                       sel.weight(hueDegrees: 300, saturation: 0.5, lightness: 0.5))
+        XCTAssertEqual(sel.weight(hueDegrees: 300, saturation: 0.5, lightness: 0.5), 0)
+    }
+}

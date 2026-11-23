@@ -170,8 +170,8 @@ public enum EntrancePresets {
         case .driftRight: start["x"] = bx + 0.25; start["opacity"] = 0
         case .driftUp: start["y"] = by - 0.25; start["opacity"] = 0
         case .driftDown: start["y"] = by + 0.25; start["opacity"] = 0
-        case .blur: start["blur"] = 60; start["opacity"] = 0
-        case .blurRelease: start["blur"] = 60
+        case .blur: start["blur"] = bb + 60; start["opacity"] = 0
+        case .blurRelease: start["blur"] = bb + 60
         case .bounceIn:
             // 跳ね: 5 点で easeOutBounce の軌跡をなぞる(キーのイージングは一定)。
             // 登場は u: 0→1、退場はその逆向きに同じ軌跡をたどる。

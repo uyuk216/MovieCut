@@ -347,3 +347,20 @@ final class EntrancePresetTests: XCTestCase {
         XCTAssertFalse(EntrancePresets.applyAsKeyframes(EntrancePresets.preset(id: "shatter")!, edge: .in, to: &c))
     }
 }
+
+
+// MARK: - バグ確認 第2部 C19: 硬いワイプの開始と、境界ぼかしの帯幅
+
+final class RuleWipeBoundaryTests: XCTestCase {
+    func testHardWipeShowsNothingAtProgressZero() {
+        XCTAssertEqual(RuleWipeMath.alpha(field: 0, progress: 0, softness: 0), 0)
+        XCTAssertEqual(RuleWipeMath.alpha(field: 0, progress: 0.5, softness: 0), 1)
+        XCTAssertEqual(RuleWipeMath.alpha(field: 1, progress: 1, softness: 0), 1)
+    }
+    func testFeatherBandIsUniformInPixels() {
+        let top = FeatherMath.alpha(x: 0.5, y: 5.0 / 100, feather: 0.1, aspect: 4)
+        let left = FeatherMath.alpha(x: 5.0 / 400, y: 0.5, feather: 0.1, aspect: 4)
+        XCTAssertEqual(top, 0.5, accuracy: 1e-9)
+        XCTAssertEqual(left, 0.5, accuracy: 1e-9)
+    }
+}

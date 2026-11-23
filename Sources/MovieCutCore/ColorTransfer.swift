@@ -33,7 +33,7 @@ public enum ColorTransfer {
     /// premultiplied RGBA8(0〜255)から統計を測る。ほぼ透明な画素(アルファ 128 未満)は数えない
     /// (透明な所は premultiplied で黒になり、色調を引っ張ってしまうため)。数える画素が無ければ nil。
     public static func stats(rgba: [UInt8], count: Int) -> Stats? {
-        guard count > 0, rgba.count >= count * 4 else { return nil }
+        guard count > 0, count <= rgba.count / 4 else { return nil }
         var sum = [0.0, 0.0, 0.0], sq = [0.0, 0.0, 0.0]
         var n = 0.0
         for i in 0..<count {
@@ -92,7 +92,7 @@ public enum ColorTransfer {
     /// 元の平均色は参照の平均色へ写り、ばらつきは比(std の商)で拡縮する。結果は 0〜1 に収める。
     public static func transferred(_ rgb: [Double], src: Stats, ref: Stats, strength: Double) -> [Double] {
         let k = min(max(strength, 0), 1)
-        guard rgb.count == 3, src.mean.count == 3, ref.mean.count == 3 else { return rgb }
+        guard rgb.count == 3, src.mean.count == 3, ref.mean.count == 3, src.std.count == 3, ref.std.count == 3 else { return rgb }
         var out = [0.0, 0.0, 0.0]
         for c in 0..<3 {
             let s = max(src.std[c], minStd)
@@ -124,10 +124,11 @@ public enum ColorTransfer {
     private static let cubeLock = NSLock()
     private static var cubeCache: [(key: String, data: Data)] = []
 
-    /// 統計の組み合わせごとに立方体を覚える(静止画や同じコマの再描画で作り直さない)。鍵は 3 桁に丸めた値。
+    /// 統計の組み合わせごとに立方体を覚える(静止画や同じコマの再描画で作り直さない)。
+    /// 鍵は丸めない(丸めると、違う統計が同じ鍵になって、先に作った立方体が使い回される)。
     static func cachedCubeData(src: Stats, ref: Stats, strength: Double) -> Data {
-        func q(_ v: [Double]) -> String { v.map { String(format: "%.3f", $0) }.joined(separator: ",") }
-        let key = "\(q(src.mean))|\(q(src.std))|\(q(ref.mean))|\(q(ref.std))|\(String(format: "%.2f", strength))"
+        func q(_ v: [Double]) -> String { v.map { "\($0)" }.joined(separator: ",") }
+        let key = "\(q(src.mean))|\(q(src.std))|\(q(ref.mean))|\(q(ref.std))|\(strength)"
         cubeLock.lock()
         if let hit = cubeCache.first(where: { $0.key == key }) { cubeLock.unlock(); return hit.data }
         cubeLock.unlock()

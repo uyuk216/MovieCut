@@ -165,3 +165,23 @@ final class AutoWhiteBalanceTests: XCTestCase {
         XCTAssertFalse(AutoWhiteBalance.apply(result, to: &fixed))
     }
 }
+
+
+// MARK: - バグ確認 第2部 C18: 測定用プロジェクトの素性
+
+final class AutoWhiteBalanceMeasurementTests: XCTestCase {
+    func testAverageColorWithHugeCountReturnsNil() {
+        XCTAssertNil(AutoWhiteBalance.averageColor(rgba: [], count: Int.max))
+    }
+    func testMeasurementProjectDropsSelectionMasksAndBackground() {
+        var clip = Clip(); clip.type = .image; clip.src = "/x/a.png"
+        clip.hslMask = HSLMask(); clip.objectMask = ObjectMask(sourceClipId: "c", seedRect: TrackRect(x: 0, y: 0, w: 1, h: 1))
+        var p = Project(); p.bg = "#802020"
+        let m = AutoWhiteBalance.measurementProject(for: clip, in: p)
+        XCTAssertNotNil(m)
+        let mc = m!.tracks[0].clips[0]
+        XCTAssertNil(mc.hslMask)
+        XCTAssertNil(mc.objectMask)
+        XCTAssertEqual(m!.bg, "#000000")
+    }
+}

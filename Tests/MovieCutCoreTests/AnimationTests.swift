@@ -175,3 +175,41 @@ final class AnimationTests: XCTestCase {
         XCTAssertEqual(Animation.allKeyTimes(["a": ks([(0, 0), (1, 0)]), "b": ks([(1, 0), (2, 0)])]), [0, 1, 2])
     }
 }
+
+
+// MARK: - バグ確認 第2部 C19: フレームブレンドは透明画素も薄まる
+
+final class FrameBlendAlphaTests: XCTestCase {
+    func solidImage(r: UInt8, g: UInt8, b: UInt8, a: UInt8) -> CGImage {
+        var px: [UInt8] = [b, g, r, a]   // premultipliedFirst (BGRA)。不透明・透明のみで使う
+        if a == 0 { px = [0, 0, 0, 0] }
+        let ctx = CGContext(data: &px, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+                            space: CGColorSpaceCreateDeviceRGB(),
+                            bitmapInfo: CGBitmapInfo.byteOrder32Little.rawValue | CGImageAlphaInfo.premultipliedFirst.rawValue)!
+        return ctx.makeImage()!
+    }
+    func testTransparentBFadesA() {
+        let a = solidImage(r: 255, g: 0, b: 0, a: 255)
+        let b = solidImage(r: 0, g: 0, b: 0, a: 0)
+        let m = FrameBlend.mix(a, b, weight: 0.5)!
+        var px = [UInt8](repeating: 0, count: 4)
+        let ctx = CGContext(data: &px, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+                            space: CGColorSpaceCreateDeviceRGB(),
+                            bitmapInfo: CGBitmapInfo.byteOrder32Little.rawValue | CGImageAlphaInfo.premultipliedFirst.rawValue)!
+        ctx.draw(m, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+        XCTAssertEqual(Int(px[3]), 127, accuracy: 2, "線形補間ならアルファは半分になる")
+    }
+}
+
+
+// MARK: - バグ確認 第2部 C19: 巨大なキー値の補間
+
+final class AnimationHugeValueTests: XCTestCase {
+    func testInterpolateHugeEndpointsStaysFinite() {
+        let ks = [Keyframe(t: 0, v: -1e308), Keyframe(t: 1, v: 1e308)]
+        let v = Animation.interpolate(ks, at: 0.5)
+        XCTAssertNotNil(v)
+        XCTAssertTrue(v!.isFinite)
+        XCTAssertEqual(v!, 0, accuracy: 1e292)
+    }
+}

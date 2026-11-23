@@ -117,7 +117,7 @@ public enum RuleWipeMath {
     public static func alpha(field f: Double, progress u: Double, softness s: Double) -> Double {
         let uu = min(max(u, 0), 1)
         let ss = clampedSoftness(s)
-        if ss <= 0 { return f <= uu ? 1 : 0 }
+        if ss <= 0 { return uu <= 0 ? 0 : (f <= uu ? 1 : 0) }
         return min(max((uu * (1 + ss) - f) / ss, 0), 1)
     }
 
@@ -184,11 +184,15 @@ public enum RuleWipeMath {
 /// `feather` は「縁から内側へ薄くなる帯の幅」(短い辺に対する割合、0〜0.5)。
 public enum FeatherMath {
     /// 位置 (x, y)(0〜1)での見え具合。内側は 1、縁は 0。
-    public static func alpha(x: Double, y: Double, feather f: Double) -> Double {
+    /// 帯の幅は「短い辺に対する割合」なので、距離は画素に直して比べる(横長・縦長で帯幅が軸ごとに変わらないように)。
+    /// `aspect` は幅/高さ(正方形は 1)。
+    public static func alpha(x: Double, y: Double, feather f: Double, aspect: Double = 1) -> Double {
         let ff = min(max(f, 0), 0.5)
         guard ff > 0 else { return 1 }
-        let d = min(min(x, 1 - x), min(y, 1 - y))
-        return min(max(d / ff, 0), 1)
+        let a = (aspect.isFinite && aspect > 0) ? aspect : 1
+        // 高さを 1 とした画素距離。短い辺は min(a, 1)
+        let d = min(min(x, 1 - x) * a, min(y, 1 - y))
+        return min(max(d / (ff * min(a, 1)), 0), 1)
     }
 
     /// マスク画素(行優先・左上原点)。
@@ -197,7 +201,7 @@ public enum FeatherMath {
         var out = [UInt8](repeating: 0, count: w * h)
         for j in 0..<h {
             for i in 0..<w {
-                let v = alpha(x: (Double(i) + 0.5) / Double(w), y: (Double(j) + 0.5) / Double(h), feather: f)
+                let v = alpha(x: (Double(i) + 0.5) / Double(w), y: (Double(j) + 0.5) / Double(h), feather: f, aspect: Double(w) / Double(h))
                 out[j * w + i] = UInt8((v * 255).rounded())
             }
         }

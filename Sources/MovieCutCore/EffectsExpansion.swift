@@ -25,7 +25,7 @@ public enum Tritone {
 
     public static func cubeData(palette: Int, amount: Double) -> Data {
         let a = min(max(amount, 0), 1)
-        let key = "t\(palette)-\(Int((a * 100).rounded()))"
+        let key = "t\(palette)-\(a)"
         lock.lock(); if let d = cache[key] { lock.unlock(); return d }; lock.unlock()
         let p = palettes[min(max(palette, 0), palettes.count - 1)]
         let n = dimension
@@ -67,7 +67,7 @@ public enum Solarize {
 
     public static func cubeData(threshold: Double, amount: Double) -> Data {
         let t = min(max(threshold, 0), 1), a = min(max(amount, 0), 1)
-        let key = "s\(Int((t * 100).rounded()))-\(Int((a * 100).rounded()))"
+        let key = "s\(t)-\(a)"
         lock.lock(); if let d = cache[key] { lock.unlock(); return d }; lock.unlock()
         let n = dimension
         var floats = [Float](repeating: 0, count: n * n * n * 4)

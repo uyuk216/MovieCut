@@ -147,7 +147,7 @@ public enum EffectPipeline {
             case .bokehBlur: m += e.v("radius") * scale * 1.1 + 4
             case .dropShadow: m += max(abs(e.v("dx")), abs(e.v("dy"))) * scale + 3 * e.v("blur") * scale * 0.5
             case .outline: m += e.v("width") * scale
-            case .edgeBlur: m += 3 * e.v("radius") * scale * 0.5
+            case .edgeBlur: m += 3 * e.v("radius") * scale
             case .echo: m += e.v("distance") * e.v("count") * scale
             default: break
             }

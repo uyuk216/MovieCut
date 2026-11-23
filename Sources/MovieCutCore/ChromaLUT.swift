@@ -70,7 +70,7 @@ public enum LUTApply {
         var src = img
         if lut.hasCustomDomain {
             // 入力の範囲(DOMAIN_MIN/MAX)を 0..1 に正規化
-            func s(_ i: Int) -> Double { 1 / Double(lut.domainMax[i] - lut.domainMin[i]) }
+            func s(_ i: Int) -> Double { 1 / (Double(lut.domainMax[i]) - Double(lut.domainMin[i])) }
             func bias(_ i: Int) -> Double { -Double(lut.domainMin[i]) * s(i) }
             src = src.unpremultiplyingAlpha().applyingFilter("CIColorMatrix", parameters: [
                 "inputRVector": CIVector(x: s(0), y: 0, z: 0, w: 0), "inputGVector": CIVector(x: 0, y: s(1), z: 0, w: 0),
