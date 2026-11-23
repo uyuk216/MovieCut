@@ -445,3 +445,30 @@ final class ClipEditingTests: XCTestCase {
         XCTAssertEqual(back.project, p)
     }
 }
+
+
+/// シーンの分割と、短い断片の右トリム(第2部 C11)。
+final class ClipEditingSceneAndTinyTrimTests: XCTestCase {
+    private func clip(_ id: String, _ type: ClipType, start: Double, dur: Double) -> Clip {
+        var c = Clip(); c.id = id; c.type = type; c.start = start; c.duration = dur; return c
+    }
+    private func project(_ clips: [Clip]) -> Project {
+        var p = Project.new(); var t = Track(name: "T"); t.clips = clips; p.tracks = [t]; return p
+    }
+
+    func testSplitSceneClipAdvancesOffset() {
+        // シーンは offset が内部時刻。分割した右断片は、切った位置から続く
+        // (従来は .scene が offset を動かす対象に入らず、頭から再生されていた)。
+        var sc = clip("s", .scene, start: 0, dur: 10); sc.sceneId = "s1"
+        let r = ClipEditing.split(sc, at: 5)
+        XCTAssertEqual(r?.left.offset, 0)
+        XCTAssertEqual(r?.right.offset, 5)
+    }
+
+    func testTrimRightDoesNotGrowTinyClip() {
+        // 0.02 秒の断片を縮める操作で、0.05 秒へ勝手に伸びない(左トリムと同じ扱い)。
+        let p = project([clip("i", .image, start: 0, dur: 0.02)])
+        let r = ClipEditing.trimRight(in: p, clipId: "i", deltaT: -0.001, playhead: 99, pps: 40, snapEnabled: false)
+        XCTAssertEqual(r.project.allClips[0].duration, 0.02, accuracy: 1e-9)
+    }
+}

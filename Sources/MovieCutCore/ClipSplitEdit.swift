@@ -50,10 +50,29 @@ public enum ClipSplitEdit {
         pair(at: t, in: project, where: isPicture) != nil
     }
 
+    /// アンカーを基準にした音の組。アンカーが音だけのクリップなら、そのクリップを含む組を優先する
+    /// (別の音声レイヤーに同じ時刻の境界があっても、選択したレイヤーの組を動かすため)。
+    private static func soundPair(at t: Double, in project: Project, anchorClipId: String) -> (left: String, right: String)? {
+        if let loc = ClipEditing.locate(anchorClipId, in: project) {
+            let a = project.tracks[loc.track].clips[loc.index]
+            if isSoundOnly(a) {
+                func isSound(_ id: String) -> Bool {
+                    guard let l = ClipEditing.locate(id, in: project) else { return false }
+                    return isSoundOnly(project.tracks[l.track].clips[l.index])
+                }
+                if abs(a.start + a.duration - t) <= ClipRollSlip.adjacencyTolerance,
+                   let r = ClipRollSlip.rightNeighbor(of: a.id, in: project), isSound(r) { return (a.id, r) }
+                if abs(a.start - t) <= ClipRollSlip.adjacencyTolerance,
+                   let l = ClipRollSlip.leftNeighbor(of: a.id, in: project), isSound(l) { return (l, a.id) }
+            }
+        }
+        return soundPair(at: t, in: project)
+    }
+
     /// J/Lカットができない理由(日本語)。使えるなら nil。
     public static func splitEditBlockedReason(in project: Project, anchorClipId: String) -> String? {
         guard let t = boundaryTime(for: anchorClipId, in: project) else { return "隣り合うクリップとの境界がありません" }
-        guard let s = soundPair(at: t, in: project) else { return "その境界に音声・ボイスだけのクリップの境界がありません" }
+        guard let s = soundPair(at: t, in: project, anchorClipId: anchorClipId) else { return "その境界に音声・ボイスだけのクリップの境界がありません" }
         guard hasPictureBoundary(at: t, in: project) else { return "その境界に映像クリップの境界がありません" }
         if LayerEditing.isLockedClip(s.left, in: project) || LayerEditing.isLockedClip(s.right, in: project) {
             return "ロックされたレイヤー・クリップは編集できません"
@@ -67,7 +86,7 @@ public enum ClipSplitEdit {
         guard deltaT.isFinite, deltaT != 0,
               splitEditBlockedReason(in: project, anchorClipId: anchorClipId) == nil,
               let t = boundaryTime(for: anchorClipId, in: project),
-              let s = soundPair(at: t, in: project) else { return nil }
+              let s = soundPair(at: t, in: project, anchorClipId: anchorClipId) else { return nil }
         return ClipRollSlip.roll(in: project, leftClipId: s.left, deltaT: deltaT)
     }
 

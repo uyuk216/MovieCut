@@ -68,7 +68,8 @@ public enum ClipEditing {
 
     /// トリム・分割で offset を動かす(素材の時間が流れる)クリップか。フリーズ(1コマで止まる)は動かさない。
     /// 複合クリップも、中身の時刻(offset)で頭・分割の位置を持つ(描画・音声が offset を読む)。
-    static func movesSource(_ clip: Clip) -> Bool { (hasSourceTimeline(clip.type) || clip.type == .compound) && !clip.isFreeze }
+    /// シーンも同じ(offset がシーン内部の時刻を指す)ので、分割・左トリムで offset を進める。
+    static func movesSource(_ clip: Clip) -> Bool { (hasSourceTimeline(clip.type) || clip.type == .compound || clip.type == .scene) && !clip.isFreeze }
 
     /// 本体のドラッグ: 頭と終わりの両方を吸着させる(startDrag と同じ: 頭を吸着 → 終わりを吸着したら終わりに合わせて戻す)。
     /// `targetTrackIndex` が別のレイヤーなら、そこへ移す(元のレイヤーから外して、行き先の末尾に足す)。nil / 範囲外 / 同じなら動かさない。
@@ -104,25 +105,28 @@ public enum ClipEditing {
         guard let loc = locate(clipId, in: project) else { return Result(project: project, guides: []) }
         var p = project
         var clip = p.tracks[loc.track].clips[loc.index]
-        let raw = clip.start + max(minDuration, clip.duration + deltaT)
+        // もともと最短より短いクリップ(分割でできた断片など)は、縮める操作で勝手に伸ばさない
+        // (左トリムの minD と同じ扱い)。
+        let minD = min(minDuration, clip.duration)
+        let raw = clip.start + max(minD, clip.duration + deltaT)
         let sp = snapPoint(raw, excluding: clipId, project: project, playhead: playhead, pps: pps, enabled: snapEnabled)
         let ne = sp ?? raw
-        var d = max(minDuration, ne - clip.start)
+        var d = max(minD, ne - clip.start)
         if movesSource(clip) {
             let rate = clip.effectiveSpeed
             if let ramp = clip.rampPoints {
                 // 速度ランプ: 右端の素材の時刻は積分で決まる。素材の終わりを越えない
                 if let src = clip.srcDuration {
-                    d = max(minDuration, min(d, SpeedRamp.time(ramp, forIntegral: src - clip.offset)))
+                    d = max(minD, min(d, SpeedRamp.time(ramp, forIntegral: src - clip.offset)))
                 }
                 clip.speedRamp = SpeedRamp.fit(ramp, to: d)
             } else if clip.effectiveReverse {
                 // 逆再生は右端が素材の頭側(offset)。素材の頭より前へは延ばせない。縮めた分は offset が進む(見えているコマは動かない)
                 let dur0 = clip.duration
-                d = max(minDuration, min(d, dur0 + clip.offset / rate))
+                d = max(minD, min(d, dur0 + clip.offset / rate))
                 clip.offset = max(0, clip.offset - (d - dur0) * rate)
             } else if let src = clip.srcDuration {
-                d = max(minDuration, min(d, (src - clip.offset) / rate))
+                d = max(minD, min(d, (src - clip.offset) / rate))
             }
         }
         clip.duration = d

@@ -34,11 +34,43 @@ public enum ClipTransfer {
         let used = usedCharacterIds(picked.map(\.clip))
         let chars = project.characters.filter { used.contains($0.id) }
         if !chars.isEmpty { p.characters = chars }
+        // シーン・立ち絵の参照先の定義も一緒に写す(参照だけ写すと、行き先で何も表示されなくなる)。
+        p.scenes = sceneDefinitions(referencedFrom: p.tracks, in: project)
+        var tachieIds = usedTachieIds(p.tracks.flatMap(\.clips))
+        for s in p.scenes { tachieIds.formUnion(usedTachieIds(s.tracks.flatMap(\.clips))) }
+        p.tachies = project.tachies.filter { tachieIds.contains($0.id) }
         var paths = Set<String>()
         UnusedMedia.collect(picked.map(\.clip), into: &paths)
         p.mediaPool = project.mediaPool.filter { paths.contains($0) }
         p.mediaHints = project.mediaHints.filter { paths.contains($0.key) }
         return Package(project: p, copied: picked.count)
+    }
+
+    /// `tracks` から参照されるシーンの定義(シーンの中から参照されるシーンもたどる)。
+    static func sceneDefinitions(referencedFrom tracks: [Track], in project: Project) -> [SceneDefinition] {
+        var ids = SceneEditing.referencedSceneIds(in: tracks)
+        var queue = Array(ids)
+        while let sid = queue.popLast() {
+            guard let def = project.scenes.first(where: { $0.id == sid }) else { continue }
+            for nid in SceneEditing.referencedSceneIds(in: def.tracks) where !ids.contains(nid) {
+                ids.insert(nid)
+                queue.append(nid)
+            }
+        }
+        return project.scenes.filter { ids.contains($0.id) }
+    }
+
+    /// 立ち絵クリップが使う立ち絵素材の id(複合クリップの中も)。
+    static func usedTachieIds(_ clips: [Clip]) -> Set<String> {
+        var out = Set<String>()
+        func walk(_ cs: [Clip]) {
+            for c in cs {
+                if c.type == .tachie, let id = c.tachieId, !id.isEmpty { out.insert(id) }
+                for tr in c.tracks ?? [] { walk(tr.clips) }
+            }
+        }
+        walk(clips)
+        return out
     }
 
     /// ボイスクリップが使うキャラクターの id(複合クリップの中も)。
@@ -87,6 +119,16 @@ public enum ClipTransfer {
                 remapCharacters(&c, map)
                 return .init(track: it.track, clip: c)
             }
+        }
+        // シーン・立ち絵の参照先が行き先に無ければ足す(同じ id があれば行き先の定義を優先する。
+        // キャラクターの id 一致と同じ扱い)。
+        for s in sceneDefinitions(referencedFrom: source.tracks, in: source) where !p.scenes.contains(where: { $0.id == s.id }) {
+            p.scenes.append(s)
+        }
+        var tachieIds = usedTachieIds(items.map(\.clip))
+        for s in p.scenes { tachieIds.formUnion(usedTachieIds(s.tracks.flatMap(\.clips))) }
+        for t in source.tachies where tachieIds.contains(t.id) && !p.tachies.contains(where: { $0.id == t.id }) {
+            p.tachies.append(t)
         }
         let minStart = items.map { $0.clip.start }.min() ?? 0
         guard let r = ClipEditing.paste(ClipClipboard(items: items), in: p, at: minStart, targetTrack: nil) else { return nil }

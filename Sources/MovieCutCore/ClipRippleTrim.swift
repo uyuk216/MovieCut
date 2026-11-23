@@ -91,9 +91,11 @@ public enum ClipRippleTrim {
                 p.tracks[ti].clips[ci].start = max(0, p.tracks[ti].clips[ci].start + shift)
             }
         }
-        // 新しい重なりを作らない(元からの重なりは数えない)
+        // 新しい重なりを作らない(元からの重なりは数えない)。
+        // 総数の比較では「既存の重なりが消えて別の重なりができる」入れ替わりを見逃すため、
+        // 重なる組そのものを比べて、新しい組が増えていたら断る。
         let touched = allLayers ? Array(p.tracks.indices) : [loc.track]
-        for ti in touched where overlapCount(p.tracks[ti].clips) > overlapCount(project.tracks[ti].clips) { return nil }
+        for ti in touched where !overlappingPairs(p.tracks[ti].clips).subtracting(overlappingPairs(project.tracks[ti].clips)).isEmpty { return nil }
         guard p != project else { return nil }
         return ClipEditing.Result(project: p, guides: guides)
     }
@@ -105,6 +107,20 @@ public enum ClipRippleTrim {
         let c = project.tracks[loc.track].clips[loc.index]
         let d = edge == .head ? playhead - c.start : playhead - (c.start + c.duration)
         return trim(in: project, clipId: clipId, edge: edge, deltaT: d, allLayers: allLayers, playhead: playhead, pps: 1, snapEnabled: false)?.project
+    }
+
+    /// 1 つのレイヤーの中で、時間が重なっているクリップの組(組のキー文字列)。
+    static func overlappingPairs(_ clips: [Clip]) -> Set<String> {
+        var out = Set<String>()
+        for i in clips.indices {
+            for j in clips.indices where j > i {
+                let a = clips[i], b = clips[j]
+                if a.start < b.start + b.duration - eps && b.start < a.start + a.duration - eps {
+                    out.insert(a.id < b.id ? a.id + "\u{1}" + b.id : b.id + "\u{1}" + a.id)
+                }
+            }
+        }
+        return out
     }
 
     /// 1 つのレイヤーの中で、時間が重なっているクリップの組の数。

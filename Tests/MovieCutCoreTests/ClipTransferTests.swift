@@ -107,3 +107,35 @@ final class ClipTransferTests: XCTestCase {
         XCTAssertNil(ClipTransfer.insert(from: Project(), into: Project()))
     }
 }
+
+
+/// 転送でシーン・立ち絵の参照先の定義が欠落しないこと(第2部 C11)。
+final class ClipTransferDefinitionsTests: XCTestCase {
+    private func source() -> Project {
+        var p = Project.new()
+        var st = Track(name: "場面")
+        var inner = Clip(); inner.type = .video; inner.src = "/m/in.mp4"; inner.duration = 5
+        st.clips = [inner]
+        p.scenes = [SceneDefinition(id: "s1", name: "場面1", tracks: [st])]
+        var tach = Tachie(name: "立ち絵"); tach.id = "t1"
+        p.tachies = [tach]
+        var sceneClip = Clip(); sceneClip.id = "sc"; sceneClip.type = .scene; sceneClip.sceneId = "s1"; sceneClip.duration = 5
+        var tachieClip = Clip(); tachieClip.id = "tc"; tachieClip.type = .tachie; tachieClip.tachieId = "t1"; tachieClip.duration = 5
+        var main = Track(name: "主"); main.clips = [sceneClip, tachieClip]
+        p.tracks = [main]
+        return p
+    }
+
+    func testExtractCarriesSceneAndTachieDefinitions() {
+        let pkg = ClipTransfer.extract(from: source(), clipIds: ["sc", "tc"])
+        XCTAssertEqual(pkg?.project.scenes.map(\.id), ["s1"])
+        XCTAssertEqual(pkg?.project.tachies.map(\.id), ["t1"])
+    }
+
+    func testInsertAddsMissingDefinitions() {
+        let src = ClipTransfer.extract(from: source(), clipIds: ["sc", "tc"])!.project
+        let r = ClipTransfer.insert(from: src, into: Project.new())
+        XCTAssertEqual(r?.project.scenes.map(\.id), ["s1"])
+        XCTAssertEqual(r?.project.tachies.map(\.id), ["t1"])
+    }
+}

@@ -111,3 +111,25 @@ final class SubclipBatchTests: XCTestCase {
         XCTAssertNil(SubclipBatch.place([], in: p))
     }
 }
+
+
+/// 素材名の中の範囲らしい文字列と、壊れた範囲の扱い(第2部 C11)。
+final class SubclipBatchNameParsingTests: XCTestCase {
+    func testFilenameContainingRangeLikeDigitsIsNotMisread() {
+        // ファイル名の「001-002」を範囲と誤認せず、後ろの 0:05-0:12 を範囲として読む。
+        let pool = ["/m/take001-002.mov"]
+        let r = SubclipBatch.parse("take001-002.mov 0:05-0:12", pool: pool)
+        XCTAssertTrue(r.errors.isEmpty, "\(r.errors)")
+        XCTAssertEqual(r.specs.map(\.src), ["/m/take001-002.mov"])
+        XCTAssertEqual(r.specs.map(\.inTime), [5])
+        XCTAssertEqual(r.specs.map(\.outTime), [12])
+    }
+
+    func testBrokenRangeIsAnErrorNotSilentlyDropped() {
+        // 「2--3」のような壊れた範囲がある行は、一部の範囲だけを黙って採用しない。
+        let pool = ["/m/clip.mov"]
+        let r = SubclipBatch.parse("clip.mov 0-1, 2--3", pool: pool)
+        XCTAssertFalse(r.errors.isEmpty)
+        XCTAssertTrue(r.specs.isEmpty, "壊れた範囲がある行は一部だけ採用しない")
+    }
+}

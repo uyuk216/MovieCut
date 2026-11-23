@@ -150,3 +150,28 @@ final class ClipRippleTrimTests: XCTestCase {
         XCTAssertEqual(r.guides, [2])
     }
 }
+
+
+/// 重なりの入れ替わりを見逃さないこと(第2部 C11)。
+final class ClipRippleTrimPairSwapTests: XCTestCase {
+    private func video(_ id: String, start: Double, dur: Double) -> Clip {
+        var c = Clip(); c.id = id; c.type = .video; c.start = start; c.duration = dur; return c
+    }
+    private func project(_ clips: [Clip]) -> Project {
+        var p = Project.new(); var t = Track(name: "V"); t.clips = clips; p.tracks = [t]; return p
+    }
+
+    func testRippleTrimRejectsSwappedOverlap() {
+        // A=[0,10) B=[8,12) C=[12,14)。A の尻を 4 秒縮めると A∩B は消えるが、
+        // 後ろの C が [8,10) へ来て B と新しく重なる。重なりの総数は同じでも断る。
+        let p = project([video("A", start: 0, dur: 10), video("B", start: 8, dur: 4), video("C", start: 12, dur: 2)])
+        XCTAssertNil(ClipRippleTrim.trim(in: p, clipId: "A", edge: .tail, deltaT: -4, allLayers: false, playhead: 0, pps: 1, snapEnabled: false))
+    }
+
+    func testRippleTrimAllowsRemovingOverlap() {
+        // 既存の重なりが消えるだけなら通る。
+        let p = project([video("A", start: 0, dur: 10), video("B", start: 8, dur: 4)])
+        let r = ClipRippleTrim.trim(in: p, clipId: "A", edge: .tail, deltaT: -4, allLayers: false, playhead: 0, pps: 1, snapEnabled: false)
+        XCTAssertEqual(r?.project.allClips.first { $0.id == "A" }?.duration, 6)
+    }
+}

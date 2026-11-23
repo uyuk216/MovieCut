@@ -183,3 +183,27 @@ final class ClipSlideSplitEditTests: XCTestCase {
         XCTAssertNil(ClipSplitEdit.splitEditBlockedReason(in: avPair(), anchorClipId: "v1"))
     }
 }
+
+
+/// J/Lカットは、選択した音声レイヤーの組を動かすこと(第2部 C11)。
+final class ClipSplitEditAnchorLayerTests: XCTestCase {
+    private func clip(_ id: String, _ type: ClipType, start: Double, dur: Double) -> Clip {
+        var c = Clip(); c.id = id; c.type = type; c.start = start; c.duration = dur; c.src = "/x.wav"; return c
+    }
+
+    func testSplitEditMovesAnchorsOwnSoundPair() {
+        // 映像 1 本 + 音声 2 本、どれにも 5 秒の境界がある。
+        // 後ろの音声レイヤーをアンカーにしたら、そのレイヤーの組だけが動く。
+        var p = Project.new()
+        var v = Track(name: "V"); v.clips = [clip("v1", .video, start: 0, dur: 5), clip("v2", .video, start: 5, dur: 5)]
+        var a = Track(name: "A1"); a.clips = [clip("a1", .audio, start: 0, dur: 5), clip("a2", .audio, start: 5, dur: 5)]
+        var b = Track(name: "A2"); b.clips = [clip("b1", .audio, start: 0, dur: 5), clip("b2", .audio, start: 5, dur: 5)]
+        p.tracks = [v, a, b]
+        let r = ClipSplitEdit.splitEdit(in: p, anchorClipId: "b1", deltaT: 1)
+        XCTAssertNotNil(r)
+        XCTAssertEqual(r?.allClips.first { $0.id == "b1" }?.duration, 6)
+        XCTAssertEqual(r?.allClips.first { $0.id == "b2" }?.start, 6)
+        XCTAssertEqual(r?.allClips.first { $0.id == "a1" }?.duration, 5, "選択していない音声レイヤーは動かない")
+        XCTAssertEqual(r?.allClips.first { $0.id == "a2" }?.start, 5)
+    }
+}

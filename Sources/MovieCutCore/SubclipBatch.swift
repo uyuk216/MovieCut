@@ -92,13 +92,26 @@ public enum SubclipBatch {
             if line.isEmpty || line.hasPrefix("#") { continue }
             let ns = line as NSString
             let matches = re.matches(in: line, range: NSRange(location: 0, length: ns.length))
-            guard let firstMatch = matches.first else {
+            guard !matches.isEmpty else {
                 errors.append(LineError(line: no, message: "範囲(例 0:05-0:12)がありません"))
                 continue
             }
+            // 素材名の中の数字・ハイフン(例: take001-002.mov の「001-002」)を範囲と誤認しないよう、
+            // 一致を後ろから見て「前の文字列が空、または素材として解決できる」ものを範囲の開始とする。
+            // どれも解決できなければ最初の一致を使い、従来どおり素材の解決エラーを出す。
+            var startIndex = 0
+            var chosenResolution: Resolution?
+            for k in matches.indices.reversed() {
+                let prefix = ns.substring(to: matches[k].range.location).trimmingCharacters(in: CharacterSet(charactersIn: " \t,、:："))
+                if prefix.isEmpty { startIndex = k; chosenResolution = nil; break }
+                let r = resolve(prefix, pool: pool, fileExists: fileExists)
+                if case .found = r { startIndex = k; chosenResolution = r; break }
+            }
+            let firstMatch = matches[startIndex]
+            let ranges = Array(matches[startIndex...])
             let name = ns.substring(to: firstMatch.range.location).trimmingCharacters(in: CharacterSet(charactersIn: " \t,、:："))
             if !name.isEmpty {
-                switch resolve(name, pool: pool, fileExists: fileExists) {
+                switch chosenResolution ?? resolve(name, pool: pool, fileExists: fileExists) {
                 case .found(let path):
                     let kind = ClipEditing.kindOf(path: path)
                     guard kind == .video || kind == .audio else {
@@ -117,7 +130,19 @@ public enum SubclipBatch {
                 errors.append(LineError(line: no, message: "素材が決まっていません"))
                 continue
             }
-            for m in matches {
+            // 範囲として読んだ部分と区切り以外の文字が残っていたら、書き間違いとして行ごと採らない
+            // (例: 「2--3」のような壊れた範囲が、黙って落ちて一部の範囲だけ採用されるのを防ぐ)。
+            var rest = ns.substring(from: firstMatch.range.location)
+            for m in ranges.reversed() {
+                let r = NSRange(location: m.range.location - firstMatch.range.location, length: m.range.length)
+                rest = (rest as NSString).replacingCharacters(in: r, with: "")
+            }
+            let leftover = rest.trimmingCharacters(in: CharacterSet(charactersIn: " \t,、，"))
+            guard leftover.isEmpty else {
+                errors.append(LineError(line: no, message: "範囲の書き方を読めません:「\(leftover)」"))
+                continue
+            }
+            for m in ranges {
                 let a = ns.substring(with: m.range(at: 1)), b = ns.substring(with: m.range(at: 2))
                 guard let t0 = parseTime(a), let t1 = parseTime(b) else {
                     errors.append(LineError(line: no, message: "時刻「\(a)-\(b)」を読めません"))
