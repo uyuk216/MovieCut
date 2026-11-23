@@ -78,9 +78,17 @@ public struct AquesTalkSynthesizer {
         if let hit = cache.hit(forKey: key) { return hit }
         let out = try cache.url(forKey: key)
         // 速さ 100・未指定では従来どおり無変換で作る(参照 WAV とのバイト一致を保つ互換条件)。
+        // ただしキャッシュの場所へ直接書くと、途中終了したときに壊れた WAV が残り、
+        // 次回に「キャッシュに当たった」として使われ続ける。隣の一時ファイルへ作ってから移す
+        // (移すだけなので中身のバイト列は変わらない)。
         guard VoiceTimeStretch.needsStretch(speed: speed), let speed else {
-            let inv = invocation(text: text, voice: voice, out: out)
-            try await Self.run(executable: inv.executable, arguments: inv.arguments, expecting: out)
+            // 一時ファイルも .wav で終わる名前にする(プレイヤーが拡張子で形式を判定するため)
+            let tmp = out.deletingLastPathComponent().appendingPathComponent("\(key).part-\(UUID().uuidString).wav")
+            defer { try? FileManager.default.removeItem(at: tmp) }
+            let inv = invocation(text: text, voice: voice, out: tmp)
+            try await Self.run(executable: inv.executable, arguments: inv.arguments, expecting: tmp)
+            _ = try? FileManager.default.removeItem(at: out)
+            try FileManager.default.moveItem(at: tmp, to: out)
             return out
         }
         // 速さは AquesTalkPlayer の引数に無いので、一度テンポラリへ生成してから音程保持の
@@ -89,7 +97,12 @@ public struct AquesTalkSynthesizer {
         defer { try? FileManager.default.removeItem(at: raw) }
         let inv = invocation(text: text, voice: voice, out: raw)
         try await Self.run(executable: inv.executable, arguments: inv.arguments, expecting: raw)
-        try VoiceTimeStretch.apply(input: raw, speedPercent: speed, output: out)
+        // 伸縮の書き込みも、途中で失敗したときに壊れた WAV がキャッシュに残らないよう一時ファイル経由にする
+        let stretched = FileManager.default.temporaryDirectory.appendingPathComponent("moviecut-aq-stretch-\(UUID().uuidString).wav")
+        defer { try? FileManager.default.removeItem(at: stretched) }
+        try VoiceTimeStretch.apply(input: raw, speedPercent: speed, output: stretched)
+        _ = try? FileManager.default.removeItem(at: out)
+        try FileManager.default.moveItem(at: stretched, to: out)
         return out
     }
 

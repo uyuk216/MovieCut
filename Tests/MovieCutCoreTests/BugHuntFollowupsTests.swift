@@ -22,6 +22,33 @@ final class BugHuntFollowupsTests: XCTestCase {
         XCTAssertTrue(audio.suggestedFileName(documentName: "d").hasSuffix(".m4a"))
     }
 
+    /// AquesTalk の合成が途中で失敗したとき、壊れた WAV がキャッシュに残らないこと
+    /// (残ると次回に「当たった」として壊れた音声が使われ続けていた不具合の回帰)。
+    /// 同じプレイヤーが「失敗 → 成功」と変わる形で確かめる(キーはプレイヤーのパスで決まるため)。
+    func testAquesTalkFailedSynthesisDoesNotPoisonCache() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("aqpoison-test-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let flag = dir.appendingPathComponent("failflag")
+        let player = dir.appendingPathComponent("player.sh")
+        let script = "#!/bin/sh\n"
+            + "while [ $# -gt 0 ]; do if [ \"$1\" = \"-W\" ]; then out=\"$2\"; fi; shift; done\n"
+            + "if [ -f \"\(flag.path)\" ]; then printf 'PARTIAL' > \"$out\"; exit 1; fi\n"
+            + "printf 'FULLWAV' > \"$out\"\nexit 0\n"
+        try script.write(to: player, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: player.path)
+        let cache = VoiceCache(directory: dir.appendingPathComponent("cache"))
+        let synth = AquesTalkSynthesizer(cache: cache, playerPath: player.path)
+        try Data().write(to: flag)
+        do { _ = try await synth.synthesize(text: "テスト", voice: nil, speed: nil); XCTFail("失敗するはず") } catch {}
+        let leftovers = (try? FileManager.default.contentsOfDirectory(atPath: cache.directory.path)) ?? []
+        XCTAssertTrue(leftovers.filter { $0.hasSuffix(".wav") }.isEmpty,
+                      "失敗した合成の壊れた WAV がキャッシュに残っている: \(leftovers)")
+        try FileManager.default.removeItem(at: flag)
+        let url = try await synth.synthesize(text: "テスト", voice: nil, speed: nil)
+        XCTAssertEqual(try String(contentsOf: url, encoding: .utf8), "FULLWAV")
+    }
+
     /// 口パク用タイミング(moraTimeline)がアクセントの手修正を反映すること
     /// (合成だけ手修正が効いて、タイミングは既定のままになっていた不具合の回帰)。
     func testMoraTimelineReflectsAccentEdits() async throws {
