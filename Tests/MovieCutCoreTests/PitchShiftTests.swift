@@ -44,6 +44,21 @@ final class PitchShiftTests: XCTestCase {
         }
     }
 
+    /// 小幅な音程変更でも時間伸縮が最後まで効くこと(以前は粒の基準位置が前の選択位置からの
+    /// 相対指定で、ずれが累積して末尾ほど音程がずれ・音量が落ちていた不具合の回帰テスト)。
+    func testSmallShiftsKeepSoundUntilTheEnd() {
+        let x = sine(seconds: 2, f: 440)
+        for s in [1.0, 2.0, 4.0] {
+            let y = PitchShift.shift(x, semitones: s)
+            let tail = Array(y[Int(1.85 * sr)...])
+            let rms = (tail.reduce(Float(0)) { $0 + $1 * $1 } / Float(tail.count)).squareRoot()
+            XCTAssertGreaterThan(rms, 0.25, "半音 \(s): 末尾の音量が落ちている")
+            let expected = 440 * pow(2, s / 12)
+            XCTAssertEqual(frequency(y, from: 1.5, to: 1.95), expected, accuracy: expected * 0.03,
+                           "半音 \(s): 末尾の音程が合っていない")
+        }
+    }
+
     func testZeroSemitonesIsBitIdentical() {
         let x = sine(seconds: 1, f: 300)
         XCTAssertEqual(PitchShift.shift(x, semitones: 0), x)

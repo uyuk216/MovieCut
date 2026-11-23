@@ -50,7 +50,9 @@ public enum PitchShift {
             let outStart = k * hop
             var s = 0
             if k > 0 {
-                let nominal = prev + Int(inHop.rounded())
+                // 基準位置は「k 番目の粒の本来の位置」(絶対位置)。前の選択位置からの相対指定にすると、
+                // 前の粒の続きそのものが毎回相関最大になって選ばれ、ずれが累積して伸縮が崩れる。
+                let nominal = Int((Double(k) * inHop).rounded())
                 // 目標: 前の粒の、出力で重なる部分に対応する入力(prev + hop ..< prev + grain)
                 for j in 0..<ov { let i = prev + hop + j; target[j] = i < n ? chans[0][i] : 0 }
                 s = bestStart(chans[0], nominal: nominal, target: target)
