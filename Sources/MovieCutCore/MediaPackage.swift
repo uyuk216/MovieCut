@@ -43,22 +43,39 @@ public enum MediaPackage {
             return rel
         }
 
-        for ti in p.tracks.indices {
-            for ci in p.tracks[ti].clips.indices {
-                guard let src = p.tracks[ti].clips[ci].src, !src.isEmpty else { continue }
-                guard exists(src) else {
-                    if !skipped.contains(src) { skipped.append(src) }
-                    continue
+        // 最上位だけでなく、複合の内側・シーン定義の中の素材も集める(漏れると、開いた先で素材が欠ける)
+        func walk(_ tracks: inout [Track]) {
+            for ti in tracks.indices {
+                for ci in tracks[ti].clips.indices {
+                    if let src = tracks[ti].clips[ci].src, !src.isEmpty {
+                        if !exists(src) {
+                            if !skipped.contains(src) { skipped.append(src) }
+                        } else {
+                            let rel = destination(for: src)
+                            if mapping[src] == rel, !copies.contains(where: { $0.from == src }) {
+                                copies.append(Plan.Copy(from: src, to: rel))
+                                // ヒントは、パッケージ後のパス(クリップの新しい src)をキーにする
+                                hints[rel] = MediaHint(relative: rel, size: size(src))
+                            }
+                            tracks[ti].clips[ci].src = rel
+                        }
+                    }
+                    if tracks[ti].clips[ci].tracks != nil {
+                        var inner = tracks[ti].clips[ci].tracks!
+                        walk(&inner)
+                        tracks[ti].clips[ci].tracks = inner
+                    }
                 }
-                let rel = destination(for: src)
-                if mapping[src] == rel, !copies.contains(where: { $0.from == src }) {
-                    copies.append(Plan.Copy(from: src, to: rel))
-                    hints[src] = MediaHint(relative: rel, size: size(src))
-                }
-                p.tracks[ti].clips[ci].src = rel
             }
         }
+        walk(&p.tracks)
+        for si in p.scenes.indices { walk(&p.scenes[si].tracks) }
         p.mediaHints = hints
+        // フィンガープリントと素材プールも、パッケージ後のパスへ付け替える
+        var fps: [String: MediaFingerprint] = [:]
+        for (k, v) in p.mediaFingerprints { fps[mapping[k] ?? k] = v }
+        p.mediaFingerprints = fps
+        p.mediaPool = p.mediaPool.map { mapping[$0] ?? $0 }
         return Plan(project: p, copies: copies, skipped: skipped)
     }
 

@@ -64,7 +64,25 @@ public enum ProjectTemplate {
         } else {
             p.tracks = Track.defaultLayers()
         }
-        if !parts.contains(.characters) { p.characters = Character.defaults() }
+        if !parts.contains(.characters) {
+            p.characters = Character.defaults()
+            // 残したボイスのキャラクター参照が、置き換えた先に無いものは外す(参照切れで音声生成が迷わないように)
+            let valid = Set(p.characters.map(\.id))
+            func unref(_ tracks: inout [Track]) {
+                for ti in tracks.indices {
+                    for ci in tracks[ti].clips.indices {
+                        if let cid = tracks[ti].clips[ci].charId, !valid.contains(cid) { tracks[ti].clips[ci].charId = nil }
+                        if tracks[ti].clips[ci].tracks != nil {
+                            var inner = tracks[ti].clips[ci].tracks!
+                            unref(&inner)
+                            tracks[ti].clips[ci].tracks = inner
+                        }
+                    }
+                }
+            }
+            unref(&p.tracks)
+            for si in p.scenes.indices { unref(&p.scenes[si].tracks) }
+        }
         if !parts.contains(.markers) { p.markers = [] }
         if !parts.contains(.settings) {
             let d = Project()

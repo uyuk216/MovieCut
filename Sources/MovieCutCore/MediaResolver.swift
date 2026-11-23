@@ -15,14 +15,16 @@ public enum MediaResolver {
     public static func resolve(src: String, projectDir: String?,
                                exists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }) -> String? {
         guard !src.isEmpty else { return nil }
+        // 相対パスはプロジェクトフォルダ基準を先に試す(作業フォルダの同名ファイルに化けないように)
+        if !src.hasPrefix("/") {
+            if let projectDir, !projectDir.isEmpty,
+               let p = MediaPaths.contained(relative: src, in: projectDir), exists(p) { return p }
+            if exists(src) { return src }
+            return nil
+        }
         // 1. そのまま存在
         if exists(src) { return src }
         guard let projectDir, !projectDir.isEmpty else { return nil }
-        // 2a. 相対パスはプロジェクトフォルダ基準
-        if !src.hasPrefix("/") {
-            if let p = MediaPaths.contained(relative: src, in: projectDir), exists(p) { return p }
-            return nil
-        }
         // 2b. 絶対パス: プロジェクト配下だったものは、プロジェクトが移動しても
         //     「プロジェクトフォルダ名以降の相対部分」で新しい場所から解決できる。
         //     フォルダ名を含む末尾から順に短くしながら、存在するものを探す。
@@ -137,14 +139,31 @@ public enum MediaRelinker {
     public static func applying(_ mapping: [String: String], to project: Project) -> Project {
         guard !mapping.isEmpty else { return project }
         var p = project
-        for ti in p.tracks.indices {
-            for ci in p.tracks[ti].clips.indices {
-                if let src = p.tracks[ti].clips[ci].src, let new = mapping[src] {
-                    p.tracks[ti].clips[ci].src = new
+        // 複合の内側・シーン定義の中の参照も差し替える(検出だけ入れ子対応で、適用が最上位だけだと直らない)
+        func walk(_ tracks: inout [Track]) {
+            for ti in tracks.indices {
+                for ci in tracks[ti].clips.indices {
+                    if let src = tracks[ti].clips[ci].src, let new = mapping[src] {
+                        tracks[ti].clips[ci].src = new
+                    }
+                    if tracks[ti].clips[ci].tracks != nil {
+                        var inner = tracks[ti].clips[ci].tracks!
+                        walk(&inner)
+                        tracks[ti].clips[ci].tracks = inner
+                    }
                 }
             }
         }
+        walk(&p.tracks)
+        for si in p.scenes.indices { walk(&p.scenes[si].tracks) }
         p.mediaPool = p.mediaPool.map { mapping[$0] ?? $0 }
+        // フィンガープリント・ヒントのキーも新しいパスへ移す(旧パスのままだと次の再リンクで照合できない)
+        var fps: [String: MediaFingerprint] = [:]
+        for (k, v) in p.mediaFingerprints { fps[mapping[k] ?? k] = v }
+        p.mediaFingerprints = fps
+        var hs: [String: MediaHint] = [:]
+        for (k, v) in p.mediaHints { hs[mapping[k] ?? k] = v }
+        p.mediaHints = hs
         return p
     }
 

@@ -206,7 +206,14 @@ public enum YmmpImporter {
         guard let n = v as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID() else { return nil }
         return n.doubleValue
     }
-    static func int(_ v: Any?) -> Int? { number(v).map { Int($0) } }
+    static func int(_ v: Any?) -> Int? {
+        number(v).flatMap { d in
+            guard d.isFinite else { return nil }
+            if d >= 9.223372036854776e18 { return Int.max }
+            if d <= -9.223372036854776e18 { return Int.min }
+            return Int(d)
+        }
+    }
     static func string(_ v: Any?) -> String? { v as? String }
     static func bool(_ v: Any?) -> Bool? {
         if let n = v as? NSNumber, CFGetTypeID(n) == CFBooleanGetTypeID() { return n.boolValue }
@@ -351,6 +358,7 @@ public enum YmmpImporter {
             clip.start = max(0, Double(frame) / fps)
             clip.duration = Double(length) / fps
             if YmmpImporter.bool(item["IsLocked"]) == true { clip.locked = true }
+            if YmmpImporter.bool(item["IsHidden"]) == true { clip.disabled = true }
 
             switch typeName {
             case "VoiceItem":
@@ -438,6 +446,8 @@ public enum YmmpImporter {
             let visibility = YmmpImporter.string(item["JimakuVisibility"])
             if visibility == "Hidden" {
                 clip.subtitle = false
+            } else if visibility == "Visible" {
+                clip.subtitle = true
             } else if let charName, let raw = rawCharacters[charName] {
                 clip.subtitle = YmmpImporter.bool(raw["IsJimakuVisible"]) ?? true
             } else {

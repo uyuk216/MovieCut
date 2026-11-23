@@ -150,17 +150,25 @@ public enum ProjectVersions {
             if latest.size == data.count, let old = try? Data(contentsOf: latest.url), old == data { return .unchanged }
             if minInterval > 0, now.timeIntervalSince(latest.date) >= 0, now.timeIntervalSince(latest.date) < minInterval { replacing = latest }
         }
+        if let r = replacing {
+            // 置き換えは、その世代自身のファイルへ上書きする。名前(日時)が保存のたびに新しくなると、
+            // 間隔の判定基準が後ろへずれ続け、いつまでも新しい世代が作られない
+            try data.write(to: r.url, options: .atomic)
+            for n in namesToPrune((try? fm.contentsOfDirectory(atPath: dir.path)) ?? [], keep: keep) {
+                try? fm.removeItem(at: dir.appendingPathComponent(n))
+            }
+            return .replaced(r.url)
+        }
         // 重ならない名前(同じ瞬間なら連番を足す)
         var seq = 1
         var name = generationName(date: now, ext: ext, sequence: seq)
         while fm.fileExists(atPath: dir.appendingPathComponent(name).path) { seq += 1; name = generationName(date: now, ext: ext, sequence: seq) }
         let url = dir.appendingPathComponent(name)
         try data.write(to: url, options: .atomic)
-        if let r = replacing { try? fm.removeItem(at: r.url) }
         for n in namesToPrune((try? fm.contentsOfDirectory(atPath: dir.path)) ?? [], keep: keep) {
             try? fm.removeItem(at: dir.appendingPathComponent(n))
         }
-        return replacing == nil ? .added(url) : .replaced(url)
+        return .added(url)
     }
 
     /// 世代を読んでプロジェクトにする(開くだけ。世代のファイルは変えない)。

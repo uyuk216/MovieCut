@@ -241,7 +241,9 @@ public enum PrprojImporter {
         func ticks(_ node: Node?, _ name: String) -> Int64? {
             guard let s = node?.str(name) else { return nil }
             if let v = Int64(s) { return v }
-            return Double(s).map { Int64($0) }
+            return Double(s).flatMap { d in
+                (d.isFinite && abs(d) < 9.223372036854776e18) ? Int64(d) : nil
+            }
         }
 
         /// Index 属性順に並べたリスト要素の子(参照解決済み)。

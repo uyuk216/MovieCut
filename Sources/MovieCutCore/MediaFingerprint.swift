@@ -26,7 +26,7 @@ public struct MediaFingerprint: Codable, Equatable, Hashable, Sendable {
     }
 
     public static func compute(url: URL, chunkSize: Int = 1 << 20) -> MediaFingerprint? {
-        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        guard chunkSize > 0, let handle = try? FileHandle(forReadingFrom: url) else { return nil }
         defer { try? handle.close() }
         var hasher = SHA256()
         var total: Int64 = 0
@@ -63,6 +63,17 @@ public enum MediaFingerprintCollector {
     public static func referencedSources(in project: Project) -> [String] {
         var seen = Set<String>()
         var out: [String] = []
+        // 複合の内側・シーン定義の中だけの参照も数える
+        func walk(_ tracks: [Track]) {
+            for tr in tracks {
+                for clip in tr.clips {
+                    if let src = clip.src, !src.isEmpty, seen.insert(src).inserted { out.append(src) }
+                    if let inner = clip.tracks { walk(inner) }
+                }
+            }
+        }
+        walk(project.tracks)
+        for s in project.scenes { walk(s.tracks) }
         for clip in project.allClips {
             if let src = clip.src, !src.isEmpty, seen.insert(src).inserted { out.append(src) }
         }

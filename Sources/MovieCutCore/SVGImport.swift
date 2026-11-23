@@ -131,7 +131,7 @@ public enum SVGParser {
         while let eq = s.firstIndex(of: "=") {
             let rawName = s[..<eq].split(whereSeparator: { $0 == " " || $0 == "\t" || $0 == "\n" || $0 == "\r" }).last.map(String.init) ?? ""
             var rest = s[s.index(after: eq)...]
-            while rest.first == " " || rest.first == "\t" { rest = rest.dropFirst() }
+            while rest.first == " " || rest.first == "\t" || rest.first == "\n" || rest.first == "\r" { rest = rest.dropFirst() }
             guard let q = rest.first, q == "\"" || q == "'" else { s = rest; continue }
             rest = rest.dropFirst()
             guard let end = rest.firstIndex(of: q) else { break }

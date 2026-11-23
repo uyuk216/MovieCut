@@ -76,8 +76,13 @@ public enum YmmpExporter {
         var builder = Builder(project: project, report: &report)
         let root = builder.buildRoot(timelineName: timelineName)
         report = builder.report
+        // 非有限の数値が混ざると JSON 化に失敗し、空のプロジェクトが「正常な出力」として書かれてしまう。
+        // 失敗で握り潰さず、0 に直したうえでレポートに残す
+        var sanitized = false
+        let cleanRoot = sanitizeJSON(root, changed: &sanitized)
+        if sanitized { report.notes.append("JSON にできない数値(非有限)が含まれていたため、0 に直して書き出しました") }
         // キーの順序を安定させる(テストでの比較と差分の見やすさのため)。YMM4 側の読み込みは順序に依存しない。
-        let data = (try? JSONSerialization.data(withJSONObject: root, options: [.sortedKeys])) ?? Data("{}".utf8)
+        let data = (try? JSONSerialization.data(withJSONObject: cleanRoot, options: [.sortedKeys])) ?? Data("{}".utf8)
         return Output(data: data, report: report)
     }
 
@@ -100,10 +105,33 @@ public enum YmmpExporter {
         return "#FF" + hex.uppercased()
     }
 
+    /// Double → Int の安全な変換(巨大な有限値でも落ちず、端へ丸める)。
+    static func safeInt(_ d: Double) -> Int {
+        guard d.isFinite else { return 0 }
+        if d >= 9.223372036854776e18 { return Int.max }
+        if d <= -9.223372036854776e18 { return Int.min }
+        return Int(d)
+    }
+
+    /// JSON の値の木から、JSON にできない数値(非有限の Double)を 0 に直す。
+    static func sanitizeJSON(_ v: Any, changed: inout Bool) -> Any {
+        switch v {
+        case let d as Double:
+            if !d.isFinite { changed = true; return 0.0 }
+            return d
+        case let dict as [String: Any]:
+            return dict.mapValues { sanitizeJSON($0, changed: &changed) }
+        case let arr as [Any]:
+            return arr.map { sanitizeJSON($0, changed: &changed) }
+        default:
+            return v
+        }
+    }
+
     /// 秒を .NET の TimeSpan 文字列(`hh:mm:ss.fffffff`)にする(インポーターの `timeSpanSeconds` の逆)。
     static func timeSpanString(_ seconds: Double) -> String {
         let clamped = seconds.isFinite ? max(0, seconds) : 0
-        let totalTicks = Int((clamped * 10_000_000).rounded())  // 1 tick = 100ns
+        let totalTicks = safeInt((clamped * 10_000_000).rounded())  // 1 tick = 100ns
         let ticks = totalTicks % 10_000_000
         var rest = totalTicks / 10_000_000
         let s = rest % 60; rest /= 60
@@ -120,7 +148,7 @@ public enum YmmpExporter {
     /// フレーム換算(四捨五入)。
     static func frame(_ seconds: Double, fps: Double) -> Int {
         guard seconds.isFinite else { return 0 }
-        return Int((seconds * fps).rounded())
+        return safeInt((seconds * fps).rounded())
     }
 
     // MARK: - 変換の本体
@@ -276,7 +304,7 @@ public enum YmmpExporter {
             item["Layer"] = layer
             item["Group"] = 0
             item["IsLocked"] = clip.locked == true
-            item["IsHidden"] = trackHidden
+            item["IsHidden"] = trackHidden || clip.isDisabled
 
             switch clip.type {
             case .voice:

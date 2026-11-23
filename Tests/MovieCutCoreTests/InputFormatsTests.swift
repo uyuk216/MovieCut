@@ -414,3 +414,17 @@ final class InputFormatsTests: XCTestCase {
         XCTAssertNil(backPlain.playsAnimation)
     }
 }
+
+
+// MARK: - バグ確認 第2部 C20: 宣言より短い MIDI トラックは切れている
+
+final class MidiTruncatedTrackTests: XCTestCase {
+    func testDeclaredLengthBeyondDataIsTruncated() {
+        var d: [UInt8] = Array("MThd".utf8) + [0, 0, 0, 6, 0, 0, 0, 1, 0x01, 0xE0]
+        d += Array("MTrk".utf8) + [0, 0, 0, 10]        // 10 バイトあると宣言
+        d += [0x00, 0xFF, 0x2F, 0x00]                   // 実際は 4 バイトだけ
+        XCTAssertThrowsError(try MidiParser.parse(Data(d))) {
+            XCTAssertEqual($0 as? MidiError, .truncated)
+        }
+    }
+}
