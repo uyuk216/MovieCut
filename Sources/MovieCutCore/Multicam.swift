@@ -153,9 +153,7 @@ public enum Multicam {
         var segEnd: Double
         if let ci = cover {
             segEnd = clips[ci].start + clips[ci].duration
-            let target = g.angles[angle].clip
-            if clips[ci].src == target.src, clips[ci].offset == target.offset,
-               clips[ci].speed == target.speed, clips[ci].reverse == target.reverse { return .unchanged }
+            if clips[ci].src == g.angles[angle].clip.src { return .unchanged }
             // t が頭ぴったりでなければ分割(右側が置き換え対象)
             if t - clips[ci].start > ClipEditing.timeEpsilon, let (l, r) = ClipEditing.split(clips[ci], at: t) {
                 clips[ci] = l

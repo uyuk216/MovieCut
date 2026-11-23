@@ -14,11 +14,7 @@ enum FrameBlend {
         let info = CGBitmapInfo.byteOrder32Little.rawValue | CGImageAlphaInfo.premultipliedFirst.rawValue
         guard let ctx = CGContext(data: nil, width: a.width, height: a.height, bitsPerComponent: 8, bytesPerRow: 0, space: cs, bitmapInfo: info) else { return nil }
         let rect = CGRect(x: 0, y: 0, width: a.width, height: a.height)
-        // 通常合成だと B が透明な所で A が薄まらない。A を (1 − w) で置き、B を加算で重ねると、
-        // 乗算済みアルファの線形補間 (1 − w) × A + w × B になる
-        ctx.setAlpha(CGFloat(1 - w))
         ctx.draw(a, in: rect)
-        ctx.setBlendMode(.plusLighter)
         ctx.setAlpha(CGFloat(w))
         ctx.draw(b, in: rect)
         return ctx.makeImage()

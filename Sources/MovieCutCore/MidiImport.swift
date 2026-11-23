@@ -176,8 +176,7 @@ public enum MidiImporter {
     /// 戻り値は置いた音声クリップの id。
     @discardableResult
     public static func place(wavPath: String, file: MidiFileData, at start: Double, in project: inout Project) -> [String] {
-        // 生成した WAV は末尾の余韻(tail)まで含む。配置の長さもそろえないと、余韻が再生・書き出しで切れる
-        let duration = max(0.05, file.duration + tail)
+        let duration = max(0.05, file.duration)
         let ids = ClipEditing.place(media: [(path: wavPath, kind: .audio, duration: duration)], at: start, in: &project)
         let markers = noteMarkers(for: file, at: start)
         if !markers.isEmpty {

@@ -54,8 +54,7 @@ public enum MediaPackage {
                             let rel = destination(for: src)
                             if mapping[src] == rel, !copies.contains(where: { $0.from == src }) {
                                 copies.append(Plan.Copy(from: src, to: rel))
-                                // ヒントは、パッケージ後のパス(クリップの新しい src)をキーにする
-                                hints[rel] = MediaHint(relative: rel, size: size(src))
+                                hints[src] = MediaHint(relative: rel, size: size(src))
                             }
                             tracks[ti].clips[ci].src = rel
                         }

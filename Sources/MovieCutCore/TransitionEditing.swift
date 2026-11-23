@@ -307,25 +307,21 @@ public enum TransitionEditing {
             let oEnd = o.start + o.duration
             if oEnd <= pv.start + eps { wall = max(wall, oEnd) }
         }
-        // 隙間がある場合は負になる(重なりではなく隙間の長さ)。ずらす量は隙間を埋める分も要る
-        let existingRaw = pv.start + pv.duration - c.start
-        let existing = max(0, existingRaw)
+        let existing = max(0, pv.start + pv.duration - c.start)
         var want = min(Transition.clampedDuration(requested.isFinite ? requested : Transition.defaultDuration, clipDuration: c.duration), pv.duration)
         want = round3(want)
         guard want >= minCrossfadeOverlap - eps else { return .noRoom }
         var shift = 0.0
-        if existingRaw < want - eps {
+        if existing < want - eps {
             let maxShift = c.start - max(pv.start, wall, 0)
-            shift = min(want - existingRaw, max(0, maxShift))
+            shift = min(want - existing, max(0, maxShift))
             if shift <= eps {
                 // ずらす余地が無い: 既存の重なりだけで作る(無ければ断る)
                 guard existing >= minCrossfadeOverlap - eps else { return .noRoom }
                 want = round3(Transition.clampedDuration(existing, clipDuration: c.duration))
                 shift = 0
             } else {
-                want = round3(existingRaw + shift)
-                // 壁に当たって重なりが作り切れなければ、ずらさずに断る
-                guard want >= minCrossfadeOverlap - eps else { return .noRoom }
+                want = round3(existing + shift)
             }
         }
         var p = project

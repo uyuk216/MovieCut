@@ -109,9 +109,10 @@ public struct ValueRef: Codable, Equatable, Sendable {
         switch kind {
         case "percent": return String(format: "%.\(decimals)f%%", v * 100)
         case "time":
-            // 先に表示桁で丸めてから分・秒へ分ける(丸めで秒が 60 になるときは分へ繰り上がる)
+            // 先に表示桁で丸めてから分・秒へ分ける(丸めで秒が 60 になるときは分へ繰り上がる)。
+            // 丸め方は表示側(printf の偶数丸め)とそろえる
             let scale = pow(10.0, Double(decimals))
-            let s = (max(0, v) * scale).rounded() / scale
+            let s = (max(0, v) * scale).rounded(.toNearestOrEven) / scale
             let m = Int(s / 60)
             let rest = s - Double(m * 60)
             let width = decimals == 0 ? 2 : 3 + decimals
