@@ -151,6 +151,43 @@ final class EdlExportTests: XCTestCase {
         XCTAssertTrue(out.report.notes.contains { $0.contains("速度") })
     }
 
+    /// 非表示の映像トラックは代表(V)にならず、見えているトラックが書かれること。
+    func testHiddenVideoTrackIsNotUsedAsRepresentative() {
+        var hidden = track("隠し", [clip(.video, src: "/media/hidden.mp4", start: 0, duration: 2)])
+        hidden.hidden = true
+        let visible = track("見える", [clip(.video, src: "/media/visible.mp4", start: 0, duration: 2)])
+        let out = EdlExporter.export(project: project(tracks: [hidden, visible]))
+        let events = eventLines(out.text)
+        XCTAssertEqual(events.count, 1)
+        XCTAssertTrue(events[0].contains("VISIBLE"), events[0])
+        XCTAssertTrue(out.report.skipped.contains { $0.label.contains("hidden") })
+    }
+
+    /// ミュートされている音声トラックは書かれず、報告に残ること。
+    func testMutedAudioTrackIsSkipped() {
+        var muted = track("消音", [clip(.audio, src: "/media/bgm.wav", start: 0, duration: 2)])
+        muted.muted = true
+        let live = track("音声", [clip(.audio, src: "/media/voice.wav", start: 0, duration: 2)])
+        let out = EdlExporter.export(project: project(tracks: [muted, live]))
+        let events = eventLines(out.text)
+        XCTAssertEqual(events.count, 1)
+        XCTAssertTrue(out.report.skipped.contains { $0.label.contains("bgm") })
+    }
+
+    /// 連続するクリップは記録側で重なり・隙間なく並ぶこと(記録アウトは開始+長さから数える)。
+    func testContiguousClipsTileWithoutOverlap() {
+        let p = project(tracks: [track("レイヤー1", [
+            clip(.video, src: "/media/a.mp4", start: 0.05, duration: 0.05),
+            clip(.video, src: "/media/b.mp4", start: 0.10, duration: 0.05),
+        ])])
+        let out = EdlExporter.export(project: p)
+        let events = eventLines(out.text)
+        XCTAssertEqual(events.count, 2)
+        let f0 = events[0].split(separator: " ").map(String.init)
+        let f1 = events[1].split(separator: " ").map(String.init)
+        XCTAssertEqual(f0[7], f1[6], "前の記録アウトと次の記録インが一致する")
+    }
+
     func testEmptyProject() {
         let p = project(tracks: [track("レイヤー1", [])])
         let out = EdlExporter.export(project: p)

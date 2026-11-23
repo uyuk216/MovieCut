@@ -175,7 +175,7 @@ public enum EdlExporter {
                 report.notes.append("クリップ「\(label)」のトランジションは CMX のカット(C)として書きました(MovieCut の入/出トランジションはクリップ間のトランジションとは意味が違うため)")
             }
             let recIn = frames(clip.start)
-            let recOut = recIn + frames(clip.duration)
+            let recOut = frames(clip.start + clip.duration)
             let srcIn = frames(clip.offset)
             let srcOut = srcIn + frames(clip.duration * clip.effectiveSpeed)
             let reel = reelName(for: clip.src, used: &usedReels)
@@ -185,22 +185,34 @@ public enum EdlExporter {
                          channel: channel, channelOrder: channelOrder, reel: reel, comments: comments)
         }
 
-        // 映像: 映像クリップを含む最初のトラックを代表(V)にする。CMX 3600 は映像 1 トラックが前提。
+        // 映像: 映像クリップを含む最初の「見えている」トラックを代表(V)にする。CMX 3600 は映像 1 トラックが前提。
+        // 非表示のトラックとミュート・無効化されたクリップは、再生・書き出しで出ないものなので EDL にも書かない。
         let visualTypes: Set<ClipType> = [.video, .image]
         var videoTrackUsed: Track? = nil
         for track in project.tracks {
             let visual = track.clips.filter { visualTypes.contains($0.type) }
             guard !visual.isEmpty else { continue }
+            if track.isHidden {
+                for clip in visual {
+                    report.skipped.append(Skipped(label: clipLabel(clip), reason: "非表示のトラックにあるため書きません"))
+                }
+                continue
+            }
+            let playable = visual.filter { !$0.isMuted && !$0.isDisabled }
+            for clip in visual where clip.isMuted || clip.isDisabled {
+                report.skipped.append(Skipped(label: clipLabel(clip), reason: "ミュート・無効化されているクリップのため書きません"))
+            }
+            guard !playable.isEmpty else { continue }
             if videoTrackUsed == nil {
                 videoTrackUsed = track
-                for clip in visual.sorted(by: { $0.start < $1.start }) {
+                for clip in playable.sorted(by: { $0.start < $1.start }) {
                     if let e = makeEvent(clip: clip, channel: "V", channelOrder: 0) { events.append(e) }
                 }
                 for clip in track.clips where !visualTypes.contains(clip.type) && clip.type != .audio {
                     report.skipped.append(Skipped(label: clipLabel(clip), reason: "EDL で表せるクリップ(映像・音声)ではないため"))
                 }
             } else {
-                for clip in visual {
+                for clip in playable {
                     report.skipped.append(Skipped(label: clipLabel(clip), reason: "CMX 3600 の EDL は映像 1 トラック分のみのため、代表トラック以外の映像は書きません"))
                 }
             }
@@ -215,14 +227,25 @@ public enum EdlExporter {
         for track in project.tracks {
             let audio = track.clips.filter { $0.type == .audio }
             guard !audio.isEmpty else { continue }
-            if audioIndex >= audioChannels.count {
+            if !project.isAudible(track) {
                 for clip in audio {
+                    report.skipped.append(Skipped(label: clipLabel(clip), reason: track.isMuted ? "ミュートされているトラックのため書きません" : "ソロ再生で鳴らないトラックのため書きません"))
+                }
+                continue
+            }
+            let playable = audio.filter { !$0.isMuted && !$0.isDisabled }
+            for clip in audio where clip.isMuted || clip.isDisabled {
+                report.skipped.append(Skipped(label: clipLabel(clip), reason: "ミュート・無効化されているクリップのため書きません"))
+            }
+            guard !playable.isEmpty else { continue }
+            if audioIndex >= audioChannels.count {
+                for clip in playable {
                     report.skipped.append(Skipped(label: clipLabel(clip), reason: "CMX 3600 の音声は最大 4 トラックのため書きません"))
                 }
                 continue
             }
             let channel = audioChannels[audioIndex]
-            for clip in audio.sorted(by: { $0.start < $1.start }) {
+            for clip in playable.sorted(by: { $0.start < $1.start }) {
                 if let e = makeEvent(clip: clip, channel: channel, channelOrder: 1 + audioIndex) { events.append(e) }
             }
             audioIndex += 1
