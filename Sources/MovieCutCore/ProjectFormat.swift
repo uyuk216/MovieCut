@@ -12,13 +12,17 @@ public enum ProjectFormat {
     /// ファイルに書くキー。
     public static let key = "formatVersion"
 
-    /// ファイルの先頭の階層から版だけを読む(全部は読まない)。無い・整数でない・負は 0。
-    public static func version(in data: Data) -> Int {
-        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let n = obj[key] as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID() else { return 0 }
-        let d = n.doubleValue
-        guard d.isFinite, d >= 0, d < 1e9 else { return 0 }
+    /// 版として受け入れる規則(仕様 V-02。読み込みも版だけの読みもこの 1 箇所を通る)。
+    /// JSON の数値で、整数値(小数部が無い)かつ 0 以上 1e9 未満のものだけ。それ以外(文字列・真偽値・負数・巨大値・小数・null・配列・オブジェクト・欠落)は 0。
+    public static func version(from value: JSONValue?) -> Int {
+        guard case .number(let d)? = value, d.isFinite, d >= 0, d < 1e9, d == d.rounded() else { return 0 }
         return Int(d)
+    }
+
+    /// ファイルの先頭の階層から版だけを読む(全部は読まない)。規則は `version(from:)`。
+    public static func version(in data: Data) -> Int {
+        guard let obj = try? JSONDecoder().decode([String: JSONValue].self, from: data) else { return 0 }
+        return version(from: obj[key])
     }
 
     public static func isNewer(_ version: Int) -> Bool { version > current }

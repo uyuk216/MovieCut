@@ -116,7 +116,7 @@ public struct Project: Codable, Equatable {
         subtitleY = l.double("subtitleY")
         camera = l.value("camera")
         scriptText = l.string("scriptText") ?? ""
-        sourceFormat = SourceFormatVersion(max(0, l.int("formatVersion") ?? 0))
+        sourceFormat = SourceFormatVersion(ProjectFormat.version(from: l.value("formatVersion") as JSONValue?))
         extra = l.extra()
         // 型が違って読めなかったときは、捨てずにそのまま書き戻す
         if targetTrackId == nil, let raw: JSONValue = l.value("targetTrackId") { extra["targetTrackId"] = raw }

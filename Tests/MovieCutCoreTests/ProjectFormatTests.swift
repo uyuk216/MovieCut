@@ -43,8 +43,28 @@ final class ProjectFormatTests: XCTestCase {
         XCTAssertEqual(v(#"{"formatVersion":"2"}"#), 0)
         XCTAssertEqual(v(#"{"formatVersion":true}"#), 0)
         XCTAssertEqual(v(#"{"formatVersion":1e300}"#), 0)
+        XCTAssertEqual(v(#"{"formatVersion":2.9}"#), 0)
+        XCTAssertEqual(v(#"{"formatVersion":1e10}"#), 0)
+        XCTAssertEqual(v(#"{"formatVersion":2.0}"#), 2)
+        XCTAssertEqual(v(#"{"formatVersion":999999999}"#), 999999999)
+        XCTAssertEqual(v(#"{"formatVersion":null}"#), 0)
+        XCTAssertEqual(v(#"{"formatVersion":[2]}"#), 0)
         XCTAssertEqual(v("[1]"), 0)
         XCTAssertEqual(v("broken"), 0)
+    }
+
+    func testDecodeAppliesSameVersionRule() throws {
+        func src(_ lit: String) throws -> Int { try Project.decode(from: Data("{\"formatVersion\":\(lit),\"width\":640,\"height\":360}".utf8)).sourceFormat.value }
+        XCTAssertEqual(try src("2.9"), 0)
+        XCTAssertEqual(try src("1e10"), 0)
+        XCTAssertEqual(try src("-1"), 0)
+        XCTAssertEqual(try src("\"2\""), 0)
+        XCTAssertEqual(try src("true"), 0)
+        XCTAssertEqual(try src("2.0"), 2)
+        XCTAssertEqual(try src("999999999"), 999999999)
+        let p = try Project.decode(from: Data(#"{"formatVersion":3,"width":640,"height":360}"#.utf8))
+        XCTAssertEqual(p.sourceFormat.value, 3)
+        XCTAssertEqual(try json(p)["formatVersion"] as? Int, 3, "新しい版として保たれ、保存でも 3")
     }
 
     func testNewerVersionIsDetectedStillLoadsAndKeepsItsVersionOnSave() throws {
