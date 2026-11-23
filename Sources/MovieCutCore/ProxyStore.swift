@@ -70,7 +70,8 @@ public enum ProxyStore {
         if let done = existingProxy(for: source, directory: directory) { progress(1); return done }
         guard let dest = proxyURL(for: source, directory: directory) else { throw ProxyError.exportFailed("元の素材が読めません") }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let part = dest.deletingPathExtension().appendingPathExtension("part.mp4")
+        // 作成途中ファイルは生成ごとに一意な名前にする(同じ素材の同時生成で、互いの途中ファイルを消し合わない)。
+        let part = dest.deletingPathExtension().appendingPathExtension("part-\(UUID().uuidString).mp4")
         try? FileManager.default.removeItem(at: part)
 
         let asset = AVURLAsset(url: source)

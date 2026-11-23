@@ -29,6 +29,15 @@ final class UnusedMediaTests: XCTestCase {
         XCTAssertEqual(UnusedMedia.find(in: p).map(\.path), ["/m/out.mp4"])
     }
 
+    func testUsedOnlyInsideSceneIsNotUnused() {
+        // シーンの中でだけ使っている素材を「未使用」と判定して一覧から消さない。
+        var p = Project()
+        p.mediaPool = ["/m/scene-only.mp4", "/m/orphan.mp4"]
+        var st = Track(name: "場面"); st.clips = [clip("s", .video, src: "/m/scene-only.mp4")]
+        p.scenes = [SceneDefinition(id: "s1", name: "場面1", tracks: [st])]
+        XCTAssertEqual(UnusedMedia.find(in: p).map(\.path), ["/m/orphan.mp4"])
+    }
+
     func testAudioTextAndOtherReferences() {
         var p = Project()
         p.mediaPool = ["/m/s.wav", "/m/l.cube", "/m/face.png", "/m/x.png"]

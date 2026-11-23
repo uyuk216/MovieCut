@@ -35,7 +35,8 @@ public enum ThumbnailScoring {
 
     /// 8 ビットの輝度(0〜255、行優先)から鮮明さ(0〜1)。ラプラシアンの分散 v を v / (v + 300) で 0〜1 にする。
     public static func sharpness(luma: [UInt8], width w: Int, height h: Int) -> Double {
-        guard w >= 3, h >= 3, luma.count >= w * h else { return 0 }
+        // 件数の検査は割り算で行う(w * h が溢れる寸法でも落ちない)。
+        guard w >= 3, h >= 3, luma.count / w >= h else { return 0 }
         var sum = 0.0, sumSq = 0.0
         var n = 0.0
         for y in 1..<(h - 1) {

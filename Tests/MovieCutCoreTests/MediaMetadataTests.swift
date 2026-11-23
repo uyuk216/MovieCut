@@ -250,3 +250,15 @@ final class MediaMetadataTests: XCTestCase {
         XCTAssertEqual(MediaBrowser.filter(items, kind: .audio, query: "", metadata: metadata, criteria: MediaFilterCriteria(keywords: ["海"])).map(\.name), ["sea-bgm.wav"])
     }
 }
+
+
+final class MediaMetadataKeywordNormalizationTests: XCTestCase {
+    func testKeywordDedupHappensAfterTruncation() {
+        // 先頭 100 文字が同じで末尾だけ違うキーワードは、切り詰めると同じになる。
+        // 重複判定を切り詰め前にすると両方残り、再正規化(保存・再読込)で件数が変わる。
+        let base = String(repeating: "a", count: MediaMetadata.maxKeywordLength)
+        let m = MediaMetadata(keywords: [base + "x", base + "y"]).normalized
+        XCTAssertEqual(m.keywords.count, 1, "切り詰めで同じになるキーワードは 1 件にまとめる")
+        XCTAssertEqual(m.normalized.keywords.count, 1, "再正規化でも件数が変わらない")
+    }
+}

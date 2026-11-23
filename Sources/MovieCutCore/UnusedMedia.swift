@@ -22,6 +22,7 @@ public enum UnusedMedia {
     public static func usedPaths(in p: Project) -> Set<String> {
         var out = Set<String>()
         for tr in p.tracks { collect(tr.clips, into: &out) }
+        for s in p.scenes { for tr in s.tracks { collect(tr.clips, into: &out) } }   // シーンの中身も使用中として数える
         for ch in p.characters {
             for s in [ch.imgClosed, ch.imgOpen, ch.imgBlink] + Array((ch.imgVowels ?? [:]).values) { if let s, !s.isEmpty { out.insert(s) } }
             for s in (ch.expressions ?? [:]).values where !s.isEmpty { out.insert(s) }

@@ -48,6 +48,23 @@ public final class MediaTranscriptStore: @unchecked Sendable {
     private let stampProvider: (String) -> MediaFingerprintCache.FileStamp?
     private let lock = NSLock()
     private var loaded: FileBody?
+    /// 読み込んだ時点のキャッシュファイルの目印(更新日時・大きさ)。
+    /// 別のインスタンス(別の書類)が書き換えたら、古い控えで上書きしないよう読み直す。
+    private var loadedFileStamp: (modified: Date, size: Int)?
+
+    private func currentFileStamp() -> (modified: Date, size: Int)? {
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: fileURL.path),
+              let m = attrs[.modificationDate] as? Date, let s = attrs[.size] as? Int else { return nil }
+        return (m, s)
+    }
+
+    private static func stampsEqual(_ a: (modified: Date, size: Int)?, _ b: (modified: Date, size: Int)?) -> Bool {
+        switch (a, b) {
+        case (nil, nil): return true
+        case let (x?, y?): return x.modified == y.modified && x.size == y.size
+        default: return false
+        }
+    }
 
     /// `stamp` は差し替えられる(テスト用。既定はファイルを実際に見る)。
     public init(fileURL: URL,
@@ -128,7 +145,7 @@ public final class MediaTranscriptStore: @unchecked Sendable {
     }
 
     private func loadLocked() -> FileBody {
-        if let loaded { return loaded }
+        if let loaded, Self.stampsEqual(currentFileStamp(), loadedFileStamp) { return loaded }
         var body = FileBody()
         if let data = try? Data(contentsOf: fileURL),
            let decoded = try? JSONDecoder().decode(FileBody.self, from: data),
@@ -136,6 +153,7 @@ public final class MediaTranscriptStore: @unchecked Sendable {
             body = decoded
         }
         loaded = body
+        loadedFileStamp = currentFileStamp()
         return body
     }
 
@@ -144,6 +162,7 @@ public final class MediaTranscriptStore: @unchecked Sendable {
         guard let data = try? JSONEncoder().encode(body) else { return }
         try? FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? data.write(to: fileURL, options: [.atomic])
+        loadedFileStamp = currentFileStamp()
     }
 }
 

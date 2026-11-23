@@ -108,3 +108,12 @@ final class MediaBrowserSortAndProbeTests: XCTestCase {
         XCTAssertNil(p.duration, "画像は長さを持たない")
     }
 }
+
+
+final class MediaBrowserRelativePathTests: XCTestCase {
+    func testRelativePathUnderFilesystemRoot() {
+        // 起点が "/" でも相対パスが作れる("//" の要求でファイル名に化けない)。
+        let root = URL(fileURLWithPath: "/")
+        XCTAssertEqual(MediaBrowser.relativePath(of: URL(fileURLWithPath: "/a/b/c.mp4"), under: root), "a/b/c.mp4")
+    }
+}

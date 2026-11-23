@@ -90,9 +90,12 @@ public struct MediaMetadata: Codable, Equatable, Sendable {
         m.keywords = keywords.compactMap { raw -> String? in
             let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !t.isEmpty else { return nil }
-            let key = t.lowercased()
+            // 重複の判定は切り詰めた後の文字列でする(切り詰めで同じになるものを両方残すと、
+            // 保存・再読込の再正規化で片方が消えて件数が変わる)。
+            let truncated = String(t.prefix(Self.maxKeywordLength))
+            let key = truncated.lowercased()
             guard seen.insert(key).inserted else { return nil }
-            return String(t.prefix(Self.maxKeywordLength))
+            return truncated
         }
         if m.keywords.count > Self.maxKeywords { m.keywords = Array(m.keywords.prefix(Self.maxKeywords)) }
         if let r = rating { m.rating = min(max(r, 0), 5) }

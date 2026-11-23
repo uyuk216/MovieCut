@@ -23,7 +23,8 @@ extension SourceUsage {
 
     /// 秒を「mm:ss」(切り捨て)。1 時間以上は「h:mm:ss」。
     public static func clock(_ t: Double) -> String {
-        let s = max(0, Int(t.rounded(.down)))
+        // 非有限・巨大な時刻でも整数変換で落ちないよう、先に範囲へ丸める。
+        let s = t.isFinite ? max(0, Int(min(t.rounded(.down), 9_000_000_000_000_000))) : 0
         let h = s / 3600, m = (s % 3600) / 60, sec = s % 60
         return h > 0 ? String(format: "%d:%02d:%02d", h, m, sec) : String(format: "%02d:%02d", m, sec)
     }

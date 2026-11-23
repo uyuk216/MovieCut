@@ -54,4 +54,26 @@ final class MissingMediaTests: XCTestCase {
         XCTAssertEqual(r.stillMissing, 2)
         XCTAssertEqual(r.project, base)
     }
+
+    func testFindsAndRelinksInsideCompoundsAndScenes() {
+        // 複合クリップの中と、配置されているシーンの中の欠損も検出・再リンクの対象。
+        // (従来は一番上のクリップしか見ず、書き出し前のチェックを通過していた)
+        var p = Project.new()
+        var inner = Track(name: "内側"); inner.clips = [clip(.video, "/m/inner.mp4")]
+        var comp = clip(.compound, nil); comp.tracks = [inner]
+        var sceneClip = clip(.scene, nil); sceneClip.sceneId = "s1"
+        var main = Track(name: "主"); main.clips = [comp, sceneClip]
+        p.tracks = [main]
+        var st = Track(name: "場面の映像"); st.clips = [clip(.video, "/m/scene.mp4")]
+        p.scenes = [SceneDefinition(id: "s1", name: "場面1", tracks: [st])]
+
+        let items = MissingMedia.find(in: p, exists: exists)
+        XCTAssertEqual(Set(items.map(\.path)), ["/m/inner.mp4", "/m/scene.mp4"])
+
+        let r = MissingMedia.relink(p, index: ["inner.mp4": "/new/a.mp4", "scene.mp4": "/new/b.wav"], exists: exists)
+        XCTAssertEqual(r.relinked, 2)
+        XCTAssertEqual(r.stillMissing, 0)
+        XCTAssertEqual(r.project.tracks[0].clips[0].tracks?[0].clips[0].src, "/new/a.mp4")
+        XCTAssertEqual(r.project.scenes[0].tracks[0].clips[0].src, "/new/b.wav")
+    }
 }

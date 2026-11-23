@@ -42,3 +42,24 @@ final class SecretStoreTests: XCTestCase {
         XCTAssertEqual(store.get("textgen.apiKey"), "")
     }
 }
+
+
+/// 移行の書き込みが失敗する保存先では、平文の控えを消さない(キーを失わない)。
+final class SecretStoreMigrationFailureTests: XCTestCase {
+    /// 書き込みが常に失敗する保存先(キーチェーンがロックされている状態の再現)。
+    final class FailingBackend: SecretBackend {
+        func read(account: String) -> String? { nil }
+        func write(_ value: String, account: String) {}
+        func delete(account: String) {}
+    }
+
+    func testFailedMigrationKeepsPlaintextCopy() {
+        let name = "secretstore-fail-\(UUID().uuidString)"
+        let d = UserDefaults(suiteName: name)!
+        d.removePersistentDomain(forName: name)
+        d.set("my-key", forKey: "textgen.apiKey")
+        let store = SecretStore(backend: FailingBackend())
+        _ = store.load(account: "textgen.apiKey", migratingFrom: d)
+        XCTAssertEqual(d.string(forKey: "textgen.apiKey"), "my-key", "移行に失敗したら平文の控えを消さない")
+    }
+}

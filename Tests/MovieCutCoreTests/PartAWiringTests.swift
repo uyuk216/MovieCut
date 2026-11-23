@@ -116,3 +116,14 @@ final class PartAWiringTests: XCTestCase {
         XCTAssertNil(SourceUsage.label(of: c))
     }
 }
+
+
+final class SourceUsageClockEdgeTests: XCTestCase {
+    func testClockToleratesNonFiniteAndHugeTimes() {
+        XCTAssertEqual(SourceUsage.clock(.nan), "00:00")
+        XCTAssertEqual(SourceUsage.clock(.infinity), "00:00")
+        XCTAssertEqual(SourceUsage.clock(-.infinity), "00:00")
+        _ = SourceUsage.clock(1e20)   // 巨大な有限値でも落ちないこと
+        XCTAssertEqual(SourceUsage.clock(61), "01:01")
+    }
+}

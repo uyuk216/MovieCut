@@ -17,13 +17,23 @@ public enum MissingMedia {
     }
 
     /// `src` を持つクリップのうち、ファイルが無いもの(トラック順・クリップ順)。`src` が空のものは数えない。
+    /// 複合クリップの中身と、配置されているシーンの中身も調べる(どちらも書き出しに含まれるため)。
     public static func find(in project: Project, exists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }) -> [Item] {
         var out: [Item] = []
-        for tr in project.tracks {
-            for c in tr.clips {
-                guard let src = c.src, !src.isEmpty, !exists(src) else { continue }
-                out.append(Item(clipId: c.id, trackName: tr.name, path: src))
+        func walk(_ clips: [Clip], trackName: String) {
+            for c in clips {
+                if let src = c.src, !src.isEmpty, !exists(src) {
+                    out.append(Item(clipId: c.id, trackName: trackName, path: src))
+                }
+                if c.type == .compound, let kids = c.tracks {
+                    for kt in kids { walk(kt.clips, trackName: kt.name) }
+                }
             }
+        }
+        for tr in project.tracks { walk(tr.clips, trackName: tr.name) }
+        let referenced = SceneEditing.allReferencedSceneIds(in: project)
+        for s in project.scenes where referenced.contains(s.id) {
+            for tr in s.tracks { walk(tr.clips, trackName: "\(s.name)／\(tr.name)") }
         }
         return out
     }
@@ -59,17 +69,30 @@ public enum MissingMedia {
         var p = project
         var relinked = 0
         var still = 0
-        for ti in p.tracks.indices {
-            for ci in p.tracks[ti].clips.indices {
-                guard let src = p.tracks[ti].clips[ci].src, !src.isEmpty, !exists(src) else { continue }
-                if let new = findReplacement(for: src, hint: project.mediaHints[src], candidates: candidates,
-                                             projectDir: projectDir, exists: exists) {
-                    p.tracks[ti].clips[ci].src = new
-                    relinked += 1
-                } else {
-                    still += 1
+        // find と同じ範囲(複合の中身・配置されているシーンの中身まで)を差し替える。
+        func process(_ tracks: inout [Track]) {
+            for ti in tracks.indices {
+                for ci in tracks[ti].clips.indices {
+                    if let src = tracks[ti].clips[ci].src, !src.isEmpty, !exists(src) {
+                        if let new = findReplacement(for: src, hint: project.mediaHints[src], candidates: candidates,
+                                                     projectDir: projectDir, exists: exists) {
+                            tracks[ti].clips[ci].src = new
+                            relinked += 1
+                        } else {
+                            still += 1
+                        }
+                    }
+                    if tracks[ti].clips[ci].type == .compound, var kids = tracks[ti].clips[ci].tracks {
+                        process(&kids)
+                        tracks[ti].clips[ci].tracks = kids
+                    }
                 }
             }
+        }
+        process(&p.tracks)
+        let referenced = SceneEditing.allReferencedSceneIds(in: p)
+        for si in p.scenes.indices where referenced.contains(p.scenes[si].id) {
+            process(&p.scenes[si].tracks)
         }
         return (p, relinked, still)
     }

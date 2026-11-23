@@ -59,6 +59,22 @@ final class MediaSearchTests: XCTestCase {
         XCTAssertEqual(again.segments(forPath: path)?.count, 2)
     }
 
+    func testTwoInstancesDoNotOverwriteEachOther() {
+        // 2 つの書類が同じキャッシュを使うとき、先に読み込んだ側の古い控えで
+        // もう一方の登録を消さない(ファイルが変わっていたら読み直す)。
+        let x = "/media/x.mp4", y = "/media/y.mp4"
+        let stamps = [x: stamp(100), y: stamp(200)]
+        let (a, file) = makeStore(stamps: stamps)
+        defer { try? FileManager.default.removeItem(at: file) }
+        let b = MediaTranscriptStore(fileURL: file, stamp: { stamps[$0] })
+        _ = a.count; _ = b.count   // 両方とも先に読み込む(この時点では空)
+        a.register(path: x, segments: [seg("エックス", 0, 1)])
+        b.register(path: y, segments: [seg("ワイ", 0, 1)])
+        let c = MediaTranscriptStore(fileURL: file, stamp: { stamps[$0] })
+        XCTAssertEqual(c.segments(forPath: x)?.map(\.text), ["エックス"])
+        XCTAssertEqual(c.segments(forPath: y)?.map(\.text), ["ワイ"])
+    }
+
     func testStoreDropsStaleEntryWhenFileChanged() {
         let path = "/media/a.wav"
         var current = stamp(100)

@@ -198,8 +198,10 @@ public enum MediaBrowser {
     static func relativePath(of url: URL, under root: URL) -> String {
         let base = root.standardizedFileURL.path
         let path = url.standardizedFileURL.path
-        guard path.hasPrefix(base + "/") else { return url.lastPathComponent }
-        return String(path.dropFirst(base.count + 1))
+        // 起点が "/" のときは区切りを足さない("//" になると一致せず、相対パスが壊れる)。
+        let prefix = base.hasSuffix("/") ? base : base + "/"
+        guard path.hasPrefix(prefix) else { return url.lastPathComponent }
+        return String(path.dropFirst(prefix.count))
     }
 
     /// フォルダ直下のサブフォルダ一覧(名前の自然順)。パッケージ(.app など)・隠しフォルダは除く。

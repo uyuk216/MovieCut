@@ -74,8 +74,14 @@ public struct SecretStore: Sendable {
     /// UserDefaults に平文で残っている値をキーチェーンへ移し、UserDefaults から消す。キーチェーン側に値があればそれを優先する。
     public func load(account: String, migratingFrom d: UserDefaults) -> String {
         if let legacy = d.string(forKey: account) {
-            if !legacy.isEmpty, (backend.read(account: account) ?? "").isEmpty { backend.write(legacy, account: account) }
-            d.removeObject(forKey: account)
+            if !legacy.isEmpty, (backend.read(account: account) ?? "").isEmpty {
+                backend.write(legacy, account: account)
+                // 移行できた(読み戻せる)ときだけ平文の控えを消す。書き込みが失敗したら
+                // 控えを残し、次回また移行を試す(控えまで消すとキーを失う)。
+                if (backend.read(account: account) ?? "") == legacy { d.removeObject(forKey: account) }
+            } else {
+                d.removeObject(forKey: account)
+            }
         }
         return get(account)
     }

@@ -103,3 +103,12 @@ final class ThumbnailCandidatesTests: XCTestCase {
         XCTAssertEqual(img.width, 1280); XCTAssertEqual(img.height, 720)
     }
 }
+
+
+final class ThumbnailCandidatesSharpnessEdgeTests: XCTestCase {
+    func testSharpnessToleratesHugeDimensions() {
+        // w * h が溢れる寸法でも、ガード自体が落ちずに 0 を返す。
+        XCTAssertEqual(ThumbnailScoring.sharpness(luma: [], width: Int.max, height: 3), 0)
+        XCTAssertEqual(ThumbnailScoring.sharpness(luma: [], width: 3, height: Int.max), 0)
+    }
+}
