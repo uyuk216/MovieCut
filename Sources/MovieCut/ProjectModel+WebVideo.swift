@@ -109,9 +109,11 @@ extension ProjectModel {
         guard !directExportBlocked() else { return .failure(ExportError.writerFailed(nil)) }
         if reportMissingMediaForExport() { return .failure(ExportError.writerFailed(nil)) }
         let snapshot = project
+        // 範囲は、編集スコープを抜けた後(書類全体に戻った状態)で解決する(GIF と同じ)
+        let effectiveRange = range ?? project.exportRange
         return await runJob(title: String(format: L10n.t("%@ を書き出しています"), L10n.t(format.title)), fileName: url.lastPathComponent, notices: [],
                             success: String(format: L10n.t("%@ に %@ を書き出しました"), url.lastPathComponent, L10n.t(format.title)), result: url) { progress in
-            try await FFmpegVideoExporter.export(project: snapshot, range: range, format: format, to: url, loudness: loudness, pluginEffectProviders: AppServices.pluginEffectProviders, vst3Provider: AppServices.vst3EffectProvider, progress: progress)
+            try await FFmpegVideoExporter.export(project: snapshot, range: effectiveRange, format: format, to: url, loudness: loudness, pluginEffectProviders: AppServices.pluginEffectProviders, vst3Provider: AppServices.vst3EffectProvider, progress: progress)
         }
     }
 }

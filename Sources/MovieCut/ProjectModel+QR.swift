@@ -16,7 +16,8 @@ extension ProjectModel {
         guard let url = QRCodeStore.imageURL(for: text) else { statusText = "QRコードを作れませんでした"; return nil }
         let t = max(0, time ?? currentTime)
         var ids: [String] = []
-        edit("QRコードの追加") { p in ids = ClipEditing.place(media: [(url.path, .image, 5)], at: t, in: &p) }
+        let ok = edit("QRコードの追加") { p in ids = ClipEditing.place(media: [(url.path, .image, 5)], at: t, in: &p) }
+        guard ok else { return nil }
         selectedClipId = ids.last
         statusText = "QRコードを追加しました"
         return ids.last

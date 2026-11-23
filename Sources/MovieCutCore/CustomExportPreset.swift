@@ -64,7 +64,7 @@ public enum CustomExportPresetStore {
             guard !seen.contains(name.lowercased()) else { continue }
             guard let w = int(d["width"]), let h = int(d["height"]),
                   CustomExportPreset.isValidSide(w), CustomExportPreset.isValidSide(h) else { continue }
-            guard let codec = (d["codec"] as? String)?.lowercased(), ["h264", "hevc"].contains(codec) else { continue }
+            guard let codec = (d["codec"] as? String)?.lowercased(), ["h264", "hevc"].contains(codec) || OutputPlan.isProRes(codec) else { continue }
             let fps: Double? = {
                 guard let v = number(d["fps"]), v.isFinite, (1...240).contains(v) else { return nil }
                 return v

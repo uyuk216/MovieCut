@@ -300,7 +300,7 @@ final class DebugHooks {
         if let out = env["MC_DEBUG_EXPORT"] {
             if env["MC_SNAPSHOT_DIR"] != nil {
                 Task { @MainActor in
-                    try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                    try? await Task.sleep(nanoseconds: UInt64((delay.isFinite ? max(0, min(delay, 3600)) : 0) * 1_000_000_000))
                     self.snapshot(model)
                 }
             }
@@ -344,7 +344,7 @@ final class DebugHooks {
             // 依存チェックの結果(バナー)が出るまで待つ
             var bw = 0.0
             while AppServices.deps.checkCount == 0 && !AppServices.deps.dismissedThisSession && bw < 8 { try? await Task.sleep(nanoseconds: 50_000_000); bw += 0.05 }
-            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            try? await Task.sleep(nanoseconds: UInt64((delay.isFinite ? max(0, min(delay, 3600)) : 0) * 1_000_000_000))
             snapshot(model)
         }
         Self.finish(0)
@@ -613,7 +613,7 @@ final class DebugHooks {
     private func menuClickToken(_ raw: String, _ model: ProjectModel) async {
         let body = String(raw.dropFirst())
         let kv = body.split(separator: "=", maxSplits: 1).map(String.init)
-        switch kv[0] {
+        switch kv.first ?? "" {
         case "time":
             if kv.count == 2, let t = Double(kv[1]) { model.currentTime = t; try? await Task.sleep(nanoseconds: 300_000_000) }
             Self.out("menu-click: @time → \(String(format: "%.3f", model.currentTime))")
@@ -822,7 +822,7 @@ final class DebugHooks {
     private func debugSweep(_ model: ProjectModel) async {
         await settle(model)
         let hw = HangWatch.shared
-        func sleep(_ s: Double) async { try? await Task.sleep(nanoseconds: UInt64(s * 1_000_000_000)) }
+        func sleep(_ s: Double) async { try? await Task.sleep(nanoseconds: UInt64((s.isFinite ? max(0, min(s, 3600)) : 0) * 1_000_000_000)) }
         func phase(_ n: String) { hw.phase(n); Self.out("sweep: phase \(n)") }
         phase("idle 1.5s"); await sleep(1.5)
         phase("select clips")
@@ -904,7 +904,7 @@ final class DebugHooks {
         let pb = model.playback!
         let end = model.project.endTime
         Self.out(String(format: "project: end=%.3fs clips=%d fps=%@", end, model.project.allClips.count, FrameRate.label(model.project.fps)))
-        func sleep(_ s: Double) async { try? await Task.sleep(nanoseconds: UInt64(s * 1_000_000_000)) }
+        func sleep(_ s: Double) async { try? await Task.sleep(nanoseconds: UInt64((s.isFinite ? max(0, min(s, 3600)) : 0) * 1_000_000_000)) }
         /// 再生が始まる(ミックスの準備が終わる)まで待つ
         func waitPlaying() async -> Bool {
             var w = 0.0

@@ -73,7 +73,9 @@ extension ProjectModel {
         let expanded = ClipGrouping.expand(selectedClipIDs, in: project)
         let ids = LayerEditing.editableIds(expanded, in: project)
         guard !ids.isEmpty else { statusText = Self.lockedNotice; return false }
-        let on = !selectionGroupAllDisabled
+        // 切り替え方向は、実際に変えられる(ロックされていない)メンバーだけで決める
+        let editableMembers = project.allClips.filter { ids.contains($0.id) }
+        let on = !(!editableMembers.isEmpty && editableMembers.allSatisfy { $0.isDisabled })
         var p = project
         let changed = ClipGrouping.setDisabled(ids: ids, on: on, in: &p)
         guard changed > 0 else { return false }

@@ -120,7 +120,7 @@ extension ProjectModel {
             statusText = Self.lockedNotice
             return false
         }
-        edit("クリップの貼り付け", enforcesLock: false) { $0 = r.project }
+        edit("クリップの貼り付け") { $0 = r.project }
         setSelection(ClipSelection(ids: Set(r.newIds), primary: r.newIds.first))
         statusText = r.skipped > 0 ? "\(r.newIds.count) 個を貼り付けました(ロックされたレイヤーの \(r.skipped) 個は貼りませんでした)" : "\(r.newIds.count) 個のクリップを貼り付けました"
         return true

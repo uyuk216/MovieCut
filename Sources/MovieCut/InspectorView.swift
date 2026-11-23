@@ -221,8 +221,9 @@ struct NumField: View {
 
     private func commit() {
         let t = text.trimmingCharacters(in: .whitespaces)
-        if let v = Double(t) {
-            onCommit(v)
+        if let v = Double(t), v.isFinite {
+            // 受け渡すのは範囲に収めた値だけ(巨大値・NaN が変換先で落ちないように)
+            onCommit(clamp(v))
             text = Self.format(clamp(v), decimals: decimals)
         } else {
             text = Self.format(value, decimals: decimals)
@@ -1046,7 +1047,7 @@ struct ClipInspector: View {
     }
 
     /// LUT のファイル名と状態(見つからない・読めないときは赤字)。
-    @ViewBuilder private func lutFileRow(_ e: Effect) -> some View {
+    @ViewBuilder private func lutFileRow(_ e: Effect, index: Int) -> some View {
         let path = e.path ?? ""
         let status: LUTCache.Status? = path.isEmpty ? nil : LUTCache.shared.status(atPath: path)
         HStack(spacing: 6) {
@@ -1055,7 +1056,7 @@ struct ClipInspector: View {
                 .foregroundStyle(status == .ok ? Color.secondary : Color.red)
                 .help(path)
             Spacer(minLength: 4)
-            Button(L10n.t("選ぶ…")) { model.chooseAndLoadLUT(clipId: clipId) }
+            Button(L10n.t("選ぶ…")) { model.chooseAndLoadLUT(clipId: clipId, effectIndex: index) }
                 .controlSize(.small).disabled(model.isLocked)
                 .help(L10n.t("LUT の .cube ファイルを選ぶ"))
         }
@@ -1064,7 +1065,7 @@ struct ClipInspector: View {
     }
 
     /// 色調転写の参照画像の名前と状態(見つからない・読めないときは赤字)。
-    @ViewBuilder private func colorTransferFileRow(_ e: Effect) -> some View {
+    @ViewBuilder private func colorTransferFileRow(_ e: Effect, index: Int) -> some View {
         let path = e.path ?? ""
         let status: ReferenceColorCache.Status? = path.isEmpty ? nil : ReferenceColorCache.shared.status(atPath: path)
         HStack(spacing: 6) {
@@ -1073,7 +1074,7 @@ struct ClipInspector: View {
                 .foregroundStyle(status == .ok ? Color.secondary : Color.red)
                 .help(path)
             Spacer(minLength: 4)
-            Button(L10n.t("選ぶ…")) { model.chooseColorTransferReference(clipId: clipId) }
+            Button(L10n.t("選ぶ…")) { model.chooseColorTransferReference(clipId: clipId, effectIndex: index) }
                 .controlSize(.small).disabled(model.isLocked)
                 .help(L10n.t("色調の手本にする画像を選ぶ"))
         }
@@ -1117,8 +1118,8 @@ struct ClipInspector: View {
                     if kind.defaultColor != nil {
                         ColorField(label: kind == .chromaKey ? "抜く色" : "色", hex: e.colorOrDefault) { model.coalescedEffectColor($0, at: i, clipId: clipId) }
                     }
-                    if kind == .lut { lutFileRow(e) }
-                    if kind == .colorTransfer { colorTransferFileRow(e) }
+                    if kind == .lut { lutFileRow(e, index: i) }
+                    if kind == .colorTransfer { colorTransferFileRow(e, index: i) }
                 }
                 .opacity(e.enabled ? 1 : 0.45)
             } else if let pluginDesc {

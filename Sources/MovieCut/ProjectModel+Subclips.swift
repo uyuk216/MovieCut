@@ -41,7 +41,7 @@ extension ProjectModel {
             return 0
         }
         flushCoalesced()
-        guard edit("サブクリップを一括作成", enforcesLock: false, { $0 = r.project }) else { return 0 }
+        guard edit("サブクリップを一括作成", { $0 = r.project }) else { return 0 }
         setSelection(ClipSelection(ids: Set(r.newIds), primary: r.newIds.first))
         var note = "\(r.newIds.count) 個のサブクリップを作りました"
         let skipped = parsed.errors.count + built.errors.count

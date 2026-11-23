@@ -58,14 +58,11 @@ extension ProjectModel {
         let rest = allUrls.filter { !handled.contains($0.path) }
         let psds = rest.filter { PSDImporter.isPSD(path: $0.path) }
         let urls = rest.filter { !PSDImporter.isPSD(path: $0.path) }
-        if !psds.isEmpty {
-            let psdIds = await importPSDFiles(urls: psds, at: time)
-            if urls.isEmpty { return specialIds + psdIds }
-        } else if urls.isEmpty {
-            return specialIds
-        }
+        var psdIds: [String] = []
+        if !psds.isEmpty { psdIds = await importPSDFiles(urls: psds, at: time) }
+        if urls.isEmpty { return specialIds + psdIds }
         let files = urls.filter { ClipEditing.isSupportedMedia(path: $0.path) }
-        guard !files.isEmpty else { return specialIds }
+        guard !files.isEmpty else { return specialIds + psdIds }
         var media: [(path: String, kind: ClipType, duration: Double)] = []
         for u in files {
             let kind = ClipEditing.kindOf(path: u.path)
@@ -77,7 +74,7 @@ extension ProjectModel {
         selectedClipId = ids.last
         statusText = "\(ids.count) 個の素材を追加しました"
         if !ids.isEmpty { autoCreateProxiesIfNeeded(forVideoPaths: media.filter { $0.kind == .video }.map(\.path)) }
-        return specialIds + ids
+        return specialIds + psdIds + ids
     }
 
     /// タイムラインへのドロップ(Finder・素材ブラウザ共通): 落とした時刻を吸着して、落とした行のレイヤーへ置く。

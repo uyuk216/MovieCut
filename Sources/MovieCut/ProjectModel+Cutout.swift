@@ -32,7 +32,7 @@ extension ProjectModel {
     @MainActor
     func applyCutout(clipId: String, path: String) {
         var found = false
-        _ = edit("背景を抜く") { p in
+        let applied = edit("背景を抜く") { p in
             for ti in p.tracks.indices {
                 if let ci = p.tracks[ti].clips.firstIndex(where: { $0.id == clipId }) {
                     p.tracks[ti].clips[ci].src = path
@@ -40,6 +40,7 @@ extension ProjectModel {
                 }
             }
         }
+        if !applied { found = false }
         // 差し替えられなかったら、書いた PNG は誰も使わないので消す(残骸を溜めない)
         if !found {
             for orphan in CutoutCache.unreferenced([path], in: project) {

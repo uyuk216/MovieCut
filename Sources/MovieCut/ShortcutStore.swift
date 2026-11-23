@@ -59,7 +59,13 @@ final class ShortcutStore: ObservableObject {
 
     func setPlainOverride(_ binding: PlainBinding?, for command: KeyCommand) {
         let id = String(describing: command)
-        if let binding { plainOverrides[id] = binding } else { plainOverrides.removeValue(forKey: id) }
+        if let binding {
+            plainOverrides[id] = binding
+            // 同じキーを持つ他のコマンドからは外す(最後に割り当てたコマンドが勝つ)
+            for k in Array(plainOverrides.keys) where k != id && plainOverrides[k]?.keyCode == binding.keyCode {
+                plainOverrides.removeValue(forKey: k)
+            }
+        } else { plainOverrides.removeValue(forKey: id) }
         save()
     }
 

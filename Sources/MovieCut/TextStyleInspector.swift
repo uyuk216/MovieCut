@@ -309,8 +309,12 @@ struct TextStyleInspector: View {
         let cands = model.valueRefCandidates(for: c.id)
         InspectorSubsection("inspector.textStyle.otherClips") {
         Toggle(L10n.t("他のクリップの値を表示"), isOn: Binding(get: { c.valueRef != nil }, set: { on in
-            guard let first = cands.first else { return }
-            model.setValueRef(on ? ValueRef(clipId: first.id) : nil, name: on ? "他のクリップの値を表示" : "値の表示を外す", clipId: clipId)
+            if on {
+                guard let first = cands.first else { return }
+                model.setValueRef(ValueRef(clipId: first.id), name: "他のクリップの値を表示", clipId: clipId)
+            } else {
+                model.setValueRef(nil, name: "値の表示を外す", clipId: clipId)
+            }
         }))
         .toggleStyle(.checkbox).font(MCDesign.Font.callout).disabled(model.isLocked || (c.valueRef == nil && cands.isEmpty))
         if let r = c.valueRef {

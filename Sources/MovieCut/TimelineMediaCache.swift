@@ -47,7 +47,7 @@ final class TimelineMediaCache {
     }
 
     static func thumbKey(path: String, stamp: Double, time: Double) -> String {
-        "\(path)|\(Int(stamp))|\(Int((time * 1000).rounded()))"
+        "\(path)|\(stamp)|\(Int((time * 1000).rounded()))"
     }
 
     // MARK: サムネイル
@@ -113,7 +113,7 @@ final class TimelineMediaCache {
     }
 
     private func waveBox(path: String) -> WaveBox? {
-        let key = "wave|\(path)|\(Int(fileStamp(path)))"
+        let key = "wave|\(path)|\(fileStamp(path))"
         if let b = waves.object(forKey: key as NSString) { return b }
         enqueue(key) { [weak self] in
             let p = await WaveformPeaks.load(url: URL(fileURLWithPath: path))

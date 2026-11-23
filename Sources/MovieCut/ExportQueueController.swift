@@ -52,10 +52,14 @@ final class ExportQueueController: ObservableObject {
 
     /// 本番の書き出し: MP4(今の設定のまま)。描画は書き出しと同じ経路。
     static let defaultRunner: Runner = { project, range, url, progress in
+        // 実行開始の時点で素材が無ければ、映像が欠けたまま「完了」にしない(直接書き出しと同じ確認)
+        let missing = MissingMedia.find(in: project)
+        guard missing.isEmpty else { throw MissingMediaExportError(count: missing.count) }
         try await ExportJob.run(project: project, preset: nil, range: range, to: url, pluginEffectProviders: AppServices.pluginEffectProviders, vst3Provider: AppServices.vst3EffectProvider, progress: progress)
     }
 
     var entries: [ExportQueue.Entry] { queue.entries }
+
 
     /// 件の保存先(パス)。知らない ID は nil。
     func destination(of id: UUID) -> String? { destinations[id] }
@@ -145,4 +149,11 @@ struct ExportQueueSheet: View {
         case .failed(let m): return "失敗: \(m)"
         }
     }
+}
+
+
+/// キュー書き出しの開始時点で素材が見つからないときの失敗。
+struct MissingMediaExportError: Error, LocalizedError {
+    let count: Int
+    var errorDescription: String? { "素材が \(count) 件見つかりません" }
 }

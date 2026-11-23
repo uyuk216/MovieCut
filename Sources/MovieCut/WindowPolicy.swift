@@ -84,7 +84,8 @@ enum WindowFramePolicy {
         f.size.height = min(f.height, max(best.height, minSize.height))
         f.origin.x = min(max(f.origin.x, best.minX), max(best.minX, best.maxX - f.width))
         // 上端がメニューバーの下に隠れないように
-        f.origin.y = min(max(f.origin.y, best.minY), max(best.minY, best.maxY - f.height))
+        let topLimit = best.maxY - f.height
+        f.origin.y = topLimit >= best.minY ? min(max(f.origin.y, best.minY), topLimit) : topLimit
         return f
     }
 

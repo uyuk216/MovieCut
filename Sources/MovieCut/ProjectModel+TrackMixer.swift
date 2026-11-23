@@ -25,13 +25,13 @@ extension ProjectModel {
     /// そうでなければ(キーボードや VoiceOver でスライダーを動かしたときなど)1 回の編集にする
     /// (`liveClipProperty` と同じ約束。ジェスチャの外で `updateGesture` に渡すと、変更が黙って捨てられてつまみが元の値へ戻る)。
     func liveTrackVolume(_ index: Int, _ volume: Double) {
-        guard let p = LayerEditing.setTrackVolume(in: project, index: index, volume) else { return }
+        guard !isLocked, let p = LayerEditing.setTrackVolume(in: project, index: index, volume) else { return }
         if gestureBase != nil { updateGesture(p) } else { edit(Self.trackVolumeUndoName) { $0 = p } }
     }
 
     /// ドラッグ中のパン(Undo に積まない)。ジェスチャの外では 1 回の編集にする(`liveTrackVolume` と同じ)。
     func liveTrackPan(_ index: Int, _ pan: Double) {
-        guard let p = LayerEditing.setTrackPan(in: project, index: index, pan) else { return }
+        guard !isLocked, let p = LayerEditing.setTrackPan(in: project, index: index, pan) else { return }
         if gestureBase != nil { updateGesture(p) } else { edit(Self.trackPanUndoName) { $0 = p } }
     }
 

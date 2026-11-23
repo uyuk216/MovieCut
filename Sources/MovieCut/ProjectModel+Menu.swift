@@ -105,7 +105,7 @@ extension ProjectModel {
         }
         let url = CustomExportPresetStore.defaultURL()
         let current = CustomExportPresetStore.load(from: url)
-        let preset = CustomExportPreset(name: name, width: project.width, height: project.height, codec: project.codec == "hevc" ? "hevc" : "h264", fps: project.fps)
+        let preset = CustomExportPreset(name: name, width: project.width, height: project.height, codec: OutputPlan.isProRes(project.codec) ? project.codec : (project.codec == "hevc" ? "hevc" : "h264"), fps: project.fps)
         guard let merged = CustomExportPresetStore.upserting(preset, into: current), let url else {
             errorTitle = "プリセットを保存できません"; errorMessage = "保存できるプリセットは \(CustomExportPreset.maxCount) 件までです。"
             return

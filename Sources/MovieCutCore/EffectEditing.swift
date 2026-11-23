@@ -84,8 +84,13 @@ public enum EffectEditing {
 
     /// LUT のファイルを決める。LUT が無ければ足し、あれば最初の LUT のファイルを差し替える(同じなら何もしない)。
     @discardableResult
-    public static func setLUTPath(_ c: inout Clip, _ path: String) -> Bool {
+    public static func setLUTPath(_ c: inout Clip, _ path: String, effectIndex: Int? = nil) -> Bool {
         guard supports(c.type), !path.isEmpty else { return false }
+        if let effectIndex, c.effects.indices.contains(effectIndex), c.effects[effectIndex].kind == EffectKind.lut.rawValue {
+            guard c.effects[effectIndex].path != path else { return false }
+            c.effects[effectIndex].path = path
+            return true
+        }
         if let i = c.effects.firstIndex(where: { $0.kind == EffectKind.lut.rawValue }) {
             guard c.effects[i].path != path else { return false }
             c.effects[i].path = path
@@ -99,8 +104,13 @@ public enum EffectEditing {
 
     /// 色調転写の参照画像を決める。転写が無ければ足し、あれば最初の転写の参照を差し替える(同じなら何もしない)。
     @discardableResult
-    public static func setColorTransferPath(_ c: inout Clip, _ path: String) -> Bool {
+    public static func setColorTransferPath(_ c: inout Clip, _ path: String, effectIndex: Int? = nil) -> Bool {
         guard supports(c.type), !path.isEmpty else { return false }
+        if let effectIndex, c.effects.indices.contains(effectIndex), c.effects[effectIndex].kind == EffectKind.colorTransfer.rawValue {
+            guard c.effects[effectIndex].path != path else { return false }
+            c.effects[effectIndex].path = path
+            return true
+        }
         if let i = c.effects.firstIndex(where: { $0.kind == EffectKind.colorTransfer.rawValue }) {
             guard c.effects[i].path != path else { return false }
             c.effects[i].path = path

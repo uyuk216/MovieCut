@@ -59,7 +59,7 @@ extension ProjectModel {
             return 0
         }
         flushCoalesced()
-        guard edit("別のプロジェクトから複製", enforcesLock: false, { $0 = r.project }) else { return 0 }
+        guard edit("別のプロジェクトから複製", { $0 = r.project }) else { return 0 }
         setSelection(ClipSelection(ids: Set(r.newIds), primary: r.newIds.first))
         var note = "\(r.newIds.count) 個のクリップを複製しました"
         if r.skipped > 0 { note += "(ロックされたレイヤーの \(r.skipped) 個は入れていません)" }
