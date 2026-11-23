@@ -74,3 +74,19 @@ final class SubtitleGenerationTests: XCTestCase {
         XCTAssertEqual(r.project.tracks[0].clips[0], expected)
     }
 }
+
+
+// MARK: - バグ確認 第2部 C14: 字幕生成でルビを引き継ぐ
+
+final class SubtitleGenerationRubyTests: XCTestCase {
+    func testGeneratedClipKeepsTheVoicesRuby() throws {
+        var voice = Clip(); voice.id = "v"; voice.type = .voice; voice.start = 0; voice.duration = 2
+        voice.text = "東京へ行く"; voice.ruby = [RubySpan(base: "東京", reading: "とうきょう")]
+        var tr = Track(name: "ボイス"); tr.clips = [voice]
+        var p = Project(); p.tracks = [tr]
+        let r = try XCTUnwrap(SubtitleGeneration.generate(p, style: nil))
+        let texts = r.project.tracks.flatMap(\.clips).filter { $0.type == .text }
+        XCTAssertEqual(texts.count, 1)
+        XCTAssertEqual(texts[0].ruby, [RubySpan(base: "東京", reading: "とうきょう")])
+    }
+}

@@ -189,3 +189,37 @@ final class BroadcastSubtitleTests: XCTestCase {
         XCTAssertEqual(EBUSTLExporter.parse(data), [])
     }
 }
+
+
+// MARK: - バグ確認 第2部 C14: SCC の制御対の整列と、STL の上限
+
+final class BroadcastSubtitleBoundaryTests: XCTestCase {
+    /// SCC 出力のワード列を、パリティを落とした (上位, 下位) の組で返す。
+    func sccWords(_ text: String) -> [(UInt8, UInt8)] {
+        var out: [(UInt8, UInt8)] = []
+        for line in text.components(separatedBy: "\n") {
+            guard let tab = line.firstIndex(of: "\t") else { continue }
+            for tok in line[line.index(after: tab)...].split(separator: " ") {
+                if let v = UInt16(tok, radix: 16) { out.append((UInt8(v >> 8) & 0x7F, UInt8(v & 0xFF) & 0x7F)) }
+            }
+        }
+        return out
+    }
+    func testSCCSpecialCharPairStaysInOneWord() {
+        // "A®B": 基本文字 1 個の後ろに特殊文字(0x11, 0x30)。対がワードをまたぐとデコーダが認識できない
+        let (text, _) = SCCExporter.export([SubtitleCue(start: 0, end: 2, text: "A®B")])
+        XCTAssertTrue(sccWords(text).contains(where: { $0 == (0x11, 0x30) }), "特殊文字の対が 1 ワードに収まる")
+    }
+    func testSTLLongSubtitleIsCappedNotCrashing() {
+        let cue = SubtitleCue(start: 0, end: 60, text: String(repeating: "A", count: 30000))
+        let (data, warnings) = EBUSTLExporter.export([cue])
+        XCTAssertEqual((data.count - 1024) % 128, 0)
+        XCTAssertLessThanOrEqual((data.count - 1024) / 128, 255)
+        XCTAssertFalse(warnings.isEmpty)
+    }
+    func testSTLHugeTimeDoesNotTrap() {
+        let cue = SubtitleCue(start: 256 * 3600, end: 256 * 3600 + 1, text: "x")
+        let (data, _) = EBUSTLExporter.export([cue])
+        XCTAssertGreaterThan(data.count, 1024)
+    }
+}

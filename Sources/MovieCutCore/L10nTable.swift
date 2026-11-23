@@ -937,7 +937,7 @@ enum L10nTable {
         "%.2f 秒のコマ": "Frame at %.2f s",
         "%@ がアプリの中にもリポジトリにもありませんでした。": "%@ was found neither in the app nor in the repository.",
         "%@ で書き出しています": "Exporting with %@",
-        "%@ に %@ を書き出しました": "Exported %@ to %@",
+        "%@ に %@ を書き出しました": "Exported to %@ as %@",
         "%@ に %d コマの APNG を書き出しました": "Exported to %@ (APNG, %d frames)",
         "%@ に %d コマの GIF を書き出しました": "Exported to %@ (GIF, %d frames)",
         "%@ に %d 枚の PNG と WAV を書き出しました": "Exported to %@ (%d PNGs and a WAV)",

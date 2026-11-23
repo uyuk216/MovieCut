@@ -96,3 +96,16 @@ final class KaraokeTests: XCTestCase {
         XCTAssertEqual(rightRed, 0, "まだ話していない右側は赤にならない")
     }
 }
+
+
+// MARK: - バグ確認 第2部 C14: カラオケ時刻が非昇順のとき
+
+final class KaraokeNonMonotonicTimesTests: XCTestCase {
+    func testNonMonotonicTimesFallBackToProportional() {
+        // times [1, 0] は B の時刻だけが先に来ている。先頭からの着色数で表すと A が塗られてしまうため、比例配分へ倒す
+        let hl = Highlight(color: "#ff0000", mode: nil, times: [1, 0])
+        XCTAssertEqual(KaraokeMath.coloredCount(text: "AB", highlight: hl, rel: 0.5, duration: 2), 0)
+        let ok = Highlight(color: "#ff0000", mode: nil, times: [0, 1])
+        XCTAssertEqual(KaraokeMath.coloredCount(text: "AB", highlight: ok, rel: 0.5, duration: 2), 1)
+    }
+}

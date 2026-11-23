@@ -19,7 +19,7 @@ public enum SubtitleGeneration {
             for (ci, c) in tr.clips.enumerated() where c.type == .voice && c.subtitle != false && c.duration > 0 {
                 let body = SubtitleFile.cleanBody(c.subtitleBody)   // 字幕の文を優先(無ければ読み上げ文。表情タグは除く)
                 guard !body.isEmpty else { continue }
-                out.append((ti, ci, SubtitleCue(start: c.start, end: c.start + c.duration, text: body)))
+                out.append((ti, ci, SubtitleCue(start: c.start, end: c.start + c.duration, text: body, ruby: c.ruby)))
             }
         }
         return out

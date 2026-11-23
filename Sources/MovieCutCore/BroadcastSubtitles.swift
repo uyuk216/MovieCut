@@ -264,7 +264,15 @@ public enum SCCExporter {
                 let rem = startCol - indent
                 if rem > 0 { push(tabOver(rem)) }
                 var bytes: [UInt8] = []
-                for p in line { bytes += p.rawBytes }
+                for p in line {
+                    // 制御対(特殊文字・拡張文字)はワード境界から始まらないとデコーダが認識できない。手前に詰め物(0 = 表示されない)でそろえる
+                    switch p {
+                    case .special: if bytes.count % 2 == 1 { bytes.append(0) }
+                    case .extended: if bytes.count % 2 == 0 { bytes.append(0) }
+                    case .basic: break
+                    }
+                    bytes += p.rawBytes
+                }
                 if bytes.count % 2 == 1 { bytes.append(0) } // 対にそろえる詰め物(表示されない)
                 for j in stride(from: 0, to: bytes.count, by: 2) { words.append(word(bytes[j], bytes[j + 1])) }
             }
@@ -396,7 +404,10 @@ public enum EBUSTLExporter {
     }
 
     static func timecodeBytes(_ t: Double, fps: Int) -> [UInt8] {
-        let total = (t.isFinite && t > 0) ? Int((t * Double(fps) + 0.5).rounded(.down)) : 0
+        // 時のフィールドは 1 バイト(255 時間まで)。それを超える時刻は上限へ丸める(UInt8 変換で落ちない)
+        let maxTotal = (255 * 3600 + 59 * 60 + 59) * fps + (fps - 1)
+        let raw = (t.isFinite && t > 0) ? (t * Double(fps) + 0.5).rounded(.down) : 0
+        let total = raw >= Double(maxTotal) ? maxTotal : Int(raw)
         return [UInt8(total / (fps * 3600)), UInt8((total / (fps * 60)) % 60), UInt8((total / fps) % 60), UInt8(total % fps)]
     }
 
@@ -445,6 +456,11 @@ public enum EBUSTLExporter {
                 cur += s.textBytes[j..<(j + unit)]; j += unit
             }
             if !cur.isEmpty || chunks.isEmpty { chunks.append(cur) }
+            // EBN は 1 バイトで、最後のブロックは 0xFF が目印。255 個を超える分は書けない(255 番目が目印と衝突し、256 番目は変換で落ちる)
+            if chunks.count > 255 {
+                chunks = Array(chunks.prefix(255))
+                warnings.append("長すぎる字幕(\(idx + 1) 件目)を 255 ブロックで切りました")
+            }
             for (k, chunk) in chunks.enumerated() {
                 var tti = [UInt8](repeating: padding, count: 128)
                 tti[0] = 0 // SGN

@@ -78,12 +78,14 @@ public enum SubtitleValidator {
                 }
             }
         }
-        // 重なりは開始順に並べて隣同士で見る(報告は元の番号で)
+        // 重なりは開始順に並べ、これまでの最大の終了時刻と見る(隣同士だけだと、長い字幕に包含される後続を見逃す。報告は元の番号で)
         let order = cues.indices.sorted { (cues[$0].start, $0) < (cues[$1].start, $1) }
-        for (a, b) in zip(order, order.dropFirst()) {
-            if cues[b].start < cues[a].end - 1e-9, cues[a].end > cues[a].start {
+        var maxEnd = -Double.infinity
+        for b in order {
+            if cues[b].start < maxEnd - 1e-9 {
                 out.append(SubtitleIssue(cueIndex: b, kind: .overlap, message: "前の字幕と時刻が重なっています"))
             }
+            if cues[b].end > cues[b].start { maxEnd = max(maxEnd, cues[b].end) }
         }
         return out.sorted { ($0.cueIndex, $0.kind.rawValue) < ($1.cueIndex, $1.kind.rawValue) }
     }

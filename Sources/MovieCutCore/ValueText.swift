@@ -71,15 +71,28 @@ public struct ValueRef: Codable, Equatable, Sendable {
 
     /// 参照先の項目の、プロジェクトの時刻 `t` での値(未知の項目・見つからないときは nil)。
     public func value(in project: Project, at t: Double) -> Double? {
-        guard let target = Self.find(clipId, in: project.tracks) else { return nil }
+        guard let found = Self.locate(clipId, in: project.tracks) else { return nil }
+        let target = found.clip
         switch param {
         case "start": return target.start
         case "duration": return target.duration
         case "end": return target.start + target.duration
         default:
             guard Self.params.contains(param) else { return nil }
-            return Animation.value(of: param, in: target, at: max(0, t - target.start))
+            // 複合の中のクリップは、祖先の開始・素材位置ぶんずらした時刻で評価する(描画と同じ換算)
+            return Animation.value(of: param, in: target, at: max(0, t - found.shift - target.start))
         }
+    }
+
+    /// 入れ子をたどり、プロジェクト時刻から引くべきずれ(祖先の start − offset の合計)も一緒に返す。
+    static func locate(_ id: String, in tracks: [Track], shift: Double = 0) -> (clip: Clip, shift: Double)? {
+        for tr in tracks {
+            for c in tr.clips {
+                if c.id == id { return (c, shift) }
+                if let inner = c.tracks, let hit = locate(id, in: inner, shift: shift + c.start - c.offset) { return hit }
+            }
+        }
+        return nil
     }
 
     /// 値を文字にする。
@@ -96,7 +109,9 @@ public struct ValueRef: Codable, Equatable, Sendable {
         switch kind {
         case "percent": return String(format: "%.\(decimals)f%%", v * 100)
         case "time":
-            let s = max(0, v)
+            // 先に表示桁で丸めてから分・秒へ分ける(丸めで秒が 60 になるときは分へ繰り上がる)
+            let scale = pow(10.0, Double(decimals))
+            let s = (max(0, v) * scale).rounded() / scale
             let m = Int(s / 60)
             let rest = s - Double(m * 60)
             let width = decimals == 0 ? 2 : 3 + decimals

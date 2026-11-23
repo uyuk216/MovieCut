@@ -86,3 +86,17 @@ final class SubtitleQuickAddTests: XCTestCase {
         XCTAssertNil(SubtitleQuickAdd.updateText(clipId: "nope", text: "x", in: Project.new()))
     }
 }
+
+
+// MARK: - バグ確認 第2部 C14: 非表示の字幕レイヤーは再利用しない
+
+final class SubtitleQuickAddHiddenLayerTests: XCTestCase {
+    func testHiddenSubtitleLayerIsNotReused() {
+        var hidden = Track(name: "字幕"); hidden.hidden = true
+        var p = Project(); p.tracks = [hidden]
+        XCTAssertNil(SubtitleQuickAdd.freeSubtitleLayer(in: p, start: 0, end: 1))
+        var visible = Track(name: "字幕")
+        var p2 = Project(); p2.tracks = [visible]
+        XCTAssertEqual(SubtitleQuickAdd.freeSubtitleLayer(in: p2, start: 0, end: 1), 0)
+    }
+}

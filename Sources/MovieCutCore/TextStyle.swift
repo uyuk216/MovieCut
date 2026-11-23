@@ -447,7 +447,9 @@ public enum TextAnimMath {
         guard total > 0 else { return 0 }
         guard duration > 0, rel.isFinite else { return total }
         let u = min(max(rel / duration, 0), 1)
-        return min(total, Int((Double(total) * u).rounded(.down)))
+        if u >= 1 { return total }
+        // Double(total) は Int.max で 2^63 へ丸まるため、変換前に total 未満へ抑える
+        return Int(min(Double(total) * u, Double(total - 1)).rounded(.down))
     }
 
     /// ポップ: 0.6 倍から始まり、60% の時点で 1.1 倍まで膨らみ(ゆっくり止まる)、1 倍に落ち着く。
@@ -481,7 +483,8 @@ public enum TextAnimMath {
     /// 1 文字ずつ動かす設定のとき、全文字が動き終わるまでの秒(長さ + (文字数 − 1) × 間隔)。
     public static func perCharTotal(_ a: TextAnim, count: Int) -> Double {
         guard let g = a.perCharOrNil, a.known != nil else { return a.durationOrDefault }
-        return a.durationOrDefault + Double(max(0, count - 1)) * g
+        // count - 1 は Int.min で溢れる。1 以下は間隔ぶんを足さない
+        return a.durationOrDefault + (count > 1 ? Double(count - 1) : 0) * g
     }
 
     /// 1 文字ずつの動きがまだ続いている(描画のキャッシュを使えない)。

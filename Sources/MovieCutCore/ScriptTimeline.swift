@@ -71,7 +71,7 @@ public enum ScriptTimeline {
     public static func add(lines rawLines: [String], to project: inout Project, voice: VoiceProvider, directory: URL, selectedCharId: String? = nil) async throws -> [Clip] {
         let lines = rawLines.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty && !isNote(line: $0) }
         guard !lines.isEmpty else { return [] }
-        var ti = project.tracks.firstIndex { $0.clips.allSatisfy { $0.type == .voice } }
+        var ti = project.tracks.firstIndex { !$0.isLocked && !$0.isHidden && $0.clips.allSatisfy { $0.type == .voice } }
         if ti == nil {
             project.tracks.append(Track(name: "レイヤー\(project.tracks.count + 1)"))
             ti = project.tracks.count - 1

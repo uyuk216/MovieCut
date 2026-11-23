@@ -74,3 +74,18 @@ final class SubtitleValidationTests: XCTestCase {
         XCTAssertTrue(issues.map(\.kind).contains(.tooShort))
     }
 }
+
+
+// MARK: - バグ確認 第2部 C14: 長い字幕に包含される後続の重なり
+
+final class SubtitleValidationContainedOverlapTests: XCTestCase {
+    func testCueContainedInALongEarlierCueIsFlagged() {
+        let cues = [
+            SubtitleCue(start: 0, end: 10, text: "長い"),
+            SubtitleCue(start: 1, end: 2, text: "中"),
+            SubtitleCue(start: 3, end: 4, text: "後続"),
+        ]
+        let overlaps = SubtitleValidator.validate(cues).filter { $0.kind == .overlap }.map(\.cueIndex)
+        XCTAssertEqual(overlaps, [1, 2])
+    }
+}

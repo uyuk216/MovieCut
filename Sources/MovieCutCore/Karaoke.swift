@@ -79,7 +79,7 @@ public enum KaraokeMath {
         if rel <= 0 { return 0 }
         guard duration > 0, rel < duration else { return total }
         // 任意の単位ごとの開始秒: 単位の数が一致するときだけ使う
-        if let ts = highlight.times, ts.count == us.count {
+        if let ts = highlight.times, ts.count == us.count, zip(ts, ts.dropFirst()).allSatisfy({ $0 <= $1 }) {
             var n = 0
             for (i, u) in us.enumerated() where ts[i] <= rel { n += u.length }
             return n

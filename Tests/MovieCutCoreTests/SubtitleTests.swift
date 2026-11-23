@@ -282,3 +282,14 @@ final class SubtitlePositionTests: XCTestCase {
     }
 }
 
+
+
+// MARK: - バグ確認 第2部 C14: 字幕時刻の巨大な値
+
+final class SubtitleTimestampHugeTests: XCTestCase {
+    func testHugeTimestampDoesNotTrap() {
+        let s = SubtitleFile.timestamp(1e20, format: .srt)
+        XCTAssertTrue(s.hasSuffix(",000") || s.contains(","), s)
+        XCTAssertEqual(SubtitleFile.timestamp(61.5, format: .srt), "00:01:01,500")
+    }
+}

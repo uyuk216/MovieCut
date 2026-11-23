@@ -69,7 +69,7 @@ public enum SubtitleQuickAdd {
 
     /// 「字幕」レイヤーのうち、ロックされておらず、[start, end) に重なるクリップが無い最初のもの。
     static func freeSubtitleLayer(in project: Project, start: Double, end: Double) -> Int? {
-        for (i, tr) in project.tracks.enumerated() where SubtitleFile.isSubtitleLayer(tr.name) && !tr.isLocked {
+        for (i, tr) in project.tracks.enumerated() where SubtitleFile.isSubtitleLayer(tr.name) && !tr.isLocked && !tr.isHidden {
             let overlaps = tr.clips.contains { c in c.start < end - 1e-9 && c.start + c.duration > start + 1e-9 }
             if !overlaps { return i }
         }

@@ -619,3 +619,35 @@ final class TextStyleTests: XCTestCase {
         XCTAssertEqual(TextLook(of: c), TextLook(color: nil, outline: nil, font: "Menlo", style: nil))
     }
 }
+
+
+// MARK: - バグ確認 第2部 C15: カウンター・アニメーション計算の極端な値
+
+final class TextCounterExtremeTests: XCTestCase {
+    func testHugeCounterDoesNotTrap() {
+        let c = TextCounter(from: 1e20, to: 0)
+        XCTAssertFalse(c.text(at: 0, duration: 10).isEmpty)
+        XCTAssertFalse(c.text(at: 5, duration: 10).isEmpty)
+    }
+    func testCounterEditingKeepsUnknownKeys() {
+        var clip = Clip(); clip.type = .text
+        var counter = TextCounter(from: 10, to: 0)
+        counter.extra["future"] = .string("keep")
+        clip.counter = counter
+        XCTAssertTrue(CounterEditing.update(&clip) { $0.from = 5 })
+        XCTAssertEqual(clip.counter?.extra["future"], .string("keep"))
+        XCTAssertEqual(clip.counter?.from, 5)
+    }
+}
+
+final class TextAnimMathExtremeTests: XCTestCase {
+    func testVisibleCountAtIntMax() {
+        XCTAssertEqual(TextAnimMath.visibleCount(total: Int.max, rel: 1, duration: 1), Int.max)
+        XCTAssertEqual(TextAnimMath.visibleCount(total: 3, rel: 0.5, duration: 1), 1)
+    }
+    func testPerCharTotalAtIntMin() {
+        var a = TextAnim(kind: "typewriter", duration: 1)
+        a.perChar = 0.1
+        XCTAssertEqual(TextAnimMath.perCharTotal(a, count: Int.min), 1)
+    }
+}

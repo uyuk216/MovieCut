@@ -269,7 +269,9 @@ public enum Animation {
         let span = b.t - a.t
         guard span > 0 else { return b.v }
         let k = a.ease.apply((t - a.t) / span)
-        return a.v + (b.v - a.v) * k
+        let d = b.v - a.v
+        // 差が溢れる巨大な値同士では、重み付きの平均で有限に保つ(通常の値では従来と同一)
+        return d.isFinite ? a.v + d * k : a.v * (1 - k) + b.v * k
     }
 
     /// クリップの `key` の、クリップ内の時刻 `t`(頭からの秒)での値。キーが無い項目は、いまの設定値(未設定は既定値)。

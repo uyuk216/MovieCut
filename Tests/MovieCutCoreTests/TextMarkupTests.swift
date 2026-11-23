@@ -375,3 +375,32 @@ final class TextMarkupTests: XCTestCase {
         XCTAssertLessThan(mid.ink(), full.ink() * 3 / 4, "半分だけ出る(タグは数えない)")
     }
 }
+
+
+// MARK: - バグ確認 第2部 C15: 不正タグの状態汚染と、非有限の数値
+
+final class TextMarkupRejectedTagStateTests: XCTestCase {
+    func testSecondColorInvalidLeavesNoState() {
+        // 後半の色だけ不正なタグは、タグごと文字として残り、色も付かない
+        let p = TextMarkup.parse("<#ff0000,invalid>A", baseSize: 40, baseLetterSpacing: 0)
+        XCTAssertEqual(p.plain, "<#ff0000,invalid>A")
+        XCTAssertTrue(p.runs.isEmpty, "前半の色だけが残ってはいけない: \(p.runs)")
+    }
+    func testInvalidSecondComponentLeavesNoState() {
+        // 位置タグの2つ目の要素が不正なら、1つ目の要素だけが効いた状態を残さない
+        let p = TextMarkup.parse("<p10,abc>A", baseSize: 40, baseLetterSpacing: 0)
+        XCTAssertEqual(p.plain, "<p10,abc>A")
+        XCTAssertTrue(p.runs.isEmpty, "x だけが残ってはいけない: \(p.runs)")
+    }
+    func testNonFiniteNumbersAreRejected() {
+        let p = TextMarkup.parse("<pnan,0>A", baseSize: 40, baseLetterSpacing: 0)
+        XCTAssertEqual(p.plain, "<pnan,0>A")
+        XCTAssertTrue(p.runs.isEmpty)
+        let q = TextMarkup.parse("<s1e308><s*=10>A", baseSize: 40, baseLetterSpacing: 0)
+        for r in q.runs { if let sz = r.style.size { XCTAssertTrue(sz.isFinite) } }
+    }
+    func testManyUnclosedAnglesParse() {
+        let p = TextMarkup.parse(String(repeating: "<", count: 20000), baseSize: 40, baseLetterSpacing: 0)
+        XCTAssertEqual(p.plain.count, 20000)
+    }
+}

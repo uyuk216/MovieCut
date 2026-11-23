@@ -46,7 +46,9 @@ public struct TextCounter: Codable, Equatable, Sendable {
     /// 表示する文字。減る向きは切り上げ(残り 0.5 秒は 00:01)、増える向きは切り捨て。
     public func text(at rel: Double, duration: Double) -> String {
         let v = value(at: rel, duration: duration)
-        let n = from >= to ? Int(ceil(v - 1e-9)) : Int(floor(v + 1e-9))
+        // 巨大な値(1e20 など)でも Int 変換で落ちないよう、Double のまま上限で丸めてから変換する
+        let nd = from >= to ? ceil(v - 1e-9) : floor(v + 1e-9)
+        let n = (nd.isFinite && nd > 0) ? (nd >= 9_999_999_999 ? 9_999_999_999 : Int(nd)) : 0
         let secs = max(0, n)
         switch format {
         case "ss": return String(secs)
@@ -69,7 +71,11 @@ public enum CounterEditing {
     @discardableResult
     public static func set(_ c: inout Clip, to counter: TextCounter?) -> Bool {
         guard c.type == .text else { return false }
-        let new = counter.map { TextCounter(from: $0.from, to: $0.to, format: $0.format) }
+        let new = counter.map { c -> TextCounter in
+            var t = TextCounter(from: c.from, to: c.to, format: c.format)
+            t.extra = c.extra   // 再構築で未知キーを落とさない
+            return t
+        }
         guard new != c.counter else { return false }
         c.counter = new
         return true
@@ -80,7 +86,8 @@ public enum CounterEditing {
     public static func update(_ c: inout Clip, _ change: (inout TextCounter) -> Void) -> Bool {
         guard c.type == .text, var k = c.counter else { return false }
         change(&k)
-        let n = TextCounter(from: k.from, to: k.to, format: k.format)
+        var n = TextCounter(from: k.from, to: k.to, format: k.format)
+        n.extra = k.extra   // 再構築で未知キーを落とさない
         guard n != c.counter else { return false }
         c.counter = n
         return true

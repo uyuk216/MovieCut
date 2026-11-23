@@ -37,7 +37,8 @@ public enum SubtitleFile {
 
     /// SRT は `HH:MM:SS,mmm`、VTT は `HH:MM:SS.mmm`。ミリ秒に丸める。負・NaN は 0。時が 99 を超えても桁を増やして書く。
     public static func timestamp(_ t: Double, format: SubtitleFormat) -> String {
-        let ms = Int((t.isFinite ? max(0, t) : 0) * 1000 + 0.5)
+        let msD = (t.isFinite ? max(0, t) : 0) * 1000 + 0.5
+        let ms = msD >= Double(Int.max) ? Int.max : Int(msD)
         let h = ms / 3_600_000, m = ms / 60_000 % 60, s = ms / 1000 % 60, f = ms % 1000
         let sep = format == .srt ? "," : "."
         return String(format: "%02d:%02d:%02d%@%03d", h, m, s, sep, f)

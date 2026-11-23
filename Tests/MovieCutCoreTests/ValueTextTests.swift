@@ -105,3 +105,24 @@ final class ValueTextTests: XCTestCase {
         XCTAssertNotEqual(a.dataProvider?.data as Data?, b.dataProvider?.data as Data?, "参照先の値が変われば文字の絵が変わる")
     }
 }
+
+
+// MARK: - バグ確認 第2部 C15: 複合内部の評価時刻と、時刻表示の繰り上がり
+
+final class ValueTextCompoundTimeTests: XCTestCase {
+    func testValueInsideCompoundUsesCompoundLocalTime() {
+        var p = Project()
+        var img = Clip(); img.id = "img"; img.type = .image; img.start = 0; img.duration = 4
+        img.keyframes["opacity"] = [Keyframe(t: 0, v: 0), Keyframe(t: 4, v: 1)]
+        var comp = Clip(); comp.id = "comp"; comp.type = .compound; comp.start = 10; comp.duration = 4
+        var tr = Track(name: "中"); tr.clips = [img]; comp.tracks = [tr]
+        p.tracks[0].clips = [comp]
+        // プロジェクト時刻 11 秒 = 複合の内部では 1 秒 → 不透明度は 0.25
+        XCTAssertEqual(ValueRef(clipId: "img", param: "opacity").value(in: p, at: 11)!, 0.25, accuracy: 1e-9)
+    }
+    func testTimeFormatRoundsIntoTheMinute() {
+        XCTAssertEqual(ValueRef(clipId: "a", format: "time", decimals: 1).format(59.96), "01:00.0")
+        XCTAssertEqual(ValueRef(clipId: "a", format: "time", decimals: 0).format(59.6), "01:00")
+        XCTAssertEqual(ValueRef(clipId: "a", format: "time", decimals: 1).format(75.25), "01:15.3")
+    }
+}

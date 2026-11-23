@@ -166,6 +166,8 @@ public enum TextMarkup {
 
         mutating func run(_ text: String) -> MarkupParsed {
             let chars = Array(text)
+            // 最後の '>' より後ろではタグは閉じない。そこから先の '<' は毎回、残り全体を探す二乗時間になっていた
+            let lastClose = chars.lastIndex(of: ">")
             var i = 0
             while i < chars.count {
                 let ch = chars[i]
@@ -176,7 +178,7 @@ public enum TextMarkup {
                     i += 2
                     continue
                 }
-                if ch == "<", let close = chars[(i + 1)...].firstIndex(of: ">") {
+                if ch == "<", let lastClose, i < lastClose, let close = chars[(i + 1)...].firstIndex(of: ">") {
                     let content = String(chars[(i + 1)..<close])
                     if applyTag(content) {
                         hasTags = true
@@ -230,11 +232,14 @@ public enum TextMarkup {
             if b.isEmpty { fillSpec = nil; outlineSpec = nil; return true }
             let parts = b.split(separator: ",", omittingEmptySubsequences: false).map { $0.trimmingCharacters(in: .whitespaces) }
             guard parts.count == 1 || parts.count == 2, let first = colorSpec(parts[0]) else { return false }
-            fillSpec = first
+            // 検証が全部通ってから状態へ書く(後半だけ不正なタグで、前半の色だけ残らないように)
+            var second: (hex: String, alpha: Double)? = nil
             if parts.count == 2 {
-                guard let second = colorSpec(parts[1]) else { return false }
-                outlineSpec = second
+                guard let s2 = colorSpec(parts[1]) else { return false }
+                second = s2
             }
+            fillSpec = first
+            if let second { outlineSpec = second }
             return true
         }
 
@@ -246,22 +251,27 @@ public enum TextMarkup {
             }
             let parts = body.split(separator: ",", omittingEmptySubsequences: false).map { String($0) }
             guard parts.count <= 3 else { return false }
+            // 検証が全部通ってから状態へ書く(途中の項目だけ不正なタグで、前の項目だけ残らないように)
+            var newSize = fSize, newName = fName
+            var newFlags: (b: Bool, i: Bool, s: Bool, u: Bool)? = nil
             let sizePart = parts[0].trimmingCharacters(in: .whitespaces)
             if !sizePart.isEmpty {
                 guard let v = numberOrArithmetic(sizePart, base: fSize ?? baseSize) else { return false }
-                fSize = v
+                newSize = v
             }
             if parts.count >= 2 {
                 let name = parts[1].trimmingCharacters(in: .whitespaces)
-                if !name.isEmpty { fName = name }
+                if !name.isEmpty { newName = name }
             }
             if parts.count >= 3 {
                 let bisu = parts[2].trimmingCharacters(in: .whitespaces)
                 if !bisu.isEmpty {
                     guard let flags = parseBISU(bisu) else { return false }
-                    fBold = flags.b; fItalic = flags.i; fStrike = flags.s; fUnder = flags.u
+                    newFlags = flags
                 }
             }
+            fSize = newSize; fName = newName
+            if let flags = newFlags { fBold = flags.b; fItalic = flags.i; fStrike = flags.s; fUnder = flags.u }
             return true
         }
 
@@ -273,12 +283,21 @@ public enum TextMarkup {
             if b.hasPrefix("+") || b.hasPrefix("-") { return applyBISUDiff(b) }
             let parts = b.split(separator: ",", omittingEmptySubsequences: false).map { $0.trimmingCharacters(in: .whitespaces) }
             guard parts.count <= 2 else { return false }
-            if !parts[0].isEmpty { fName = parts[0] }
             if parts.count == 2, !parts[1].isEmpty {
-                if parts[1].hasPrefix("+") || parts[1].hasPrefix("-") { return applyBISUDiff(parts[1]) }
+                if parts[1].hasPrefix("+") || parts[1].hasPrefix("-") {
+                    // 差分モードは名前の有無に依らない。検証(適用込み)が通ったときだけ名前も書く
+                    let saved = fName
+                    if !parts[0].isEmpty { fName = parts[0] }
+                    if applyBISUDiff(parts[1]) { return true }
+                    fName = saved
+                    return false
+                }
                 guard let flags = parseBISU(parts[1]) else { return false }
+                if !parts[0].isEmpty { fName = parts[0] }
                 fBold = flags.b; fItalic = flags.i; fStrike = flags.s; fUnder = flags.u
+                return true
             }
+            if !parts[0].isEmpty { fName = parts[0] }
             return true
         }
 
@@ -324,11 +343,11 @@ public enum TextMarkup {
                 ruby.sizeRatio = min(max(pct / 100, 0.05), 3)
             }
             if parts.count >= 4, !parts[3].isEmpty {
-                guard let v = Double(parts[3]) else { return false }
+                guard let v = Double(parts[3]), v.isFinite else { return false }
                 ruby.dx = v
             }
             if parts.count >= 5, !parts[4].isEmpty {
-                guard let v = Double(parts[4]) else { return false }
+                guard let v = Double(parts[4]), v.isFinite else { return false }
                 ruby.dy = v
             }
             if parts.count >= 6, !parts[5].isEmpty { ruby.fontName = parts[5] }
@@ -379,34 +398,37 @@ public enum TextMarkup {
             let parts = body.split(separator: ",", omittingEmptySubsequences: false).map { $0.trimmingCharacters(in: .whitespaces) }
             guard parts.count == 1 || parts.count == 2 else { return false }
             let unit = proportional ? (fSize ?? baseSize) / 100 : 1
+            var newX = offX, newY = offY
             if !parts[0].isEmpty {
                 guard let v = positionComponent(parts[0], current: offX, unit: unit) else { return false }
-                offX = v
+                newX = v
             }
             if parts.count == 2, !parts[1].isEmpty {
                 guard let v = positionComponent(parts[1], current: offY, unit: unit) else { return false }
-                offY = v
+                newY = v
             }
+            offX = newX; offY = newY
             return true
         }
 
         /// 座標 1 成分(空でない前提)。解釈できなければ nil。
         func positionComponent(_ s: String, current: Double, unit: Double) -> Double? {
+            func finite(_ v: Double?) -> Double? { v.flatMap { $0.isFinite ? $0 : nil } }
             for op in ["+=", "-=", "*=", "/="] where s.hasPrefix(op) {
                 guard let v = Double(s.dropFirst(2)) else { return nil }
                 switch op {
-                case "+=": return current + v * unit
-                case "-=": return current - v * unit
-                case "*=": return current * v
-                default: return v == 0 ? nil : current / v
+                case "+=": return finite(current + v * unit)
+                case "-=": return finite(current - v * unit)
+                case "*=": return finite(current * v)
+                default: return v == 0 ? nil : finite(current / v)
                 }
             }
             if s.hasPrefix("+") || s.hasPrefix("-") {
                 guard let v = Double(s) else { return nil }
-                return current + v * unit
+                return finite(current + v * unit)
             }
             guard let v = Double(s) else { return nil }
-            return v * unit
+            return finite(v * unit)
         }
 
         /// タイミングタグ `<r>` `<w>` `<c>`(効果なし・消費のみ)。構文が合うかだけ見る。
@@ -423,16 +445,18 @@ public enum TextMarkup {
 
         /// 数値そのもの(絶対)か、四則演算(+= -= *= /=、基準は base)か。解釈できなければ nil。
         func numberOrArithmetic(_ s: String, base: Double) -> Double? {
+            // nan / inf の数値(リテラル・演算結果とも)は描画へ伝播させない
+            func finite(_ v: Double?) -> Double? { v.flatMap { $0.isFinite ? $0 : nil } }
             for op in ["+=", "-=", "*=", "/="] where s.hasPrefix(op) {
                 guard let v = Double(s.dropFirst(2)) else { return nil }
                 switch op {
-                case "+=": return base + v
-                case "-=": return base - v
-                case "*=": return base * v
-                default: return v == 0 ? nil : base / v
+                case "+=": return finite(base + v)
+                case "-=": return finite(base - v)
+                case "*=": return finite(base * v)
+                default: return v == 0 ? nil : finite(base / v)
                 }
             }
-            return Double(s)
+            return finite(Double(s))
         }
 
         /// BISU + 装飾種別(0-6、読み捨て)の解釈。全置換の意味で返す。
