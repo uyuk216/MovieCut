@@ -31,6 +31,17 @@ final class AutomationExportTests: XCTestCase {
         XCTAssertNotEqual(plan.outputURL, url)
     }
 
+    /// プリセット無し・出力先省略のとき、既定の拡張子はプロジェクトのコーデックに従うこと
+    /// (ProRes なのに .mp4 名で .mov の中身が書かれていた不具合の回帰)。
+    func testPlanDefaultOutputExtensionFollowsProjectCodec() throws {
+        var p = Project.new()
+        p.codec = "prores422"
+        let url = tmp.appendingPathComponent("prores").appendingPathExtension(ProjectFileExtension.current)
+        try p.save(to: url)
+        let plan = try AutomationExport.plan(.init(projectPath: url.path))
+        XCTAssertEqual(plan.outputURL.pathExtension, "mov")
+    }
+
     func testPlanPreset() throws {
         let url = try saveProject()
         let plan = try AutomationExport.plan(.init(projectPath: url.path, presetName: "youtube1080"))

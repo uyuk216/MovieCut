@@ -12,6 +12,16 @@ final class BugHuntFollowupsTests: XCTestCase {
         XCTAssertEqual(ClipListingExport.csvCell("abc"), "abc")
     }
 
+    /// 書き出し仕様の提案ファイル名はコーデックに従うこと(ProRes でも .mp4 になっていた)。
+    func testExportSpecSuggestedFileNameFollowsCodec() {
+        let prores = ExportSpec(name: "n", stem: "s", width: 320, height: 180, codec: "prores422")
+        XCTAssertTrue(prores.suggestedFileName(documentName: "d").hasSuffix(".mov"))
+        let h264 = ExportSpec(name: "n", stem: "s", width: 320, height: 180, codec: "h264")
+        XCTAssertTrue(h264.suggestedFileName(documentName: "d").hasSuffix(".mp4"))
+        let audio = ExportSpec(name: "n", stem: "s", width: 0, height: 0, codec: "h264", audioOnly: true)
+        XCTAssertTrue(audio.suggestedFileName(documentName: "d").hasSuffix(".m4a"))
+    }
+
     /// 連番の取り込みキャッシュ鍵で fps を整数に切り捨てないこと(29 と 29.97 が同じ鍵になり、
     /// 古い APNG が再利用されていた)。
     func testImageSequenceCacheKeyDistinguishesFractionalFPS() {

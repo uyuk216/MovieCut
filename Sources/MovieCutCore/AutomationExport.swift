@@ -62,12 +62,12 @@ public struct AutomationExportPlan {
 
 public enum AutomationExport {
     /// 既定の出力先: プロジェクトと同じフォルダ。プリセットがあれば提案名、無ければ「<名前>-書き出し.mp4」。
-    public static func defaultOutputURL(projectURL: URL, preset: ExportPreset?, spec: ExportSpec?) -> URL {
+    public static func defaultOutputURL(projectURL: URL, preset: ExportPreset?, spec: ExportSpec?, codec: String? = nil) -> URL {
         let dir = projectURL.deletingLastPathComponent()
         let stem = projectURL.deletingPathExtension().lastPathComponent
         if let spec { return dir.appendingPathComponent(spec.suggestedFileName(documentName: stem)) }
         if let preset { return dir.appendingPathComponent(preset.suggestedFileName(documentName: stem)) }
-        return dir.appendingPathComponent(stem + "-書き出し").appendingPathExtension("mp4")
+        return dir.appendingPathComponent(stem + "-書き出し").appendingPathExtension(OutputPlan.fileExtension(forCodec: codec ?? ""))
     }
 
     /// 文字列の引数を検証して計画に直す。プロジェクトの読み込みを含む(ファイルが無ければ理由つきで失敗)。
@@ -110,7 +110,7 @@ public enum AutomationExport {
         if let out = request.outputPath?.trimmingCharacters(in: .whitespacesAndNewlines), !out.isEmpty {
             outputURL = URL(fileURLWithPath: (out as NSString).expandingTildeInPath)
         } else {
-            outputURL = defaultOutputURL(projectURL: projectURL, preset: preset, spec: spec)
+            outputURL = defaultOutputURL(projectURL: projectURL, preset: preset, spec: spec, codec: project.codec)
         }
         guard outputURL.standardizedFileURL != projectURL.standardizedFileURL else { throw AutomationError.sameAsProject }
         return AutomationExportPlan(project: project, projectURL: projectURL, outputURL: outputURL, preset: preset, spec: spec, range: range)

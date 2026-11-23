@@ -59,7 +59,7 @@ public struct ExportSpec: Equatable, Sendable {
 
     /// 保存パネルの提案名 `<書類名>-<stem>.mp4|.m4a`。
     public func suggestedFileName(documentName: String) -> String {
-        "\(documentName)-\(stem).\(audioOnly ? "m4a" : "mp4")"
+        "\(documentName)-\(stem).\(audioOnly ? "m4a" : OutputPlan.fileExtension(forCodec: codec))"
     }
 }
 
