@@ -167,7 +167,7 @@ public enum BuiltInSounds {
         let bytes = samples.count * 2
         d.append(contentsOf: Array("RIFF".utf8)); u32(UInt32(36 + bytes))
         d.append(contentsOf: Array("WAVEfmt ".utf8)); u32(16); u16(1); u16(1)
-        u32(UInt32(sampleRate)); u32(UInt32(sampleRate * 2)); u16(2); u16(16)
+        let rate = UInt32(min(max(Int(sampleRate), 1), 384_000)); u32(rate); u32(rate * 2); u16(2); u16(16)
         d.append(contentsOf: Array("data".utf8)); u32(UInt32(bytes))
         for s in samples { u16(UInt16(bitPattern: Int16((max(-1, min(1, s)) * 32767).rounded()))) }
         return d

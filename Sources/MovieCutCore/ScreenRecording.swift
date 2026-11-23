@@ -44,10 +44,11 @@ public struct ScreenRecordingRegion: Equatable, Sendable {
     /// ディスプレイの大きさに切り詰めた範囲。重なりが最小サイズ未満なら nil。
     public func clamped(toDisplayWidth displayWidth: Double, height displayHeight: Double) -> ScreenRecordingRegion? {
         guard isValidSize, displayWidth > 0, displayHeight > 0 else { return nil }
-        let nx = min(max(0, x), displayWidth)
-        let ny = min(max(0, y), displayHeight)
-        let nw = min(width, displayWidth - nx)
-        let nh = min(height, displayHeight - ny)
+        // 画面との交差を取る(原点を寄せるだけだと、はみ出した分だけ幅が広がってしまう)
+        let nx = max(0, x)
+        let ny = max(0, y)
+        let nw = min(x + width, displayWidth) - nx
+        let nh = min(y + height, displayHeight) - ny
         guard nw >= Self.minSide, nh >= Self.minSide else { return nil }
         return ScreenRecordingRegion(x: nx, y: ny, width: nw, height: nh)
     }

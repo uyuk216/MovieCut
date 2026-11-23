@@ -553,9 +553,10 @@ case "transcribe" where args.count >= 2:
             transcriber = SpeechFrameworkTranscriber(localeIdentifier: locale, requestsPermission: false)
         }
         let started = Date()
-        let r = try await SubtitleTranscription.run(clip: clip, project: project, transcriber: transcriber,
-                                                    style: nil, onProgress: { p in FileHandle.standardError.write(Data(String(format: "  %3.0f%%\n", p * 100).utf8)) })
-        let cues = r.map { SubtitleFile.cues(from: $0.project) } ?? []
+        // 出力は対象クリップの認識結果だけ(プロジェクト全体の字幕を混ぜない)
+        let segs = try await SubtitleTranscription.segments(clip: clip, transcriber: transcriber,
+                                                            onProgress: { p in FileHandle.standardError.write(Data(String(format: "  %3.0f%%\n", p * 100).utf8)) })
+        let cues = TranscriptSubtitles.cues(from: segs, clip: clip)
         guard !cues.isEmpty else { fail("認識できた文字がありませんでした") }
         let body = subFmt.map { SubtitleFile.format(cues, as: $0) } ?? TranscriptText.plainText(from: cues)
         try body.write(to: URL(fileURLWithPath: outPath), atomically: true, encoding: .utf8)
@@ -598,9 +599,14 @@ case "speak":
             url = try await aq.synthesize(text: text, voice: voice, speed: optValue("--speed").flatMap(Double.init) ?? 100)
             used = aq.usingFallback ? "say (fallback)" : "aquestalk"
         } else { fail("--voicevox <話者ID> か --voice <プリセット> が必要です") }
-        try? FileManager.default.removeItem(atPath: outPath)
-        try FileManager.default.copyItem(at: url, to: URL(fileURLWithPath: outPath))
         let dur = try RealVoiceProvider.duration(of: url)
+        // 先に消してから複写すると、複写の失敗で既存の出力まで失われる。置き換えは原子的に行う
+        let outURL = URL(fileURLWithPath: outPath)
+        if FileManager.default.fileExists(atPath: outPath) {
+            _ = try FileManager.default.replaceItemAt(outURL, withItemAt: url)
+        } else {
+            try FileManager.default.copyItem(at: url, to: outURL)
+        }
         print(String(format: "wrote %@ engine=%@ duration=%.3fs total=%.2fs", outPath, used, dur, Date().timeIntervalSince(t0)))
     } catch { fail("合成できませんでした: \(error.localizedDescription)") }
 case "speakers":
@@ -677,7 +683,7 @@ case "addimage" where args.count >= 4:
     // --duration が無ければ、プロジェクトの終わりまで(プロジェクトが空なら 5 秒)
     do {
         var p = try Project.load(from: URL(fileURLWithPath: args[1]))
-        let path = args[2]
+        let path = URL(fileURLWithPath: args[2]).path
         guard FileManager.default.fileExists(atPath: path) else { fail("画像が見つかりません: \(path)") }
         var c = Clip()
         c.type = .image
@@ -865,7 +871,7 @@ case "export-web" where args.count >= 3:
         }
         var nextMark = 0.1
         let t0 = Date()
-        try await FFmpegVideoExporter.export(project: p, range: range, format: format, crf: crf, to: URL(fileURLWithPath: args[2]), loudness: loudness) { v in
+        try await FFmpegVideoExporter.export(project: p, range: range, format: format, crf: crf, to: URL(fileURLWithPath: args[2]), loudness: loudness, vst3Provider: VST3EffectProvider.standard()) { v in
             if v >= nextMark - 1e-9 {
                 FileHandle.standardError.write(Data(String(format: "  %3.0f%%\n", v * 100).utf8))
                 nextMark = (v * 10 + 1e-9).rounded(.down) / 10 + 0.1

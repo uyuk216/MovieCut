@@ -62,7 +62,8 @@ public final class CacheBudgetManager: @unchecked Sendable {
         }
         entries[key] = Entry(cost: safeCost, onEvict: onEvict)
         order.append(key)
-        total += safeCost
+        let sum = total.addingReportingOverflow(safeCost)
+        total = sum.overflow ? Int64.max : sum.partialValue
         evicted = collectEvictionsLocked()
         lock.unlock()
         for (_, handler) in evicted { handler() }

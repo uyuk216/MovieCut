@@ -32,16 +32,18 @@ public enum BuiltInLibrary {
         let versionURL = dir.appendingPathComponent(versionFileName)
         let current = (try? String(contentsOf: versionURL, encoding: .utf8)).flatMap { Int($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
         let stale = current != version
+        var allWritesOK = true
         func write(_ data: Data?, _ name: String) {
             let url = dir.appendingPathComponent(name)
             if !stale, let size = (try? fm.attributesOfItem(atPath: url.path))?[.size] as? Int, size > 0 { return }
             guard let data else { return }
-            try? data.write(to: url, options: .atomic)
+            do { try data.write(to: url, options: .atomic) } catch { allWritesOK = false }
         }
         for s in BuiltInSounds.specs { if stale || !fm.fileExists(atPath: dir.appendingPathComponent(s.title + ".wav").path) { write(BuiltInSounds.wavData(BuiltInSounds.render(s.id)), s.title + ".wav") } }
         for s in BuiltInImages.specs { if stale || !fm.fileExists(atPath: dir.appendingPathComponent(s.title + ".png").path) { write(BuiltInImages.render(s.id).flatMap(BuiltInImages.pngData), s.title + ".png") } }
         try? (licenseNote + "\n").data(using: .utf8)?.write(to: dir.appendingPathComponent(licenseFileName), options: .atomic)
-        try? "\(version)\n".data(using: .utf8)?.write(to: versionURL, options: .atomic)
+        // どれか書き込みに失敗したら版を刻まない(次回、古い素材のまま「更新済み」にならないように)
+        if allWritesOK { try? "\(version)\n".data(using: .utf8)?.write(to: versionURL, options: .atomic) }
         return dir
     }
 

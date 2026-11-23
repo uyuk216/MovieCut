@@ -58,7 +58,10 @@ public enum MemoryBudget {
 
     /// Double(GB)で受ける便利版。テストや設定画面からの利用を想定。
     public static func limitBytes(totalRAMGB: Double, platform: MemoryBudgetPlatform = .mac) -> Int64? {
-        limitBytes(totalRAMBytes: Int64(totalRAMGB * Double(gib)), platform: platform)
+        guard totalRAMGB.isFinite else { return nil }
+        // 巨大な有限値でも変換で落ちないよう、Double のまま頭打ちしてから変換する
+        let gb = min(max(totalRAMGB, 0), 8.0e9)
+        return limitBytes(totalRAMBytes: Int64(gb * Double(gib)), platform: platform)
     }
 
     /// このマシンの総 RAM から上限を求める(実機用。テストでは使わない)。

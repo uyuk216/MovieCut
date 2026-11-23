@@ -197,11 +197,21 @@ public enum CharacterEditing {
         guard p.characters.count > 1, p.characters.contains(where: { $0.id == charId }) else { return nil }
         var q = p
         var removed: [String] = []
-        for ti in q.tracks.indices {
-            let gone = q.tracks[ti].clips.filter { $0.type == .voice && $0.charId == charId }
-            removed += gone.map(\.id)
-            q.tracks[ti].clips.removeAll { $0.type == .voice && $0.charId == charId }
+        // 複合の内側・シーン定義の中のボイスも消す(残るとキャラクター参照が切れる)
+        func walk(_ tracks: inout [Track]) {
+            for ti in tracks.indices {
+                let gone = tracks[ti].clips.filter { $0.type == .voice && $0.charId == charId }
+                removed += gone.map(\.id)
+                tracks[ti].clips.removeAll { $0.type == .voice && $0.charId == charId }
+                for ci in tracks[ti].clips.indices where tracks[ti].clips[ci].tracks != nil {
+                    var inner = tracks[ti].clips[ci].tracks!
+                    walk(&inner)
+                    tracks[ti].clips[ci].tracks = inner
+                }
+            }
         }
+        walk(&q.tracks)
+        for si in q.scenes.indices { walk(&q.scenes[si].tracks) }
         q.characters.removeAll { $0.id == charId }
         return (q, removed)
     }

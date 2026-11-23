@@ -32,6 +32,9 @@ public struct ReviewComment: Codable, Equatable, Identifiable {
     /// 作成者名の長さの上限(文字数)。
     public static let maxAuthorLength = 100
 
+    /// 交換ファイルや引数から入る時刻の整形(非有限は 0、巨大な有限値も表示側の整数変換で落ちない上限へ)。
+    public static func sanitizedTime(_ t: Double) -> Double { t.isFinite ? min(max(0, t), 1.0e12) : 0 }
+
     public init() {}
     public init(time: Double, body: String, author: String = "") {
         self.time = max(0, time.isFinite ? time : 0)
@@ -43,8 +46,8 @@ public struct ReviewComment: Codable, Equatable, Identifiable {
         let l = Lenient(c: try decoder.container(keyedBy: AnyKey.self), known: Self.knownKeys)
         id = l.string("id") ?? id
         let t = l.double("time") ?? 0
-        time = t.isFinite ? max(0, t) : 0
-        if let e = l.double("endTime"), e.isFinite, e > time { endTime = e }
+        time = ReviewComment.sanitizedTime(t)
+        if let e = l.double("endTime"), e.isFinite, e > time { endTime = ReviewComment.sanitizedTime(e) }
         body = String((l.string("body") ?? body).prefix(Self.maxBodyLength))
         author = String((l.string("author") ?? author).prefix(Self.maxAuthorLength))
         clipId = l.string("clipId").flatMap { $0.isEmpty ? nil : $0 }
@@ -85,8 +88,10 @@ public enum ReviewCommentEditing {
                            createdAt: String? = nil) -> (project: Project, id: String)? {
         let b = body.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !b.isEmpty else { return nil }
-        var c = ReviewComment(time: t, body: b, author: author.trimmingCharacters(in: .whitespacesAndNewlines))
-        if let e = endTime, e.isFinite, e > c.time { c.endTime = e }
+        var c = ReviewComment(time: ReviewComment.sanitizedTime(t),
+                              body: String(b.prefix(ReviewComment.maxBodyLength)),
+                              author: String(author.trimmingCharacters(in: .whitespacesAndNewlines).prefix(ReviewComment.maxAuthorLength)))
+        if let e = endTime { let se = ReviewComment.sanitizedTime(e); if se > c.time { c.endTime = se } }
         c.clipId = clipId.flatMap { $0.isEmpty ? nil : $0 }
         c.createdAt = createdAt
         var p = project
@@ -101,7 +106,7 @@ public enum ReviewCommentEditing {
         let b = body.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !b.isEmpty, b != project.reviewComments[i].body else { return nil }
         var p = project
-        p.reviewComments[i].body = b
+        p.reviewComments[i].body = String(b.prefix(ReviewComment.maxBodyLength))
         if let updatedAt { p.reviewComments[i].updatedAt = updatedAt }
         return p
     }
@@ -287,8 +292,8 @@ public enum ReviewCommentExchange {
             var c = ReviewComment()
             let id = cell(row, "id")
             if !id.isEmpty { c.id = id }
-            c.time = Double(cell(row, "time")) ?? parseTimecode(cell(row, "timecode")) ?? parseTimecode(cell(row, "time")) ?? 0
-            if let e = Double(cell(row, "endTime")), e.isFinite, e > c.time { c.endTime = e }
+            c.time = ReviewComment.sanitizedTime(Double(cell(row, "time")) ?? parseTimecode(cell(row, "timecode")) ?? parseTimecode(cell(row, "time")) ?? 0)
+            if let e = Double(cell(row, "endTime")), e.isFinite, e > c.time { c.endTime = ReviewComment.sanitizedTime(e) }
             c.body = String(body.prefix(ReviewComment.maxBodyLength))
             c.author = String(cell(row, "author").prefix(ReviewComment.maxAuthorLength))
             let clip = cell(row, "clipId")
@@ -319,6 +324,8 @@ public enum ReviewCommentExchange {
             }
         }
         p.reviewComments = ReviewCommentEditing.sorted(p.reviewComments)
+        // 読み込み時の上限と同じにそろえる(保存・再読込で黙って消えないように)
+        if p.reviewComments.count > ReviewComment.maxCount { p.reviewComments = Array(p.reviewComments.prefix(ReviewComment.maxCount)) }
         return MergeResult(project: p, added: added, updated: updated, unchanged: unchanged)
     }
 
