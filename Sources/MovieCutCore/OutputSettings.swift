@@ -143,13 +143,15 @@ public struct ResolutionInput: Equatable {
     /// 幅を入力した。固定中は高さも合わせる。
     public mutating func setWidth(_ text: String) {
         widthText = text
-        if lockAspect, let a = lockedAspect, let w = width, w > 0 { heightText = String(max(1, Int((Double(w) / a).rounded()))) }
+        if lockAspect, let a = lockedAspect, let w = width, w > 0,
+           let n = Int(exactly: (Double(w) / a).rounded()) { heightText = String(max(1, n)) }
     }
 
     /// 高さを入力した。固定中は幅も合わせる。
     public mutating func setHeight(_ text: String) {
         heightText = text
-        if lockAspect, let a = lockedAspect, let h = height, h > 0 { widthText = String(max(1, Int((Double(h) * a).rounded()))) }
+        if lockAspect, let a = lockedAspect, let h = height, h > 0,
+           let n = Int(exactly: (Double(h) * a).rounded()) { widthText = String(max(1, n)) }
     }
 
     /// 縦横を入れ替える(固定中の縦横比も逆数にする)。

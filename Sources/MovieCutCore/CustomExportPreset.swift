@@ -81,8 +81,8 @@ public enum CustomExportPresetStore {
         var items: [[String: Any]] = []
         for p in presets.prefix(CustomExportPreset.maxCount) {
             var d: [String: Any] = ["name": p.name, "width": p.width, "height": p.height, "codec": p.codec]
-            if let f = p.fps { d["fps"] = f }
-            if let b = p.bitrateMbps { d["bitrateMbps"] = b }
+            if let f = p.fps, f.isFinite { d["fps"] = f }
+            if let b = p.bitrateMbps, b.isFinite { d["bitrateMbps"] = b }
             items.append(d)
         }
         let root: [String: Any] = ["version": 1, "presets": items]
