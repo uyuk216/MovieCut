@@ -28,7 +28,7 @@ final class ImportNestedMediaTests: XCTestCase {
         XCTAssertEqual(plan.copies.map(\.from), [f.path], "複合の内側の素材もコピー対象になる")
         let inner = plan.project.tracks[0].clips[0].tracks![0].clips[0]
         XCTAssertEqual(inner.src, "media/nested.mp4")
-        XCTAssertNotNil(plan.project.mediaHints["media/nested.mp4"], "ヒントはパッケージ後のパスがキー")
+        XCTAssertEqual(plan.project.mediaHints[f.path]?.relative, "media/nested.mp4", "ヒントは元のパスがキーで、値に相対パスを持つ")
     }
 
     func testRelinkApplyingRewritesNestedAndMovesKeys() {

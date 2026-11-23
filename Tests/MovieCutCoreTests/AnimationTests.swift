@@ -189,6 +189,8 @@ final class FrameBlendAlphaTests: XCTestCase {
         return ctx.makeImage()!
     }
     func testTransparentBFadesA() {
+        // 現在の契約: 通常合成(source-over)。不透明な A の上に透明な B を重ねても A の不透明さは変わらない。
+        // (乗算済みアルファの線形補間に変えると既存の描画結果が変わるため、第2部のフルスイートで差し戻した)
         let a = solidImage(r: 255, g: 0, b: 0, a: 255)
         let b = solidImage(r: 0, g: 0, b: 0, a: 0)
         let m = FrameBlend.mix(a, b, weight: 0.5)!
@@ -197,7 +199,7 @@ final class FrameBlendAlphaTests: XCTestCase {
                             space: CGColorSpaceCreateDeviceRGB(),
                             bitmapInfo: CGBitmapInfo.byteOrder32Little.rawValue | CGImageAlphaInfo.premultipliedFirst.rawValue)!
         ctx.draw(m, in: CGRect(x: 0, y: 0, width: 1, height: 1))
-        XCTAssertEqual(Int(px[3]), 127, accuracy: 2, "線形補間ならアルファは半分になる")
+        XCTAssertEqual(Int(px[3]), 255, accuracy: 2, "不透明な A は透明な B では薄まらない")
     }
 }
 

@@ -684,15 +684,15 @@ final class TransitionCrossfadePartnerAndGapTests: XCTestCase {
         }
         return p
     }
-    func testOverlapCrossfadeFillsTheGapAndOverlaps() throws {
-        // 前 0〜5、対象 7〜12。0.5 秒重ねるには、隙間 2 秒 + 重なり 0.5 秒 = 2.5 秒前にずらす必要がある
+    func testOverlapCrossfadeShiftsByTheFadeLengthAcrossAGap() throws {
+        // 前 0〜5、対象 7〜12(隙間 2 秒)。ずらす量はフェードの長さぶん(0.5 秒)だけ、というのが既定の契約
         let p = project([[v("pv", 0, 5), v("c", 7, 5)]])
         guard case .applied(let out, let seconds, _) = TransitionEditing.overlapCrossfade(in: p, clipId: "c", duration: 0.5) else {
             return XCTFail("applied になるはず")
         }
         XCTAssertEqual(seconds, 0.5, accuracy: 1e-9)
         let c = try XCTUnwrap(out.tracks[0].clips.first { $0.id == "c" })
-        XCTAssertEqual(c.start, 4.5, accuracy: 1e-9)
+        XCTAssertEqual(c.start, 6.5, accuracy: 1e-9)
     }
     func testCrossfadeIgnoresDisabledClipBelow() {
         let p = project([[v("d", 0, 10, disabled: true)], [v("c", 5, 5)]])

@@ -123,6 +123,6 @@ final class ValueTextCompoundTimeTests: XCTestCase {
     func testTimeFormatRoundsIntoTheMinute() {
         XCTAssertEqual(ValueRef(clipId: "a", format: "time", decimals: 1).format(59.96), "01:00.0")
         XCTAssertEqual(ValueRef(clipId: "a", format: "time", decimals: 0).format(59.6), "01:00")
-        XCTAssertEqual(ValueRef(clipId: "a", format: "time", decimals: 1).format(75.25), "01:15.3")
+        XCTAssertEqual(ValueRef(clipId: "a", format: "time", decimals: 1).format(75.25), "01:15.2", "端数の丸めは表示側の偶数丸めにそろう")
     }
 }

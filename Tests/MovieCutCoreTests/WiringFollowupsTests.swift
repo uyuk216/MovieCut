@@ -223,13 +223,13 @@ final class MidiDensityAndTailTests: XCTestCase {
             XCTAssertEqual(error as? MidiError, .tooDense)
         }
     }
-    func testPlacementDurationIncludesTail() {
+    func testPlacementDurationIsFileDuration() {
         let f = midiData(duration: 10, notes: [])
         var p = Project()
         let ids = MidiImporter.place(wavPath: "/nonexistent/midi.wav", file: f, at: 0, in: &p)
         XCTAssertEqual(ids.count, 1)
         let clip = p.tracks.flatMap(\.clips).first { $0.id == ids[0] }
-        XCTAssertEqual(clip?.duration ?? 0, 10.5, accuracy: 1e-9)
+        XCTAssertEqual(clip?.duration ?? 0, 10, accuracy: 1e-9)
     }
     func testStepVolumeRejectsNonFiniteDb() {
         var c = Clip(); c.type = .audio; c.volume = 1
