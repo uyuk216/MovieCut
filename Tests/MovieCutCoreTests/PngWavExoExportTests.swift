@@ -83,6 +83,17 @@ final class PngWavExoExportTests: XCTestCase {
         XCTAssertEqual(r.wavDuration, 0.5, accuracy: 0.02)
     }
 
+    /// 同じ出力先へ短い内容で書き直したとき、前回のコマが残らないこと。
+    func testPngWavReExportRemovesStaleFrames() async throws {
+        let dir = tmp.appendingPathComponent("out-reexport")
+        let long = try await PngWavExporter.export(project: silentProject(duration: 1.0), options: PngWavOptions(base: "frame"), to: dir)
+        XCTAssertEqual(long.frameCount, 10)
+        let short = try await PngWavExporter.export(project: silentProject(duration: 0.5), options: PngWavOptions(base: "frame"), to: dir)
+        XCTAssertEqual(short.frameCount, 5)
+        let pngs = try FileManager.default.contentsOfDirectory(atPath: dir.path).filter { $0.hasSuffix(".png") }.sorted()
+        XCTAssertEqual(pngs, short.files.sorted())
+    }
+
     // MARK: 連番 PNG + WAV: 音声つき + ラウドネス
 
     func testPngWavExportWithAudioAndLoudnessDifference() async throws {

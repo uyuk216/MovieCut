@@ -64,6 +64,13 @@ public enum PngWavExporter {
     public static func digits(frameCount n: Int) -> Int { max(6, String(max(1, n)).count) }
 
     /// `frame_000001.png` 形式の名前(番号は 1 から)。
+    /// 連番ファイル名(base_000001.png の形)かどうか。
+    static func isFrameFileName(_ name: String, base: String) -> Bool {
+        guard name.hasPrefix(base + "_"), name.hasSuffix(".png") else { return false }
+        let mid = name.dropFirst(base.count + 1).dropLast(4)
+        return !mid.isEmpty && mid.allSatisfy { $0.isASCII && $0.isNumber }
+    }
+
     public static func fileName(base: String, index: Int, digits: Int) -> String {
         let num = String(index)
         return base + "_" + String(repeating: "0", count: max(0, digits - num.count)) + num + ".png"
@@ -109,6 +116,13 @@ public enum PngWavExporter {
                 if wavCreated { try? FileManager.default.removeItem(at: wavURL) }
             }
             do {
+                // 同じ出力先に前回の書き出しのコマが残っていると、短く書き直したときに混ざるので、
+                // 同じ名前付け(base_連番.png)の既存ファイルは先に消す(どうせこの回に上書きされる組である)
+                if let existing = try? FileManager.default.contentsOfDirectory(atPath: directory.path) {
+                    for name in existing where isFrameFileName(name, base: options.base) {
+                        try? FileManager.default.removeItem(at: directory.appendingPathComponent(name))
+                    }
+                }
                 // 映像: 1 コマずつ描いて書く(長尺でも 1 コマ分しかメモリに置かない)
                 if let vst3Provider { assets.setVST3Provider(vst3Provider) }
                 let renderer = Renderer(project: project, assets: assets, pluginEffectProviders: pluginEffectProviders)
