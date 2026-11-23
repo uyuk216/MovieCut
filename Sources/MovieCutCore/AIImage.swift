@@ -44,10 +44,11 @@ public enum AIImageStore {
         dir.appendingPathComponent(UUID().uuidString + ".png")
     }
 
-    /// ImageIO で 1 コマ以上読めるか。
+    /// ImageIO で読み取れて、最初のコマが実際にデコードできるか。
     public static func isReadableImage(_ url: URL) -> Bool {
         guard let src = CGImageSourceCreateWithURL(url as CFURL, nil) else { return false }
-        return CGImageSourceGetCount(src) > 0
+        guard CGImageSourceGetCount(src) > 0 else { return false }
+        return CGImageSourceCreateImageAtIndex(src, 0, nil) != nil
     }
 }
 

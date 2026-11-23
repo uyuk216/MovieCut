@@ -312,7 +312,7 @@ public final class FakeImageGenerationProvider: GenerativeMediaProvider, @unchec
         case .succeed(let d): bytes = d
         case .fail(let e): throw e
         case .delay(let sec, let d):
-            do { try await Task.sleep(nanoseconds: UInt64(sec * 1_000_000_000)) } catch { throw GenerativeMediaError.cancelled }
+            do { try await Task.sleep(nanoseconds: UInt64((sec.isFinite ? max(0, min(sec, 3600)) : 0) * 1_000_000_000)) } catch { throw GenerativeMediaError.cancelled }
             bytes = d
         }
         try? FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)

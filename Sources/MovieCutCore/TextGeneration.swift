@@ -364,7 +364,7 @@ switch behavior {
 case .suggestions(let s): return s
 case .fail(let e): throw e
 case .delay(let sec, let s):
-do { try await Task.sleep(nanoseconds: UInt64(sec * 1_000_000_000))} catch { throw TextGenerationError.cancelled}
+do { try await Task.sleep(nanoseconds: UInt64((sec.isFinite ? max(0, min(sec, 3600)) : 0) * 1_000_000_000))} catch { throw TextGenerationError.cancelled}
 return s
 }
 }

@@ -178,6 +178,7 @@ final class ProcessRun: @unchecked Sendable {
     private var outcome: AIError?          // 先に決まった理由(時間切れ・キャンセル・大きすぎ)
     private var finished = false
     private let input: Data, timeout: TimeInterval, cap: Int
+    private var restTail = Data()
 
     init(executable: String, arguments: [String], input: Data, timeout: TimeInterval, maxOutputBytes: Int, environment: [String: String] = [:]) {
         process.executableURL = URL(fileURLWithPath: executable)
@@ -195,7 +196,30 @@ final class ProcessRun: @unchecked Sendable {
         let first = outcome == nil && !finished
         if first { outcome = e }
         lock.unlock()
-        if first, process.isRunning { process.terminate() }
+        if first { terminateForcefully() }
+    }
+
+    /// SIGTERM で止まらないコマンドのために、2秒後に SIGKILL へ格上げする。
+    private func terminateForcefully() {
+        guard process.isRunning else { return }
+        process.terminate()
+        let pid = process.processIdentifier
+        DispatchQueue.global().asyncAfter(deadline: .now() + 2) { [weak self] in
+            guard let self, self.process.isRunning, self.process.processIdentifier == pid else { return }
+            kill(pid, SIGKILL)
+        }
+    }
+
+    /// 終了後の残り読み。子孫プロセスが出力を握っていると EOF が来ないため、待ちに上限を付ける。
+    private func readRestCapped(_ handle: FileHandle) -> Data {
+        let sem = DispatchSemaphore(value: 0)
+        DispatchQueue.global().async { [weak self] in
+            let d = (try? handle.readToEnd()) ?? Data()
+            if let self { self.lock.lock(); self.restTail = d; self.lock.unlock() }
+            sem.signal()
+        }
+        guard sem.wait(timeout: .now() + 0.5) == .success else { return Data() }
+        return lock.withLock { restTail }
     }
 
     func cancel() { setOutcome(.cancelled) }
@@ -228,6 +252,9 @@ final class ProcessRun: @unchecked Sendable {
                 cont.resume(throwing: AIError.launchFailed(error.localizedDescription))
                 return
             }
+            // 起動の前後でキャンセル・時間切れが入っていたら、起動したプロセスを止める
+            lock.lock(); let postOutcome = outcome; lock.unlock()
+            if postOutcome != nil { terminateForcefully() }
             let data = input
             DispatchQueue.global().async {
                 try? stdin.fileHandleForWriting.write(contentsOf: data)
@@ -241,7 +268,7 @@ final class ProcessRun: @unchecked Sendable {
         stdout.fileHandleForReading.readabilityHandler = nil
         stderr.fileHandleForReading.readabilityHandler = nil
         // 残りを読む(上限まで)
-        let rest = (try? stdout.fileHandleForReading.readToEnd()) ?? Data()
+        let rest = readRestCapped(stdout.fileHandleForReading)
         let (why, o, e) = lock.withLock { () -> (AIError?, Data, Data) in
             finished = true
             if out.count <= cap { out.append(rest.prefix(max(0, cap + 1 - out.count))) }
@@ -273,7 +300,7 @@ public final class FakeAIProvider: AIProvider, @unchecked Sendable {
         case .reply(let s): return s
         case .fail(let e): throw e
         case .delay(let s, let r):
-            do { try await Task.sleep(nanoseconds: UInt64(s * 1_000_000_000)) } catch { throw AIError.cancelled }
+            do { try await Task.sleep(nanoseconds: UInt64((s.isFinite ? max(0, min(s, 3600)) : 0) * 1_000_000_000)) } catch { throw AIError.cancelled }
             return r
         }
     }

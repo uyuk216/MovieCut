@@ -36,7 +36,7 @@ public struct MulticamGroup: Codable, Equatable, Identifiable {
 
     /// 基準の角度が占める時間(グループの時間軸)。
     public var range: ClosedRange<Double>? {
-        guard let r = angles.first?.clip else { return nil }
+        guard let r = angles.first?.clip, r.start.isFinite, r.duration.isFinite, r.duration >= 0 else { return nil }
         return r.start...(r.start + r.duration)
     }
 }
@@ -101,7 +101,11 @@ public enum Multicam {
         let track = Track(name: layerName)
         p.tracks.append(track)
         for c in cands.dropFirst() {
-            if let loc = ClipEditing.locate(c.id, in: p) { p.tracks[loc.track].clips[loc.index].volume = 0 }
+            if let loc = ClipEditing.locate(c.id, in: p) {
+                p.tracks[loc.track].clips[loc.index].volume = 0
+                // 音量キーフレームが残ると、ミキサーは固定音量よりキーフレームを優先して音が出てしまう
+                p.tracks[loc.track].clips[loc.index].keyframes["volume"] = nil
+            }
         }
         let g = MulticamGroup(name: name ?? "マルチカメラ\(project.multicams.count + 1)", angles: angles, targetTrackId: track.id)
         p.multicams.append(g)
@@ -149,7 +153,9 @@ public enum Multicam {
         var segEnd: Double
         if let ci = cover {
             segEnd = clips[ci].start + clips[ci].duration
-            if clips[ci].src == g.angles[angle].clip.src { return .unchanged }
+            let target = g.angles[angle].clip
+            if clips[ci].src == target.src, clips[ci].offset == target.offset,
+               clips[ci].speed == target.speed, clips[ci].reverse == target.reverse { return .unchanged }
             // t が頭ぴったりでなければ分割(右側が置き換え対象)
             if t - clips[ci].start > ClipEditing.timeEpsilon, let (l, r) = ClipEditing.split(clips[ci], at: t) {
                 clips[ci] = l

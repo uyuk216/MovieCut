@@ -27,7 +27,11 @@ public enum AIText {
         var digits = 0
         for ch in t { if ch.isASCII && ch.isNumber { digits += 1 } else { break } }
         if digits > 0, digits <= 3, let f = t.dropFirst(digits).first, ".)、）".contains(f) {
-            t = String(t.dropFirst(digits + 1)).trimmingCharacters(in: .whitespaces)
+            // 区切りの直後が数字なら小数(3.14…)なので、番号として外さない
+            let after = t.dropFirst(digits + 1).first
+            if after == nil || !(after!.isASCII && after!.isNumber) {
+                t = String(t.dropFirst(digits + 1)).trimmingCharacters(in: .whitespaces)
+            }
         }
         return t.trimmingCharacters(in: .whitespaces)
     }

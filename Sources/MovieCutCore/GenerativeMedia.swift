@@ -111,7 +111,7 @@ public struct GenerativeMediaResult: Equatable, Sendable {
     }
 
     public var clipType: ClipType { kind.clipType }
-    public var placementDuration: Double { duration > 0 ? duration : kind.defaultDuration }
+    public var placementDuration: Double { duration.isFinite && duration > 0 ? duration : kind.defaultDuration }
 }
 
 /// 生成メディア共通の失敗。`errorDescription` は画面に出す日本語。
@@ -282,7 +282,7 @@ public final class FakeGenerativeMediaProvider: GenerativeMediaProvider, @unchec
         case .fail(let e):
             throw e
         case .delay(let sec, let url, let duration):
-            do { try await Task.sleep(nanoseconds: UInt64(sec * 1_000_000_000)) } catch { throw GenerativeMediaError.cancelled }
+            do { try await Task.sleep(nanoseconds: UInt64((sec.isFinite ? max(0, min(sec, 3600)) : 0) * 1_000_000_000)) } catch { throw GenerativeMediaError.cancelled }
             return GenerativeMediaResult(kind: request.kind, fileURL: url, duration: duration)
         }
     }

@@ -225,9 +225,14 @@ public struct OpenAICompatibleVideoProvider: GenerativeMediaProvider {
 
     /// ジョブ参照用の URL(`{endpoint}/{id}`)。id はパス用にエンコードする。
     public func jobURL(id: String) -> URL {
-        let base = endpoint.absoluteString.hasSuffix("/") ? String(endpoint.absoluteString.dropLast()) : endpoint.absoluteString
-        let enc = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
-        return URL(string: base + "/" + enc) ?? endpoint
+        // 文字列連結だと、クエリ付きエンドポイントで ID がクエリの後ろに付いてしまう
+        var pathSet = CharacterSet.urlPathAllowed
+        pathSet.remove(charactersIn: "/")
+        let enc = id.addingPercentEncoding(withAllowedCharacters: pathSet) ?? id
+        guard var comps = URLComponents(url: endpoint, resolvingAgainstBaseURL: false) else { return endpoint }
+        let base = comps.percentEncodedPath.hasSuffix("/") ? String(comps.percentEncodedPath.dropLast()) : comps.percentEncodedPath
+        comps.percentEncodedPath = base + "/" + enc
+        return comps.url ?? endpoint
     }
 
     public func contentURL(id: String) -> URL { jobURL(id: id).appendingPathComponent("content") }
@@ -513,7 +518,8 @@ public struct VideoGenerationSettings: Equatable, Sendable {
     }
 
     public static func secondsText(_ v: Double) -> String {
-        v == v.rounded() ? String(Int(v)) : String(v)
+        guard v.isFinite, abs(v) < 9.0e15 else { return String(v) }
+        return v == v.rounded() ? String(Int(v)) : String(v)
     }
 }
 

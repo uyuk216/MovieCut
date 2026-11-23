@@ -49,12 +49,18 @@ public enum AITranslatePrompt {
     /// 返事を読んで、番号順の訳文にする。番号が 1…expected のどれか欠けていれば `unparsable`(途中の行は捨てずに、全体をやり直してもらう)。
     /// 番号の後ろの区切り(タブ・|・.・:・全角の句読点・空白)は捨てる。同じ番号が 2 回出たら先のものを使う。
     public static func parse(_ response: String, expected: Int) throws -> [String] {
+        guard expected > 0 else { return [] }
         var out = [String?](repeating: nil, count: expected)
         for raw in AIText.stripFences(response).components(separatedBy: .newlines) {
             let line = raw.trimmingCharacters(in: .whitespaces)
             let digits = line.prefix(while: { $0.isASCII && $0.isNumber })
             guard !digits.isEmpty, let n = Int(digits), (1...expected).contains(n) else { continue }
-            let rest = line.dropFirst(digits.count).drop(while: { "\t|.:：)）、 　".contains($0) })
+            var rest = line.dropFirst(digits.count)
+            // 区切りを捨てる。ただし「.5」のような小数の先頭のピリオドは本文として残す
+            while let f = rest.first, "\t|.:：)）、 　".contains(f) {
+                if f == ".", let nx = rest.dropFirst().first, nx.isASCII && nx.isNumber { break }
+                rest = rest.dropFirst()
+            }
             let text = rest.trimmingCharacters(in: .whitespaces)
             guard !text.isEmpty else { continue }
             if out[n - 1] == nil { out[n - 1] = text }
