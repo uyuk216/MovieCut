@@ -71,6 +71,34 @@ final class SilenceTests: XCTestCase {
         let l = [Float](repeating: 0, count: 48000)
         let r = samples([(1, 0.3)])
         XCTAssertTrue(SilenceDetector.profile(left: l, right: r, sampleRate: sr).silentRanges(.default).isEmpty)
+
+    func testProfileToleratesShorterRightChannel() {
+        // 右が左より短いと、従来は右の範囲外を読んで落ちた。
+        let p = SilenceDetector.profile(left: [0.5, 0.5], right: [0.5], sampleRate: 48000)
+        XCTAssertEqual(p.levels.count, 1)
+    }
+
+    func testProfileRejectsInvalidSampleRate() {
+        for bad in [Double.nan, 0, -1, Double.infinity] {
+            let p = SilenceDetector.profile(left: [0.5, 0.5], sampleRate: bad)
+            XCTAssertTrue(p.levels.isEmpty)
+            XCTAssertEqual(p.duration, 0)
+        }
+    }
+
+    func testSilentRangeTimesUseActualWindowLength() {
+        // 22050 Hz では 1 窓 = 221 サンプル ≒ 0.01002 秒。窓番号 × 0.01 秒で数えると
+        // 長い尺で無音の位置が前へずれる(300 秒で約 0.7 秒)。実窓長で数える。
+        let sr2 = 22050.0
+        let loud = [Float](repeating: 0.5, count: Int(300 * sr2))
+        let quiet = [Float](repeating: 0, count: Int(sr2))
+        let p = SilenceDetector.profile(left: loud + quiet, sampleRate: sr2)
+        var params = SilenceParams.default
+        params.pad = 0
+        let ranges = p.silentRanges(params)
+        XCTAssertEqual(ranges.count, 1)
+        XCTAssertEqual(ranges[0].start, 300, accuracy: 0.05)
+    }
         XCTAssertEqual(SilenceDetector.profile(left: l, right: l, sampleRate: sr).silentRanges(.default).count, 1)
     }
 

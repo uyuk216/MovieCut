@@ -69,8 +69,10 @@ public enum TranscriptTextEdit {
                 for w in parts.flatMap(\.sourceWords) {
                     let wt = w.text.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !wt.isEmpty, w.start.isFinite, w.end.isFinite else { continue }
-                    let wa = min(max(0, w.start), dur)
-                    let wb = min(max(wa, w.end), dur)
+                    // 単語の時刻は文の範囲の内側に収める(型の契約どおり)。
+                    // 認識器が文より外側の時刻を返しても、単語削除が隣の文の範囲を切らないように。
+                    let wa = min(max(a, w.start), b)
+                    let wb = min(max(wa, w.end), b)
                     guard wb - wa > 1e-3 else { continue }
                     words.append(TranscriptSegment(text: wt, start: wa, end: wb))
                 }

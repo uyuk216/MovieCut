@@ -26,15 +26,15 @@ public enum AudioSync {
     /// 平均を引いて正規化した相互相関を、-maxLag...maxLag の範囲で探す。`score` は −1〜1(1 に近いほど一致)。
     /// 重なりが 2 サンプル未満、または片方が無音なら nil。
     public static func lag(reference: [Float], target: [Float], maxLag: Int) -> (lag: Int, score: Double)? {
-        let n = min(reference.count, target.count)
-        guard n >= 2 else { return nil }
-        let r = center(Array(reference.prefix(n)))
-        let t = center(Array(target.prefix(n)))
-        let limit = max(0, min(maxLag, n - 2))
+        guard !reference.isEmpty, !target.isEmpty else { return nil }
+        // 長さが違う場合は切り捨てず、全体で比べる(短い側が長い側の途中から始まる組も探せる)。
+        let r = center(reference)
+        let t = center(target)
+        let limit = max(0, min(maxLag, reference.count + target.count))
         var best: (lag: Int, score: Double)?
         for lag in -limit...limit {
             // target[k] と reference[k - lag] が両方ある k の範囲
-            let lo = max(0, lag), hi = min(n, n + lag)
+            let lo = max(0, lag), hi = min(t.count, r.count + lag)
             guard hi - lo >= 2 else { continue }
             var dot = 0.0, er = 0.0, et = 0.0
             for k in lo..<hi {

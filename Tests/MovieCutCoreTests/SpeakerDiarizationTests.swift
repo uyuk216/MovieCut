@@ -27,6 +27,14 @@ final class SpeakerDiarizationTests: XCTestCase {
     }
 
     func testExtractorSilenceAndRanges() {
+        // 非有限・巨大な区間でも整数変換で落ちない(認識結果の時刻がそのまま入る経路がある)
+        let infEnd = AcousticFeatureExtractor.features(samples: sine(freq: 120, seconds: 0.5), sampleRate: sampleRate, start: 0, end: .infinity)
+        XCTAssertEqual(infEnd.rms, 0, "非有限の区間は無音の特徴として扱う")
+        let hugeEnd = AcousticFeatureExtractor.features(samples: sine(freq: 120, seconds: 0.5), sampleRate: sampleRate, start: 0, end: 1e30)
+        XCTAssertGreaterThan(hugeEnd.rms, 0, "巨大な終端はバッファの末尾に丸めて測る")
+        let nanStart = AcousticFeatureExtractor.features(samples: sine(freq: 120, seconds: 0.5), sampleRate: sampleRate, start: .nan, end: 0.5)
+        XCTAssertEqual(nanStart.rms, 0)
+
         let silent = AcousticFeatureExtractor.features(samples: [Float](repeating: 0, count: 8000), sampleRate: sampleRate, start: 0, end: 0.5)
         XCTAssertEqual(silent.meanF0, 0)
         XCTAssertEqual(silent.rms, 0)

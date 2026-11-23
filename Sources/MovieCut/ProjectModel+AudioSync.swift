@@ -17,15 +17,15 @@ extension ProjectModel {
             }.value
             guard let self else { return }
             guard let lag else { self.statusText = "音が一致せず、合わせられませんでした"; return }
-            self.applyAudioSync(videoId: v.id, audioId: a.id, lag: lag)
+            self.applyAudioSync(videoId: v.id, audioId: a.id, lag: lag, expectedVideo: v, expectedAudio: a)
         }
     }
 
     /// 求めたずれを音声クリップの開始位置に反映する。1 回の Undo。動かさなかったときは false(履歴に載せない)。
     @discardableResult
-    func applyAudioSync(videoId: String, audioId: String, lag: Double) -> Bool {
+    func applyAudioSync(videoId: String, audioId: String, lag: Double, expectedVideo: Clip? = nil, expectedAudio: Clip? = nil) -> Bool {
         guard !isLocked else { return false }
-        switch AudioSyncEditing.apply(to: project, videoId: videoId, audioId: audioId, lag: lag) {
+        switch AudioSyncEditing.apply(to: project, videoId: videoId, audioId: audioId, lag: lag, expectedVideo: expectedVideo, expectedAudio: expectedAudio) {
         case .moved(let p, let s):
             let ok = edit(Self.audioSyncUndoName) { $0 = p }
             if ok { statusText = String(format: L10n.t("音声を %.2f 秒に動かして合わせました"), s) }
@@ -34,6 +34,7 @@ extension ProjectModel {
         case .beforeZero: statusText = "合わせると音声の頭が 0 秒より前になるため、動かしませんでした"
         case .locked: statusText = Self.lockedNotice
         case .invalid: statusText = "動画と音声のクリップが見つかりません"
+        case .stale: statusText = "解析のあいだにクリップが変わったため、合わせませんでした。もう一度お試しください"
         }
         return false
     }

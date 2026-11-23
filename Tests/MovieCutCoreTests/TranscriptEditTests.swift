@@ -84,6 +84,19 @@ final class TranscriptEditTests: XCTestCase {
         XCTAssertEqual(laterNow.start, 4.5, accuracy: 0.01, "後ろのクリップは詰める")
     }
 
+    func testSentenceWordsAreClampedInsideTheSentence() {
+        // 認識器が文の範囲より外側の単語時刻を返しても、単語は文の内側に収める(型の契約)。
+        // 収めないと、単語削除が隣の文の音まで切ってしまう。
+        let clip = audioClip(id: "a", start: 0, duration: 10)
+        var s1 = seg("あ", 2, 3)
+        s1.words = [seg("あ", 1, 4)]
+        let s = TranscriptTextEdit.sentences(from: [s1], clip: clip)
+        XCTAssertEqual(s.count, 1)
+        XCTAssertEqual(s[0].words.count, 1)
+        XCTAssertEqual(s[0].words[0].start, 2, accuracy: 1e-9)
+        XCTAssertEqual(s[0].words[0].end, 3, accuracy: 1e-9)
+    }
+
     func testRemovingEverySentenceIsRefusedAndChangesNothing() {
         var p = Project.new()
         var tr = Track(name: "音"); tr.clips = [audioClip(id: "a", start: 0, duration: 2)]

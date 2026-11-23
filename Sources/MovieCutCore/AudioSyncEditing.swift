@@ -53,13 +53,20 @@ public enum AudioSyncEditing {
         case beforeZero(newStart: Double)
         case locked
         case invalid
+        /// 解析のあいだに対象クリップが変わったため、古いずれを当てなかった。
+        case stale
     }
 
     /// ずれ `lag`(秒、`lagSeconds` の値)に従って、音声クリップの開始位置を動かす。
     /// 音声の時刻 t は映像の時刻 t − lag と同じ音なので、新しい開始 = 映像の開始 − lag。
-    public static func apply(to project: Project, videoId: String, audioId: String, lag: Double) -> Outcome {
+    /// `expectedVideo` / `expectedAudio`(解析開始時のクリップ)を渡すと、解析中に対象が変わっていた場合は
+    /// 古いずれを当てず `.stale` を返す(素材・使う範囲・速度などが変わると、ずれの根拠が崩れるため)。
+    public static func apply(to project: Project, videoId: String, audioId: String, lag: Double,
+                             expectedVideo: Clip? = nil, expectedAudio: Clip? = nil) -> Outcome {
         guard let v = project.allClips.first(where: { $0.id == videoId && $0.type == .video }),
               let a = project.allClips.first(where: { $0.id == audioId && $0.type == .audio }), lag.isFinite else { return .invalid }
+        if let ev = expectedVideo, !sameAnalyzedContent(ev, v) { return .stale }
+        if let ea = expectedAudio, !sameAnalyzedContent(ea, a) { return .stale }
         guard !LayerEditing.isLockedClip(audioId, in: project) else { return .locked }
         let newStart = ((v.start - lag) * 1000).rounded() / 1000
         if newStart < 0 { return .beforeZero(newStart: newStart) }
@@ -69,5 +76,11 @@ public enum AudioSyncEditing {
             if let ci = p.tracks[ti].clips.firstIndex(where: { $0.id == audioId }) { p.tracks[ti].clips[ci].start = newStart }
         }
         return .moved(p, newStart: newStart)
+    }
+
+    /// 解析対象の音を決める項目(素材・開始・使う範囲・速度・逆再生)が同じか。
+    private static func sameAnalyzedContent(_ x: Clip, _ y: Clip) -> Bool {
+        x.src == y.src && x.start == y.start && x.offset == y.offset && x.duration == y.duration
+            && x.speed == y.speed && x.reverse == y.reverse
     }
 }

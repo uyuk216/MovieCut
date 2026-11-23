@@ -44,14 +44,18 @@ public struct LevelProfile: Equatable, Sendable {
     public var levels: [Float]
     /// 測った長さ(秒)。最後の窓は短いことがある。
     public var duration: Double
+    /// 1 窓の実時間(秒)。窓のサンプル数をサンプルレートで割った値で、丸めのため windowSeconds とずれることがある。
+    public var windowDuration: Double
 
-    public init(levels: [Float], duration: Double) { self.levels = levels; self.duration = duration }
+    public init(levels: [Float], duration: Double, windowDuration: Double = LevelProfile.windowSeconds) {
+        self.levels = levels; self.duration = duration; self.windowDuration = windowDuration
+    }
 
     /// 無音の区間(余白を引いた、実際に切る範囲)。音の大きさが `thresholdDb` 未満の窓が `minSilence` 以上続いたところ。
     /// 前後に `pad` を残す(クリップの頭・終わりに接する側は残さない)。余白を引くと残らないものは捨てる。
     public func silentRanges(_ params: SilenceParams) -> [SilenceRange] {
         let p = params.clamped
-        let w = Self.windowSeconds
+        let w = windowDuration
         var out: [SilenceRange] = []
         var i = 0
         let n = levels.count
@@ -82,7 +86,9 @@ public enum SilenceDetector {
     /// 窓ごとの RMS の dBFS を求める(左右別々に測って大きい方)。`sampleRate` は 1 秒あたりのフレーム数。
     /// 最後の窓が短いときは、その長さの RMS。
     public static func profile(left: [Float], right: [Float]? = nil, sampleRate: Double, duration: Double? = nil) -> LevelProfile {
-        let win = max(1, Int((sampleRate * LevelProfile.windowSeconds).rounded()))
+        // 不正なサンプルレート(NaN・0・負・無限大)では測らず、空の結果を返す(整数変換で落とさない)。
+        guard sampleRate.isFinite, sampleRate > 0 else { return LevelProfile(levels: [], duration: 0) }
+        let win = max(1, Int((min(sampleRate, 1e9) * LevelProfile.windowSeconds).rounded()))
         let n = left.count
         var levels: [Float] = []
         levels.reserveCapacity(n / win + 1)
@@ -92,14 +98,19 @@ public enum SilenceDetector {
             levels.append(windowDb(left, right, i, e))
             i = e
         }
-        return LevelProfile(levels: levels, duration: duration ?? Double(n) / sampleRate)
+        // 窓の実時間は win / sampleRate(窓番号 × windowSeconds だと、丸めで少しずつずれる)。
+        return LevelProfile(levels: levels, duration: duration ?? Double(n) / sampleRate,
+                            windowDuration: Double(win) / sampleRate)
     }
 
     static func windowDb(_ l: [Float], _ r: [Float]?, _ a: Int, _ b: Int) -> Float {
         func rms(_ x: [Float]) -> Double {
+            // 左右で長さが違う場合は、そのチャンネルの範囲内だけ測る(範囲外を読まない)。
+            let hi = min(b, x.count)
+            guard hi > a else { return 0 }
             var s = 0.0
-            for k in a..<b { s += Double(x[k]) * Double(x[k]) }
-            return (s / Double(max(1, b - a))).squareRoot()
+            for k in a..<hi { s += Double(x[k]) * Double(x[k]) }
+            return (s / Double(hi - a)).squareRoot()
         }
         let v = max(rms(l), r.map { rms($0) } ?? 0)
         return v <= 1e-6 ? -120 : Float(20 * log10(v))

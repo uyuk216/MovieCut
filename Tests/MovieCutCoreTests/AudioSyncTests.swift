@@ -64,6 +64,24 @@ final class AudioSyncTests: XCTestCase {
         XCTAssertEqual(AudioSync.seconds(lag: 48000, sampleRate: 48000), 1, accuracy: 1e-9)
         XCTAssertEqual(AudioSync.seconds(lag: 5, sampleRate: 0), 0)
     }
+
+    func testLagFindsShortTargetInsideLongReference() throws {
+        // 短い target が長い reference の途中(100 サンプル目)から出てくる組。
+        // 従来は短い方に切り捨てて無音部分しか比べられず、見つけられなかった。
+        let p = noise(100, seed: 13)
+        let reference = [Float](repeating: 0, count: 100) + p
+        let r = try XCTUnwrap(AudioSync.lag(reference: reference, target: p, maxLag: 150))
+        XCTAssertEqual(r.lag, -100)
+        XCTAssertGreaterThan(r.score, 0.9)
+    }
+
+    func testLagFindsShortReferenceInsideLongTarget() throws {
+        let p = noise(100, seed: 17)
+        let target = [Float](repeating: 0, count: 100) + p
+        let r = try XCTUnwrap(AudioSync.lag(reference: p, target: target, maxLag: 150))
+        XCTAssertEqual(r.lag, 100)
+        XCTAssertGreaterThan(r.score, 0.9)
+    }
 }
 
 /// 自動同期の編集(包絡 → ずれ → 開始位置)。
@@ -104,6 +122,18 @@ final class AudioSyncEditingTests: XCTestCase {
         XCTAssertEqual(q.allClips.first { $0.id == "a" }!.start, 4.63, accuracy: 1e-9)
         XCTAssertEqual(q.allClips.first { $0.id == "b" }!.start, 20)
         XCTAssertEqual(q.allClips.first { $0.id == "v" }!.start, 5)
+    }
+
+    func testApplyRefusesStaleAnalysis() {
+        let p = project([[clip("v", .video, start: 5)], [clip("a", .audio, start: 3)]])
+        let v = p.allClips.first { $0.id == "v" }!
+        let a = p.allClips.first { $0.id == "a" }!
+        // 解析時と同じスナップショットなら、通常どおり動く
+        guard case .moved = AudioSyncEditing.apply(to: p, videoId: "v", audioId: "a", lag: 0.37, expectedVideo: v, expectedAudio: a) else { return XCTFail() }
+        // 解析のあいだに音声の使う範囲(offset)が変わっていたら、古いずれを当てない
+        var changed = p
+        changed.tracks[1].clips[0].offset = 1.5
+        XCTAssertEqual(AudioSyncEditing.apply(to: changed, videoId: "v", audioId: "a", lag: 0.37, expectedVideo: v, expectedAudio: a), .stale)
     }
 
     func testApplyEdgeCases() {

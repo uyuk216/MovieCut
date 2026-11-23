@@ -75,12 +75,21 @@ public enum AcousticFeatureExtractor {
 
     /// モノラルサンプルの [start, end)(秒)の区間の特徴を出す。区間が空・範囲外なら無音の特徴を返す。
     public static func features(samples: [Float], sampleRate: Double, start: Double, end: Double) -> AcousticFeatures {
-        let duration = max(0, end - start)
-        guard sampleRate > 0, !samples.isEmpty, duration > 0 else {
+        let rawDuration = end - start
+        let duration = rawDuration.isFinite ? max(0, rawDuration) : 0
+        guard sampleRate > 0, sampleRate.isFinite, !samples.isEmpty, duration > 0 else {
             return AcousticFeatures(meanF0: 0, f0Spread: 0, rms: 0, spectralCentroid: 0, zeroCrossingRate: 0, duration: duration)
         }
-        let a = min(max(0, Int((start * sampleRate).rounded())), samples.count)
-        let b = min(max(a, Int((end * sampleRate).rounded())), samples.count)
+        // 時刻→フレームの変換は、非有限・巨大な時刻でも整数変換で落とさず、範囲へ丸める。
+        func frame(_ t: Double) -> Int {
+            let v = (t * sampleRate).rounded()
+            guard v.isFinite else { return v > 0 ? samples.count : 0 }
+            if v <= 0 { return 0 }
+            if v >= Double(samples.count) { return samples.count }
+            return Int(v)
+        }
+        let a = frame(start)
+        let b = min(max(a, frame(end)), samples.count)
         guard b > a else {
             return AcousticFeatures(meanF0: 0, f0Spread: 0, rms: 0, spectralCentroid: 0, zeroCrossingRate: 0, duration: duration)
         }
@@ -97,7 +106,7 @@ public enum AcousticFeatureExtractor {
         let zcr = Double(crossings) / Double(slice.count)
 
         // フレーム単位(約 128ms まで)に分けて F0 とスペクトル重心を集める
-        let frameLen = min(slice.count, max(512, Int(sampleRate * 0.128)))
+        let frameLen = min(slice.count, max(512, Int(min(sampleRate, 1e9) * 0.128)))
         let hop = max(1, frameLen / 2)
         var f0s: [Double] = []
         var centroids: [Double] = []
@@ -629,7 +638,10 @@ public enum DiarizationPipeline {
     public static func readMonoSamples(url: URL) throws -> (samples: [Float], sampleRate: Double) {
         let file = try AVAudioFile(forReading: url)
         let format = file.processingFormat
-        let frames = AVAudioFrameCount(file.length)
+        // フレーム数が AVAudioFrameCount(UInt32)に収まらない音声は、変換で落とさずエラーにする。
+        guard let frames = AVAudioFrameCount(exactly: file.length) else {
+            throw TranscriptionError.failed("音声が長すぎて読み込めません。")
+        }
         guard frames > 0, let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames) else {
             return ([], format.sampleRate)
         }
