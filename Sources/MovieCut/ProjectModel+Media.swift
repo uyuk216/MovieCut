@@ -128,7 +128,7 @@ extension ProjectModel {
                 folder = parent.appendingPathComponent("\(name) パッケージ \(n)", isDirectory: true)
                 n += 1
             }
-            let plan = MediaPackage.plan(self.project, size: { p in
+            let plan = MediaPackage.plan(self.savedProject, size: { p in
                 (try? fm.attributesOfItem(atPath: p)[.size] as? NSNumber)?.int64Value
             })
             do {

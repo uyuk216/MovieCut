@@ -13,8 +13,13 @@ enum ProjectVersionRecorder {
         let work = {
             _ = try? ProjectVersions.record(data: data, projectURL: url, locations: locations, keep: keep, minInterval: minInterval)
         }
-        if synchronous { work() } else { DispatchQueue.global(qos: .utility).async(execute: work) }
+        if synchronous { work() } else { VersionRecordQueue.queue.async(execute: work) }
     }
+}
+
+/// 世代記録専用の直列キュー(複数の保存の記録が重なって、世代の置き換え・削除が競合しないように)。
+private enum VersionRecordQueue {
+    static let queue = DispatchQueue(label: "moviecut.version-record")
 }
 
 @MainActor

@@ -88,7 +88,8 @@ final class EngineAudioBackend: AudioBackend {
         let frame = AVAudioFramePosition(max(0, time) * sr)
         let count = f.length - frame
         if count > 0 {
-            player.scheduleSegment(f, startingFrame: frame, frameCount: AVAudioFrameCount(count), at: nil)
+            // 残りが AVAudioFrameCount の範囲を超える長さでは、変換で落ちないよう頭打ちする
+            player.scheduleSegment(f, startingFrame: frame, frameCount: AVAudioFrameCount(min(count, Int64(AVAudioFrameCount.max))), at: nil)
         }
         baseTime = time
         player.play()
@@ -104,7 +105,7 @@ final class EngineAudioBackend: AudioBackend {
         let frame = AVAudioFramePosition(max(0, time) * sr)
         let count = f.length - frame
         if count > 0 {
-            player.scheduleSegment(f, startingFrame: frame, frameCount: AVAudioFrameCount(count), at: nil)
+            player.scheduleSegment(f, startingFrame: frame, frameCount: AVAudioFrameCount(min(count, Int64(AVAudioFrameCount.max))), at: nil)
         }
         baseTime = time
         player.play()
@@ -494,7 +495,12 @@ final class PlaybackController {
     private func scheduleRebuildIfNeeded() {
         guard armed, let model else { return }
         let key = AudioCacheKey.make(for: model.project)
-        if key == cacheKey || key == failedKey || key == buildingKey { debounceTask?.cancel(); return }
+        if key == cacheKey || key == failedKey || key == buildingKey {
+            debounceTask?.cancel()
+            // キャッシュ済みの音に戻ったときは、作りかけの別のミックスが後から読み込まれないよう世代を進める
+            if key == cacheKey || key == failedKey { generation += 1 }
+            return
+        }
         debounceTask?.cancel()
         let delay = debounce
         debounceTask = Task { [weak self] in
@@ -524,7 +530,7 @@ final class PlaybackController {
                 return .success(d)
             } catch { return .failure(error) }
         }.value
-        guard gen == generation else { try? FileManager.default.removeItem(at: url); return }  // 古い依頼
+        guard gen == generation else { if buildingKey == key { buildingKey = nil }; try? FileManager.default.removeItem(at: url); return }  // 古い依頼
         buildingKey = nil
         rebuildCount += 1
         switch result {

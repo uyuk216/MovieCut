@@ -579,6 +579,8 @@ final class ProjectModel: ObservableObject {
         scopeRoot = path.isEmpty ? nil : rootNew
         if path != compoundPath { compoundPath = path }
         project = new
+        // Undo / Redo でプロキシの関連付けが変わったら、プレビューの参照先(キャッシュ含む)も入れ直す
+        if oldRoot.proxyLinks != rootNew.proxyLinks { installPreviewProxies() }
         // Undo / Redo でクリップが無くなったら、選択も外す
         if let id = selectedClipId, !new.allClips.contains(where: { $0.id == id }) {
             let s = TimelineSelection.pruned(selection, in: new)
@@ -844,7 +846,7 @@ final class ProjectModel: ObservableObject {
         isExporting = true
         // 直接の書き出しの間は、キューの待っている件を始めない(終わったら自動で再開する)
         let queue = exportQueueOverride ?? AppServices.exportQueue
-        queue.queue.isHeld = true
+        queue.queue.acquireHold()
         exportProgress = 0
         exportFileName = fileName
         exportTitle = title
@@ -852,7 +854,7 @@ final class ProjectModel: ObservableObject {
         exportNotice = notices.joined(separator: "\n")
         let dock = dockOverride ?? AppServices.dock
         dock.update(0)
-        defer { isExporting = false; exportTask = nil; queue.queue.isHeld = false }
+        defer { isExporting = false; exportTask = nil; queue.queue.releaseHold() }
         let task = Task { [weak self] in
             try await job { v in
                 Task { @MainActor in

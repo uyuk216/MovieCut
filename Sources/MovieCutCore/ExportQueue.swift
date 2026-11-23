@@ -43,6 +43,14 @@ public final class ExportQueue {
         didSet { if !isHeld { pump() } }
     }
 
+    /// 保留の数え上げ(複数の書類が同時に直接書き出しをしても、先に終わった方が保留を解かないように)。
+    public private(set) var holdCount = 0
+    public func acquireHold() { holdCount += 1; isHeld = true }
+    public func releaseHold() {
+        holdCount = max(0, holdCount - 1)
+        if holdCount == 0 { isHeld = false }
+    }
+
     private var works: [UUID: ExportWork] = [:]
     private var running: (id: UUID, task: Task<Void, Never>)?
 
