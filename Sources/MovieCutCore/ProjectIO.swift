@@ -34,21 +34,31 @@ extension Project {
         p.width = newWidth
         p.height = newHeight
         guard k.isFinite, k > 0, abs(k - 1) >= 1e-6 else { return p }
-        for ti in p.tracks.indices {
-            for ci in p.tracks[ti].clips.indices {
-                var c = p.tracks[ti].clips[ci]
-                if (c.type == .text || c.type == .voice), let f = c.fontSize, f != 0 {
-                    c.fontSize = max(8, (f * k).rounded())
-                }
-                if let b = c.blur, b > 0 { c.blur = (b * k).rounded() }
-                if c.type == .blur, let s = c.strength, s > 0 { c.strength = (s * k).rounded() }
-                // 動くぼかし(キー)の値も同じ比で直す
-                for key in ["blur", "strength"] where c.keyframes[key] != nil {
-                    c.keyframes[key] = c.keyframes[key]!.map { Keyframe(t: $0.t, v: ($0.v * k).rounded(), ease: $0.ease) }
-                }
-                p.tracks[ti].clips[ci] = c
+        // 複合クリップの子とシーン内のクリップも同じキャンバスの px で描かれるので、同じ比で直す
+        func scaleClip(_ c: inout Clip) {
+            if (c.type == .text || c.type == .voice), let f = c.fontSize, f != 0 {
+                c.fontSize = max(8, (f * k).rounded())
+            }
+            if let b = c.blur, b > 0 { c.blur = (b * k).rounded() }
+            if c.type == .blur, let st = c.strength, st > 0 { c.strength = (st * k).rounded() }
+            // 動くぼかし(キー)の値も同じ比で直す
+            for key in ["blur", "strength"] where c.keyframes[key] != nil {
+                c.keyframes[key] = c.keyframes[key]!.map { Keyframe(t: $0.t, v: ($0.v * k).rounded(), ease: $0.ease) }
+            }
+            if var sub = c.tracks {
+                scaleTracks(&sub)
+                c.tracks = sub
             }
         }
+        func scaleTracks(_ tracks: inout [Track]) {
+            for ti in tracks.indices {
+                for ci in tracks[ti].clips.indices {
+                    scaleClip(&tracks[ti].clips[ci])
+                }
+            }
+        }
+        scaleTracks(&p.tracks)
+        for si in p.scenes.indices { scaleTracks(&p.scenes[si].tracks) }
         return p
     }
 }

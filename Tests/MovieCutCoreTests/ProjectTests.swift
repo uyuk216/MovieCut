@@ -87,6 +87,22 @@ final class ProjectTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(tiny.tracks[0].clips[1].fontSize ?? 0, 8)
     }
 
+    /// 解像度補正は複合クリップの子とシーン内のクリップにも届くこと(最上位だけ直っていた不具合の回帰)。
+    func testScaledForResolutionReachesCompoundAndSceneClips() throws {
+        var p = Project.new()
+        var child = Clip(); child.type = .text; child.fontSize = 96
+        var inner = Track(); inner.clips = [child]
+        var compound = Clip(); compound.type = .compound; compound.tracks = [inner]
+        p.tracks[0].clips = [compound]
+        var sceneText = Clip(); sceneText.type = .voice; sceneText.fontSize = 64
+        var sceneTrack = Track(); sceneTrack.clips = [sceneText]
+        p.scenes = [SceneDefinition(id: "s1", name: "場面", tracks: [sceneTrack])]
+
+        let q = p.scaledForResolution(newWidth: 960, newHeight: 540)
+        XCTAssertEqual(q.tracks[0].clips[0].tracks?[0].clips[0].fontSize, 48)
+        XCTAssertEqual(q.scenes[0].tracks[0].clips[0].fontSize, 32)
+    }
+
     func testSaveLoadFile() throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("ye-\(UUID().uuidString).ymproj")
         defer { try? FileManager.default.removeItem(at: url) }
