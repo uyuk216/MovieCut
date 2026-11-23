@@ -187,8 +187,8 @@ public struct ItemTemplate: Codable, Equatable, Identifiable, Sendable {
 
     /// `makeClip(values:)` の詳細版(入れたスロットと、断った値の記録つき)。
     public func instantiate(values: [String: String]) -> TemplateInstantiation {
-        var c = clip
-        c.id = newId()
+        // 複合クリップの中身にも新しい id を振る(最上位だけ変えると、同じテンプレートから作った複合同士で子の id が重なる)
+        var c = CompoundEditing.freshIds(clip)
         c.start = 0
         if !(c.duration > 0) { c.duration = 2 }
         let r = applySlots(values: values, to: &c)

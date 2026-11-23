@@ -229,3 +229,16 @@ final class TemplateSlotsTests: XCTestCase {
         XCTAssertTrue(TemplateSlot(id: "c", label: "c", kind: .color, target: .outline).isCompatible(with: img))
     }
 }
+
+
+// MARK: - バグ確認 第2部 C12: 素材差し替えで旧素材の長さを捨てる
+
+final class TemplateSlotSourceReplacementTests: XCTestCase {
+    func testReplacingTheSourceClearsTheOldSourceLength() {
+        var c = Clip(); c.type = .image; c.src = "/old.png"; c.srcDuration = 5
+        let slot = TemplateSlot(id: "img", label: "画像", kind: .image, target: .source)
+        XCTAssertTrue(slot.apply("/new.png", to: &c))
+        XCTAssertEqual(c.src, "/new.png")
+        XCTAssertNil(c.srcDuration)
+    }
+}

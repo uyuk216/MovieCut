@@ -318,3 +318,42 @@ final class CompoundTests: XCTestCase {
         print("[CompoundTests] 1920x1080 1コマ: まとめる前 \(String(format: "%.2f", before)) ms, まとめた後 \(String(format: "%.2f", after)) ms")
     }
 }
+
+
+// MARK: - バグ確認 第2部 C12: 解除の窓と、複合化のミックス二重適用
+
+final class CompoundUngroupWindowAndMixTests: XCTestCase {
+    private func clip(_ id: String, type: ClipType, start: Double, dur: Double) -> Clip {
+        var c = Clip(); c.id = id; c.type = type; c.start = start; c.duration = dur; return c
+    }
+
+    func testUngroupAppliesTheCompoundWindow() throws {
+        // 中身 0〜10 秒のうち、複合は offset 3 から 4 秒だけを見せている。解除で除外分が復活しないこと
+        let child = clip("k1", type: .video, start: 0, dur: 10)
+        var inner = Track(name: "L1"); inner.id = "t1"; inner.clips = [child]
+        var comp = clip("comp", type: .compound, start: 20, dur: 4)
+        comp.offset = 3; comp.tracks = [inner]
+        var outer = Track(name: "L1"); outer.id = "t1"; outer.clips = [comp]
+        var p = Project(); p.tracks = [outer]
+        let r = try XCTUnwrap(CompoundEditing.ungroup(p, clipId: "comp"))
+        let kids = r.project.tracks[0].clips
+        XCTAssertEqual(kids.count, 1)
+        XCTAssertEqual(kids[0].start, 20, accuracy: 1e-9)
+        XCTAssertEqual(kids[0].duration, 4, accuracy: 1e-9)
+        XCTAssertEqual(kids[0].offset, 3, accuracy: 1e-9)
+    }
+
+    func testGroupingDoesNotDoubleApplyTheHomeTrackMix() throws {
+        // 音量 0.5 のレイヤー内でまとめるだけでは、実効音量は 0.5 のまま(0.25 にならない)
+        var tr = Track(name: "A"); tr.volume = 0.5
+        tr.clips = [clip("a1", type: .audio, start: 0, dur: 2), clip("a2", type: .audio, start: 2, dur: 2)]
+        var p = Project(); p.tracks = [tr]
+        let g = try XCTUnwrap(CompoundEditing.group(p, clipIds: ["a1", "a2"]))
+        let flat = CompoundEditing.audibleClipsWithTrackMix(in: g.project)
+        XCTAssertEqual(flat.count, 2)
+        for e in flat {
+            XCTAssertEqual(e.mix.l, 0.5, accuracy: 1e-6)
+            XCTAssertEqual(e.mix.r, 0.5, accuracy: 1e-6)
+        }
+    }
+}

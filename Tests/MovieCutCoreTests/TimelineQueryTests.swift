@@ -223,3 +223,27 @@ final class ClipListingExportTests: XCTestCase {
         XCTAssertEqual(TimelineQuery.clipListing(in: p).first?.source, "/m/v.mp4")
     }
 }
+
+
+// MARK: - バグ確認 第2部 C12: 空白は映像でだけ埋まる
+
+final class TimelineQueryCoveredSpansTests: XCTestCase {
+    private func clip(_ type: ClipType, _ start: Double, _ dur: Double, disabled: Bool = false) -> Clip {
+        var c = Clip(); c.type = type; c.start = start; c.duration = dur
+        if disabled { c.disabled = true }
+        return c
+    }
+    private func project(_ tracks: [[Clip]]) -> Project {
+        var p = Project()
+        p.tracks = tracks.map { cs in var t = Track(name: "L"); t.clips = cs; return t }
+        return p
+    }
+    func testAudioDoesNotFillAPictureGap() {
+        let p = project([[clip(.video, 0, 2), clip(.video, 4, 2)], [clip(.audio, 0, 6)]])
+        XCTAssertEqual(TimelineQuery.gapStarts(in: p), [2])
+    }
+    func testDisabledVideoDoesNotFillAPictureGap() {
+        let p = project([[clip(.video, 0, 2), clip(.video, 2, 2, disabled: true), clip(.video, 4, 2)]])
+        XCTAssertEqual(TimelineQuery.gapStarts(in: p), [2])
+    }
+}

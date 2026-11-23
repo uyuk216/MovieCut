@@ -151,13 +151,26 @@ public enum SceneEditing {
     /// 拒否するのは: 参照先が無い / 配置で循環ができる / 入れ子が深さ上限を超える、の 3 つ。
     public static func canPlace(in p: Project, sceneId: String, hostSceneId: String?) -> Bool {
         guard p.scene(withId: sceneId) != nil else { return false }
+        // 深さは、シーン参照の段数ではなく、複合クリップも含めた展開の段数(expansionCost)で数える。
+        // 参照だけ数えると途中の複合の段数が抜け、描画・音声の平坦化が上限で末端を落とす構造を許してしまう。
+        let content = contentDepth(in: p, sceneId: sceneId)
+        guard content != .max else { return false }
+        let clipDepth = 1 + content   // このシーンを指すクリップ自体の段数
         if let host = hostSceneId {
             // 辺 host → sceneId を足して循環になるのは、sceneId から host へ辿れるとき(自分自身を含む)
             if reaches(in: p, from: sceneId, target: host) { return false }
-            // 深さ: host の中身として置くので、host を含む全体の段数が上限以内か
-            if nestingDepth(in: p, sceneId: sceneId) == .max { return false }
+            // 配置先の中身として置く: 置いた後の配置先の中身の段数が、配置先自身の 1 段を残して上限に収まること
+            let hostContent = contentDepth(in: p, sceneId: host)
+            guard hostContent != .max else { return false }
+            return max(hostContent, clipDepth) < maxDepth
         }
-        return nestingDepth(in: p, sceneId: sceneId) < maxDepth
+        return clipDepth <= maxDepth
+    }
+
+    /// シーンの中身の展開の段数(中身のクリップの expansionCost の最大。空なら 0、循環なら .max)。
+    private static func contentDepth(in p: Project, sceneId: String) -> Int {
+        guard let s = p.scene(withId: sceneId) else { return 0 }
+        return s.tracks.flatMap { $0.clips }.map { expansionCost(of: $0, in: p, seen: ["scene:\(sceneId)"]) }.max() ?? 0
     }
 
     // MARK: 一覧の編集(作成・名前変更・複製・削除)
@@ -337,6 +350,9 @@ public extension SceneEditing {
                 k.start = CompoundEditing.grid(c.start - m)
                 return k
             }
+            // シーンの置き先レイヤー自身の音量・パンは、外側でもそのまま掛かり続ける。
+            // 内側の写しにも残すと二重に掛かるため、置き先分だけ写し側を標準に戻す(複合化と同じ)。
+            if ti == (found.map(\.ti).min() ?? 0) { kt.volume = nil; kt.pan = nil }
             kids.append(kt)
             out.tracks[ti].clips.removeAll { wanted.contains($0.id) }
         }

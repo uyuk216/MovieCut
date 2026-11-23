@@ -59,6 +59,7 @@ public enum CompoundEditing {
         let end = picked.map { $0.start + $0.duration }.max() ?? m
 
         // 中身: 元のレイヤーごとに、同じ id・名前・状態のレイヤーへ、選んだクリップだけを入れる(時刻は頭からの秒)
+        let home = found.map(\.ti).min() ?? 0
         var out = p
         var kids: [Track] = []
         for ti in Set(found.map(\.ti)).sorted() {
@@ -68,6 +69,9 @@ public enum CompoundEditing {
                 k.start = grid(c.start - m)
                 return k
             }
+            // 複合の置き先レイヤー自身の音量・パンは、外側でもそのまま掛かり続ける。
+            // 内側の写しにも残すと二重に掛かる(音量 0.5 が 0.25 になる)ため、置き先分だけ写し側を標準に戻す。
+            if ti == home { kt.volume = nil; kt.pan = nil }
             kids.append(kt)
             out.tracks[ti].clips.removeAll { wanted.contains($0.id) }
         }
@@ -76,7 +80,6 @@ public enum CompoundEditing {
         compound.start = m
         compound.duration = grid(end - m)
         compound.tracks = kids
-        let home = found.map(\.ti).min() ?? 0
         insertByStart(compound, into: &out.tracks[home].clips)
         return (out, compound.id)
     }
@@ -94,7 +97,9 @@ public enum CompoundEditing {
         out.tracks[loc.track].clips.remove(at: loc.index)
         var ids: [String] = []
         for (kt, target) in zip(kids, targets) {
-            for k in kt.clips {
+            // 描画・音声と同じ窓(offset から duration だけ)で切り取ってから戻す。
+            // 中身をそのまま戻すと、トリムで除外した部分が復活し、位置もずれる。
+            for k in window(kt.clips, from: comp.offset, duration: comp.duration) {
                 var c = k
                 c.start = grid(comp.start + k.start)
                 insertByStart(c, into: &out.tracks[target].clips)

@@ -42,8 +42,10 @@ public enum TimelineSelection {
             var ids = s.ids
             ids.insert(id)
             if let p = s.primary, let a = ClipEditing.locate(p, in: project), let b = ClipEditing.locate(id, in: project), a.track == b.track {
-                let lo = min(a.index, b.index), hi = max(a.index, b.index)
-                for c in project.tracks[a.track].clips[lo...hi] { ids.insert(c.id) }
+                // 配列の並びは移動などで時間順とずれることがある。範囲は開始時刻で決める
+                let clips = project.tracks[a.track].clips
+                let t0 = min(clips[a.index].start, clips[b.index].start), t1 = max(clips[a.index].start, clips[b.index].start)
+                for c in clips where c.start >= t0 && c.start <= t1 { ids.insert(c.id) }
             }
             return ClipSelection(ids: ids, primary: id)
         }
@@ -190,10 +192,17 @@ extension ClipEditing {
         let minTrack = clip.items.map { $0.track }.min() ?? 0
         let dt = max(0, time) - minStart
         var p = project
+        // 参照先の定義が行き先に無ければ足す(同じ id があれば行き先の定義を優先)
+        for s in clip.scenes where !p.scenes.contains(where: { $0.id == s.id }) { p.scenes.append(s) }
+        for t in clip.tachies where !p.tachies.contains(where: { $0.id == t.id }) { p.tachies.append(t) }
+        for ch in clip.characters where !p.characters.contains(where: { $0.id == ch.id }) { p.characters.append(ch) }
         var ids: [String] = []
         var skipped = 0
         for item in clip.items {
-            var want = targetTrack.map { $0 + (item.track - minTrack) } ?? item.track
+            // 外から来た JSON のレイヤー番号は信用しない: 差が溢れたり、巨大な番号でレイヤーを際限なく作ったりしないよう丸める
+            let (diff, overflow) = item.track.subtractingReportingOverflow(minTrack)
+            let rel = overflow ? ClipClipboard.maxPasteTrack : min(max(diff, 0), ClipClipboard.maxPasteTrack)
+            var want = targetTrack.map { min(max($0, 0), ClipClipboard.maxPasteTrack) + rel } ?? min(max(item.track, 0), ClipClipboard.maxPasteTrack)
             want = max(0, want)
             while p.tracks.count <= want { p.tracks.append(Track(name: "レイヤー\(p.tracks.count + 1)")) }
             if p.tracks[want].isLocked { skipped += 1; continue }
@@ -227,7 +236,7 @@ extension ClipEditing {
 // MARK: - クリップボード
 
 /// コピーしたクリップの入れ物(アプリ内と、一般のペーストボードに JSON で書く)。
-public struct ClipClipboard: Codable, Equatable {
+public struct ClipClipboard: Equatable {
     public struct Item: Codable, Equatable {
         /// コピー元のレイヤー番号
         public var track: Int
@@ -235,6 +244,15 @@ public struct ClipClipboard: Codable, Equatable {
     }
     public var version = 1
     public var items: [Item]
+    /// クリップが参照するシーンの定義(参照だけ写すと、貼り付け先で何も表示されなくなる)
+    public var scenes: [SceneDefinition] = []
+    /// クリップが使う立ち絵の定義
+    public var tachies: [Tachie] = []
+    /// ボイスクリップが使うキャラクターの定義
+    public var characters: [Character] = []
+
+    /// 貼り付けで扱うレイヤー番号の上限(外から来た JSON の巨大な番号でレイヤーを際限なく作らない)
+    public static let maxPasteTrack = 1024
 
     /// 選択したクリップから作る(レイヤー番号順、開始順)。無ければ nil。
     public static func make(from project: Project, clipIds: Set<String>) -> ClipClipboard? {
@@ -243,13 +261,41 @@ public struct ClipClipboard: Codable, Equatable {
             for c in tr.clips where clipIds.contains(c.id) { items.append(Item(track: ti, clip: c)) }
         }
         items.sort { a, b in a.track != b.track ? a.track < b.track : a.clip.start < b.clip.start }
-        return items.isEmpty ? nil : ClipClipboard(items: items)
+        guard !items.isEmpty else { return nil }
+        var cb = ClipClipboard(items: items)
+        // 参照先の定義も一緒に持つ(シーン・立ち絵・キャラクター)
+        let clips = items.map(\.clip)
+        var holder = Track(name: "")
+        holder.clips = clips
+        cb.scenes = ClipTransfer.sceneDefinitions(referencedFrom: [holder], in: project)
+        var tachieIds = ClipTransfer.usedTachieIds(clips)
+        for s in cb.scenes { tachieIds.formUnion(ClipTransfer.usedTachieIds(s.tracks.flatMap(\.clips))) }
+        cb.tachies = project.tachies.filter { tachieIds.contains($0.id) }
+        let charIds = ClipTransfer.usedCharacterIds(clips)
+        cb.characters = project.characters.filter { charIds.contains($0.id) }
+        return cb
     }
 
     public func encoded() -> Data? { try? JSONEncoder().encode(self) }
 
+
     public static func decode(_ data: Data) -> ClipClipboard? {
-        guard let c = try? JSONDecoder().decode(ClipClipboard.self, from: data), c.version == 1, !c.items.isEmpty else { return nil }
+        guard let c = try? JSONDecoder().decode(ClipClipboard.self, from: data), c.version == 1, !c.items.isEmpty,
+              c.items.allSatisfy({ (0...maxPasteTrack).contains($0.track) }) else { return nil }
         return c
+    }
+}
+
+extension ClipClipboard: Codable {
+    private enum CodingKeys: String, CodingKey { case version, items, scenes, tachies, characters }
+
+    public init(from decoder: Decoder) throws {
+        let box = try decoder.container(keyedBy: CodingKeys.self)
+        version = try box.decode(Int.self, forKey: .version)
+        items = try box.decode([Item].self, forKey: .items)
+        // 定義の同梱(scenes / tachies / characters)は後から足した項目。無い書き方(旧形式)でも読めるようにする
+        scenes = try box.decodeIfPresent([SceneDefinition].self, forKey: .scenes) ?? []
+        tachies = try box.decodeIfPresent([Tachie].self, forKey: .tachies) ?? []
+        characters = try box.decodeIfPresent([Character].self, forKey: .characters) ?? []
     }
 }

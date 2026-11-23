@@ -439,3 +439,75 @@ private extension Clip {
         var c = Clip(); c.type = type; c.offset = offset; c.duration = duration; return c
     }
 }
+
+
+// MARK: - バグ確認 第2部 C12: クリップボードの定義の持ち運びと、レイヤー番号の検証
+
+final class ClipClipboardDefinitionsTests: XCTestCase {
+    func testCopyPasteCarriesSceneDefinitions() throws {
+        var inner = Track(name: "L")
+        var vc = Clip(); vc.type = .video; vc.duration = 3; inner.clips = [vc]
+        var sceneClip = Clip(); sceneClip.type = .scene; sceneClip.sceneId = "s1"; sceneClip.duration = 3
+        var tr = Track(name: "L"); tr.clips = [sceneClip]
+        var a = Project(); a.tracks = [tr]
+        a.scenes = [SceneDefinition(id: "s1", name: "S1", tracks: [inner])]
+        let cb = try XCTUnwrap(ClipClipboard.make(from: a, clipIds: [sceneClip.id]))
+        var b = Project(); b.tracks = [Track(name: "L")]
+        let r = try XCTUnwrap(ClipEditing.paste(cb, in: b, at: 0, targetTrack: 0))
+        XCTAssertTrue(r.project.scenes.contains { $0.id == "s1" })
+    }
+    func testDecodeRejectsHugeTrackNumbers() throws {
+        var c = Clip(); c.type = .video; c.duration = 1
+        let cb = ClipClipboard(items: [.init(track: 100000, clip: c)])
+        let data = try XCTUnwrap(cb.encoded())
+        XCTAssertNil(ClipClipboard.decode(data))
+    }
+    func testDecodeAcceptsTheOldFormatWithoutDefinitions() throws {
+        var c = Clip(); c.type = .video; c.duration = 1
+        let cb = ClipClipboard(items: [.init(track: 0, clip: c)])
+        let full = try XCTUnwrap(cb.encoded())
+        var obj = try XCTUnwrap(JSONSerialization.jsonObject(with: full) as? [String: Any])
+        obj.removeValue(forKey: "scenes"); obj.removeValue(forKey: "tachies"); obj.removeValue(forKey: "characters")
+        let stripped = try JSONSerialization.data(withJSONObject: obj)
+        XCTAssertNotNil(ClipClipboard.decode(stripped))
+    }
+    func testPasteClampsAbsurdTrackNumbers() throws {
+        var c = Clip(); c.type = .video; c.duration = 1
+        let cb = ClipClipboard(items: [.init(track: Int.max, clip: c)])
+        var b = Project(); b.tracks = [Track(name: "L")]
+        let r = try XCTUnwrap(ClipEditing.paste(cb, in: b, at: 0, targetTrack: nil))
+        XCTAssertEqual(r.newIds.count, 1)
+        XCTAssertLessThanOrEqual(r.project.tracks.count, ClipClipboard.maxPasteTrack + 1)
+    }
+    func testShiftClickSelectsByStartOrderNotArrayOrder() {
+        // 配列順 [A@0, C@20, B@10] でも、A→B の Shift 選択に C は入らない
+        func v(_ id: String, _ start: Double) -> Clip {
+            var c = Clip(); c.id = id; c.type = .video; c.start = start; c.duration = 5; return c
+        }
+        var tr = Track(name: "L"); tr.clips = [v("a", 0), v("c", 20), v("b", 10)]
+        var p = Project(); p.tracks = [tr]
+        var s = TimelineSelection.click(.empty, on: "a", modifier: .none, in: p)
+        s = TimelineSelection.click(s, on: "b", modifier: .shift, in: p)
+        XCTAssertEqual(s.ids, ["a", "b"])
+    }
+}
+
+// MARK: - バグ確認 第2部 C12: サムネイル・波形のランプ対応と数値ガード
+
+final class TimelineMediaRampAndGuardTests: XCTestCase {
+    func testTileCountNeverTraps() {
+        XCTAssertEqual(ThumbnailPlan.tileCount(width: .infinity, tileWidth: 24), ThumbnailPlan.maxTiles)
+        XCTAssertEqual(ThumbnailPlan.tileCount(width: 1e30, tileWidth: 24), ThumbnailPlan.maxTiles)
+        XCTAssertEqual(ThumbnailPlan.tileCount(width: 100, tileWidth: 24), 5)
+    }
+    func testThumbnailTimeFollowsTheRampIntegral() {
+        var c = Clip(); c.type = .video; c.duration = 10; c.offset = 0
+        c.speedRamp = [SpeedKey(t: 0, v: 1), SpeedKey(t: 10, v: 3)]
+        // タイル 9/20 はクリップ時刻 4.75 秒。積分は 4.75 + 0.1 * 4.75^2 = 7.006… → 刻みで 7(線形補間では 9 側になる)
+        XCTAssertEqual(ThumbnailPlan.time(for: c, tile: 9, of: 20), 7, accuracy: 1e-9)
+    }
+    func testWaveformColumnsSurviveNonFiniteRanges() {
+        let w = WaveformPeaks(peaks: [Float](repeating: 0.5, count: 100))
+        XCTAssertEqual(w.columns(from: 0, to: .infinity, count: 3), [0, 0, 0])
+    }
+}

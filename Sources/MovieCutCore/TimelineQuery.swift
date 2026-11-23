@@ -30,9 +30,21 @@ public enum TimelineQuery {
 
     // MARK: 空白(黒穴)
 
-    /// 表示中のクリップが覆う区間(結合済み・昇順)。
+    /// 画面に何か映るクリップが覆う区間(結合済み・昇順)。
+    /// 音だけのクリップや無効化したクリップは、映像の空白を埋めない。
     public static func coveredSpans(in p: Project) -> [TimeSpan] {
-        merged(p.tracks.filter { !$0.isHidden }.flatMap { $0.clips }.map { TimeSpan(start: $0.start, end: $0.start + $0.duration) })
+        merged(p.tracks.filter { !$0.isHidden }.flatMap { $0.clips }
+            .filter { !$0.isDisabled && drawsPicture($0) }
+            .map { TimeSpan(start: $0.start, end: $0.start + $0.duration) })
+    }
+
+    /// そのクリップが画面に何かを描くか。音声・字幕の無いボイス・下地を変えるだけのぼかし/調整は描かない。
+    static func drawsPicture(_ c: Clip) -> Bool {
+        switch c.type {
+        case .audio, .blur, .adjustment: return false
+        case .voice: return c.subtitle == true
+        default: return true
+        }
     }
 
     /// 空白(何も映らない区間)が始まる時刻の一覧(昇順)。0 秒より後から始まるなら先頭の 0 秒も入る。

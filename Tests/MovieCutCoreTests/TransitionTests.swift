@@ -665,3 +665,45 @@ final class AudioFadeMixerTests: XCTestCase {
         XCTAssertEqual(try AudioFixture.peak(m, from: 0, to: 0.01), 0.25, accuracy: 0.02)
     }
 }
+
+
+// MARK: - バグ確認 第2部 C12: クロスフェードの相手と隙間
+
+final class TransitionCrossfadePartnerAndGapTests: XCTestCase {
+    private func v(_ id: String, _ start: Double, _ dur: Double, disabled: Bool = false) -> Clip {
+        var c = Clip(); c.id = id; c.type = .video; c.start = start; c.duration = dur
+        if disabled { c.disabled = true }
+        return c
+    }
+    private func project(_ tracks: [[Clip]], hidden: [Bool] = []) -> Project {
+        var p = Project()
+        p.tracks = tracks.enumerated().map { i, cs in
+            var t = Track(name: "L\(i)"); t.clips = cs
+            if i < hidden.count, hidden[i] { t.hidden = true }
+            return t
+        }
+        return p
+    }
+    func testOverlapCrossfadeFillsTheGapAndOverlaps() throws {
+        // 前 0〜5、対象 7〜12。0.5 秒重ねるには、隙間 2 秒 + 重なり 0.5 秒 = 2.5 秒前にずらす必要がある
+        let p = project([[v("pv", 0, 5), v("c", 7, 5)]])
+        guard case .applied(let out, let seconds, _) = TransitionEditing.overlapCrossfade(in: p, clipId: "c", duration: 0.5) else {
+            return XCTFail("applied になるはず")
+        }
+        XCTAssertEqual(seconds, 0.5, accuracy: 1e-9)
+        let c = try XCTUnwrap(out.tracks[0].clips.first { $0.id == "c" })
+        XCTAssertEqual(c.start, 4.5, accuracy: 1e-9)
+    }
+    func testCrossfadeIgnoresDisabledClipBelow() {
+        let p = project([[v("d", 0, 10, disabled: true)], [v("c", 5, 5)]])
+        guard case .noClipBelow = TransitionEditing.crossfade(in: p, clipId: "c") else {
+            return XCTFail("無効化したクリップは相手にしない")
+        }
+    }
+    func testCrossfadeIgnoresHiddenTrackBelow() {
+        let p = project([[v("d", 0, 10)], [v("c", 5, 5)]], hidden: [true, false])
+        guard case .noClipBelow = TransitionEditing.crossfade(in: p, clipId: "c") else {
+            return XCTFail("非表示レイヤーのクリップは相手にしない")
+        }
+    }
+}

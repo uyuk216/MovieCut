@@ -247,8 +247,8 @@ public enum TransitionEditing {
         guard supportsVideo(c.type) else { return .notSupported }
         let eps = ClipEditing.timeEpsilon
         var best: (track: Int, index: Int)?
-        for ti in stride(from: loc.track, through: 0, by: -1) {
-            for (ci, o) in project.tracks[ti].clips.enumerated() where o.id != c.id && supportsVideo(o.type) {
+        for ti in stride(from: loc.track, through: 0, by: -1) where !project.tracks[ti].isHidden {
+            for (ci, o) in project.tracks[ti].clips.enumerated() where o.id != c.id && supportsVideo(o.type) && !o.isDisabled {
                 if ti == loc.track && ci >= loc.index { continue }       // 同じレイヤーでは、前にあるものだけ
                 let oEnd = o.start + o.duration
                 guard o.start <= c.start + eps, oEnd > c.start + eps else { continue }
@@ -296,7 +296,7 @@ public enum TransitionEditing {
         let eps = ClipEditing.timeEpsilon
         // 前のクリップ: 同じレイヤーで、頭が自分以前にあり、終わりが一番遅いもの(すでに重なっているものも含む)
         var prev: Clip?
-        for o in track.clips where o.id != c.id && o.start <= c.start + eps {
+        for o in track.clips where o.id != c.id && !o.isDisabled && o.start <= c.start + eps {
             if prev == nil || o.start + o.duration > prev!.start + prev!.duration { prev = o }
         }
         guard let pv = prev else { return .noPreviousClip }
@@ -307,21 +307,25 @@ public enum TransitionEditing {
             let oEnd = o.start + o.duration
             if oEnd <= pv.start + eps { wall = max(wall, oEnd) }
         }
-        let existing = max(0, pv.start + pv.duration - c.start)
+        // 隙間がある場合は負になる(重なりではなく隙間の長さ)。ずらす量は隙間を埋める分も要る
+        let existingRaw = pv.start + pv.duration - c.start
+        let existing = max(0, existingRaw)
         var want = min(Transition.clampedDuration(requested.isFinite ? requested : Transition.defaultDuration, clipDuration: c.duration), pv.duration)
         want = round3(want)
         guard want >= minCrossfadeOverlap - eps else { return .noRoom }
         var shift = 0.0
-        if existing < want - eps {
+        if existingRaw < want - eps {
             let maxShift = c.start - max(pv.start, wall, 0)
-            shift = min(want - existing, max(0, maxShift))
+            shift = min(want - existingRaw, max(0, maxShift))
             if shift <= eps {
                 // ずらす余地が無い: 既存の重なりだけで作る(無ければ断る)
                 guard existing >= minCrossfadeOverlap - eps else { return .noRoom }
                 want = round3(Transition.clampedDuration(existing, clipDuration: c.duration))
                 shift = 0
             } else {
-                want = round3(existing + shift)
+                want = round3(existingRaw + shift)
+                // 壁に当たって重なりが作り切れなければ、ずらさずに断る
+                guard want >= minCrossfadeOverlap - eps else { return .noRoom }
             }
         }
         var p = project

@@ -329,3 +329,39 @@ final class SceneNestingTests: XCTestCase {
         return out
     }
 }
+
+
+// MARK: - バグ確認 第2部 C12: 配置の深さ判定は複合の段数も数える
+
+final class SceneNestingCanPlaceDepthTests: XCTestCase {
+    /// 動画クリップを複合で levels 段包んだクリップ。
+    private func nest(_ levels: Int) -> Clip {
+        var c = Clip(); c.type = .video; c.duration = 1
+        for _ in 0..<levels {
+            var tr = Track(name: "L"); tr.clips = [c]
+            var w = Clip(); w.type = .compound; w.duration = 1; w.tracks = [tr]
+            c = w
+        }
+        return c
+    }
+    private func project(sceneId: String, content: Clip) -> Project {
+        var tr = Track(name: "L"); tr.clips = [content]
+        var p = Project(); p.tracks = [Track(name: "main")]
+        p.scenes = [SceneDefinition(id: sceneId, name: "S", tracks: [tr])]
+        return p
+    }
+    func testCompoundLevelsCountTowardTheDepthLimit() {
+        // 複合 8 段を中身に持つシーンは、シーン参照が無くても上限を超える(末端が描画・音声で落ちる)
+        XCTAssertFalse(SceneEditing.canPlace(in: project(sceneId: "deep", content: nest(8)), sceneId: "deep", hostSceneId: nil))
+        XCTAssertTrue(SceneEditing.canPlace(in: project(sceneId: "ok", content: nest(7)), sceneId: "ok", hostSceneId: nil))
+    }
+    func testPlacingIntoAHostRespectsTheHostsOwnLevel() {
+        // 中身 7 段のシーン(クリップ自体で 8 段)は、別のシーンの中には置けない(置くと 9 段になる)
+        var deep = project(sceneId: "deep", content: nest(7))
+        deep.scenes.append(SceneDefinition(id: "host", name: "H", tracks: [Track(name: "L")]))
+        XCTAssertFalse(SceneEditing.canPlace(in: deep, sceneId: "deep", hostSceneId: "host"))
+        var ok = project(sceneId: "ok", content: nest(6))
+        ok.scenes.append(SceneDefinition(id: "host", name: "H", tracks: [Track(name: "L")]))
+        XCTAssertTrue(SceneEditing.canPlace(in: ok, sceneId: "ok", hostSceneId: "host"))
+    }
+}

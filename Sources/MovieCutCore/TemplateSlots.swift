@@ -212,7 +212,10 @@ public struct TemplateSlot: Codable, Equatable, Sendable, Identifiable {
             var f = clip.figure ?? Figure(); f.fill = value; clip.figure = f
         case .figureStroke:
             var f = clip.figure ?? Figure(); f.stroke = value; clip.figure = f
-        case .source: clip.src = value
+        case .source:
+            clip.src = value
+            // 素材が替わったので、旧素材の長さは使えない(トリムの上限が旧素材のままになる)
+            clip.srcDuration = nil
         }
         return true
     }

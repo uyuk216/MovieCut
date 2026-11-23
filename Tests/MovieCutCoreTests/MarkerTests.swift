@@ -121,3 +121,14 @@ final class MarkerTests: XCTestCase {
         XCTAssertEqual(MarkerEditing.previous(in: p, before: 100)?.name, "c")
     }
 }
+
+
+// MARK: - バグ確認 第2部 C12: マーカー名の番号溢れ
+
+final class MarkerNextNameOverflowTests: XCTestCase {
+    func testNextNameDoesNotOverflowOnIntMaxMarkerName() {
+        var p = Project()
+        p.markers = [Marker(time: 0, name: "マーカー9223372036854775807")]
+        XCTAssertEqual(MarkerEditing.nextName(in: p), "マーカー1")
+    }
+}

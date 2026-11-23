@@ -62,6 +62,18 @@ public enum Storyboard {
         return ctx.makeImage()
     }
 
+    /// コマをセルの大きさへ縮小する(合成ではセル幅 480px でしか使わない)。
+    private static func scaledToCell(_ f: CGImage, cell: CGSize) -> CGImage? {
+        let w = Int(cell.width), h = Int(cell.height)
+        guard w > 0, h > 0, let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0, space: space,
+                                  bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return nil }
+        ctx.interpolationQuality = .high
+        let fit = ThumbnailExporter.fittedRect(source: CGSize(width: f.width, height: f.height), canvas: cell)
+        ctx.draw(f, in: fit)
+        return ctx.makeImage()
+    }
+
     /// 絵コンテを `url` に書く(PNG)。長さは `project.endTime`。
     public static func write(project: Project, assets: RenderAssets = RenderAssets(), count: Int = defaultCount,
                              columns: Int = defaultColumns, pluginEffectProviders: [any VideoEffectProviding] = [], to url: URL) throws {
@@ -69,13 +81,14 @@ public enum Storyboard {
         let ts = times(duration: project.endTime, count: count)
         guard !ts.isEmpty else { throw Failure.noLength }
         let renderer = Renderer(project: project, assets: assets, pluginEffectProviders: pluginEffectProviders)
+        let cell = cellSize(width: project.width, height: project.height)
         var frames: [CGImage] = []
         frames.reserveCapacity(ts.count)
         for t in ts {
             guard let f = renderer.renderImage(t: t) else { throw Failure.render }
-            frames.append(f)
+            // 全コマを元の解像度で保持すると、枚数 × 元解像度ぶんのメモリを食う。その場でセルの大きさへ縮小する
+            frames.append(scaledToCell(f, cell: cell) ?? f)
         }
-        let cell = cellSize(width: project.width, height: project.height)
         guard let board = compose(frames, cell: cell, columns: columns, background: parseHexColor(project.bg)) else { throw Failure.render }
         try StillExporter.writeImage(board, format: .png, to: url)
     }

@@ -453,3 +453,19 @@ final class RotationAccumulatorTests: XCTestCase {
         XCTAssertEqual(r.rotation, 0)   // 設定値は触らない
     }
 }
+
+
+// MARK: - バグ確認 第2部 C12: 回転累積器の極端な角度
+
+final class RotationAccumulatorSafetyTests: XCTestCase {
+    func testHugeAndNonFiniteAnglesDoNotHangOrPoison() {
+        var acc = RotationAccumulator()
+        XCTAssertEqual(acc.add(angleDegrees: 0), 0)
+        // 1e30 は 360 を引いても値が変わらない(while 折り返しだと終わらない)
+        let v = acc.add(angleDegrees: 1e30)
+        XCTAssertTrue(v.isFinite)
+        XCTAssertEqual(acc.add(angleDegrees: 1e30), v)        // 同じ角度なら増えない
+        XCTAssertEqual(acc.add(angleDegrees: .infinity), v)   // 非有限は無視される
+        XCTAssertEqual(acc.add(angleDegrees: .nan), v)
+    }
+}

@@ -82,7 +82,8 @@ public enum MarkerEditing {
     public static func nextName(in project: Project) -> String {
         var maxN = 0
         for m in project.markers where m.name.hasPrefix("マーカー") {
-            if let n = Int(m.name.dropFirst("マーカー".count)) { maxN = max(maxN, n) }
+            // Int の最大値そのものの名前は番号付けの対象から外す(最大 + 1 で溢れて落ちるため)
+            if let n = Int(m.name.dropFirst("マーカー".count)), n < Int.max { maxN = max(maxN, n) }
         }
         return "マーカー\(maxN + 1)"
     }

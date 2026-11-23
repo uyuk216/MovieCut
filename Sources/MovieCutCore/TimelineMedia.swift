@@ -119,7 +119,7 @@ public struct WaveformPeaks: Equatable, Sendable {
         let lo = min(from, to), hi = max(from, to)
         let span = hi - lo
         var out = [Float](repeating: 0, count: count)
-        guard span > 0, !peaks.isEmpty else { return out }
+        guard span > 0, span.isFinite, !peaks.isEmpty else { return out }
         let per = Double(Self.perSecond)
         for i in 0..<count {
             let a = lo + span * Double(i) / Double(count)
@@ -142,6 +142,18 @@ public struct WaveformPeaks: Equatable, Sendable {
     public func columns(for c: Clip, count: Int) -> [Float] {
         guard !c.isFreeze else { return [Float](repeating: 0, count: max(0, count)) }
         let r = Self.sourceRange(for: c)
+        // 速度ランプがあるときは、列ごとの素材の区間をランプの積分で決める(等分すると実際の再生位置とずれる)
+        if let pts = SpeedRamp.sanitized(c.speedRamp ?? [], duration: c.duration), c.duration > 0, count > 0 {
+            var out = [Float](repeating: 0, count: count)
+            for i in 0..<count {
+                let s0 = SpeedRamp.integral(pts, upTo: c.duration * Double(i) / Double(count))
+                let s1 = SpeedRamp.integral(pts, upTo: c.duration * Double(i + 1) / Double(count))
+                let a = c.effectiveReverse ? r.from - s1 : r.from + s0
+                let b = c.effectiveReverse ? r.from - s0 : r.from + s1
+                out[i] = columns(from: a, to: b, count: 1)[0]
+            }
+            return out
+        }
         return columns(from: r.from, to: r.to, count: count)
     }
 
@@ -191,7 +203,10 @@ public enum ThumbnailPlan {
     /// クリップの絵の幅(pt)と 1 枚の幅から、並べる枚数。
     public static func tileCount(width: Double, tileWidth: Double) -> Int {
         guard width > 0, tileWidth > 0 else { return 0 }
-        return min(maxTiles, max(1, Int((width / tileWidth).rounded(.up))))
+        let n = (width / tileWidth).rounded(.up)
+        // 上限と比べる前に Int へ変えると、無限大や巨大な値で落ちる
+        guard n.isFinite, n < Double(maxTiles) else { return maxTiles }
+        return max(1, Int(n))
     }
 
     /// 1 枚が受け持つ素材の長さ(秒)に合わせた丸めの刻み。
@@ -208,6 +223,12 @@ public enum ThumbnailPlan {
         guard n > 0 else { return lo }
         let step = step(forTileSpan: (hi - lo) / Double(n))
         let f = (Double(min(max(0, i), n - 1)) + 0.5) / Double(n)
+        // 速度ランプがあるときは、線形補間ではなくランプの積分で素材の位置を決める(実際の再生位置と合わせる)
+        if let pts = SpeedRamp.sanitized(c.speedRamp ?? [], duration: c.duration), c.duration > 0 {
+            let consumed = SpeedRamp.integral(pts, upTo: f * c.duration)
+            let t = c.effectiveReverse ? r.from - consumed : r.from + consumed
+            return min(max((t / step).rounded(.down) * step, lo), hi)
+        }
         let t = r.from + (r.to - r.from) * f
         return min(max((t / step).rounded(.down) * step, lo), hi)
     }

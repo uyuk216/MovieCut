@@ -167,3 +167,23 @@ final class ItemTemplateTests: XCTestCase {
         XCTAssertEqual(loaded.map(\.name), ["OK"], "壊れた項目だけ捨てる")
     }
 }
+
+
+// MARK: - バグ確認 第2部 C12: 複合テンプレートの子 id
+
+final class ItemTemplateCompoundChildrenTests: XCTestCase {
+    func testInstantiatingACompoundTemplateTwiceGivesUniqueChildIds() throws {
+        var k1 = Clip(); k1.id = "k1"; k1.type = .image; k1.duration = 2
+        var k2 = Clip(); k2.id = "k2"; k2.type = .image; k2.start = 2; k2.duration = 2
+        var tr = Track(name: "L"); tr.clips = [k1, k2]
+        var comp = Clip(); comp.id = "comp"; comp.type = .compound; comp.duration = 4; comp.tracks = [tr]
+        let t = try XCTUnwrap(ItemTemplate.capture(name: "複合テスト", from: comp))
+        let a = t.instantiate(values: [:]).clip
+        let b = t.instantiate(values: [:]).clip
+        let idsA = (a.tracks ?? []).flatMap { $0.clips }.map(\.id)
+        let idsB = (b.tracks ?? []).flatMap { $0.clips }.map(\.id)
+        XCTAssertEqual(Set(idsA).count, 2)
+        XCTAssertTrue(Set(idsA).isDisjoint(with: Set(idsB)))
+        XCTAssertNotEqual(a.id, b.id)
+    }
+}

@@ -349,10 +349,13 @@ public struct RotationAccumulator: Equatable, Sendable {
     /// 2回目以降は前回角度との差を -180...180 に折り返してから加算し、累積を返す。
     @discardableResult
     public mutating func add(angleDegrees: Double) -> Double {
+        // 非有限の角度は無視する(累積も前回角度も汚さない)
+        guard angleDegrees.isFinite else { return totalDegrees }
         if let last = lastAngle {
-            var d = angleDegrees - last
-            while d > 180 { d -= 360 }
-            while d < -180 { d += 360 }
+            // 剰余で折り返す(while で引くと、巨大な差では値が変わらずループが終わらない)
+            var d = (angleDegrees - last).truncatingRemainder(dividingBy: 360)
+            if d > 180 { d -= 360 }
+            if d < -180 { d += 360 }
             totalDegrees += d
         }
         lastAngle = angleDegrees
