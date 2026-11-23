@@ -137,6 +137,20 @@ final class PngWavExoExportTests: XCTestCase {
         XCTAssertNil(ExoExporter.exoColor("red"))
     }
 
+    /// Shift_JIS に変換できない文字があっても、ファイル全体が UTF-8 にならないこと
+    /// (AviUtl が読めなくなる不具合の回帰)。変換できない文字は代替文字になり、注記が残る。
+    func testExoExportStaysShiftJISWithUnconvertibleCharacters() throws {
+        var p = Project.new()
+        p.width = 320; p.height = 180; p.fps = 30
+        var img = Clip(); img.type = .image; img.src = "/素材/動画😀.mp4"; img.start = 0; img.duration = 2; img.x = 0.5; img.y = 0.5
+        p.tracks[0].clips = [img]
+        let out = ExoExporter.export(project: p)
+        XCTAssertFalse(out.data.contains(Data("😀".utf8)), "UTF-8 のまま書き出されている")
+        let decoded = try XCTUnwrap(String(data: out.data, encoding: .shiftJIS))
+        XCTAssertEqual(decoded.data(using: .shiftJIS), out.data, "Shift_JIS として往復できる")
+        XCTAssertTrue(out.report.notes.contains { $0.contains("Shift_JIS") }, "注記が残る: \(out.report.notes)")
+    }
+
     // MARK: exo: 構造の往復
 
     func testExoExportRoundTrip() throws {

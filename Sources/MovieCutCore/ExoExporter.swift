@@ -74,7 +74,15 @@ public enum ExoExporter {
         var builder = Builder(project: project, report: &report)
         let text = builder.build()
         report = builder.report
-        let data = text.data(using: .shiftJIS) ?? Data(text.utf8)
+        let data: Data
+        if let sjis = text.data(using: .shiftJIS) {
+            data = sjis
+        } else {
+            // 変換できない文字が1つでもあると全体が UTF-8 になり AviUtl で読めなくなる。
+            // その文字だけ代替文字にして、ファイル全体は Shift_JIS を保つ。
+            data = (text as NSString).data(using: String.Encoding.shiftJIS.rawValue, allowLossyConversion: true) ?? Data()
+            report.notes.append("Shift_JIS に変換できない文字があったため、代替文字に置き換えました")
+        }
         return Output(data: data, text: text, report: report)
     }
 
