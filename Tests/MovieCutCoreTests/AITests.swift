@@ -201,3 +201,21 @@ final class AITests: XCTestCase {
         XCTAssertEqual(clip["character"] as? String, "キャラ1"); XCTAssertEqual(clip["type"] as? String, "voice")
     }
 }
+
+
+// MARK: - バグ確認 第2部 C14: 台本の音声生成はロック・非表示トラックへ置かない
+
+final class ScriptTimelineTrackChoiceTests: XCTestCase {
+    func testVoicesAreNotPlacedOnLockedTracks() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("script-track-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        var ch = Character(); ch.id = "ch1"; ch.name = "キャラ1"
+        var locked = Track(name: "ロック済み"); locked.locked = true
+        var normal = Track(name: "通常")
+        var p = Project(); p.characters = [ch]; p.tracks = [locked, normal]
+        let added = try await ScriptTimeline.add(lines: ["キャラ1: こんにちは"], to: &p, voice: ToneVoiceProvider(), directory: dir)
+        XCTAssertEqual(added.count, 1)
+        XCTAssertTrue(p.tracks[0].clips.isEmpty, "ロック済みトラックには置かない")
+    }
+}

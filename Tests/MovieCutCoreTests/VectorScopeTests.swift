@@ -156,3 +156,12 @@ final class VectorScopeTests: XCTestCase {
         XCTAssertEqual(fromImage.sampledCount, fromRaw.sampledCount)
     }
 }
+
+
+// MARK: - バグ確認 第2部 C20: スコープの寸法ガード
+
+final class ScopeDimensionGuardTests: XCTestCase {
+    func testHugeDimensionsReturnNil() {
+        XCTAssertNil(VectorScope.analyze(rgba: [], width: Int.max, height: 2))
+    }
+}

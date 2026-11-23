@@ -198,3 +198,16 @@ final class SpectrumVisualizerTests: XCTestCase {
         XCTAssertLessThan(ms, 20)
     }
 }
+
+
+// MARK: - バグ確認 第2部 C20: スペクトル帯の境界
+
+final class SpectrumAnalyzerBoundaryTests: XCTestCase {
+    func testBandIndexInfiniteFrequency() {
+        XCTAssertEqual(SpectrumAnalyzer.bandIndex(for: .infinity, count: 32), 31)
+    }
+    func testBandEdgesNonPositiveCount() {
+        XCTAssertEqual(SpectrumAnalyzer.bandEdges(count: 0), [])
+        XCTAssertEqual(SpectrumAnalyzer.bandEdges(count: -1), [])
+    }
+}

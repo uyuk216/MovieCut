@@ -111,3 +111,15 @@ final class PitchLayoutTests: XCTestCase {
         XCTAssertFalse(String(decoding: data, as: UTF8.self).contains("audioFx"))
     }
 }
+
+
+// MARK: - バグ確認 第2部 C20: 負の音階番号
+
+final class PitchScaleNegativeDegreeTests: XCTestCase {
+    func testNegativeDegreeContinuesBelow() {
+        // メジャースケール(0,2,4,5,7,9,11): -1 は根音の 1 つ下 = -1 半音(11 - 12)
+        XCTAssertEqual(PitchScale.major.degree(-1), -1)
+        XCTAssertEqual(PitchScale.major.degree(-7), -12)
+        XCTAssertEqual(PitchScale.major.degree(7), 12)
+    }
+}

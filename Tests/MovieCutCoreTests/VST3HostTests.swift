@@ -366,3 +366,18 @@ final class VST3HostTests: XCTestCase {
         XCTAssertEqual(fx.vst3CacheToken, "", "無効なスロットは含めない")
     }
 }
+
+
+// MARK: - バグ確認 第2部 C20: VST3 状態のキャッシュ鍵は内容で決まる
+
+final class VST3StateCacheTokenTests: XCTestCase {
+    func token(state: String) -> String {
+        var slot = AudioFx.VST3Slot(bundleID: "com.example.fakegain", name: "FakeGain")
+        slot.state = state
+        return AudioFx(vst3: [slot]).vst3CacheToken
+    }
+    func testSameLengthDifferentStateGivesDifferentToken() {
+        XCTAssertNotEqual(token(state: "QUFBQQ=="), token(state: "QkJCQg=="))
+        XCTAssertEqual(token(state: "QUFBQQ=="), token(state: "QUFBQQ=="))
+    }
+}

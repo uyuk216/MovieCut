@@ -120,7 +120,7 @@ public enum VectorScope {
 
     /// RGBA8(左上から、1 画素 4 バイト)から計算する。`rgba` の長さが足りなければ nil。
     public static func analyze(rgba: [UInt8], width w: Int, height h: Int, maxSamples: Int = defaultMaxSamples) -> Result? {
-        guard w > 0, h > 0, rgba.count >= w * h * 4 else { return nil }
+        guard w > 0, h > 0, w <= (rgba.count / 4) / h else { return nil }
         let stride = ScopeSampling.stride(width: w, height: h, maxSamples: maxSamples)
         let size = gridSize
         var grid = [Int](repeating: 0, count: size * size)

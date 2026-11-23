@@ -23,12 +23,15 @@ public enum SpectrumAnalyzer {
     public static func bandIndex(for f: Double, count: Int) -> Int {
         guard count > 0, f > 0 else { return 0 }
         let x = log(f / minFrequency) / log(maxFrequency / minFrequency) * Double(count)
-        return min(max(Int(floor(x)), 0), count - 1)
+        let xf = floor(x)
+        guard xf.isFinite else { return x > 0 ? count - 1 : 0 }
+        return min(max(Int(xf), 0), count - 1)
     }
 
     /// 帯の境目の周波数(count + 1 個)。
     public static func bandEdges(count: Int) -> [Double] {
-        (0...count).map { minFrequency * pow(maxFrequency / minFrequency, Double($0) / Double(count)) }
+        guard count > 0 else { return [] }
+        return (0...count).map { minFrequency * pow(maxFrequency / minFrequency, Double($0) / Double(count)) }
     }
 
     /// 帯ごとの値(0〜1)。`out` は frames × count の平らな配列(コマ k の帯 b は `out[k * count + b]`)。

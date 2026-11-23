@@ -135,3 +135,19 @@ final class LoudnessTests: XCTestCase {
         XCTAssertEqual(meter.finish(), meter.finish())
     }
 }
+
+
+// MARK: - バグ確認 第2部 C20: 統合ラウドネスの二段ゲート
+
+final class LoudnessTwoStageGateTests: XCTestCase {
+    func testAbsoluteGatedBlocksStayOutOfTheRelativeStage() {
+        // 前半は -65 LUFS、後半は -74 LUFS(絶対ゲート -70 未満)。相対ゲートは -75 付近になるため、
+        // 元の列へ再適用すると後半が混入し、統合値が下がる。正しくは絶対ゲート通過分だけで測る
+        let e1 = pow(10.0, (-65 + 0.691) / 10)
+        let e2 = pow(10.0, (-74 + 0.691) / 10)
+        let hops = [Double](repeating: e1, count: 40) + [Double](repeating: e2, count: 40)
+        let v = LoudnessMeter.integratedLoudness(hops: hops)
+        XCTAssertGreaterThan(v, -66.0, "絶対ゲート未満の区間が混入していない: \(v)")
+        XCTAssertLessThan(v, -64.0)
+    }
+}

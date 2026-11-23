@@ -97,7 +97,7 @@ public final class LoudnessMeter {
         let absKept = m.filter { lufs($0) >= absoluteGate }
         guard !absKept.isEmpty else { return -.infinity }
         let relGate = lufs(absKept.reduce(0, +) / Double(absKept.count)) + relativeOffset
-        let kept = m.filter { lufs($0) >= relGate }
+        let kept = absKept.filter { lufs($0) >= relGate }
         guard !kept.isEmpty else { return -.infinity }
         return lufs(kept.reduce(0, +) / Double(kept.count))
     }
@@ -181,7 +181,7 @@ public enum LoudnessAnalysis {
         let chunk: AVAudioFrameCount = 8192
         guard let buf = AVAudioPCMBuffer(pcmFormat: fmt, frameCapacity: chunk) else { throw CocoaError(.fileReadUnknown) }
         while file.framePosition < file.length {
-            try file.read(into: buf, frameCount: min(chunk, AVAudioFrameCount(file.length - file.framePosition)))
+            try file.read(into: buf, frameCount: AVAudioFrameCount(min(Int64(chunk), file.length - file.framePosition)))
             guard buf.frameLength > 0, let c = buf.floatChannelData else { break }
             meter.add(c[0], c[1], Int(buf.frameLength))
         }

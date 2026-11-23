@@ -117,7 +117,12 @@ public extension AudioFx {
             if let params = slot.params, !params.isEmpty {
                 part += "(" + params.keys.sorted().map { "\($0)=\(params[$0]!)" }.joined(separator: ",") + ")"
             }
-            if let state = slot.state, !state.isEmpty { part += "[state:\(state.count)]" }
+            if let state = slot.state, !state.isEmpty {
+                // 長さだけだと、同じ長さの別の状態が同じ鍵になって古い音が使い回される。内容のハッシュも入れる
+                var h: UInt64 = 0xcbf29ce484222325
+                for b in state.utf8 { h ^= UInt64(b); h = h &* 0x100000001b3 }
+                part += "[state:\(state.count):\(h)]"
+            }
             return part
         }.joined(separator: ";")
     }

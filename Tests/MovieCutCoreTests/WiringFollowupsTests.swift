@@ -205,3 +205,35 @@ final class WiringFollowupsTests: XCTestCase {
         XCTAssertEqual(seq?.missingNumbers, [2])
     }
 }
+
+
+// MARK: - バグ確認 第2部 C20: MIDI の総量ガードと、配置時の余韻
+
+final class MidiDensityAndTailTests: XCTestCase {
+    private func midiData(duration: Double, notes: [MidiNote]) -> MidiFileData {
+        MidiFileData(format: 0, trackCount: 1, ticksPerQuarter: 480, smpteFramesPerSecond: nil,
+                     smpteTicksPerFrame: nil, tempos: [], trackNames: [:], notes: notes, duration: duration)
+    }
+    func testValidateRejectsOverlappingLongNotes() {
+        // 600 秒の音を 12 音重ねると、描画の総量上限を超え、後半が黙って消える入力になる
+        let notes = (0..<12).map { _ in
+            MidiNote(track: 0, channel: 0, pitch: 60, velocity: 100, startTick: 0, endTick: 115200, start: 0, duration: 600)
+        }
+        XCTAssertThrowsError(try MidiImporter.validate(midiData(duration: 600, notes: notes))) { error in
+            XCTAssertEqual(error as? MidiError, .tooDense)
+        }
+    }
+    func testPlacementDurationIncludesTail() {
+        let f = midiData(duration: 10, notes: [])
+        var p = Project()
+        let ids = MidiImporter.place(wavPath: "/nonexistent/midi.wav", file: f, at: 0, in: &p)
+        XCTAssertEqual(ids.count, 1)
+        let clip = p.tracks.flatMap(\.clips).first { $0.id == ids[0] }
+        XCTAssertEqual(clip?.duration ?? 0, 10.5, accuracy: 1e-9)
+    }
+    func testStepVolumeRejectsNonFiniteDb() {
+        var c = Clip(); c.type = .audio; c.volume = 1
+        XCTAssertFalse(AudioFxEditing.stepVolume(&c, db: .nan))
+        XCTAssertEqual(c.volume, 1)
+    }
+}

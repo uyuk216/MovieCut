@@ -131,8 +131,8 @@ public struct SpectrogramResult: Equatable, Sendable {
     /// 周波数に最も近い bin(直流 bin 0 も含む。範囲外は端へ丸める)。
     public func binIndex(forFrequency f: Double) -> Int {
         guard binCount > 0, fftSize > 0, sampleRate > 0, f.isFinite else { return 0 }
-        let k = Int((f * Double(fftSize) / sampleRate).rounded())
-        return min(max(k, 0), binCount - 1)
+        // Double のまま端へ丸めてから変換する(巨大な有限値で Int 化が落ちないように)
+        return Int(min(max((f * Double(fftSize) / sampleRate).rounded(), 0), Double(binCount - 1)))
     }
 
     /// フレーム内で最も強い bin(直流 bin 0 は除く)。全部 0 のときは nil。
@@ -332,7 +332,8 @@ public enum Spectrogram {
                 }
             }
             for b in 0..<half {
-                let amp = (re[b] * re[b] + im[b] * im[b]).squareRoot() * norm
+                // bin 0 の実部は直流、虚部はナイキスト成分(実数 FFT の特殊配置)。直流の表示にナイキストを混ぜない
+                let amp = b == 0 ? abs(re[0]) * norm : (re[b] * re[b] + im[b] * im[b]).squareRoot() * norm
                 let db = 20 * log10(Double(max(amp, 1e-12)))
                 out[f * half + b] = Float(min(1, max(0, (db + range) / range)))
             }
@@ -382,7 +383,7 @@ public enum Spectrogram {
             let mtime = (attrs?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? -1
             filePart = "\(src)|\(size)|\(mtime)"
         }
-        return "spectrogram|\(c.id)|\(filePart)|\(c.offset)|\(ClipTiming.sourceSpan(c))|\(config.fftSize)|\(config.maxColumns)|\(config.maxDuration)|\(config.dynamicRangeDb)"
+        return "spectrogram|\(c.id)|\(filePart)|\(c.offset)|\(ClipTiming.sourceSpan(c))|\(c.channelModeOrDefault)|\(config.fftSize)|\(config.maxColumns)|\(config.maxDuration)|\(config.dynamicRangeDb)"
     }
 }
 

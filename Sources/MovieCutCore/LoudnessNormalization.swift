@@ -141,7 +141,7 @@ public enum LoudnessNormalization {
         do {
             let out = try AVAudioFile(forWriting: output, settings: settings, commonFormat: .pcmFormatFloat32, interleaved: false)
             while inFile.framePosition < inFile.length {
-                let want = min(chunk, AVAudioFrameCount(inFile.length - inFile.framePosition))
+                let want = AVAudioFrameCount(min(Int64(chunk), inFile.length - inFile.framePosition))
                 do { try inFile.read(into: buf, frameCount: want) }
                 catch { throw LoudnessNormalizationError.cannotRead(path: input.path, underlying: error) }
                 let n = Int(buf.frameLength)

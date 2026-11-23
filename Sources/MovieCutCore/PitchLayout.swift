@@ -31,7 +31,10 @@ public enum PitchScale: String, CaseIterable, Equatable, Sendable {
     /// i 番目(0 始まり)の音の、根音からの半音数。1 オクターブを超えたら 12 半音ずつ上がる。下降なら符号を反転して下へ。
     public func degree(_ i: Int, descending: Bool = false) -> Int {
         let n = intervals.count
-        let v = (i / n) * 12 + intervals[i % n]
+        guard n > 0 else { return 0 }
+        // 負の番号でも下のオクターブへ続くように、剰余は 0 以上にそろえる
+        let r = ((i % n) + n) % n
+        let v = ((i - r) / n) * 12 + intervals[r]
         return descending ? -v : v
     }
 }

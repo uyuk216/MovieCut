@@ -36,7 +36,7 @@ public enum VideoScope {
 
     /// RGBA8(左上から、1 画素 4 バイト、行の長さは width × 4)から計算する。`rgba` の長さが足りなければ nil。
     public static func analyze(rgba: [UInt8], width w: Int, height h: Int, columns requested: Int = 256) -> Result? {
-        guard w > 0, h > 0, rgba.count >= w * h * 4 else { return nil }
+        guard w > 0, h > 0, w <= (rgba.count / 4) / h else { return nil }
         let cols = max(1, min(requested, w))
         var r = [Int](repeating: 0, count: levels), g = r, b = r, l = r
         var wf = [Int](repeating: 0, count: cols * levels)

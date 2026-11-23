@@ -290,3 +290,20 @@ final class SpectrogramTests: XCTestCase {
         _ = first
     }
 }
+
+
+// MARK: - バグ確認 第2部 C20: スペクトログラムの鍵と bin
+
+final class SpectrogramKeyAndBinTests: XCTestCase {
+    func testCacheKeyIncludesChannelMode() {
+        var a = Clip(); a.id = "s"; a.type = .video
+        var b = a; b.channelMode = .firstPair
+        XCTAssertNotEqual(Spectrogram.cacheKey(for: a), Spectrogram.cacheKey(for: b))
+    }
+    func testBinIndexWithHugeFrequencyClamps() {
+        let r = SpectrogramResult(magnitudes: [], frameCount: 0, binCount: 100, fftSize: 2048, hop: 512,
+                                  sampleRate: 48000, duration: 0, sourceDuration: 0, truncated: false, dynamicRangeDb: 60)
+        XCTAssertEqual(r.binIndex(forFrequency: .greatestFiniteMagnitude), 99)
+        XCTAssertEqual(r.binIndex(forFrequency: 1000), 43)
+    }
+}

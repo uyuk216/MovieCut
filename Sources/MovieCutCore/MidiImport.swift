@@ -41,6 +41,14 @@ public enum MidiImporter {
         guard file.notes.count <= maxNotes else {
             throw MidiError.tooManyNotes(count: file.notes.count, limit: maxNotes)
         }
+        // 描画側にはノートサンプルの総量上限があり、超えると後半のノートが黙って消える。同じ計算で先に弾く
+        let sr = Double(sampleRate)
+        var budget = Double(maxNoteSamples)
+        for note in file.notes {
+            let audible = min(note.duration + 0.35, max(0, file.duration + tail - note.start))
+            budget -= audible * sr
+            if budget < 0 { throw MidiError.tooDense }
+        }
     }
 
     public static func isMIDI(path: String) -> Bool {
@@ -60,15 +68,18 @@ public enum MidiImporter {
         let sr = Double(sampleRate)
         let total = file.duration + tail
         // 防御: 総尺が上限を超える入力でも、確保するサンプルは maxSamples まで(prepare 経由では validate が先に弾く)。
-        let n = min(maxSamples, Int((total * sr).rounded()))
+        let nd = (total * sr).rounded()
+        let n = nd.isFinite ? min(maxSamples, Int(nd)) : maxSamples
         guard n > 0 else { return [] }
         var out = [Double](repeating: 0, count: n)
         var noteSampleBudget = maxNoteSamples
         for note in file.notes {
-            let start = Int((note.start * sr).rounded())
+            let sd = (note.start * sr).rounded()
+            let start = sd.isFinite ? Int(sd) : -1
             // 減衰はノートの長さ + 0.35 秒でほぼ消えるようにする
             let length = note.duration + 0.35
-            let count = min(n - start, Int((length * sr).rounded()))
+            let cd = (length * sr).rounded()
+            let count = cd.isFinite ? min(n - start, Int(cd)) : 0
             guard start >= 0, count > 0 else { continue }
             // 防御: ノートサンプルの総量が上限に達したら、それ以降のノートは描かない。
             guard noteSampleBudget > 0 else { break }
@@ -165,7 +176,8 @@ public enum MidiImporter {
     /// 戻り値は置いた音声クリップの id。
     @discardableResult
     public static func place(wavPath: String, file: MidiFileData, at start: Double, in project: inout Project) -> [String] {
-        let duration = max(0.05, file.duration)
+        // 生成した WAV は末尾の余韻(tail)まで含む。配置の長さもそろえないと、余韻が再生・書き出しで切れる
+        let duration = max(0.05, file.duration + tail)
         let ids = ClipEditing.place(media: [(path: wavPath, kind: .audio, duration: duration)], at: start, in: &project)
         let markers = noteMarkers(for: file, at: start)
         if !markers.isEmpty {

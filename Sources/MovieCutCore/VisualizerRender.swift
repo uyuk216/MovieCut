@@ -15,9 +15,10 @@ extension Renderer {
 
     /// 時刻 t の合成音声の音量(0〜1 に収めたもの)。エンベロープが無い・範囲外は 0。
     static func vizLoudness(_ env: [Float]?, t: Double) -> Double {
-        guard let env else { return 0 }
-        let i = Int(floor(t * 60))
-        guard i >= 0, i < env.count else { return 0 }
+        guard let env, t.isFinite else { return 0 }
+        let d = floor(t * 60)
+        guard d >= 0, d < Double(env.count) else { return 0 }
+        let i = Int(d)
         return min(1, max(0, Double(env[i] * vizGain)))
     }
 
@@ -42,7 +43,8 @@ extension Renderer {
         let n = vz.countOrDefault
         if vz.isSpectrum {
             let spec = assets.vizSpectrum(for: project, source: vz.source, count: n)
-            let k = Int(floor(t * SpectrumAnalyzer.frameRate))
+            let kd = floor(t * SpectrumAnalyzer.frameRate)
+            let k = (kd.isFinite && kd >= 0 && kd < 9e15) ? Int(kd) : -1
             return (0..<n).map { b in
                 guard let spec, k >= 0, (k + 1) * n <= spec.count else { return Self.vizMinFraction }
                 return Self.vizSpectrumHeight(spec[k * n + b])

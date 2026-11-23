@@ -111,6 +111,8 @@ public enum MidiError: Error, Equatable, CustomStringConvertible {
     case tooLong(seconds: Double, limit: Double)
     /// ノート数が取り込み上限を超えた(F-4 のガード。病的に密なファイルで描画が爆発しないように)。
     case tooManyNotes(count: Int, limit: Int)
+    /// ノートの総量(重なりを含む)が描画の上限を超えた。
+    case tooDense
 
     public var description: String {
         switch self {
@@ -119,6 +121,7 @@ public enum MidiError: Error, Equatable, CustomStringConvertible {
         case .unsupportedFormat(let f): return "対応していない MIDI フォーマットです(\(f))"
         case .tooLong(let s, let limit): return "MIDI が長すぎます(\(Int(s.rounded())) 秒。上限は \(Int(limit)) 秒です)"
         case .tooManyNotes(let n, let limit): return "MIDI のノートが多すぎます(\(n) 個。上限は \(limit) 個です)"
+        case .tooDense: return "MIDI のノートの総量が多すぎます(重なりを含む)"
         }
     }
 }
@@ -167,7 +170,9 @@ public enum MidiParser {
 
         for trackIndex in 0..<ntrks {
             guard r.take(4) == Array("MTrk".utf8), let trackLength = r.u32() else { throw MidiError.truncated }
-            let trackEnd = min(r.pos + trackLength, data.count)
+            // 宣言した長さが実データより長い = 途中で切れたファイル。切り詰めて正常扱いしない
+            guard r.pos + trackLength <= data.count else { throw MidiError.truncated }
+            let trackEnd = r.pos + trackLength
             var tick = 0
             var runningStatus: UInt8? = nil
             // 鳴っているノート: (チャンネル, 音の高さ) → 開始の列(同じ音の重なりは先入れ先出し)
@@ -178,7 +183,7 @@ public enum MidiParser {
                 guard let delta = r.vlq(limit: trackEnd) else { throw MidiError.truncated }
                 tick += delta
                 lastTick = max(lastTick, tick)
-                guard r.pos < trackEnd else { break }
+                guard r.pos < trackEnd else { throw MidiError.truncated }   // デルタ時刻だけで終わる = イベントが欠けている
                 var status = data[r.pos]
                 if status < 0x80 {
                     guard let rs = runningStatus else { throw MidiError.truncated }

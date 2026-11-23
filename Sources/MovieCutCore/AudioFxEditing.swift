@@ -292,7 +292,7 @@ public enum AudioFxEditing {
     /// 無音(0)のままは動かせない(0 に何をかけても 0)ので、そのときは変化なし。
     @discardableResult
     public static func stepVolume(_ c: inout Clip, db: Double) -> Bool {
-        guard supports(c) else { return false }
+        guard supports(c), db.isFinite else { return false }
         let k = pow(10, db / 20)
         func scaled(_ v: Double) -> Double { (min(max(v * k, 0), 2) * 1000).rounded() / 1000 }
         var changed = false
