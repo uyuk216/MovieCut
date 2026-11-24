@@ -61,7 +61,7 @@ final class MenuTests: XCTestCase {
         XCTAssertEqual(AppMenuSpec.customFps(s).title, "カスタム…")
         XCTAssertEqual(AppMenuSpec.codecItems(s).map(\.title), ["H.264", "HEVC", "ProRes 422（.mov）", "ProRes 422 HQ（.mov）", "ProRes 422 LT（.mov）", "ProRes 422 Proxy（.mov・下書き用）", "ProRes 4444（.mov・透明を残せる）"])
         XCTAssertEqual(AppMenuSpec.backgroundItems(s).map(\.title), ["黒", "白", "緑（クロマキー）", "透明（ProRes 4444・APNG 用）"])
-        XCTAssertEqual(AppMenuSpec.help.map { $0.map(\.title) }, [["キーボードショートカット一覧"], ["VOICEVOX 公式サイト", "AquesTalkPlayer 公式サイト"], ["ライセンス", "第三者の規約"]])
+        XCTAssertEqual(AppMenuSpec.help.map { $0.map(\.title) }, [["キーボードショートカット一覧"], ["VOICEVOX 公式サイト", "AquesTalkPlayer 公式サイト"], ["ライセンス", "第三者の規約"], ["システムレポートを書き出す…"]])
     }
 
     func testNoDuplicateAcceleratorsAndNoClashWithSystemOnes() {
@@ -106,7 +106,7 @@ final class MenuTests: XCTestCase {
         for spec in AppMenuSpec.all(s) {
             switch spec.command {
             // 設定… はアプリ設定のため、プロジェクト無しでも常時有効
-            case .settings, .about, .checkForUpdates, .welcomeAtLaunchToggle, .helpShortcuts, .helpVoicevox, .helpAquestalk, .helpLicense, .helpThirdParty, .previewBackground, .previewTier, .previewProxyToggle, .proxyAutoCreateToggle, .guide, .previewSnapToggle, .previewGuidesVisibilityToggle, .addFont: XCTAssertTrue(spec.enabled, "\(spec.title)")
+            case .settings, .about, .checkForUpdates, .welcomeAtLaunchToggle, .helpShortcuts, .helpVoicevox, .helpAquestalk, .helpLicense, .helpThirdParty, .systemReport, .previewBackground, .previewTier, .previewProxyToggle, .proxyAutoCreateToggle, .guide, .previewSnapToggle, .previewGuidesVisibilityToggle, .addFont: XCTAssertTrue(spec.enabled, "\(spec.title)")
             default: XCTAssertFalse(spec.enabled, "\(spec.title) が有効です")
             }
         }
@@ -155,7 +155,7 @@ final class MenuTests: XCTestCase {
         for spec in AppMenuSpec.all(s) {
             switch spec.command {
             // 設定… はアプリ設定のため、書き出し中でも常時有効
-            case .settings, .about, .checkForUpdates, .welcomeAtLaunchToggle, .helpShortcuts, .helpVoicevox, .helpAquestalk, .helpLicense, .helpThirdParty, .fullScreen, .previewBackground, .previewTier, .previewProxyToggle, .proxyAutoCreateToggle, .guide, .previewSnapToggle, .previewGuidesVisibilityToggle, .addFont: XCTAssertTrue(spec.enabled, "\(spec.title)")
+            case .settings, .about, .checkForUpdates, .welcomeAtLaunchToggle, .helpShortcuts, .helpVoicevox, .helpAquestalk, .helpLicense, .helpThirdParty, .systemReport, .fullScreen, .previewBackground, .previewTier, .previewProxyToggle, .proxyAutoCreateToggle, .guide, .previewSnapToggle, .previewGuidesVisibilityToggle, .addFont: XCTAssertTrue(spec.enabled, "\(spec.title)")
             default: XCTAssertFalse(spec.enabled, "\(spec.title) が書き出し中も有効です")
             }
         }

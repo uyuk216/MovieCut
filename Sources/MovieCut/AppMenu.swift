@@ -5,6 +5,8 @@ import MovieCutCore
 enum MenuCommand: Hashable {
     case about, settings, videoSettings
     case checkForUpdates
+    // ヘルプ ▸ システムレポートを書き出す…(診断情報の zip。ショートカットは持たない)
+    case systemReport
     case addMedia, screenRecord, importPSD, importSVG, importMIDI, importImageSequence, importRigFolder, importRigPSD, export, exportPreset(ExportPreset), exportCustomPreset(String), saveCustomPreset, importFcpXml, importPrproj
     // 字幕(B3)とチャプター
     case importSubtitles, exportSubtitles, generateSubtitles, copyChapters, copyChaptersColor(MarkerColor)
@@ -670,6 +672,9 @@ enum AppMenuSpec {
 
     /// アプリメニュー ▸ アップデートを確認…(配布版だけ。メニューへ出すかは AppUpdater.isAvailable で決める)。
     static let checkForUpdates = MenuItemSpec(command: .checkForUpdates, title: "アップデートを確認…", shortcut: nil, enabled: true, checked: nil)
+
+    /// ヘルプ ▸ システムレポートを書き出す…(版数・環境・直近のクラッシュレポート・設定の要約の zip。書類がなくても使える)。
+    static let systemReport = MenuItemSpec(command: .systemReport, title: "システムレポートを書き出す…", shortcut: nil, enabled: true, checked: nil)
 
     static func settings(_ s: MenuState) -> MenuItemSpec {
         MenuItemSpec(command: .settings, title: "設定…", shortcut: cmd(","), enabled: true, checked: nil)
@@ -1675,7 +1680,8 @@ enum AppMenuSpec {
          [MenuItemSpec(command: .helpVoicevox, title: "VOICEVOX 公式サイト", shortcut: nil, enabled: true, checked: nil),
           MenuItemSpec(command: .helpAquestalk, title: "AquesTalkPlayer 公式サイト", shortcut: nil, enabled: true, checked: nil)],
          [MenuItemSpec(command: .helpLicense, title: "ライセンス", shortcut: nil, enabled: true, checked: nil),
-          MenuItemSpec(command: .helpThirdParty, title: "第三者の規約", shortcut: nil, enabled: true, checked: nil)]]
+          MenuItemSpec(command: .helpThirdParty, title: "第三者の規約", shortcut: nil, enabled: true, checked: nil)],
+         [systemReport]]
     }
 
     /// 字幕と素材の項目(ファイル ▸ 字幕・素材のまとまり。式が長すぎて型検査が遅くなるので分けてある)。
@@ -1702,6 +1708,7 @@ enum AppMenu {
         switch c {
         case .about: AppInfo.showAboutPanel()
         case .checkForUpdates: AppUpdater.shared.checkForUpdates()
+        case .systemReport: SystemReportExporter.run(model: model)
         case .helpShortcuts: ShortcutSheet.show()
         case .openRecent(let path): WelcomeActions.open(path: path)
         case .clearRecents: RecentProjectsController.shared.clear()
