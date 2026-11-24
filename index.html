@@ -152,7 +152,7 @@
         <div class="tabbar"><div class="tab on">タイムライン</div></div>
         <div class="tl-tools">
           <button class="mini-btn" id="btnAddLayer">＋レイヤー</button>
-          <span class="caption">クリックで移動／クリップはドラッグで移動、端を引っぱると長さ変更</span>
+          <span class="caption">クリックで移動・ドラッグで編集／プレビュー上の枠や文字はドラッグで移動、Alt＋ドラッグで回転／Mでマーカー、⌘Zで元に戻す</span>
           <span style="flex:1"></span>
           <span class="caption">拡大</span>
           <input type="range" id="zoom" min="12" max="120" value="40" style="width:110px; accent-color:var(--accent);">
@@ -198,7 +198,7 @@ const CHARS = {
   reimu:  {name:"れいむ", color:"#ff5a76", engine:"ゆっくり 女性A（AquesTalk2）", side:"right", hair:"#3a2b33"},
   marisa: {name:"まりさ", color:"#ffd23e", engine:"ゆっくり 女性G（AquesTalk2）", side:"left",  hair:"#e8b93e"}
 };
-const TACHIE_POS = { reimu:{x:0.86, y:0.97, scale:1.0}, marisa:{x:0.14, y:0.97, scale:1.0} };
+const TACHIE_POS = { reimu:{x:0.86, y:0.97, scale:1.0, rot:0}, marisa:{x:0.14, y:0.97, scale:1.0, rot:0} };
 let uid = 1;
 const nid = () => uid++;
 let layers = [];
@@ -256,7 +256,7 @@ function buildInitial(){
   ];
   scenes.forEach(s => addClip(lVideo, "scene", total * s.from, total * (s.to - s.from), s.title,
     {title:s.title, points:s.points, c1:s.c1, c2:s.c2}));
-  scenes.forEach((s, i) => addClip(lText, "text", total * s.from + 0.1, 3, s.title, {text:s.title, size:44}));
+  scenes.forEach((s, i) => addClip(lText, "text", total * s.from + 0.1, 3, s.title, {text:s.title, size:44, x:0.5, y:0.16, rot:0, color:"#ffffff"}));
   addClip(lTachie, "tachie", 0, total, "れいむ", {char:"reimu"});
   addClip(lTachie, "tachie", 0, total, "まりさ", {char:"marisa"});
   addClip(lBgm, "audio", 0, total, "BGM_まったり.mp3", {volume:60});
@@ -267,6 +267,7 @@ function clipAt(layerId, t){ return clips.filter(c => c.layer === layerId && t >
 
 /* ================= 状態 ================= */
 let t = 0, playing = false, pps = 40, selClip = null, selChar = "reimu", lastTs = null, lastLineId = null, audioCtx = null;
+let markers = [];
 const $ = id => document.getElementById(id);
 const toastEl = $("toast"); let toastTimer = null;
 function toast(msg){ toastEl.textContent = msg; toastEl.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => toastEl.classList.remove("show"), 2600); }
@@ -288,6 +289,12 @@ function renderTimeline(){
     const sp = document.createElement("span"); sp.style.left = (s * pps) + "px"; sp.textContent = Math.round(s) + "s"; ruler.appendChild(sp);
     const tick = document.createElement("i"); tick.style.left = (s * pps) + "px"; ruler.appendChild(tick);
   }
+  markers.forEach(mk => {
+    const f = document.createElement("span");
+    f.textContent = "▼"; f.title = mk.name;
+    f.style.cssText = `left:${mk.time * pps - 5}px; top:9px; font-size:9px; color:#3dd6c0;`;
+    ruler.appendChild(f);
+  });
   layers.forEach(L => {
     const row = document.createElement("div"); row.className = "trow";
     const head = document.createElement("div"); head.className = "thead";
@@ -346,20 +353,21 @@ function activeClip(type){
   return null;
 }
 function drawTachie(charId, active){
+  /* 立ち絵そのものは描かず、位置を示す枠だけ出す */
   const ch = CHARS[charId], pos = TACHIE_POS[charId];
-  const cx = pos.x * 960, base = pos.y * 540, s = pos.scale * (active ? 1.04 : 1.0);
-  const bounce = active && playing ? Math.sin(performance.now() / 130) * 5 : 0;
-  const w = 120 * s, h = 190 * s, x = cx - w / 2, y = base - h + bounce;
+  const cx = pos.x * 960, base = pos.y * 540, s = pos.scale * (active ? 1.03 : 1.0);
+  const bounce = active && playing ? Math.sin(performance.now() / 130) * 4 : 0;
+  const w = 150 * s, h = 215 * s, cy = base - h / 2 + bounce;
   ctx.save();
-  if(charId === "marisa"){ ctx.translate(cx, 0); ctx.scale(-1, 1); ctx.translate(-cx, 0); }
-  ctx.fillStyle = ch.color; roundRect(x, y + 58 * s, w, h - 58 * s, 18 * s); ctx.fill();
-  ctx.fillStyle = "#ffe3c9"; ctx.beginPath(); ctx.arc(cx, y + 52 * s, 40 * s, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = ch.hair; ctx.beginPath(); ctx.arc(cx, y + 44 * s, 42 * s, Math.PI, Math.PI * 2); ctx.fill();
-  ctx.fillRect(x + 8 * s, y + 40 * s, 10 * s, 52 * s); ctx.fillRect(x + w - 18 * s, y + 40 * s, 10 * s, 52 * s);
-  ctx.fillStyle = "#26222a";
-  ctx.beginPath(); ctx.arc(cx - 14 * s, y + 54 * s, 4.4 * s, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(cx + 14 * s, y + 54 * s, 4.4 * s, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = "#26222a"; ctx.lineWidth = 2.4 * s; ctx.beginPath(); ctx.arc(cx, y + 62 * s, 10 * s, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke();
+  ctx.translate(cx, cy); ctx.rotate((pos.rot || 0) * Math.PI / 180);
+  ctx.fillStyle = active ? "rgba(255,255,255,.13)" : "rgba(255,255,255,.06)";
+  roundRect(-w / 2, -h / 2, w, h, 10); ctx.fill();
+  ctx.setLineDash([7, 5]);
+  ctx.strokeStyle = active ? ch.color : "rgba(255,255,255,.45)"; ctx.lineWidth = 2;
+  roundRect(-w / 2, -h / 2, w, h, 10); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = "rgba(255,255,255,.75)"; ctx.font = "600 14px sans-serif"; ctx.textAlign = "center";
+  ctx.fillText("立ち絵", 0, -4);
   ctx.restore();
   ctx.fillStyle = "rgba(0,0,0,.55)"; roundRect(cx - 34, base - 24 + bounce, 68, 19, 9); ctx.fill();
   ctx.fillStyle = "#fff"; ctx.font = "600 12px sans-serif"; ctx.textAlign = "center"; ctx.fillText(ch.name, cx, base - 10 + bounce);
@@ -382,9 +390,12 @@ function draw(){
   }
   const img = activeClip("image");
   if(img){
-    const g = ctx.createLinearGradient(300, 140, 660, 400); g.addColorStop(0, img.data.c1); g.addColorStop(1, img.data.c2);
-    ctx.fillStyle = g; roundRect(300, 140, 360, 260, 14); ctx.fill();
-    ctx.fillStyle = "#fff"; ctx.font = "700 24px sans-serif"; ctx.textAlign = "center"; ctx.fillText(img.label, 480, 282);
+    const ix = (img.data.x ?? 0.5) * 960, iy = (img.data.y ?? 0.5) * 540, is = img.data.scale || 1;
+    ctx.save(); ctx.translate(ix, iy); ctx.rotate((img.data.rot || 0) * Math.PI / 180);
+    const g = ctx.createLinearGradient(-180 * is, -130 * is, 180 * is, 130 * is); g.addColorStop(0, img.data.c1); g.addColorStop(1, img.data.c2);
+    ctx.fillStyle = g; roundRect(-180 * is, -130 * is, 360 * is, 260 * is, 14); ctx.fill();
+    ctx.fillStyle = "#fff"; ctx.font = "700 24px sans-serif"; ctx.textAlign = "center"; ctx.fillText(img.label, 0, 8);
+    ctx.restore();
   }
   const tachieLayer = layers.find(l => l.name.startsWith("立ち絵"));
   if(tachieLayer && !tachieLayer.hidden){
@@ -394,9 +405,13 @@ function draw(){
   }
   const tx = activeClip("text");
   if(tx){
+    ctx.save();
+    ctx.translate((tx.data.x ?? 0.5) * 960, (tx.data.y ?? 0.16) * 540);
+    ctx.rotate((tx.data.rot || 0) * Math.PI / 180);
     ctx.font = `800 ${tx.data.size || 44}px sans-serif`; ctx.textAlign = "center";
-    ctx.lineWidth = 7; ctx.strokeStyle = "rgba(0,0,0,.65)"; ctx.strokeText(tx.data.text, 480, 84);
-    ctx.fillStyle = "#fff"; ctx.fillText(tx.data.text, 480, 84);
+    ctx.lineWidth = 7; ctx.strokeStyle = "rgba(0,0,0,.65)"; ctx.strokeText(tx.data.text, 0, 0);
+    ctx.fillStyle = tx.data.color || "#fff"; ctx.fillText(tx.data.text, 0, 0);
+    ctx.restore();
   }
   const bl = activeClip("blur");
   if(bl){
@@ -434,10 +449,10 @@ function renderSubtitle(){
       line.innerHTML = splitSub(txt).join("<br>");
     }
   }
-  if(vc && vc.id !== lastLineId){ if(playing) blip(vc.data.char); }
+  if(vc && vc.id !== lastLineId){ if(playing) blip(vc.data.char, (vc.data.volume || 100) / 100); }
   lastLineId = vc ? vc.id : null;
 }
-function blip(charId){
+function blip(charId, vol){
   const voiceLayer = layers.find(l => l.name === "音声");
   const anySolo = layers.some(l => l.solo);
   if(voiceLayer && (voiceLayer.muted || (anySolo && !voiceLayer.solo))) return;
@@ -446,7 +461,7 @@ function blip(charId){
     const o = audioCtx.createOscillator(), g = audioCtx.createGain();
     o.type = "sine"; o.frequency.value = charId === "reimu" ? 740 : 560;
     g.gain.setValueAtTime(0.0001, audioCtx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.05, audioCtx.currentTime + 0.02);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.001, 0.06 * (vol || 1)), audioCtx.currentTime + 0.02);
     g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.12);
     o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime + 0.13);
   }catch(e){}
@@ -544,7 +559,7 @@ function ensureLayer(name, before){
 }
 $("btnAddText").onclick = () => {
   const L = layerByName("テキスト");
-  const c = addClip(L, "text", Math.round(t * 20) / 20, 3, "テキスト", {text:"テキスト", size:44});
+  const c = addClip(L, "text", Math.round(t * 20) / 20, 3, "テキスト", {text:"テキスト", size:44, x:0.5, y:0.16, rot:0, color:"#ffffff"});
   selClip = c.id; setStatus("テキストを追加しました（プロパティで文字を変えられます）");
   renderTimeline(); renderInspector(); draw();
 };
@@ -556,7 +571,7 @@ $("btnAddBlur").onclick = () => {
 };
 $("btnAddMedia").onclick = () => {
   const L = ensureLayer("画像", "映像");
-  const c = addClip(L, "image", Math.round(t * 20) / 20, 4, "画像（デモ）", {c1:"#3f8f6b", c2:"#274b63"});
+  const c = addClip(L, "image", Math.round(t * 20) / 20, 4, "画像（デモ）", {c1:"#3f8f6b", c2:"#274b63", x:0.5, y:0.5, scale:1, rot:0});
   selClip = c.id; setStatus("素材（画像の代わり）を追加しました");
   renderTimeline(); renderInspector(); draw();
 };
@@ -580,7 +595,10 @@ window._set = {
   scenePoints(id, v){ const c = clips.find(x => x.id === id); c.data.points = v.split("\n").filter(s => s.trim()); draw(); },
   textText(id, v){ const c = clips.find(x => x.id === id); c.data.text = v; c.label = v; draw(); renderTimelineSoft(); },
   textSize(id, v){ const c = clips.find(x => x.id === id); c.data.size = +v; draw(); },
-  tachie(id, axis, v){ const c = clips.find(x => x.id === id); TACHIE_POS[c.data.char][axis] = axis === "scale" ? +v / 100 : +v / 100; draw(); },
+  tachie(id, axis, v){ const c = clips.find(x => x.id === id); TACHIE_POS[c.data.char][axis] = axis === "rot" ? +v : +v / 100; draw(); },
+  pos(id, axis, v){ const c = clips.find(x => x.id === id); c.data[axis] = axis === "rot" ? +v : +v / 100; draw(); },
+  textColor(id, v){ const c = clips.find(x => x.id === id); c.data.color = v; draw(); },
+  sceneColor(id, key, v){ const c = clips.find(x => x.id === id); c.data[key] = v; draw(); },
   blurStr(id, v){ const c = clips.find(x => x.id === id); c.data.strength = +v; draw(); },
   bgmVol(id, v){ const c = clips.find(x => x.id === id); c.data.volume = +v; },
   imgColor(id, v){ const c = clips.find(x => x.id === id); c.data.c1 = v; draw(); }
@@ -614,15 +632,29 @@ function renderInspector(){
       ${fld("キャラクター", `<input type="text" value="${ch.name}" disabled>`)}
       ${slider("横の位置", Math.round(pos.x * 100), 5, 95, "%", `_set.tachie(${c.id}, 'x', this.value); this.nextElementSibling.textContent = this.value + '%'`)}
       ${slider("縦の位置", Math.round(pos.y * 100), 60, 100, "%", `_set.tachie(${c.id}, 'y', this.value); this.nextElementSibling.textContent = this.value + '%'`)}
-      ${slider("大きさ", Math.round(pos.scale * 100), 50, 160, "%", `_set.tachie(${c.id}, 'scale', this.value); this.nextElementSibling.textContent = this.value + '%'`)}`;
+      ${slider("大きさ", Math.round(pos.scale * 100), 50, 160, "%", `_set.tachie(${c.id}, 'scale', this.value); this.nextElementSibling.textContent = this.value + '%'`)}
+      ${slider("回転", Math.round(pos.rot || 0), -180, 180, "°", `_set.tachie(${c.id}, 'rot', this.value); this.nextElementSibling.textContent = this.value + '°'`)}
+      <p class="caption">プレビュー上の枠をドラッグでも動かせます（Altを押しながらドラッグで回転）。</p>`;
   } else if(c.type === "scene"){
     h += `<div class="sec-title">シーン</div>
       ${fld("見出し", `<input type="text" value="${c.data.title.replace(/"/g, "&quot;")}" oninput="_set.sceneTitle(${c.id}, this.value)">`)}
-      ${fld("本文（1行に1つ）", `<textarea rows="3" oninput="_set.scenePoints(${c.id}, this.value)">${(c.data.points || []).join("\n")}</textarea>`)}`;
+      ${fld("本文（1行に1つ）", `<textarea rows="3" oninput="_set.scenePoints(${c.id}, this.value)">${(c.data.points || []).join("\n")}</textarea>`)}
+      <div class="field"><label>背景の色</label><div class="rowline">
+        <input type="color" value="${c.data.c1}" onchange="_set.sceneColor(${c.id}, 'c1', this.value)">
+        <span class="caption">→</span>
+        <input type="color" value="${c.data.c2}" onchange="_set.sceneColor(${c.id}, 'c2', this.value)">
+      </div></div>`;
   } else if(c.type === "text"){
     h += `<div class="sec-title">文字</div>
       ${fld("テキスト", `<input type="text" value="${c.data.text.replace(/"/g, "&quot;")}" oninput="_set.textText(${c.id}, this.value)">`)}
-      ${slider("大きさ", c.data.size || 44, 20, 90, "px", `_set.textSize(${c.id}, this.value); this.nextElementSibling.textContent = this.value + 'px'`)}`;
+      ${slider("大きさ", c.data.size || 44, 20, 90, "px", `_set.textSize(${c.id}, this.value); this.nextElementSibling.textContent = this.value + 'px'`)}
+      <div class="field"><label>文字の色</label><div class="swatches">
+      ${["#ffffff", "#ffd23e", "#ff5a76", "#3dd6c0", "#4f8cff"].map(col => `<div class="sw" style="background:${col}" onclick="_set.textColor(${c.id}, '${col}')"></div>`).join("")}
+      </div></div>
+      <div class="sec-title">位置・変形</div>
+      ${slider("横の位置", Math.round((c.data.x ?? 0.5) * 100), 0, 100, "%", `_set.pos(${c.id}, 'x', this.value); this.nextElementSibling.textContent = this.value + '%'`)}
+      ${slider("縦の位置", Math.round((c.data.y ?? 0.16) * 100), 0, 100, "%", `_set.pos(${c.id}, 'y', this.value); this.nextElementSibling.textContent = this.value + '%'`)}
+      ${slider("回転", Math.round(c.data.rot || 0), -180, 180, "°", `_set.pos(${c.id}, 'rot', this.value); this.nextElementSibling.textContent = this.value + '°'`)}`;
   } else if(c.type === "blur"){
     h += `<div class="sec-title">ぼかし</div>
       ${slider("強さ", c.data.strength || 50, 0, 100, "%", `_set.blurStr(${c.id}, this.value); this.nextElementSibling.textContent = this.value + '%'`)}`;
@@ -631,7 +663,12 @@ function renderInspector(){
       ${fld("名前", `<input type="text" value="${c.label}" disabled>`)}
       <div class="field"><label>色（デモ用の代わり）</label><div class="swatches">
       ${["#3f8f6b", "#3d6bb3", "#b07a3a", "#a8527f"].map(col => `<div class="sw" style="background:${col}" onclick="_set.imgColor(${c.id}, '${col}')"></div>`).join("")}
-      </div></div>`;
+      </div></div>
+      <div class="sec-title">位置・変形</div>
+      ${slider("横の位置", Math.round((c.data.x ?? 0.5) * 100), 0, 100, "%", `_set.pos(${c.id}, 'x', this.value); this.nextElementSibling.textContent = this.value + '%'`)}
+      ${slider("縦の位置", Math.round((c.data.y ?? 0.5) * 100), 0, 100, "%", `_set.pos(${c.id}, 'y', this.value); this.nextElementSibling.textContent = this.value + '%'`)}
+      ${slider("大きさ", Math.round((c.data.scale || 1) * 100), 30, 200, "%", `_set.pos(${c.id}, 'scale', this.value); this.nextElementSibling.textContent = this.value + '%'`)}
+      ${slider("回転", Math.round(c.data.rot || 0), -180, 180, "°", `_set.pos(${c.id}, 'rot', this.value); this.nextElementSibling.textContent = this.value + '°'`)}`;
   } else if(c.type === "audio"){
     h += `<div class="sec-title">音声</div>
       ${fld("名前", `<input type="text" value="${c.label}" disabled>`)}
@@ -691,6 +728,108 @@ renderTimeline();
 renderInspector();
 draw();
 requestAnimationFrame(loop);
+</script>
+<script>
+"use strict";
+/* ================= 元に戻す／複製／マーカー ================= */
+let undoStack = [], redoStack = [], lastJSON = "", restoring = false, clipBoard = null;
+function stateJSON(){ try{ return JSON.stringify({layers, clips, markers, tp:TACHIE_POS}); }catch(e){ return ""; } }
+function restoreState(j){
+  const s = JSON.parse(j);
+  layers = s.layers; clips = s.clips; markers = s.markers || [];
+  ["reimu", "marisa"].forEach(k => { if(s.tp && s.tp[k]) Object.assign(TACHIE_POS[k], s.tp[k]); });
+  if(selClip && !clips.find(c => c.id === selClip)) selClip = null;
+  renderTimeline(); renderInspector(); draw();
+}
+setInterval(() => {
+  const j = stateJSON(); if(!j) return;
+  if(restoring){ lastJSON = j; restoring = false; return; }
+  if(lastJSON && j !== lastJSON){ undoStack.push(lastJSON); if(undoStack.length > 60) undoStack.shift(); redoStack = []; }
+  lastJSON = j;
+}, 400);
+function doUndo(){ if(!undoStack.length){ toast("これ以上戻れません"); return; } redoStack.push(stateJSON()); restoring = true; restoreState(undoStack.pop()); setStatus("元に戻しました"); }
+function doRedo(){ if(!redoStack.length){ toast("これ以上進めません"); return; } undoStack.push(stateJSON()); restoring = true; restoreState(redoStack.pop()); setStatus("やり直しました"); }
+function duplicateSelected(){
+  const c = clips.find(x => x.id === selClip); if(!c) return;
+  const c2 = JSON.parse(JSON.stringify(c)); c2.id = nid(); c2.start = Math.round((c.start + c.dur + 0.1) * 20) / 20;
+  clips.push(c2); selClip = c2.id;
+  setStatus(`「${c.label}」を複製しました`);
+  renderTimeline(); renderInspector(); draw();
+}
+function pasteClip(){
+  if(!clipBoard) return;
+  const c = JSON.parse(clipBoard); c.id = nid(); c.start = Math.round(t * 20) / 20;
+  if(!layers.find(l => l.id === c.layer)){ toast("貼り付け先のレイヤーがもうありません"); return; }
+  clips.push(c); selClip = c.id;
+  setStatus(`「${c.label}」を貼り付けました`);
+  renderTimeline(); renderInspector(); draw();
+}
+document.addEventListener("keydown", e => {
+  if(e.target.tagName === "TEXTAREA" || e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+  const mod = e.metaKey || e.ctrlKey, k = e.key.toLowerCase();
+  if(mod && k === "z"){ e.preventDefault(); if(e.shiftKey) doRedo(); else doUndo(); }
+  else if(mod && k === "d"){ e.preventDefault(); duplicateSelected(); }
+  else if(mod && k === "c"){ const c = clips.find(x => x.id === selClip); if(c){ clipBoard = JSON.stringify(c); toast("クリップをコピーしました"); } }
+  else if(mod && k === "v"){ pasteClip(); }
+  else if(!mod && k === "m"){
+    markers.push({time: Math.round(t * 20) / 20, name: "マーカー" + (markers.length + 1)});
+    markers.sort((a, b) => a.time - b.time);
+    renderTimeline(); toast("マーカーを追加しました");
+  }
+});
+
+/* ================= プレビューの直接操作 ================= */
+function stagePos(ev){ const r = cv.getBoundingClientRect(); return {x:(ev.clientX - r.left) * 960 / r.width, y:(ev.clientY - r.top) * 540 / r.height}; }
+function hitPreview(p){
+  const tx = activeClip("text");
+  if(tx){
+    const w = Math.max(60, tx.data.text.length * (tx.data.size || 44) * 0.95), h = (tx.data.size || 44) * 1.6;
+    if(Math.abs(p.x - (tx.data.x ?? 0.5) * 960) < w / 2 && Math.abs(p.y - (tx.data.y ?? 0.16) * 540) < h / 2) return {kind:"clip", clip:tx};
+  }
+  const img = activeClip("image");
+  if(img){
+    const s = img.data.scale || 1;
+    if(Math.abs(p.x - (img.data.x ?? 0.5) * 960) < 180 * s && Math.abs(p.y - (img.data.y ?? 0.5) * 540) < 130 * s) return {kind:"clip", clip:img};
+  }
+  const tLayer = layers.find(l => l.name.startsWith("立ち絵"));
+  if(tLayer && !tLayer.hidden){
+    for(const cid of ["reimu", "marisa"]){
+      const pos = TACHIE_POS[cid], w = 150 * pos.scale, h = 215 * pos.scale;
+      const cx = pos.x * 960, cy = pos.y * 540 - h / 2;
+      if(Math.abs(p.x - cx) < w / 2 && Math.abs(p.y - cy) < h / 2){
+        return {kind:"tachie", char:cid, clip:clips.find(c => c.type === "tachie" && c.data.char === cid)};
+      }
+    }
+  }
+  return null;
+}
+cv.addEventListener("pointerdown", ev => {
+  const p = stagePos(ev), hit = hitPreview(p);
+  if(!hit) return;
+  ev.preventDefault();
+  if(hit.clip) selectClip(hit.clip.id);
+  const pos = hit.kind === "tachie" ? TACHIE_POS[hit.char] : hit.clip.data;
+  const cx = (pos.x ?? 0.5) * 960;
+  const cy = hit.kind === "tachie" ? pos.y * 540 - 215 * pos.scale / 2 : (pos.y ?? 0.5) * 540;
+  const startAngle = Math.atan2(p.y - cy, p.x - cx) * 180 / Math.PI;
+  const startRot = pos.rot || 0, sx = p.x, sy = p.y, startX = pos.x ?? 0.5, startY = pos.y ?? 0.5;
+  const mv = e2 => {
+    const q = stagePos(e2);
+    if(e2.altKey){
+      const a = Math.atan2(q.y - cy, q.x - cx) * 180 / Math.PI;
+      pos.rot = Math.round(startRot + (a - startAngle));
+    } else {
+      pos.x = Math.min(1, Math.max(0, startX + (q.x - sx) / 960));
+      pos.y = Math.min(1.05, Math.max(0, startY + (q.y - sy) / 540));
+    }
+    draw();
+  };
+  const up = () => {
+    window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up);
+    renderInspector();
+  };
+  window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
+});
 </script>
 </body>
 </html>
