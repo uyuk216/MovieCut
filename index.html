@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MovieCut 体験デモ｜編集はできないけど、操作は試せます</title>
+<meta name="description" content="動画編集ソフト MovieCut の体験デモ。再生・シーク・字幕の見た目変更など、実際の操作感をブラウザで試せます。編集と保存はできません。">
+<style>
+  :root{
+    --bg:#16181d; --panel:#1f222a; --panel2:#262a34; --line:#343947;
+    --text:#e8eaf0; --muted:#9aa1b1; --accent:#ff5a3c; --accent2:#ffb03a;
+    --reimu:#ff6b81; --marisa:#ffd23e;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; padding:0;}
+  body{background:var(--bg); color:var(--text); font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Noto Sans JP",system-ui,sans-serif; font-size:14px;}
+  header{display:flex; align-items:center; gap:10px; padding:10px 14px; background:var(--panel); border-bottom:1px solid var(--line); flex-wrap:wrap;}
+  .logo{font-size:20px; font-weight:800; letter-spacing:.5px;}
+  .logo span{color:var(--accent);}
+  .badge{background:var(--accent); color:#fff; font-size:11px; font-weight:700; padding:3px 8px; border-radius:999px;}
+  .badge.sub{background:var(--panel2); color:var(--muted); border:1px solid var(--line);}
+  header .spacer{flex:1;}
+  .hbtn{background:var(--panel2); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:7px 12px; font-size:13px; cursor:pointer;}
+  .hbtn.primary{background:var(--accent); border-color:var(--accent); color:#fff; font-weight:700;}
+  .note{padding:8px 14px; background:#2a2118; color:#ffd9a0; font-size:12.5px; border-bottom:1px solid var(--line);}
+  main{display:flex; gap:10px; padding:10px; align-items:stretch;}
+  .col-assets{width:200px; flex:none; display:flex; flex-direction:column; gap:8px;}
+  .col-center{flex:1; min-width:0; display:flex; flex-direction:column; gap:8px;}
+  .col-right{width:250px; flex:none; display:flex; flex-direction:column; gap:8px;}
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:10px;}
+  .card h3{margin:0 0 8px; font-size:12px; color:var(--muted); font-weight:700; letter-spacing:.08em;}
+  .asset{display:flex; gap:8px; align-items:center; padding:6px; border-radius:8px; cursor:pointer; border:1px solid transparent;}
+  .asset:hover{background:var(--panel2);}
+  .asset.sel{border-color:var(--accent); background:var(--panel2);}
+  .thumb{width:52px; height:30px; border-radius:5px; flex:none;}
+  .asset .nm{font-size:12px; line-height:1.3;}
+  .asset .meta{font-size:10.5px; color:var(--muted);}
+  .preview-wrap{background:#000; border-radius:12px; overflow:hidden; border:1px solid var(--line);}
+  .stage{position:relative; width:100%; aspect-ratio:16/9; background:#000;}
+  canvas#screen{position:absolute; inset:0; width:100%; height:100%; display:block;}
+  .subtitle{position:absolute; left:0; right:0; bottom:5%; text-align:center; padding:0 6%; pointer-events:none;}
+  .subtitle .line{display:inline-block; font-weight:800; line-height:1.35; color:#fff; text-shadow:2px 2px 0 #000,-2px 2px 0 #000,2px -2px 0 #000,-2px -2px 0 #000,0 3px 6px rgba(0,0,0,.6);}
+  .subtitle .who{font-size:.55em; display:block; margin-bottom:.15em; text-shadow:1px 1px 0 #000,-1px 1px 0 #000,1px -1px 0 #000,-1px -1px 0 #000;}
+  .transport{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+  .tbtn{background:var(--panel2); border:1px solid var(--line); color:var(--text); border-radius:8px; padding:8px 13px; font-size:14px; cursor:pointer;}
+  .tbtn.play{background:var(--accent); border-color:var(--accent); color:#fff; font-weight:800; min-width:88px;}
+  .time{font-variant-numeric:tabular-nums; color:var(--muted); font-size:13px;}
+  select.tbtn{appearance:none;}
+  .tabs{display:flex; gap:6px; margin-bottom:8px;}
+  .tab{flex:1; text-align:center; padding:7px 0; border-radius:8px; background:var(--panel2); color:var(--muted); cursor:pointer; font-size:12.5px; border:1px solid var(--line);}
+  .tab.on{color:#fff; border-color:var(--accent); background:#33231e;}
+  .sublist{display:flex; flex-direction:column; gap:4px; max-height:300px; overflow:auto;}
+  .subrow{display:flex; gap:7px; padding:6px 7px; border-radius:7px; cursor:pointer; font-size:12.5px; align-items:baseline;}
+  .subrow:hover{background:var(--panel2);}
+  .subrow.now{background:#33231e; outline:1px solid var(--accent);}
+  .subrow .tc{color:var(--muted); font-size:11px; font-variant-numeric:tabular-nums; flex:none;}
+  .subrow .sp{flex:none; font-size:10.5px; font-weight:700; padding:1px 6px; border-radius:999px; color:#111;}
+  .sp.r{background:var(--reimu);} .sp.m{background:var(--marisa);}
+  .ctl{margin:10px 0;}
+  .ctl label{display:flex; justify-content:space-between; font-size:12.5px; color:var(--muted); margin-bottom:5px;}
+  .ctl input[type=range]{width:100%; accent-color:var(--accent);}
+  .swatches{display:flex; gap:7px;}
+  .sw{width:26px; height:26px; border-radius:50%; border:2px solid transparent; cursor:pointer;}
+  .sw.on{border-color:#fff;}
+  .chk{display:flex; align-items:center; gap:8px; font-size:13px; padding:5px 0; cursor:pointer;}
+  .chk input{accent-color:var(--accent); width:16px; height:16px;}
+  /* timeline */
+  .tl-card{padding:10px 10px 6px;}
+  .tl-head{display:flex; align-items:center; gap:8px; margin-bottom:6px;}
+  .tl-head h3{margin:0;}
+  .tl-scroll{overflow-x:auto; padding-bottom:6px;}
+  .tl{position:relative; width:1080px;}
+  .ruler{position:relative; height:18px; margin-left:64px; border-bottom:1px solid var(--line); color:var(--muted); font-size:10px;}
+  .ruler span{position:absolute; top:2px; transform:translateX(2px); font-variant-numeric:tabular-nums;}
+  .track{display:flex; align-items:stretch; height:34px; margin-top:4px;}
+  .track .lab{width:64px; flex:none; font-size:11px; color:var(--muted); display:flex; align-items:center; gap:4px;}
+  .track .lab .dot{width:8px; height:8px; border-radius:50%;}
+  .lane{position:relative; flex:1; background:#191c22; border-radius:6px; overflow:hidden;}
+  .clip{position:absolute; top:3px; bottom:3px; border-radius:5px; font-size:10.5px; padding:3px 6px; white-space:nowrap; overflow:hidden; cursor:pointer; border:1px solid rgba(255,255,255,.25); color:#fff;}
+  .clip.sel{outline:2px solid #fff; outline-offset:-1px;}
+  .clip.v{background:linear-gradient(180deg,#3f6fb5,#33598f);}
+  .clip.s{background:linear-gradient(180deg,#8a5fb0,#6d4791); font-size:9.5px;}
+  .clip.a{background:linear-gradient(180deg,#3f9e6e,#2f7a55);}
+  .clip.b{background:linear-gradient(180deg,#777d8c,#5b606d);}
+  .playhead{position:absolute; top:0; bottom:0; width:2px; background:var(--accent); z-index:5; pointer-events:none;}
+  .playhead::before{content:""; position:absolute; top:0; left:-5px; border:6px solid transparent; border-top:8px solid var(--accent);}
+  .statusbar{font-size:12px; color:var(--muted); padding:2px 2px 0; min-height:18px;}
+  #toast{position:fixed; left:50%; bottom:26px; transform:translateX(-50%) translateY(20px); background:#fff; color:#16181d; padding:11px 16px; border-radius:10px; font-size:13.5px; font-weight:600; box-shadow:0 8px 30px rgba(0,0,0,.5); opacity:0; pointer-events:none; transition:.25s; max-width:92vw; text-align:center; z-index:50;}
+  #toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+  footer{padding:14px; color:var(--muted); font-size:12px; line-height:1.7;}
+  @media (max-width:900px){
+    main{flex-direction:column;}
+    .col-assets,.col-right{width:auto;}
+    .sublist{max-height:200px;}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">Movie<span>Cut</span></div>
+  <div class="badge">体験デモ</div>
+  <div class="badge sub">ブラウザで操作を試せます</div>
+  <div class="spacer"></div>
+  <button class="hbtn" data-edit>プロジェクトを開く</button>
+  <button class="hbtn primary" data-edit>書き出し</button>
+</header>
+<div class="note">これは MovieCut の体験デモです。<b>再生・シーク・字幕の見た目変更など、実際の操作感はそのまま試せます</b>が、編集と保存はできません。編集しようとすると、その旨が表示されます。</div>
+
+<main>
+  <div class="col-assets">
+    <div class="card">
+      <h3>素材</h3>
+      <div id="assets"></div>
+    </div>
+    <div class="card">
+      <h3>プロジェクト</h3>
+      <div style="font-size:12.5px; line-height:1.8; color:var(--muted);">
+        名前：サンプル動画<br>
+        長さ：36秒 ／ 1920×1080<br>
+        形式：ゆっくり解説（デモ用）
+      </div>
+    </div>
+  </div>
+
+  <div class="col-center">
+    <div class="preview-wrap">
+      <div class="stage">
+        <canvas id="screen" width="960" height="540"></canvas>
+        <div class="subtitle" id="subtitle"><span class="line" id="subline"></span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="transport">
+        <button class="tbtn play" id="btnPlay">▶ 再生</button>
+        <button class="tbtn" id="btnStop">■ 最初へ</button>
+        <span class="time" id="clock">00:00.0 / 00:36.0</span>
+        <span style="flex:1"></span>
+        <label class="time">速度
+          <select id="speed" class="tbtn" style="padding:6px 8px;">
+            <option value="0.5">0.5倍</option>
+            <option value="1" selected>1倍</option>
+            <option value="1.5">1.5倍</option>
+            <option value="2">2倍</option>
+          </select>
+        </label>
+        <label class="chk" style="padding:0;"><input type="checkbox" id="sound" checked> 音（合いの手）</label>
+      </div>
+    </div>
+    <div class="card tl-card">
+      <div class="tl-head">
+        <h3 style="font-size:12px; color:var(--muted); letter-spacing:.08em;">タイムライン（クリックで移動／クリップは選べます）</h3>
+        <span style="flex:1"></span>
+        <span class="time">拡大 <input type="range" id="zoom" min="60" max="220" value="100" style="width:90px; accent-color:var(--accent); vertical-align:middle;"></span>
+      </div>
+      <div class="tl-scroll" id="tlScroll">
+        <div class="tl" id="tl">
+          <div class="ruler" id="ruler"></div>
+          <div id="tracks"></div>
+          <div class="playhead" id="playhead"></div>
+        </div>
+      </div>
+      <div class="statusbar" id="status">クリップを選ぶと、ここに情報が出ます。</div>
+    </div>
+  </div>
+
+  <div class="col-right">
+    <div class="card">
+      <div class="tabs">
+        <div class="tab on" id="tabSubs">字幕リスト</div>
+        <div class="tab" id="tabSet">表示の設定</div>
+      </div>
+      <div id="paneSubs"><div class="sublist" id="sublist"></div></div>
+      <div id="paneSet" style="display:none;">
+        <div class="ctl">
+          <label><span>字幕の大きさ</span><span id="fsVal">44px</span></label>
+          <input type="range" id="fontsize" min="26" max="72" value="44">
+        </div>
+        <div class="ctl">
+          <label><span>字幕の色（話者ごと）</span></label>
+          <div style="font-size:12px; color:var(--muted); margin-bottom:4px;">れいむ</div>
+          <div class="swatches" id="swR"></div>
+          <div style="font-size:12px; color:var(--muted); margin:8px 0 4px;">まりさ</div>
+          <div class="swatches" id="swM"></div>
+        </div>
+        <label class="chk"><input type="checkbox" id="showSub" checked> 字幕を表示</label>
+        <label class="chk"><input type="checkbox" id="showTitle" checked> シーンの見出しを表示</label>
+        <div class="ctl">
+          <label><span>BGMの音量（デモでは見た目のみ）</span><span id="bgmVal">60%</span></label>
+          <input type="range" id="bgm" min="0" max="100" value="60">
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>製品版では</h3>
+      <div style="font-size:12.5px; line-height:1.9;">
+        ・台本を貼るだけで音声と字幕を自動配置<br>
+        ・VOICEVOX／ゆっくり音声に標準対応<br>
+        ・本体は<b>完全無料</b>（透かし・機能制限なし）<br>
+        ・Mac版を公開準備中、Windows版を開発中
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  MovieCut 体験デモ — このページは操作感を試すためのもので、実際の編集・保存・書き出しはできません。<br>
+  キーボード：スペース＝再生／停止、←→＝1秒移動、↑↓＝字幕リストの前後へ移動。
+</footer>
+
+<div id="toast"></div>
+
+<script>
+"use strict";
+const DURATION = 36;
+const SCENES = [
+  {title:"オープニング", c1:"#2b4a7a", c2:"#16233c"},
+  {title:"MovieCutって何？", c1:"#5a2b7a", c2:"#2a163c"},
+  {title:"台本から自動で作る", c1:"#7a2b4a", c2:"#3c1626"},
+  {title:"タイムラインを触ってみる", c1:"#2b7a5a", c2:"#163c2c"},
+  {title:"本体は完全無料", c1:"#7a5a2b", c2:"#3c2d16"},
+  {title:"まとめ", c1:"#2b6d7a", c2:"#16333c"}
+];
+const LINES = [
+  {s:0.5,  e:3.4,  who:"r", text:"みんなー！今日はMovieCutを紹介するよ"},
+  {s:3.6,  e:6.4,  who:"m", text:"お、ついに公開か。どんな編集ソフトだ？"},
+  {s:6.6,  e:9.8,  who:"r", text:"台本を貼るだけで、音声と字幕が自動で並ぶんだよ"},
+  {s:10.0, e:13.2, who:"m", text:"ゆっくり動画を作る人には刺さりそうだな"},
+  {s:13.4, e:16.6, who:"r", text:"このデモでも、再生とシークは本物と同じに動くよ"},
+  {s:16.8, e:19.8, who:"m", text:"タイムラインをクリックすると、そこへ飛べるんだな"},
+  {s:20.0, e:23.2, who:"r", text:"右の設定で、字幕の大きさや色も変えられるよ"},
+  {s:23.4, e:26.4, who:"m", text:"でも編集はできないんだろ？"},
+  {s:26.6, e:29.8, who:"r", text:"そう、このデモは見る・触る専用。本体は完全無料だよ"},
+  {s:30.0, e:33.0, who:"m", text:"無料で透かしも制限もなしか。太っ腹だな"},
+  {s:33.2, e:35.8, who:"r", text:"気になったら、製品版を待っててね！"}
+];
+const NAMES = {r:"れいむ", m:"まりさ"};
+const COLORS = {r:"#ff6b81", m:"#ffd23e"};
+const ASSETS = [
+  {nm:"背景_青空.png", meta:"画像 ・ 1920×1080", g:"linear-gradient(135deg,#4a90c4,#9fd0ff)"},
+  {nm:"背景_夕焼け.png", meta:"画像 ・ 1920×1080", g:"linear-gradient(135deg,#c46a4a,#ffc49f)"},
+  {nm:"立ち絵_れいむ.png", meta:"画像 ・ 透過PNG", g:"linear-gradient(135deg,#c44a6a,#ff9fb2)"},
+  {nm:"立ち絵_まりさ.png", meta:"画像 ・ 透過PNG", g:"linear-gradient(135deg,#c4a44a,#ffe89f)"},
+  {nm:"BGM_まったり.mp3", meta:"音声 ・ 3:24", g:"linear-gradient(135deg,#5a5f6e,#9aa1b1)"},
+  {nm:"効果音_決定.mp3", meta:"音声 ・ 0:01", g:"linear-gradient(135deg,#4ac49e,#9fffdf)"}
+];
+let t = 0, playing = false, speed = 1, lastTs = null, curLine = -1, audioCtx = null;
+
+const $ = id => document.getElementById(id);
+const toastEl = $("toast"); let toastTimer = null;
+function toast(msg){
+  toastEl.textContent = msg; toastEl.classList.add("show");
+  clearTimeout(toastTimer); toastTimer = setTimeout(()=>toastEl.classList.remove("show"), 2600);
+}
+function fmt(x){ const m = Math.floor(x/60), s = x - m*60; return String(m).padStart(2,"0") + ":" + s.toFixed(1).padStart(4,"0"); }
+
+/* assets */
+const assetsEl = $("assets");
+ASSETS.forEach((a,i)=>{
+  const d = document.createElement("div"); d.className = "asset" + (i===0?" sel":"");
+  d.innerHTML = `<div class="thumb" style="background:${a.g}"></div><div><div class="nm">${a.nm}</div><div class="meta">${a.meta}</div></div>`;
+  d.onclick = ()=>{ document.querySelectorAll(".asset").forEach(x=>x.classList.remove("sel")); d.classList.add("sel"); };
+  d.ondblclick = ()=>toast("デモ版では素材の追加・配置はできません（製品版ではできます）");
+  assetsEl.appendChild(d);
+});
+
+/* subtitle list */
+const sublistEl = $("sublist");
+LINES.forEach((L,i)=>{
+  const d = document.createElement("div"); d.className = "subrow"; d.id = "subrow"+i;
+  d.innerHTML = `<span class="tc">${fmt(L.s)}</span><span class="sp ${L.who}">${NAMES[L.who]}</span><span>${L.text}</span>`;
+  d.onclick = ()=>{ seek(L.s + 0.01); };
+  sublistEl.appendChild(d);
+});
+
+/* timeline */
+const tlEl = $("tl"), tracksEl = $("tracks"), rulerEl = $("ruler");
+function pct(x){ return (x / DURATION * 100) + "%"; }
+for(let s=0; s<=DURATION; s+=4){ const sp = document.createElement("span"); sp.style.left = pct(s); sp.textContent = s + "s"; rulerEl.appendChild(sp); }
+function addTrack(label, color, clips, cls){
+  const tr = document.createElement("div"); tr.className = "track";
+  tr.innerHTML = `<div class="lab"><span class="dot" style="background:${color}"></span>${label}</div>`;
+  const lane = document.createElement("div"); lane.className = "lane";
+  clips.forEach(c=>{
+    const el = document.createElement("div"); el.className = "clip " + cls;
+    el.style.left = pct(c.s); el.style.width = `calc(${pct(c.e-c.s)} - 2px)`; el.textContent = c.nm;
+    el.onclick = ev=>{ ev.stopPropagation(); selectClip(el, c); seek(c.s + 0.01); };
+    el.ondblclick = ev=>{ ev.stopPropagation(); toast("デモ版ではクリップの編集はできません（製品版ではできます）"); };
+    lane.appendChild(el);
+  });
+  lane.onclick = ev=>{ const r = lane.getBoundingClientRect(); seek((ev.clientX - r.left) / r.width * DURATION); };
+  tr.appendChild(lane); tracksEl.appendChild(tr);
+}
+function selectClip(el, c){
+  document.querySelectorAll(".clip").forEach(x=>x.classList.remove("sel")); el.classList.add("sel");
+  $("status").textContent = `選択中：${c.nm}（${fmt(c.s)} 〜 ${fmt(c.e)}）`;
+}
+addTrack("映像", "#3f6fb5", SCENES.map((s,i)=>({s:i*6, e:i*6+6, nm:s.title})), "v");
+addTrack("字幕", "#8a5fb0", LINES.map(L=>({s:L.s, e:L.e, nm:L.text})), "s");
+addTrack("音声", "#3f9e6e", LINES.map(L=>({s:L.s, e:L.e, nm:NAMES[L.who] + "の声"})), "a");
+addTrack("BGM", "#777d8c", [{s:0, e:DURATION, nm:"BGM_まったり.mp3"}], "b");
+rulerEl.onclick = ev=>{ const r = rulerEl.getBoundingClientRect(); seek((ev.clientX - r.left) / r.width * DURATION); };
+$("zoom").oninput = e=>{ tlEl.style.width = (1080 * e.target.value / 100) + "px"; movePlayhead(); };
+
+/* settings */
+$("fontsize").oninput = e=>{ $("subline").style.fontSize = e.target.value + "px"; $("fsVal").textContent = e.target.value + "px"; };
+$("subline").style.fontSize = "44px";
+function buildSwatches(elId, who){
+  ["#ffffff","#ffd23e","#ff6b81","#7ee787","#79c0ff"].forEach(c=>{
+    const d = document.createElement("div"); d.className = "sw" + ((who==="r"&&c==="#ffffff")||(who==="m"&&c==="#ffffff")?"":"");
+    d.style.background = c; d.title = c;
+    if(who==="r" ? c==="#ff6b81" : c==="#ffd23e"){ /* defaults are speaker colors, applied below */ }
+    d.onclick = ()=>{ COLORS[who] = c; d.parentElement.querySelectorAll(".sw").forEach(x=>x.classList.remove("on")); d.classList.add("on"); renderSubtitle(); };
+    $(elId).appendChild(d);
+  });
+}
+buildSwatches("swR","r"); buildSwatches("swM","m");
+$("bgm").oninput = e=>{ $("bgmVal").textContent = e.target.value + "%"; };
+$("tabSubs").onclick = ()=>{ $("tabSubs").classList.add("on"); $("tabSet").classList.remove("on"); $("paneSubs").style.display=""; $("paneSet").style.display="none"; };
+$("tabSet").onclick = ()=>{ $("tabSet").classList.add("on"); $("tabSubs").classList.remove("on"); $("paneSet").style.display=""; $("paneSubs").style.display="none"; };
+document.querySelectorAll("[data-edit]").forEach(b=> b.onclick = ()=>toast("デモ版ではこの操作はできません（製品版ではできます）"));
+
+/* sound blips */
+function blip(who){
+  if(!$("sound").checked) return;
+  try{
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = "sine"; o.frequency.value = who === "r" ? 740 : 560;
+    g.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.06, audioCtx.currentTime + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.12);
+    o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime + 0.13);
+  }catch(e){ /* no audio */ }
+}
+
+/* playback */
+function seek(x){ t = Math.max(0, Math.min(DURATION - 0.01, x)); curLine = -2; draw(); }
+$("btnPlay").onclick = ()=>{ playing = !playing; $("btnPlay").textContent = playing ? "⏸ 一時停止" : "▶ 再生"; lastTs = null; };
+$("btnStop").onclick = ()=>{ playing = false; $("btnPlay").textContent = "▶ 再生"; seek(0); };
+$("speed").onchange = e=>{ speed = parseFloat(e.target.value); };
+document.addEventListener("keydown", e=>{
+  if(e.code === "Space"){ e.preventDefault(); $("btnPlay").click(); }
+  if(e.code === "ArrowRight") seek(t + 1);
+  if(e.code === "ArrowLeft") seek(t - 1);
+  if(e.code === "ArrowDown" || e.code === "ArrowUp"){
+    const i = LINES.findIndex(L => t < L.e);
+    const n = e.code === "ArrowDown" ? Math.min(LINES.length - 1, i) : Math.max(0, (i <= 0 ? 0 : i - 1));
+    if(LINES[n]) seek(LINES[n].s + 0.01);
+  }
+});
+
+const cv = $("screen"), ctx = cv.getContext("2d");
+function drawScene(){
+  const si = Math.min(SCENES.length - 1, Math.floor(t / 6)), sc = SCENES[si];
+  const g = ctx.createLinearGradient(0, 0, 960, 540); g.addColorStop(0, sc.c1); g.addColorStop(1, sc.c2);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, 960, 540);
+  ctx.globalAlpha = 0.25; ctx.fillStyle = "#ffffff";
+  for(let i=0; i<7; i++){
+    const x = ((i * 173 + t * (12 + i * 5)) % 1100) - 70, y = 60 + (i * 61) % 300, r = 16 + (i % 3) * 12;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  if($("showTitle").checked){
+    ctx.fillStyle = "rgba(255,255,255,.92)"; ctx.font = "800 44px sans-serif"; ctx.textAlign = "center";
+    ctx.fillText(sc.title, 480, 120);
+    ctx.font = "600 19px sans-serif"; ctx.fillStyle = "rgba(255,255,255,.65)";
+    ctx.fillText("シーン " + (si + 1) + " / " + SCENES.length, 480, 156);
+  }
+  ctx.fillStyle = "rgba(0,0,0,.35)"; ctx.fillRect(0, 500, 960, 40);
+  ctx.fillStyle = "#ff5a3c"; ctx.fillRect(0, 500, 960 * (t / DURATION), 40);
+  ctx.fillStyle = "#fff"; ctx.font = "600 17px sans-serif"; ctx.textAlign = "left";
+  ctx.fillText("MovieCut 体験デモ（音声はイメージです）", 16, 527);
+}
+function renderSubtitle(){
+  const i = LINES.findIndex(L => t >= L.s && t < L.e);
+  const box = $("subtitle"), line = $("subline");
+  if(i < 0 || !$("showSub").checked){ box.style.display = "none"; }
+  else{
+    box.style.display = ""; const L = LINES[i];
+    line.innerHTML = `<span class="who" style="color:${COLORS[L.who]}">${NAMES[L.who]}</span><span style="color:#fff">${L.text}</span>`;
+  }
+  if(i !== curLine){
+    if(i >= 0 && playing) blip(LINES[i].who);
+    curLine = i;
+    document.querySelectorAll(".subrow").forEach((r, j)=> r.classList.toggle("now", j === i));
+    if(i >= 0){ const r = $("subrow" + i); if(r) r.scrollIntoView({block:"nearest", behavior:"smooth"}); }
+  }
+}
+function movePlayhead(){
+  /* playhead is inside #tl; lanes start after the 64px track labels */
+  $("playhead").style.left = `calc(64px + ${t / DURATION} * (100% - 64px))`;
+}
+function draw(){
+  drawScene(); renderSubtitle(); movePlayhead();
+  $("clock").textContent = fmt(t) + " / " + fmt(DURATION);
+}
+function loop(ts){
+  if(playing){
+    if(lastTs == null) lastTs = ts;
+    t += (ts - lastTs) / 1000 * speed; lastTs = ts;
+    if(t >= DURATION){ t = DURATION - 0.01; playing = false; $("btnPlay").textContent = "▶ 再生"; }
+    draw();
+  } else lastTs = null;
+  requestAnimationFrame(loop);
+}
+tlEl.style.position = "relative";
+draw();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
