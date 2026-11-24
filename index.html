@@ -3,407 +3,692 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MovieCut 体験デモ｜編集はできないけど、操作は試せます</title>
-<meta name="description" content="動画編集ソフト MovieCut の体験デモ。再生・シーク・字幕の見た目変更など、実際の操作感をブラウザで試せます。編集と保存はできません。">
+<title>MovieCut 体験デモ｜Mac版の画面そのまま・実際に動きます</title>
+<meta name="description" content="動画編集ソフト MovieCut（Mac版）の画面をそのまま再現した体験デモ。再生・編集・台本からの自動配置まで、ブラウザで実際に操作できます。">
 <style>
   :root{
-    --bg:#16181d; --panel:#1f222a; --panel2:#262a34; --line:#343947;
-    --text:#e8eaf0; --muted:#9aa1b1; --accent:#ff5a3c; --accent2:#ffb03a;
-    --reimu:#ff6b81; --marisa:#ffd23e;
+    --win:#232326; --bar:#1b1b1e; --control:#2e2e33; --control2:#3a3a41;
+    --sep:#3d3d42; --text:#ececf0; --text2:#9c9ca6; --text3:#6e6e78;
+    --accent:#0a84ff; --accent-red:#ff4f6a;
+    --tl-bg:#191a1e; --tl-panel:#26282f; --tl-line:#383b45; --tl-rowline:#2a2c33;
+    --tl-ruler:#22242a; --tl-tick:#5a5d6a; --tl-ticktext:#cfd1da; --tl-label:#b9bcc8;
+    --sel:#ffd84f;
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
   html,body{margin:0; padding:0;}
-  body{background:var(--bg); color:var(--text); font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Noto Sans JP",system-ui,sans-serif; font-size:14px;}
-  header{display:flex; align-items:center; gap:10px; padding:10px 14px; background:var(--panel); border-bottom:1px solid var(--line); flex-wrap:wrap;}
-  .logo{font-size:20px; font-weight:800; letter-spacing:.5px;}
-  .logo span{color:var(--accent);}
-  .badge{background:var(--accent); color:#fff; font-size:11px; font-weight:700; padding:3px 8px; border-radius:999px;}
-  .badge.sub{background:var(--panel2); color:var(--muted); border:1px solid var(--line);}
-  header .spacer{flex:1;}
-  .hbtn{background:var(--panel2); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:7px 12px; font-size:13px; cursor:pointer;}
-  .hbtn.primary{background:var(--accent); border-color:var(--accent); color:#fff; font-weight:700;}
-  .note{padding:8px 14px; background:#2a2118; color:#ffd9a0; font-size:12.5px; border-bottom:1px solid var(--line);}
-  main{display:flex; gap:10px; padding:10px; align-items:stretch;}
-  .col-assets{width:200px; flex:none; display:flex; flex-direction:column; gap:8px;}
-  .col-center{flex:1; min-width:0; display:flex; flex-direction:column; gap:8px;}
-  .col-right{width:250px; flex:none; display:flex; flex-direction:column; gap:8px;}
-  .card{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:10px;}
-  .card h3{margin:0 0 8px; font-size:12px; color:var(--muted); font-weight:700; letter-spacing:.08em;}
-  .asset{display:flex; gap:8px; align-items:center; padding:6px; border-radius:8px; cursor:pointer; border:1px solid transparent;}
-  .asset:hover{background:var(--panel2);}
-  .asset.sel{border-color:var(--accent); background:var(--panel2);}
-  .thumb{width:52px; height:30px; border-radius:5px; flex:none;}
-  .asset .nm{font-size:12px; line-height:1.3;}
-  .asset .meta{font-size:10.5px; color:var(--muted);}
-  .preview-wrap{background:#000; border-radius:12px; overflow:hidden; border:1px solid var(--line);}
-  .stage{position:relative; width:100%; aspect-ratio:16/9; background:#000;}
+  body{background:#101012; color:var(--text); font-family:-apple-system,"Hiragino Kaku Gothic ProN","Hiragino Sans","Noto Sans JP",sans-serif; font-size:13px; padding:18px 10px 26px;}
+  .page-note{max-width:1180px; margin:0 auto 10px; color:var(--text2); font-size:12.5px; line-height:1.7;}
+  .page-note b{color:var(--text);}
+  .rotate-hint{display:none; max-width:1180px; margin:0 auto 10px; background:#2a2118; color:#ffd9a0; padding:8px 12px; border-radius:8px; font-size:12.5px;}
+  @media (orientation:portrait){ .rotate-hint{display:block;} }
+  /* ===== macOS window ===== */
+  .window{max-width:1180px; margin:0 auto; background:var(--win); border-radius:10px; box-shadow:0 18px 60px rgba(0,0,0,.65), 0 0 0 1px #45454c; overflow:hidden;}
+  .titlebar{height:38px; background:linear-gradient(#343438,#2b2b2f); display:flex; align-items:center; padding:0 12px; gap:8px; border-bottom:1px solid #151517;}
+  .tl-light{width:12px; height:12px; border-radius:50%;}
+  .win-title{flex:1; text-align:center; font-size:13px; font-weight:600; color:#d8d8de; margin-right:52px;}
+  /* ===== toolbar (ToolbarBar) ===== */
+  .toolbar{display:flex; align-items:center; gap:8px; padding:6px 12px; background:var(--bar); border-bottom:1px solid var(--sep); flex-wrap:wrap;}
+  .tbtn{display:inline-flex; align-items:center; gap:5px; background:var(--control); color:var(--text); border:1px solid #48484f; border-radius:6px; padding:4px 10px; font-size:12.5px; cursor:pointer; line-height:1.5;}
+  .tbtn:hover{background:var(--control2);}
+  .tbtn:disabled{opacity:.38; cursor:default;}
+  .tbtn:disabled:hover{background:var(--control);}
+  .vdiv{width:1px; height:18px; background:var(--sep); margin:0 2px;}
+  .iconbtn{width:30px; height:26px; display:inline-flex; align-items:center; justify-content:center; background:transparent; border:none; color:var(--text); font-size:14px; cursor:pointer; border-radius:6px;}
+  .iconbtn:hover{background:var(--control);}
+  .tc{font-variant-numeric:tabular-nums; color:var(--text2); font-size:13px;}
+  /* ===== dock area ===== */
+  .dock{display:flex; height:600px;}
+  .col-left{flex:0 0 66%; display:flex; flex-direction:column; min-width:0;}
+  .col-right{flex:1; display:flex; flex-direction:column; min-width:0; border-left:1px solid var(--sep);}
+  .panel{display:flex; flex-direction:column; min-height:0; background:var(--win);}
+  .panel.preview{flex:0 0 45%;}
+  .panel.timeline{flex:1; border-top:1px solid var(--sep);}
+  .panel.right{flex:1;}
+  .tabbar{display:flex; gap:2px; background:var(--bar); padding:5px 8px 0; border-bottom:1px solid var(--sep); flex:none;}
+  .tab{padding:4px 12px 6px; font-size:12px; color:var(--text2); border-radius:6px 6px 0 0; cursor:default; border:1px solid transparent; border-bottom:none;}
+  .tab.on{background:var(--win); color:var(--text); border-color:var(--sep); font-weight:600;}
+  .tab.clickable{cursor:pointer;}
+  .panel-body{flex:1; min-height:0; display:flex; flex-direction:column; overflow:hidden;}
+  /* preview */
+  .preview-body{background:#101013; align-items:center; justify-content:center; padding:8px;}
+  .stage{position:relative; width:100%; max-width:640px; aspect-ratio:16/9; background:#000; border-radius:4px; overflow:hidden; box-shadow:0 0 0 1px #000;}
   canvas#screen{position:absolute; inset:0; width:100%; height:100%; display:block;}
-  .subtitle{position:absolute; left:0; right:0; bottom:5%; text-align:center; padding:0 6%; pointer-events:none;}
-  .subtitle .line{display:inline-block; font-weight:800; line-height:1.35; color:#fff; text-shadow:2px 2px 0 #000,-2px 2px 0 #000,2px -2px 0 #000,-2px -2px 0 #000,0 3px 6px rgba(0,0,0,.6);}
-  .subtitle .who{font-size:.55em; display:block; margin-bottom:.15em; text-shadow:1px 1px 0 #000,-1px 1px 0 #000,1px -1px 0 #000,-1px -1px 0 #000;}
-  .transport{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
-  .tbtn{background:var(--panel2); border:1px solid var(--line); color:var(--text); border-radius:8px; padding:8px 13px; font-size:14px; cursor:pointer;}
-  .tbtn.play{background:var(--accent); border-color:var(--accent); color:#fff; font-weight:800; min-width:88px;}
-  .time{font-variant-numeric:tabular-nums; color:var(--muted); font-size:13px;}
-  select.tbtn{appearance:none;}
-  .tabs{display:flex; gap:6px; margin-bottom:8px;}
-  .tab{flex:1; text-align:center; padding:7px 0; border-radius:8px; background:var(--panel2); color:var(--muted); cursor:pointer; font-size:12.5px; border:1px solid var(--line);}
-  .tab.on{color:#fff; border-color:var(--accent); background:#33231e;}
-  .sublist{display:flex; flex-direction:column; gap:4px; max-height:300px; overflow:auto;}
-  .subrow{display:flex; gap:7px; padding:6px 7px; border-radius:7px; cursor:pointer; font-size:12.5px; align-items:baseline;}
-  .subrow:hover{background:var(--panel2);}
-  .subrow.now{background:#33231e; outline:1px solid var(--accent);}
-  .subrow .tc{color:var(--muted); font-size:11px; font-variant-numeric:tabular-nums; flex:none;}
-  .subrow .sp{flex:none; font-size:10.5px; font-weight:700; padding:1px 6px; border-radius:999px; color:#111;}
-  .sp.r{background:var(--reimu);} .sp.m{background:var(--marisa);}
-  .ctl{margin:10px 0;}
-  .ctl label{display:flex; justify-content:space-between; font-size:12.5px; color:var(--muted); margin-bottom:5px;}
-  .ctl input[type=range]{width:100%; accent-color:var(--accent);}
+  .subtitle{position:absolute; left:0; right:0; bottom:4.5%; text-align:center; padding:0 5%; pointer-events:none; z-index:4;}
+  .subtitle .line{display:inline-block; font-family:"M PLUS Rounded 1c","Hiragino Maru Gothic ProN","Hiragino Sans",sans-serif; font-weight:800; line-height:1.4; color:#fff; text-shadow:2px 2px 0 #000,-2px 2px 0 #000,2px -2px 0 #000,-2px -2px 0 #000,0 2px 5px rgba(0,0,0,.55);}
+  /* inspector / characters */
+  .side-scroll{overflow-y:auto; padding:10px 12px 14px; flex:1;}
+  .side-scroll h4{margin:2px 0 8px; font-size:13px; font-weight:700;}
+  .sec-title{font-size:11px; color:var(--text2); font-weight:700; letter-spacing:.06em; margin:14px 0 6px; text-transform:none;}
+  .sec-title:first-child{margin-top:0;}
+  .field{margin:7px 0;}
+  .field label{display:block; font-size:11.5px; color:var(--text2); margin-bottom:3px;}
+  .field input[type=text], .field textarea{width:100%; background:#1c1c1f; border:1px solid var(--sep); color:var(--text); border-radius:6px; padding:6px 8px; font-size:13px; font-family:inherit;}
+  .field textarea{resize:vertical; line-height:1.6;}
+  .field input[type=range]{width:100%; accent-color:var(--accent);}
+  .rowline{display:flex; align-items:center; gap:8px;}
+  .rowline .grow{flex:1;}
+  .val{font-size:11.5px; color:var(--text2); font-variant-numeric:tabular-nums; min-width:38px; text-align:right;}
+  .char-row{display:flex; align-items:center; gap:8px; background:var(--control); border:1px solid var(--sep); border-radius:6px; padding:6px 10px; margin-bottom:6px; cursor:pointer;}
+  .char-row.sel{border-color:var(--accent); box-shadow:0 0 0 1px var(--accent);}
+  .char-dot{width:11px; height:11px; border-radius:50%; flex:none;}
+  .char-row .nm{font-size:13px; font-weight:500;}
+  .char-row .en{font-size:11px; color:var(--text2);}
+  .mini-btn{background:var(--control); border:1px solid #48484f; color:var(--text); border-radius:6px; padding:3px 9px; font-size:12px; cursor:pointer;}
+  .mini-btn:hover{background:var(--control2);}
+  .big-btn{display:block; width:100%; background:var(--accent); color:#fff; border:none; border-radius:7px; padding:9px 10px; font-size:13px; font-weight:600; cursor:pointer; margin-top:10px; line-height:1.5;}
+  .big-btn:hover{filter:brightness(1.12);}
+  .caption{font-size:10.5px; color:var(--text2); line-height:1.6;}
   .swatches{display:flex; gap:7px;}
-  .sw{width:26px; height:26px; border-radius:50%; border:2px solid transparent; cursor:pointer;}
+  .sw{width:24px; height:24px; border-radius:50%; border:2px solid transparent; cursor:pointer;}
   .sw.on{border-color:#fff;}
-  .chk{display:flex; align-items:center; gap:8px; font-size:13px; padding:5px 0; cursor:pointer;}
-  .chk input{accent-color:var(--accent); width:16px; height:16px;}
-  /* timeline */
-  .tl-card{padding:10px 10px 6px;}
-  .tl-head{display:flex; align-items:center; gap:8px; margin-bottom:6px;}
-  .tl-head h3{margin:0;}
-  .tl-scroll{overflow-x:auto; padding-bottom:6px;}
-  .tl{position:relative; width:1080px;}
-  .ruler{position:relative; height:18px; margin-left:64px; border-bottom:1px solid var(--line); color:var(--muted); font-size:10px;}
-  .ruler span{position:absolute; top:2px; transform:translateX(2px); font-variant-numeric:tabular-nums;}
-  .track{display:flex; align-items:stretch; height:34px; margin-top:4px;}
-  .track .lab{width:64px; flex:none; font-size:11px; color:var(--muted); display:flex; align-items:center; gap:4px;}
-  .track .lab .dot{width:8px; height:8px; border-radius:50%;}
-  .lane{position:relative; flex:1; background:#191c22; border-radius:6px; overflow:hidden;}
-  .clip{position:absolute; top:3px; bottom:3px; border-radius:5px; font-size:10.5px; padding:3px 6px; white-space:nowrap; overflow:hidden; cursor:pointer; border:1px solid rgba(255,255,255,.25); color:#fff;}
-  .clip.sel{outline:2px solid #fff; outline-offset:-1px;}
-  .clip.v{background:linear-gradient(180deg,#3f6fb5,#33598f);}
-  .clip.s{background:linear-gradient(180deg,#8a5fb0,#6d4791); font-size:9.5px;}
-  .clip.a{background:linear-gradient(180deg,#3f9e6e,#2f7a55);}
-  .clip.b{background:linear-gradient(180deg,#777d8c,#5b606d);}
-  .playhead{position:absolute; top:0; bottom:0; width:2px; background:var(--accent); z-index:5; pointer-events:none;}
-  .playhead::before{content:""; position:absolute; top:0; left:-5px; border:6px solid transparent; border-top:8px solid var(--accent);}
-  .statusbar{font-size:12px; color:var(--muted); padding:2px 2px 0; min-height:18px;}
-  #toast{position:fixed; left:50%; bottom:26px; transform:translateX(-50%) translateY(20px); background:#fff; color:#16181d; padding:11px 16px; border-radius:10px; font-size:13.5px; font-weight:600; box-shadow:0 8px 30px rgba(0,0,0,.5); opacity:0; pointer-events:none; transition:.25s; max-width:92vw; text-align:center; z-index:50;}
+  /* ===== timeline ===== */
+  .tl-tools{display:flex; align-items:center; gap:8px; padding:5px 10px; background:var(--win); border-bottom:1px solid var(--sep); flex:none;}
+  .tl-scroll{flex:1; overflow:auto; background:var(--tl-bg); position:relative;}
+  .tl-inner{position:relative;}
+  .ruler{position:sticky; top:0; z-index:6; height:22px; background:var(--tl-ruler); margin-left:112px; border-bottom:1px solid var(--tl-line); cursor:pointer;}
+  .ruler span{position:absolute; top:4px; font-size:11px; color:var(--tl-ticktext); font-variant-numeric:tabular-nums; transform:translateX(3px); pointer-events:none;}
+  .ruler i{position:absolute; bottom:0; width:1px; height:6px; background:var(--tl-tick); pointer-events:none;}
+  .trow{display:flex; height:40px; border-bottom:1px solid var(--tl-rowline);}
+  .thead{width:112px; flex:none; background:var(--tl-panel); border-right:1px solid var(--tl-line); display:flex; align-items:center; gap:3px; padding:0 5px; position:sticky; left:0; z-index:5;}
+  .thead .lname{font-size:11px; font-weight:500; color:var(--tl-label); flex:1; white-space:nowrap; overflow:hidden;}
+  .thead.sel{box-shadow:inset 2px 0 0 var(--accent);}
+  .chip{width:17px; height:17px; border-radius:4px; border:none; background:transparent; color:#8a8d99; font-size:10px; cursor:pointer; padding:0; line-height:1; flex:none;}
+  .chip:hover{background:#3a3d47; color:#fff;}
+  .chip.off{color:#4c4f59;}
+  .chip.on{color:var(--sel);}
+  .lane{position:relative; flex:1;}
+  .clip{position:absolute; top:3px; height:34px; border-radius:4px; font-size:11px; color:#fff; padding:3px 6px; white-space:nowrap; overflow:hidden; cursor:grab; border:1px solid rgba(255,255,255,.28); user-select:none; touch-action:none;}
+  .clip.sel{box-shadow:0 0 0 2px var(--sel); z-index:3;}
+  .clip.voice{background:#16171c; border-color:rgba(255,255,255,.18); padding-left:9px;}
+  .clip.voice::before{content:""; position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--cc,#fff);}
+  .clip .wv{position:absolute; left:8px; right:4px; bottom:3px; height:9px; opacity:.75;}
+  .playhead{position:absolute; top:0; bottom:0; width:2px; background:var(--accent-red); z-index:7; pointer-events:none;}
+  .playhead::before{content:""; position:absolute; top:0; left:-5px; border:6px solid transparent; border-top:8px solid var(--accent-red);}
+  /* status bar */
+  .statusbar{display:flex; gap:12px; align-items:center; padding:5px 12px; background:var(--bar); border-top:1px solid var(--sep); font-size:11px; color:var(--text2); font-variant-numeric:tabular-nums;}
+  .statusbar .sp{flex:1;}
+  #toast{position:fixed; left:50%; bottom:26px; transform:translateX(-50%) translateY(20px); background:#fff; color:#16181d; padding:11px 16px; border-radius:10px; font-size:13.5px; font-weight:600; box-shadow:0 8px 30px rgba(0,0,0,.5); opacity:0; pointer-events:none; transition:.25s; max-width:92vw; text-align:center; z-index:99;}
   #toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
-  footer{padding:14px; color:var(--muted); font-size:12px; line-height:1.7;}
-  @media (max-width:900px){
-    main{flex-direction:column;}
-    .col-assets,.col-right{width:auto;}
-    .sublist{max-height:200px;}
-  }
+  @media (max-width:760px){ .dock{height:520px;} .col-left{flex-basis:60%;} }
 </style>
 </head>
 <body>
-<header>
-  <div class="logo">Movie<span>Cut</span></div>
-  <div class="badge">体験デモ</div>
-  <div class="badge sub">ブラウザで操作を試せます</div>
-  <div class="spacer"></div>
-  <button class="hbtn" data-edit>プロジェクトを開く</button>
-  <button class="hbtn primary" data-edit>書き出し</button>
-</header>
-<div class="note">これは MovieCut の体験デモです。<b>再生・シーク・字幕の見た目変更など、実際の操作感はそのまま試せます</b>が、編集と保存はできません。編集しようとすると、その旨が表示されます。</div>
+<div class="page-note"><b>MovieCut 体験デモ</b> — Mac版 MovieCut の初期画面をそのまま再現しました。<b>実際に動きます</b>：再生・シークはもちろん、クリップの移動・分割・削除、台本からの自動配置まで試せます（保存はされません）。</div>
+<div class="rotate-hint">横向きにすると、Macの画面そのままの比率で見られます。</div>
 
-<main>
-  <div class="col-assets">
-    <div class="card">
-      <h3>素材</h3>
-      <div id="assets"></div>
+<div class="window">
+  <div class="titlebar">
+    <div class="tl-light" style="background:#ff5f57;"></div>
+    <div class="tl-light" style="background:#febc2e;"></div>
+    <div class="tl-light" style="background:#28c840;"></div>
+    <div class="win-title">ゆっくりサンプル.ymproj</div>
+  </div>
+
+  <div class="toolbar">
+    <button class="tbtn" id="btnAddMedia">＋ 素材を追加</button>
+    <button class="tbtn" id="btnAddText">テキスト</button>
+    <button class="tbtn" id="btnAddBlur">ぼかし範囲</button>
+    <div class="vdiv"></div>
+    <button class="tbtn" id="btnSplit">✂ 分割</button>
+    <button class="tbtn" id="btnDelete">🗑 削除</button>
+    <div class="vdiv"></div>
+    <button class="iconbtn" id="btnStart" title="先頭へ（Home）">⏮</button>
+    <button class="iconbtn" id="btnPlay" title="再生 / 一時停止（Space）">▶</button>
+    <span class="tc" id="clock">00:00.00 / 00:00.00</span>
+  </div>
+
+  <div class="dock">
+    <div class="col-left">
+      <div class="panel preview">
+        <div class="tabbar"><div class="tab on">プレビュー</div></div>
+        <div class="panel-body preview-body">
+          <div class="stage">
+            <canvas id="screen" width="960" height="540"></canvas>
+            <div class="subtitle" id="subtitle"><span class="line" id="subline"></span></div>
+          </div>
+        </div>
+      </div>
+      <div class="panel timeline">
+        <div class="tabbar"><div class="tab on">タイムライン</div></div>
+        <div class="tl-tools">
+          <button class="mini-btn" id="btnAddLayer">＋レイヤー</button>
+          <span class="caption">クリックで移動／クリップはドラッグで移動、端を引っぱると長さ変更</span>
+          <span style="flex:1"></span>
+          <span class="caption">拡大</span>
+          <input type="range" id="zoom" min="12" max="120" value="40" style="width:110px; accent-color:var(--accent);">
+        </div>
+        <div class="tl-scroll" id="tlScroll">
+          <div class="tl-inner" id="tlInner">
+            <div class="ruler" id="ruler"></div>
+            <div id="rows"></div>
+            <div class="playhead" id="playhead"></div>
+          </div>
+        </div>
+      </div>
     </div>
-    <div class="card">
-      <h3>プロジェクト</h3>
-      <div style="font-size:12.5px; line-height:1.8; color:var(--muted);">
-        名前：サンプル動画<br>
-        長さ：36秒 ／ 1920×1080<br>
-        形式：ゆっくり解説（デモ用）
+
+    <div class="col-right">
+      <div class="panel right">
+        <div class="tabbar">
+          <div class="tab on clickable" id="tabInspector">プロパティ</div>
+          <div class="tab clickable" id="tabChars">キャラクター</div>
+        </div>
+        <div class="panel-body">
+          <div class="side-scroll" id="paneInspector"></div>
+          <div class="side-scroll" id="paneChars" style="display:none;"></div>
+        </div>
       </div>
     </div>
   </div>
 
-  <div class="col-center">
-    <div class="preview-wrap">
-      <div class="stage">
-        <canvas id="screen" width="960" height="540"></canvas>
-        <div class="subtitle" id="subtitle"><span class="line" id="subline"></span></div>
-      </div>
-    </div>
-    <div class="card">
-      <div class="transport">
-        <button class="tbtn play" id="btnPlay">▶ 再生</button>
-        <button class="tbtn" id="btnStop">■ 最初へ</button>
-        <span class="time" id="clock">00:00.0 / 00:36.0</span>
-        <span style="flex:1"></span>
-        <label class="time">速度
-          <select id="speed" class="tbtn" style="padding:6px 8px;">
-            <option value="0.5">0.5倍</option>
-            <option value="1" selected>1倍</option>
-            <option value="1.5">1.5倍</option>
-            <option value="2">2倍</option>
-          </select>
-        </label>
-        <label class="chk" style="padding:0;"><input type="checkbox" id="sound" checked> 音（合いの手）</label>
-      </div>
-    </div>
-    <div class="card tl-card">
-      <div class="tl-head">
-        <h3 style="font-size:12px; color:var(--muted); letter-spacing:.08em;">タイムライン（クリックで移動／クリップは選べます）</h3>
-        <span style="flex:1"></span>
-        <span class="time">拡大 <input type="range" id="zoom" min="60" max="220" value="100" style="width:90px; accent-color:var(--accent); vertical-align:middle;"></span>
-      </div>
-      <div class="tl-scroll" id="tlScroll">
-        <div class="tl" id="tl">
-          <div class="ruler" id="ruler"></div>
-          <div id="tracks"></div>
-          <div class="playhead" id="playhead"></div>
-        </div>
-      </div>
-      <div class="statusbar" id="status">クリップを選ぶと、ここに情報が出ます。</div>
-    </div>
+  <div class="statusbar">
+    <span id="statusText">準備完了</span>
+    <span class="sp"></span>
+    <span id="clipCount">クリップ 0 個</span>
+    <span>1920×1080 30fps</span>
   </div>
-
-  <div class="col-right">
-    <div class="card">
-      <div class="tabs">
-        <div class="tab on" id="tabSubs">字幕リスト</div>
-        <div class="tab" id="tabSet">表示の設定</div>
-      </div>
-      <div id="paneSubs"><div class="sublist" id="sublist"></div></div>
-      <div id="paneSet" style="display:none;">
-        <div class="ctl">
-          <label><span>字幕の大きさ</span><span id="fsVal">44px</span></label>
-          <input type="range" id="fontsize" min="26" max="72" value="44">
-        </div>
-        <div class="ctl">
-          <label><span>字幕の色（話者ごと）</span></label>
-          <div style="font-size:12px; color:var(--muted); margin-bottom:4px;">れいむ</div>
-          <div class="swatches" id="swR"></div>
-          <div style="font-size:12px; color:var(--muted); margin:8px 0 4px;">まりさ</div>
-          <div class="swatches" id="swM"></div>
-        </div>
-        <label class="chk"><input type="checkbox" id="showSub" checked> 字幕を表示</label>
-        <label class="chk"><input type="checkbox" id="showTitle" checked> シーンの見出しを表示</label>
-        <div class="ctl">
-          <label><span>BGMの音量（デモでは見た目のみ）</span><span id="bgmVal">60%</span></label>
-          <input type="range" id="bgm" min="0" max="100" value="60">
-        </div>
-      </div>
-    </div>
-    <div class="card">
-      <h3>製品版では</h3>
-      <div style="font-size:12.5px; line-height:1.9;">
-        ・台本を貼るだけで音声と字幕を自動配置<br>
-        ・VOICEVOX／ゆっくり音声に標準対応<br>
-        ・本体は<b>完全無料</b>（透かし・機能制限なし）<br>
-        ・Mac版を公開準備中、Windows版を開発中
-      </div>
-    </div>
-  </div>
-</main>
-
-<footer>
-  MovieCut 体験デモ — このページは操作感を試すためのもので、実際の編集・保存・書き出しはできません。<br>
-  キーボード：スペース＝再生／停止、←→＝1秒移動、↑↓＝字幕リストの前後へ移動。
-</footer>
+</div>
 
 <div id="toast"></div>
 
 <script>
 "use strict";
-const DURATION = 36;
-const SCENES = [
-  {title:"オープニング", c1:"#2b4a7a", c2:"#16233c"},
-  {title:"MovieCutって何？", c1:"#5a2b7a", c2:"#2a163c"},
-  {title:"台本から自動で作る", c1:"#7a2b4a", c2:"#3c1626"},
-  {title:"タイムラインを触ってみる", c1:"#2b7a5a", c2:"#163c2c"},
-  {title:"本体は完全無料", c1:"#7a5a2b", c2:"#3c2d16"},
-  {title:"まとめ", c1:"#2b6d7a", c2:"#16333c"}
-];
-const LINES = [
-  {s:0.5,  e:3.4,  who:"r", text:"みんなー！今日はMovieCutを紹介するよ"},
-  {s:3.6,  e:6.4,  who:"m", text:"お、ついに公開か。どんな編集ソフトだ？"},
-  {s:6.6,  e:9.8,  who:"r", text:"台本を貼るだけで、音声と字幕が自動で並ぶんだよ"},
-  {s:10.0, e:13.2, who:"m", text:"ゆっくり動画を作る人には刺さりそうだな"},
-  {s:13.4, e:16.6, who:"r", text:"このデモでも、再生とシークは本物と同じに動くよ"},
-  {s:16.8, e:19.8, who:"m", text:"タイムラインをクリックすると、そこへ飛べるんだな"},
-  {s:20.0, e:23.2, who:"r", text:"右の設定で、字幕の大きさや色も変えられるよ"},
-  {s:23.4, e:26.4, who:"m", text:"でも編集はできないんだろ？"},
-  {s:26.6, e:29.8, who:"r", text:"そう、このデモは見る・触る専用。本体は完全無料だよ"},
-  {s:30.0, e:33.0, who:"m", text:"無料で透かしも制限もなしか。太っ腹だな"},
-  {s:33.2, e:35.8, who:"r", text:"気になったら、製品版を待っててね！"}
-];
-const NAMES = {r:"れいむ", m:"まりさ"};
-const COLORS = {r:"#ff6b81", m:"#ffd23e"};
-const ASSETS = [
-  {nm:"背景_青空.png", meta:"画像 ・ 1920×1080", g:"linear-gradient(135deg,#4a90c4,#9fd0ff)"},
-  {nm:"背景_夕焼け.png", meta:"画像 ・ 1920×1080", g:"linear-gradient(135deg,#c46a4a,#ffc49f)"},
-  {nm:"立ち絵_れいむ.png", meta:"画像 ・ 透過PNG", g:"linear-gradient(135deg,#c44a6a,#ff9fb2)"},
-  {nm:"立ち絵_まりさ.png", meta:"画像 ・ 透過PNG", g:"linear-gradient(135deg,#c4a44a,#ffe89f)"},
-  {nm:"BGM_まったり.mp3", meta:"音声 ・ 3:24", g:"linear-gradient(135deg,#5a5f6e,#9aa1b1)"},
-  {nm:"効果音_決定.mp3", meta:"音声 ・ 0:01", g:"linear-gradient(135deg,#4ac49e,#9fffdf)"}
-];
-let t = 0, playing = false, speed = 1, lastTs = null, curLine = -1, audioCtx = null;
+/* ================= データ ================= */
+const CHARS = {
+  reimu:  {name:"れいむ", color:"#ff5a76", engine:"ゆっくり 女性A（AquesTalk2）", side:"right", hair:"#3a2b33"},
+  marisa: {name:"まりさ", color:"#ffd23e", engine:"ゆっくり 女性G（AquesTalk2）", side:"left",  hair:"#e8b93e"}
+};
+const TACHIE_POS = { reimu:{x:0.86, y:0.97, scale:1.0}, marisa:{x:0.14, y:0.97, scale:1.0} };
+let uid = 1;
+const nid = () => uid++;
+let layers = [];
+let clips = [];
+function addLayer(name){ const L = {id:nid(), name, hidden:false, muted:false, solo:false}; layers.push(L); return L; }
+function addClip(layer, type, start, dur, label, data){
+  const c = {id:nid(), layer:layer.id, type, start, dur, label, data:data||{}};
+  clips.push(c); return c;
+}
+const SCRIPT_DEFAULT = [
+  "れいむ: みんなー！今日はMovieCutを紹介するよ",
+  "まりさ: お、ついに公開か。どんな編集ソフトだ？",
+  "れいむ: 台本を貼るだけで、音声と字幕が自動で並ぶんだよ",
+  "まりさ: ゆっくり動画を作る人には刺さりそうだな",
+  "れいむ: このデモでも、本物と同じように触れるよ",
+  "まりさ: タイムラインを引っぱって動かせるんだな",
+  "れいむ: 右のプロパティで、立ち絵の位置も変えられるよ",
+  "まりさ: でも本体は無料なんだろ？",
+  "れいむ: そう、完全無料。透かしも制限もなし！",
+  "まりさ: 気になったら製品版を待とうぜ"
+].join("\n");
 
+function lineDuration(text){ return Math.max(1.4, Math.round((text.length / 7.1) * 20) / 20); }
+function layoutFromScript(script){
+  /* 音声レイヤーの voice クリップを作り直す */
+  const voiceLayer = layers.find(l => l.name === "音声");
+  clips = clips.filter(c => !(c.layer === voiceLayer.id && c.type === "voice"));
+  let t = 0, n = 0;
+  script.split("\n").forEach(raw => {
+    const line = raw.trim(); if(!line) return;
+    const m = line.match(/^(.+?)[:：]\s*(.*)$/); if(!m) return;
+    const charName = m[1].trim();
+    const charId = Object.keys(CHARS).find(k => CHARS[k].name === charName);
+    if(!charId) return;
+    let text = m[2], sub = null;
+    const bar = text.indexOf("|");
+    if(bar >= 0){ sub = text.slice(bar + 1).trim(); text = text.slice(0, bar).trim(); }
+    if(!text) return;
+    const dur = lineDuration(text);
+    addClip(voiceLayer, "voice", t, dur, text, {char:charId, text, sub, volume:100, speed:100});
+    t += dur + 0.2; n++;
+  });
+  return n;
+}
+function buildInitial(){
+  layers = []; clips = []; uid = 1;
+  const lText = addLayer("テキスト"), lTachie = addLayer("立ち絵"), lVideo = addLayer("映像"),
+        lVoice = addLayer("音声"), lBgm = addLayer("BGM");
+  layoutFromScript(SCRIPT_DEFAULT);
+  const total = endTime();
+  const scenes = [
+    {title:"MovieCutって何？", points:["台本から作る動画編集ソフト","ゆっくり・VOICEVOX対応"], c1:"#2b4a7a", c2:"#16233c", from:0,    to:0.4},
+    {title:"台本から自動で作る", points:["台本を貼るだけ","音声と字幕が自動で並ぶ"],       c1:"#5a2b7a", c2:"#2a163c", from:0.4,  to:0.75},
+    {title:"本体は完全無料",   points:["透かしなし・機能制限なし","Mac版を公開準備中"],     c1:"#2b7a5a", c2:"#163c2c", from:0.75, to:1}
+  ];
+  scenes.forEach(s => addClip(lVideo, "scene", total * s.from, total * (s.to - s.from), s.title,
+    {title:s.title, points:s.points, c1:s.c1, c2:s.c2}));
+  scenes.forEach((s, i) => addClip(lText, "text", total * s.from + 0.1, 3, s.title, {text:s.title, size:44}));
+  addClip(lTachie, "tachie", 0, total, "れいむ", {char:"reimu"});
+  addClip(lTachie, "tachie", 0, total, "まりさ", {char:"marisa"});
+  addClip(lBgm, "audio", 0, total, "BGM_まったり.mp3", {volume:60});
+}
+function endTime(){ return clips.reduce((m, c) => Math.max(m, c.start + c.dur), 0); }
+function layerById(id){ return layers.find(l => l.id === id); }
+function clipAt(layerId, t){ return clips.filter(c => c.layer === layerId && t >= c.start && t < c.start + c.dur); }
+
+/* ================= 状態 ================= */
+let t = 0, playing = false, pps = 40, selClip = null, selChar = "reimu", lastTs = null, lastLineId = null, audioCtx = null;
 const $ = id => document.getElementById(id);
 const toastEl = $("toast"); let toastTimer = null;
-function toast(msg){
-  toastEl.textContent = msg; toastEl.classList.add("show");
-  clearTimeout(toastTimer); toastTimer = setTimeout(()=>toastEl.classList.remove("show"), 2600);
-}
-function fmt(x){ const m = Math.floor(x/60), s = x - m*60; return String(m).padStart(2,"0") + ":" + s.toFixed(1).padStart(4,"0"); }
+function toast(msg){ toastEl.textContent = msg; toastEl.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => toastEl.classList.remove("show"), 2600); }
+function tc(x){ const c = Math.round(Math.max(0, x) * 100); return String(Math.floor(c / 6000)).padStart(2, "0") + ":" + String(Math.floor(c / 100) % 60).padStart(2, "0") + "." + String(c % 100).padStart(2, "0"); }
+function setStatus(msg){ $("statusText").textContent = msg; }
+function refreshCounts(){ $("clipCount").textContent = "クリップ " + clips.length + " 個"; }
 
-/* assets */
-const assetsEl = $("assets");
-ASSETS.forEach((a,i)=>{
-  const d = document.createElement("div"); d.className = "asset" + (i===0?" sel":"");
-  d.innerHTML = `<div class="thumb" style="background:${a.g}"></div><div><div class="nm">${a.nm}</div><div class="meta">${a.meta}</div></div>`;
-  d.onclick = ()=>{ document.querySelectorAll(".asset").forEach(x=>x.classList.remove("sel")); d.classList.add("sel"); };
-  d.ondblclick = ()=>toast("デモ版では素材の追加・配置はできません（製品版ではできます）");
-  assetsEl.appendChild(d);
-});
-
-/* subtitle list */
-const sublistEl = $("sublist");
-LINES.forEach((L,i)=>{
-  const d = document.createElement("div"); d.className = "subrow"; d.id = "subrow"+i;
-  d.innerHTML = `<span class="tc">${fmt(L.s)}</span><span class="sp ${L.who}">${NAMES[L.who]}</span><span>${L.text}</span>`;
-  d.onclick = ()=>{ seek(L.s + 0.01); };
-  sublistEl.appendChild(d);
-});
-
-/* timeline */
-const tlEl = $("tl"), tracksEl = $("tracks"), rulerEl = $("ruler");
-function pct(x){ return (x / DURATION * 100) + "%"; }
-for(let s=0; s<=DURATION; s+=4){ const sp = document.createElement("span"); sp.style.left = pct(s); sp.textContent = s + "s"; rulerEl.appendChild(sp); }
-function addTrack(label, color, clips, cls){
-  const tr = document.createElement("div"); tr.className = "track";
-  tr.innerHTML = `<div class="lab"><span class="dot" style="background:${color}"></span>${label}</div>`;
-  const lane = document.createElement("div"); lane.className = "lane";
-  clips.forEach(c=>{
-    const el = document.createElement("div"); el.className = "clip " + cls;
-    el.style.left = pct(c.s); el.style.width = `calc(${pct(c.e-c.s)} - 2px)`; el.textContent = c.nm;
-    el.onclick = ev=>{ ev.stopPropagation(); selectClip(el, c); seek(c.s + 0.01); };
-    el.ondblclick = ev=>{ ev.stopPropagation(); toast("デモ版ではクリップの編集はできません（製品版ではできます）"); };
-    lane.appendChild(el);
+/* ================= タイムライン描画 ================= */
+const TYPE_COLOR = {video:"#3d6bb3", image:"#3f8f6b", audio:"#8a5ab0", text:"#b07a3a", blur:"#b0436a", scene:"#6457c4", tachie:"#a8527f", voice:null};
+function renderTimeline(){
+  const rows = $("rows"); rows.innerHTML = "";
+  const total = endTime(), widthPx = Math.ceil(total * pps) + 240;
+  $("tlInner").style.width = (112 + widthPx) + "px";
+  /* ruler */
+  const ruler = $("ruler"); ruler.innerHTML = "";
+  const steps = [0.1, 0.2, 0.5, 1, 2, 5, 10, 30, 60];
+  const step = steps.find(s => s * pps >= 70) || 60;
+  for(let s = 0; s <= total + step; s += step){
+    const sp = document.createElement("span"); sp.style.left = (s * pps) + "px"; sp.textContent = Math.round(s) + "s"; ruler.appendChild(sp);
+    const tick = document.createElement("i"); tick.style.left = (s * pps) + "px"; ruler.appendChild(tick);
+  }
+  layers.forEach(L => {
+    const row = document.createElement("div"); row.className = "trow";
+    const head = document.createElement("div"); head.className = "thead";
+    head.innerHTML = `<span class="lname">${L.name}</span>
+      <button class="chip" data-act="hide" title="レイヤーの表示/非表示">${L.hidden ? "🙈" : "👁"}</button>
+      <button class="chip ${L.muted ? "on" : ""}" data-act="mute" title="レイヤーのミュート">音</button>
+      <button class="chip ${L.solo ? "on" : ""}" data-act="solo" title="ソロ">S</button>
+      <button class="chip" data-act="del" title="レイヤーを削除">✕</button>`;
+    head.querySelectorAll(".chip").forEach(b => b.onclick = ev => { ev.stopPropagation(); layerAction(L, b.dataset.act); });
+    head.onclick = () => { document.querySelectorAll(".thead").forEach(x => x.classList.remove("sel")); head.classList.add("sel"); };
+    const lane = document.createElement("div"); lane.className = "lane"; lane.dataset.layer = L.id;
+    lane.addEventListener("pointerdown", ev => {
+      if(ev.target === lane){ seek((ev.offsetX) / pps); }
+    });
+    clips.filter(c => c.layer === L.id).sort((a, b) => a.start - b.start).forEach(c => {
+      const el = document.createElement("div");
+      el.className = "clip" + (c.type === "voice" ? " voice" : "") + (selClip === c.id ? " sel" : "");
+      el.style.left = (c.start * pps) + "px";
+      el.style.width = Math.max(4, c.dur * pps - 1) + "px";
+      el.style.background = c.type === "voice" ? "" : (TYPE_COLOR[c.type] || "#3c4050");
+      if(c.type === "voice") el.style.setProperty("--cc", CHARS[c.data.char].color);
+      el.textContent = c.label;
+      if(c.type === "voice"){ const w = document.createElement("div"); w.className = "wv";
+        w.style.background = "repeating-linear-gradient(90deg, rgba(255,255,255,.55) 0 2px, transparent 2px 5px)"; el.appendChild(w); }
+      el.addEventListener("pointerdown", ev => clipPointerDown(ev, c, el));
+      lane.appendChild(el);
+    });
+    row.appendChild(head); row.appendChild(lane); rows.appendChild(row);
   });
-  lane.onclick = ev=>{ const r = lane.getBoundingClientRect(); seek((ev.clientX - r.left) / r.width * DURATION); };
-  tr.appendChild(lane); tracksEl.appendChild(tr);
+  movePlayhead(); refreshCounts(); updateToolbarState();
 }
-function selectClip(el, c){
-  document.querySelectorAll(".clip").forEach(x=>x.classList.remove("sel")); el.classList.add("sel");
-  $("status").textContent = `選択中：${c.nm}（${fmt(c.s)} 〜 ${fmt(c.e)}）`;
+function layerAction(L, act){
+  if(act === "hide"){ L.hidden = !L.hidden; setStatus(`レイヤー「${L.name}」を${L.hidden ? "隠しました" : "表示しました"}`); }
+  if(act === "mute"){ L.muted = !L.muted; }
+  if(act === "solo"){ L.solo = !L.solo; }
+  if(act === "del"){
+    clips = clips.filter(c => c.layer !== L.id);
+    layers = layers.filter(x => x.id !== L.id);
+    if(selClip && !clips.find(c => c.id === selClip)) selClip = null;
+    setStatus(`レイヤー「${L.name}」を削除しました`);
+    renderInspector();
+  }
+  renderTimeline(); draw();
 }
-addTrack("映像", "#3f6fb5", SCENES.map((s,i)=>({s:i*6, e:i*6+6, nm:s.title})), "v");
-addTrack("字幕", "#8a5fb0", LINES.map(L=>({s:L.s, e:L.e, nm:L.text})), "s");
-addTrack("音声", "#3f9e6e", LINES.map(L=>({s:L.s, e:L.e, nm:NAMES[L.who] + "の声"})), "a");
-addTrack("BGM", "#777d8c", [{s:0, e:DURATION, nm:"BGM_まったり.mp3"}], "b");
-rulerEl.onclick = ev=>{ const r = rulerEl.getBoundingClientRect(); seek((ev.clientX - r.left) / r.width * DURATION); };
-$("zoom").oninput = e=>{ tlEl.style.width = (1080 * e.target.value / 100) + "px"; movePlayhead(); };
+$("ruler").addEventListener("pointerdown", ev => {
+  const r = $("ruler").getBoundingClientRect();
+  seek((ev.clientX - r.left) / pps);
+});
+$("zoom").oninput = e => { pps = parseInt(e.target.value, 10); renderTimeline(); };
+function movePlayhead(){ $("playhead").style.left = (112 + t * pps) + "px"; }
 
-/* settings */
-$("fontsize").oninput = e=>{ $("subline").style.fontSize = e.target.value + "px"; $("fsVal").textContent = e.target.value + "px"; };
-$("subline").style.fontSize = "44px";
-function buildSwatches(elId, who){
-  ["#ffffff","#ffd23e","#ff6b81","#7ee787","#79c0ff"].forEach(c=>{
-    const d = document.createElement("div"); d.className = "sw" + ((who==="r"&&c==="#ffffff")||(who==="m"&&c==="#ffffff")?"":"");
-    d.style.background = c; d.title = c;
-    if(who==="r" ? c==="#ff6b81" : c==="#ffd23e"){ /* defaults are speaker colors, applied below */ }
-    d.onclick = ()=>{ COLORS[who] = c; d.parentElement.querySelectorAll(".sw").forEach(x=>x.classList.remove("on")); d.classList.add("on"); renderSubtitle(); };
-    $(elId).appendChild(d);
-  });
+/* ================= プレビュー描画 ================= */
+const cv = $("screen"), ctx = cv.getContext("2d");
+function activeClip(type){
+  for(const L of layers){ if(L.hidden) continue; const hit = clipAt(L.id, t).find(c => c.type === type); if(hit) return hit; }
+  return null;
 }
-buildSwatches("swR","r"); buildSwatches("swM","m");
-$("bgm").oninput = e=>{ $("bgmVal").textContent = e.target.value + "%"; };
-$("tabSubs").onclick = ()=>{ $("tabSubs").classList.add("on"); $("tabSet").classList.remove("on"); $("paneSubs").style.display=""; $("paneSet").style.display="none"; };
-$("tabSet").onclick = ()=>{ $("tabSet").classList.add("on"); $("tabSubs").classList.remove("on"); $("paneSet").style.display=""; $("paneSubs").style.display="none"; };
-document.querySelectorAll("[data-edit]").forEach(b=> b.onclick = ()=>toast("デモ版ではこの操作はできません（製品版ではできます）"));
-
-/* sound blips */
-function blip(who){
-  if(!$("sound").checked) return;
+function drawTachie(charId, active){
+  const ch = CHARS[charId], pos = TACHIE_POS[charId];
+  const cx = pos.x * 960, base = pos.y * 540, s = pos.scale * (active ? 1.04 : 1.0);
+  const bounce = active && playing ? Math.sin(performance.now() / 130) * 5 : 0;
+  const w = 120 * s, h = 190 * s, x = cx - w / 2, y = base - h + bounce;
+  ctx.save();
+  if(charId === "marisa"){ ctx.translate(cx, 0); ctx.scale(-1, 1); ctx.translate(-cx, 0); }
+  ctx.fillStyle = ch.color; roundRect(x, y + 58 * s, w, h - 58 * s, 18 * s); ctx.fill();
+  ctx.fillStyle = "#ffe3c9"; ctx.beginPath(); ctx.arc(cx, y + 52 * s, 40 * s, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = ch.hair; ctx.beginPath(); ctx.arc(cx, y + 44 * s, 42 * s, Math.PI, Math.PI * 2); ctx.fill();
+  ctx.fillRect(x + 8 * s, y + 40 * s, 10 * s, 52 * s); ctx.fillRect(x + w - 18 * s, y + 40 * s, 10 * s, 52 * s);
+  ctx.fillStyle = "#26222a";
+  ctx.beginPath(); ctx.arc(cx - 14 * s, y + 54 * s, 4.4 * s, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx + 14 * s, y + 54 * s, 4.4 * s, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "#26222a"; ctx.lineWidth = 2.4 * s; ctx.beginPath(); ctx.arc(cx, y + 62 * s, 10 * s, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke();
+  ctx.restore();
+  ctx.fillStyle = "rgba(0,0,0,.55)"; roundRect(cx - 34, base - 24 + bounce, 68, 19, 9); ctx.fill();
+  ctx.fillStyle = "#fff"; ctx.font = "600 12px sans-serif"; ctx.textAlign = "center"; ctx.fillText(ch.name, cx, base - 10 + bounce);
+}
+function roundRect(x, y, w, h, r){ ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+function draw(){
+  ctx.fillStyle = "#000"; ctx.fillRect(0, 0, 960, 540);
+  const sc = activeClip("scene");
+  if(sc){
+    const g = ctx.createLinearGradient(0, 0, 960, 540); g.addColorStop(0, sc.data.c1); g.addColorStop(1, sc.data.c2);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, 960, 540);
+    ctx.globalAlpha = 0.16; ctx.fillStyle = "#fff";
+    for(let i = 0; i < 6; i++){ const x = ((i * 197 + t * (9 + i * 4)) % 1080) - 60, y = 46 + (i * 67) % 260, r = 13 + (i % 3) * 10;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); }
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = "rgba(255,255,255,.95)"; ctx.font = "800 47px sans-serif"; ctx.textAlign = "center";
+    ctx.fillText(sc.data.title, 480, 128);
+    ctx.font = "600 22px sans-serif"; ctx.fillStyle = "rgba(255,255,255,.85)"; ctx.textAlign = "left";
+    (sc.data.points || []).forEach((p, i) => ctx.fillText("・" + p, 300, 205 + i * 42));
+  }
+  const img = activeClip("image");
+  if(img){
+    const g = ctx.createLinearGradient(300, 140, 660, 400); g.addColorStop(0, img.data.c1); g.addColorStop(1, img.data.c2);
+    ctx.fillStyle = g; roundRect(300, 140, 360, 260, 14); ctx.fill();
+    ctx.fillStyle = "#fff"; ctx.font = "700 24px sans-serif"; ctx.textAlign = "center"; ctx.fillText(img.label, 480, 282);
+  }
+  const tachieLayer = layers.find(l => l.name.startsWith("立ち絵"));
+  if(tachieLayer && !tachieLayer.hidden){
+    const vc = currentVoice();
+    drawTachie("marisa", vc && vc.data.char === "marisa");
+    drawTachie("reimu", vc && vc.data.char === "reimu");
+  }
+  const tx = activeClip("text");
+  if(tx){
+    ctx.font = `800 ${tx.data.size || 44}px sans-serif`; ctx.textAlign = "center";
+    ctx.lineWidth = 7; ctx.strokeStyle = "rgba(0,0,0,.65)"; ctx.strokeText(tx.data.text, 480, 84);
+    ctx.fillStyle = "#fff"; ctx.fillText(tx.data.text, 480, 84);
+  }
+  const bl = activeClip("blur");
+  if(bl){
+    ctx.fillStyle = `rgba(210,220,235,${0.35 + (bl.data.strength || 50) / 200})`;
+    roundRect(330, 170, 300, 200, 16); ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,.7)"; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = "#223"; ctx.font = "700 20px sans-serif"; ctx.textAlign = "center"; ctx.fillText("ぼかし", 480, 278);
+  }
+  renderSubtitle(); movePlayhead();
+  $("clock").textContent = tc(t) + " / " + tc(endTime());
+}
+function currentVoice(){
+  const L = layers.find(l => l.name === "音声"); if(!L) return null;
+  return clips.find(c => c.layer === L.id && c.type === "voice" && t >= c.start && t < c.start + c.dur) || null;
+}
+function splitSub(text){
+  if(text.length <= 13) return [text];
+  const mid = Math.ceil(text.length / 2);
+  let cut = mid; const punct = "、。！？";
+  for(let d = 0; d < 5; d++){ if(punct.includes(text[mid + d])){ cut = mid + d + 1; break; } if(punct.includes(text[mid - d])){ cut = mid - d + 1; break; } }
+  return [text.slice(0, cut), text.slice(cut)];
+}
+function renderSubtitle(){
+  const vc = currentVoice(), box = $("subtitle"), line = $("subline");
+  const voiceLayer = layers.find(l => l.name === "音声");
+  if(!vc || (voiceLayer && voiceLayer.hidden)){ box.style.display = "none"; }
+  else{
+    const txt = vc.data.sub === null || vc.data.sub === undefined ? vc.data.text : vc.data.sub;
+    if(txt === ""){ box.style.display = "none"; }
+    else{
+      box.style.display = "";
+      line.style.color = CHARS[vc.data.char].color;
+      line.style.fontSize = "21px";
+      line.style.textShadow = "2px 0 0 #fff,-2px 0 0 #fff,0 2px 0 #fff,0 -2px 0 #fff,2px 2px 0 #fff,-2px -2px 0 #fff,2px -2px 0 #fff,-2px 2px 0 #fff";
+      line.innerHTML = splitSub(txt).join("<br>");
+    }
+  }
+  if(vc && vc.id !== lastLineId){ if(playing) blip(vc.data.char); }
+  lastLineId = vc ? vc.id : null;
+}
+function blip(charId){
+  const voiceLayer = layers.find(l => l.name === "音声");
+  const anySolo = layers.some(l => l.solo);
+  if(voiceLayer && (voiceLayer.muted || (anySolo && !voiceLayer.solo))) return;
   try{
     audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
     const o = audioCtx.createOscillator(), g = audioCtx.createGain();
-    o.type = "sine"; o.frequency.value = who === "r" ? 740 : 560;
+    o.type = "sine"; o.frequency.value = charId === "reimu" ? 740 : 560;
     g.gain.setValueAtTime(0.0001, audioCtx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.06, audioCtx.currentTime + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.05, audioCtx.currentTime + 0.02);
     g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.12);
     o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime + 0.13);
-  }catch(e){ /* no audio */ }
+  }catch(e){}
 }
-
-/* playback */
-function seek(x){ t = Math.max(0, Math.min(DURATION - 0.01, x)); curLine = -2; draw(); }
-$("btnPlay").onclick = ()=>{ playing = !playing; $("btnPlay").textContent = playing ? "⏸ 一時停止" : "▶ 再生"; lastTs = null; };
-$("btnStop").onclick = ()=>{ playing = false; $("btnPlay").textContent = "▶ 再生"; seek(0); };
-$("speed").onchange = e=>{ speed = parseFloat(e.target.value); };
-document.addEventListener("keydown", e=>{
-  if(e.code === "Space"){ e.preventDefault(); $("btnPlay").click(); }
-  if(e.code === "ArrowRight") seek(t + 1);
-  if(e.code === "ArrowLeft") seek(t - 1);
-  if(e.code === "ArrowDown" || e.code === "ArrowUp"){
-    const i = LINES.findIndex(L => t < L.e);
-    const n = e.code === "ArrowDown" ? Math.min(LINES.length - 1, i) : Math.max(0, (i <= 0 ? 0 : i - 1));
-    if(LINES[n]) seek(LINES[n].s + 0.01);
-  }
+function seek(x){ t = Math.max(0, Math.min(Math.max(0, endTime() - 0.01), x)); draw(); }
+function setPlaying(p){
+  playing = p; $("btnPlay").textContent = playing ? "⏸" : "▶"; lastTs = null;
+}
+$("btnPlay").onclick = () => setPlaying(!playing);
+$("btnStart").onclick = () => { setPlaying(false); seek(0); };
+document.addEventListener("keydown", e => {
+  if(e.target.tagName === "TEXTAREA" || e.target.tagName === "INPUT") return;
+  if(e.code === "Space"){ e.preventDefault(); setPlaying(!playing); }
+  if(e.code === "Home"){ setPlaying(false); seek(0); }
+  if(e.code === "ArrowRight") seek(t + (e.shiftKey ? 5 : 1));
+  if(e.code === "ArrowLeft") seek(t - (e.shiftKey ? 5 : 1));
+  if((e.code === "Delete" || e.code === "Backspace") && selClip) deleteSelected();
 });
-
-const cv = $("screen"), ctx = cv.getContext("2d");
-function drawScene(){
-  const si = Math.min(SCENES.length - 1, Math.floor(t / 6)), sc = SCENES[si];
-  const g = ctx.createLinearGradient(0, 0, 960, 540); g.addColorStop(0, sc.c1); g.addColorStop(1, sc.c2);
-  ctx.fillStyle = g; ctx.fillRect(0, 0, 960, 540);
-  ctx.globalAlpha = 0.25; ctx.fillStyle = "#ffffff";
-  for(let i=0; i<7; i++){
-    const x = ((i * 173 + t * (12 + i * 5)) % 1100) - 70, y = 60 + (i * 61) % 300, r = 16 + (i % 3) * 12;
-    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
-  }
-  ctx.globalAlpha = 1;
-  if($("showTitle").checked){
-    ctx.fillStyle = "rgba(255,255,255,.92)"; ctx.font = "800 44px sans-serif"; ctx.textAlign = "center";
-    ctx.fillText(sc.title, 480, 120);
-    ctx.font = "600 19px sans-serif"; ctx.fillStyle = "rgba(255,255,255,.65)";
-    ctx.fillText("シーン " + (si + 1) + " / " + SCENES.length, 480, 156);
-  }
-  ctx.fillStyle = "rgba(0,0,0,.35)"; ctx.fillRect(0, 500, 960, 40);
-  ctx.fillStyle = "#ff5a3c"; ctx.fillRect(0, 500, 960 * (t / DURATION), 40);
-  ctx.fillStyle = "#fff"; ctx.font = "600 17px sans-serif"; ctx.textAlign = "left";
-  ctx.fillText("MovieCut 体験デモ（音声はイメージです）", 16, 527);
-}
-function renderSubtitle(){
-  const i = LINES.findIndex(L => t >= L.s && t < L.e);
-  const box = $("subtitle"), line = $("subline");
-  if(i < 0 || !$("showSub").checked){ box.style.display = "none"; }
-  else{
-    box.style.display = ""; const L = LINES[i];
-    line.innerHTML = `<span class="who" style="color:${COLORS[L.who]}">${NAMES[L.who]}</span><span style="color:#fff">${L.text}</span>`;
-  }
-  if(i !== curLine){
-    if(i >= 0 && playing) blip(LINES[i].who);
-    curLine = i;
-    document.querySelectorAll(".subrow").forEach((r, j)=> r.classList.toggle("now", j === i));
-    if(i >= 0){ const r = $("subrow" + i); if(r) r.scrollIntoView({block:"nearest", behavior:"smooth"}); }
-  }
-}
-function movePlayhead(){
-  /* playhead is inside #tl; lanes start after the 64px track labels */
-  $("playhead").style.left = `calc(64px + ${t / DURATION} * (100% - 64px))`;
-}
-function draw(){
-  drawScene(); renderSubtitle(); movePlayhead();
-  $("clock").textContent = fmt(t) + " / " + fmt(DURATION);
-}
 function loop(ts){
   if(playing){
     if(lastTs == null) lastTs = ts;
-    t += (ts - lastTs) / 1000 * speed; lastTs = ts;
-    if(t >= DURATION){ t = DURATION - 0.01; playing = false; $("btnPlay").textContent = "▶ 再生"; }
+    t += (ts - lastTs) / 1000; lastTs = ts;
+    if(t >= endTime()){ t = endTime() - 0.01; setPlaying(false); }
     draw();
   } else lastTs = null;
   requestAnimationFrame(loop);
 }
-tlEl.style.position = "relative";
+</script>
+
+<script>
+"use strict";
+/* ================= クリップ操作 ================= */
+function selectClip(id){ selClip = id; renderTimeline(); renderInspector(); updateToolbarState(); }
+function updateToolbarState(){
+  const has = !!clips.find(c => c.id === selClip);
+  $("btnDelete").disabled = !has;
+  const c = clips.find(x => x.id === selClip);
+  $("btnSplit").disabled = !(has && t > c.start + 0.05 && t < c.start + c.dur - 0.05);
+}
+function clipPointerDown(ev, c, el){
+  ev.preventDefault(); ev.stopPropagation();
+  selectClip(c.id); seek(Math.max(c.start, Math.min(t, c.start + c.dur - 0.01))) ;
+  const lane = el.parentElement, lr = lane.getBoundingClientRect();
+  const x0 = ev.clientX, start0 = c.start, dur0 = c.dur;
+  const localX = ev.clientX - el.getBoundingClientRect().left;
+  const zone = localX <= 8 ? "left" : (localX >= el.offsetWidth - 8 ? "right" : "move");
+  el.setPointerCapture(ev.pointerId);
+  let moved = false;
+  const mv = e2 => {
+    const dt = (e2.clientX - x0) / pps;
+    if(Math.abs(e2.clientX - x0) > 3) moved = true;
+    if(zone === "move"){ c.start = Math.max(0, Math.round((start0 + dt) * 20) / 20); }
+    if(zone === "left"){ const ns = Math.max(0, Math.round((start0 + dt) * 20) / 20); const dd = start0 - ns; if(dur0 + dd >= 0.2){ c.start = ns; c.dur = dur0 + dd; } }
+    if(zone === "right"){ c.dur = Math.max(0.2, Math.round((dur0 + dt) * 20) / 20); }
+    el.style.left = (c.start * pps) + "px"; el.style.width = Math.max(4, c.dur * pps - 1) + "px";
+    draw();
+  };
+  const up = () => {
+    el.removeEventListener("pointermove", mv); el.removeEventListener("pointerup", up);
+    if(moved) setStatus(`「${c.label}」を ${tc(c.start)} 〜 ${tc(c.start + c.dur)} にしました`);
+    renderTimeline(); renderInspector();
+  };
+  el.addEventListener("pointermove", mv); el.addEventListener("pointerup", up);
+}
+function deleteSelected(){
+  const c = clips.find(x => x.id === selClip); if(!c) return;
+  clips = clips.filter(x => x.id !== selClip); selClip = null;
+  setStatus(`「${c.label}」を削除しました`);
+  renderTimeline(); renderInspector(); draw();
+}
+$("btnDelete").onclick = deleteSelected;
+$("btnSplit").onclick = () => {
+  const c = clips.find(x => x.id === selClip); if(!c) return;
+  if(!(t > c.start + 0.05 && t < c.start + c.dur - 0.05)) return;
+  const at = Math.round(t * 20) / 20, rest = (c.start + c.dur) - at;
+  const c2 = JSON.parse(JSON.stringify(c)); c2.id = nid(); c2.start = at; c2.dur = rest;
+  if(c.type === "voice"){
+    const ratio = (at - c.start) / c.dur, cut = Math.max(1, Math.round(c.data.text.length * ratio));
+    c2.data.text = c.data.text.slice(cut); c2.label = c2.data.text;
+    if(c.data.sub){ c2.data.sub = c.data.sub.slice(Math.round(c.data.sub.length * ratio)); c.data.sub = c.data.sub.slice(0, Math.round(c.data.sub.length * ratio)); }
+    c.data.text = c.data.text.slice(0, cut); c.label = c.data.text;
+  }
+  c.dur = at - c.start;
+  clips.push(c2); selClip = c2.id;
+  setStatus(`「${c.label}」を ${tc(at)} で分割しました`);
+  renderTimeline(); renderInspector(); draw();
+};
+function layerByName(name){ return layers.find(l => l.name === name); }
+function ensureLayer(name, before){
+  let L = layerByName(name);
+  if(!L){ L = {id:nid(), name, hidden:false, muted:false, solo:false};
+    const i = before ? layers.findIndex(x => x.name === before) : -1;
+    if(i >= 0) layers.splice(i, 0, L); else layers.push(L); }
+  return L;
+}
+$("btnAddText").onclick = () => {
+  const L = layerByName("テキスト");
+  const c = addClip(L, "text", Math.round(t * 20) / 20, 3, "テキスト", {text:"テキスト", size:44});
+  selClip = c.id; setStatus("テキストを追加しました（プロパティで文字を変えられます）");
+  renderTimeline(); renderInspector(); draw();
+};
+$("btnAddBlur").onclick = () => {
+  const L = ensureLayer("ぼかし", "テキスト");
+  const c = addClip(L, "blur", Math.round(t * 20) / 20, 3, "ぼかし範囲", {strength:50});
+  selClip = c.id; setStatus("ぼかし範囲を追加しました");
+  renderTimeline(); renderInspector(); draw();
+};
+$("btnAddMedia").onclick = () => {
+  const L = ensureLayer("画像", "映像");
+  const c = addClip(L, "image", Math.round(t * 20) / 20, 4, "画像（デモ）", {c1:"#3f8f6b", c2:"#274b63"});
+  selClip = c.id; setStatus("素材（画像の代わり）を追加しました");
+  renderTimeline(); renderInspector(); draw();
+};
+$("btnAddLayer").onclick = () => {
+  const L = addLayer("レイヤー" + (layers.length + 1));
+  setStatus(`「${L.name}」を追加しました`);
+  renderTimeline();
+};
+
+/* ================= プロパティ ================= */
+function fld(label, inner){ return `<div class="field"><label>${label}</label>${inner}</div>`; }
+function slider(label, val, min, max, unit, oninput){
+  return `<div class="field"><label>${label}</label><div class="rowline"><input type="range" class="grow" min="${min}" max="${max}" value="${val}" oninput="${oninput}"><span class="val">${val}${unit}</span></div></div>`;
+}
+window._set = {
+  voiceText(id, v){ const c = clips.find(x => x.id === id); c.data.text = v; c.label = v; draw(); renderTimelineSoft(); },
+  voiceSub(id, v){ const c = clips.find(x => x.id === id); c.data.sub = v; draw(); },
+  voiceVol(id, v){ const c = clips.find(x => x.id === id); c.data.volume = +v; },
+  voiceSpd(id, v){ const c = clips.find(x => x.id === id); c.data.speed = +v; },
+  sceneTitle(id, v){ const c = clips.find(x => x.id === id); c.data.title = v; c.label = v; draw(); renderTimelineSoft(); },
+  scenePoints(id, v){ const c = clips.find(x => x.id === id); c.data.points = v.split("\n").filter(s => s.trim()); draw(); },
+  textText(id, v){ const c = clips.find(x => x.id === id); c.data.text = v; c.label = v; draw(); renderTimelineSoft(); },
+  textSize(id, v){ const c = clips.find(x => x.id === id); c.data.size = +v; draw(); },
+  tachie(id, axis, v){ const c = clips.find(x => x.id === id); TACHIE_POS[c.data.char][axis] = axis === "scale" ? +v / 100 : +v / 100; draw(); },
+  blurStr(id, v){ const c = clips.find(x => x.id === id); c.data.strength = +v; draw(); },
+  bgmVol(id, v){ const c = clips.find(x => x.id === id); c.data.volume = +v; },
+  imgColor(id, v){ const c = clips.find(x => x.id === id); c.data.c1 = v; draw(); }
+};
+let softTimer = null;
+function renderTimelineSoft(){ clearTimeout(softTimer); softTimer = setTimeout(renderTimeline, 400); }
+function renderInspector(){
+  const box = $("paneInspector");
+  const c = clips.find(x => x.id === selClip);
+  if(!c){
+    box.innerHTML = `<h4>プロパティ</h4>
+      <div class="sec-title">プロジェクト</div>
+      ${fld("解像度", `<input type="text" value="1920 × 1080" disabled>`)}
+      ${fld("フレームレート", `<input type="text" value="30 fps" disabled>`)}
+      <p class="caption">タイムラインのクリップを選ぶと、そのクリップの設定がここに出ます。右の「キャラクター」タブでは、台本から音声を自動で並べられます。</p>`;
+    return;
+  }
+  const L = layerById(c.layer);
+  let h = `<h4>プロパティ</h4><p class="caption">レイヤー：${L ? L.name : ""} ／ ${tc(c.start)} 〜 ${tc(c.start + c.dur)}</p>`;
+  if(c.type === "voice"){
+    const ch = CHARS[c.data.char];
+    h += `<div class="sec-title">セリフ</div>
+      ${fld("読み上げ文", `<textarea rows="3" oninput="_set.voiceText(${c.id}, this.value)">${c.data.text}</textarea>`)}
+      ${fld("字幕文（空なら読み上げ文と同じ）", `<input type="text" value="${(c.data.sub || "").replace(/"/g, "&quot;")}" oninput="_set.voiceSub(${c.id}, this.value)">`)}
+      ${fld("キャラクター", `<input type="text" value="${ch.name}（${ch.engine}）" disabled>`)}
+      ${slider("音量", c.data.volume || 100, 0, 200, "%", `_set.voiceVol(${c.id}, this.value); this.nextElementSibling.textContent = this.value + '%'`)}
+      ${slider("速度", c.data.speed || 100, 50, 200, "%", `_set.voiceSpd(${c.id}, this.value); this.nextElementSibling.textContent = this.value + '%'`)}`;
+  } else if(c.type === "tachie"){
+    const ch = CHARS[c.data.char], pos = TACHIE_POS[c.data.char];
+    h += `<div class="sec-title">立ち絵</div>
+      ${fld("キャラクター", `<input type="text" value="${ch.name}" disabled>`)}
+      ${slider("横の位置", Math.round(pos.x * 100), 5, 95, "%", `_set.tachie(${c.id}, 'x', this.value); this.nextElementSibling.textContent = this.value + '%'`)}
+      ${slider("縦の位置", Math.round(pos.y * 100), 60, 100, "%", `_set.tachie(${c.id}, 'y', this.value); this.nextElementSibling.textContent = this.value + '%'`)}
+      ${slider("大きさ", Math.round(pos.scale * 100), 50, 160, "%", `_set.tachie(${c.id}, 'scale', this.value); this.nextElementSibling.textContent = this.value + '%'`)}`;
+  } else if(c.type === "scene"){
+    h += `<div class="sec-title">シーン</div>
+      ${fld("見出し", `<input type="text" value="${c.data.title.replace(/"/g, "&quot;")}" oninput="_set.sceneTitle(${c.id}, this.value)">`)}
+      ${fld("本文（1行に1つ）", `<textarea rows="3" oninput="_set.scenePoints(${c.id}, this.value)">${(c.data.points || []).join("\n")}</textarea>`)}`;
+  } else if(c.type === "text"){
+    h += `<div class="sec-title">文字</div>
+      ${fld("テキスト", `<input type="text" value="${c.data.text.replace(/"/g, "&quot;")}" oninput="_set.textText(${c.id}, this.value)">`)}
+      ${slider("大きさ", c.data.size || 44, 20, 90, "px", `_set.textSize(${c.id}, this.value); this.nextElementSibling.textContent = this.value + 'px'`)}`;
+  } else if(c.type === "blur"){
+    h += `<div class="sec-title">ぼかし</div>
+      ${slider("強さ", c.data.strength || 50, 0, 100, "%", `_set.blurStr(${c.id}, this.value); this.nextElementSibling.textContent = this.value + '%'`)}`;
+  } else if(c.type === "image"){
+    h += `<div class="sec-title">画像</div>
+      ${fld("名前", `<input type="text" value="${c.label}" disabled>`)}
+      <div class="field"><label>色（デモ用の代わり）</label><div class="swatches">
+      ${["#3f8f6b", "#3d6bb3", "#b07a3a", "#a8527f"].map(col => `<div class="sw" style="background:${col}" onclick="_set.imgColor(${c.id}, '${col}')"></div>`).join("")}
+      </div></div>`;
+  } else if(c.type === "audio"){
+    h += `<div class="sec-title">音声</div>
+      ${fld("名前", `<input type="text" value="${c.label}" disabled>`)}
+      ${slider("音量", c.data.volume || 60, 0, 100, "%", `_set.bgmVol(${c.id}, this.value); this.nextElementSibling.textContent = this.value + '%'`)}`;
+  }
+  box.innerHTML = h;
+}
+
+/* ================= キャラクター ================= */
+function renderChars(){
+  const box = $("paneChars");
+  const rows = Object.values(CHARS).map(ch => `
+    <div class="char-row ${selChar === Object.keys(CHARS).find(k => CHARS[k] === ch) ? "sel" : ""}" onclick="pickChar('${Object.keys(CHARS).find(k => CHARS[k] === ch)}')">
+      <span class="char-dot" style="background:${ch.color}"></span>
+      <span><span class="nm">${ch.name}</span><br><span class="en">${ch.engine}</span></span>
+    </div>`).join("");
+  box.innerHTML = `
+    <div class="rowline"><h4 class="grow" style="margin:0;">キャラクター</h4><button class="mini-btn" onclick="toast('デモではキャラクターの追加は省略しています')">＋</button></div>
+    <div style="height:8px"></div>${rows}
+    <div class="sec-title">立ち絵</div>
+    <p class="caption">れいむ（右）・まりさ（左、反転）。位置と大きさは、タイムラインの立ち絵クリップを選ぶと変えられます。</p>
+    <div class="sec-title">台本</div>
+    <p class="caption">1行に1セリフ。「キャラ名: 読み上げ文」でそのキャラが読み上げます。「キャラ名: 読み上げ文 | 字幕文」と書くと、字幕だけ別の文にできます（| のあとを空にすると字幕なし）。</p>
+    <button class="mini-btn" style="margin-bottom:6px;" onclick="aiLines()">AIでセリフ案を作る…</button>
+    <div class="field"><textarea id="scriptText" rows="11">${$("scriptText") ? $("scriptText").value : SCRIPT_DEFAULT}</textarea></div>
+    <button class="big-btn" onclick="applyScript()">台本から音声を作って<br>タイムラインに並べる</button>`;
+}
+window.pickChar = id => { selChar = id; renderChars(); };
+window.toast = toast;
+window.aiLines = () => {
+  const ta = $("scriptText");
+  ta.value += "\nれいむ: じゃあ、最後にまとめだよ\nまりさ: おう、頼んだぜ";
+  toast("セリフ案を台本の末尾に足しました");
+};
+window.applyScript = () => {
+  const n = layoutFromScript($("scriptText").value);
+  selClip = null; seek(0);
+  setStatus(`台本から ${n} 件のセリフを並べました`);
+  renderTimeline(); renderInspector(); draw();
+  toast(`台本から ${n} 件のセリフを並べました`);
+};
+
+/* tabs */
+$("tabInspector").onclick = () => {
+  $("tabInspector").classList.add("on"); $("tabChars").classList.remove("on");
+  $("paneInspector").style.display = ""; $("paneChars").style.display = "none";
+};
+$("tabChars").onclick = () => {
+  $("tabChars").classList.add("on"); $("tabInspector").classList.remove("on");
+  $("paneChars").style.display = ""; $("paneInspector").style.display = "none";
+  renderChars();
+};
+
+/* init */
+buildInitial();
+renderTimeline();
+renderInspector();
 draw();
 requestAnimationFrame(loop);
 </script>
