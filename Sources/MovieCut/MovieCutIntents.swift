@@ -43,9 +43,7 @@ enum IntentFileConversion {
         if let url = file.fileURL { return url }
         let ext = (file.filename as NSString).pathExtension
         // 書き出し先はプロジェクトと同じフォルダになるため、利用者が見つけられるアプリ専用フォルダに置く
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? FileManager.default.temporaryDirectory
-        let dir = base.appendingPathComponent("MovieCut/ShortcutsInbox", isDirectory: true)
+        let dir = DataLocations.current.shortcutsInbox
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let tmp = dir
             .appendingPathComponent("moviecut-intent-\(UUID().uuidString)")
