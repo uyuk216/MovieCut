@@ -82,6 +82,19 @@ final class SubtitleQuickAddTests: XCTestCase {
         XCTAssertEqual(d.tracks.last!.clips[0].duration, 5, accuracy: 1e-9)
     }
 
+    func testUpdateTextDurationStopsAtNextClipStart() {
+        var p = Project.new()
+        var sub = Track(name: "字幕"); sub.clips = [textClip(2, 1, "前"), textClip(5, 1, "次")]
+        p.tracks.append(sub)
+        let id = sub.clips[0].id
+        let u = SubtitleQuickAdd.updateText(clipId: id, text: "前", duration: 10, in: p)!
+        XCTAssertEqual(u.tracks.last!.clips.first { $0.id == id }!.duration, 3, accuracy: 1e-9)
+        var solo = p
+        solo.tracks[solo.tracks.count - 1].clips.removeLast()
+        let v = SubtitleQuickAdd.updateText(clipId: id, text: "前", duration: 10, in: solo)!
+        XCTAssertEqual(v.tracks.last!.clips[0].duration, 10, accuracy: 1e-9)
+    }
+
     func testUpdateUnknownIdIsNil() {
         XCTAssertNil(SubtitleQuickAdd.updateText(clipId: "nope", text: "x", in: Project.new()))
     }

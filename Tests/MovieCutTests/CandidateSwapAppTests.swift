@@ -56,6 +56,35 @@ final class CandidateSwapAppTests: XCTestCase {
         XCTAssertEqual(try m.project.encoded(), before)
     }
 
+    func testStaleProbeResultDoesNotOverrideLaterSelection() async throws {
+        let m = model()
+        let before = try m.project.encoded()
+        XCTAssertTrue(m.openCandidateSwap())
+        // 測定を遅らせる偽プローブ
+        m.candidateProbe = { _, _ in
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            return 30
+        }
+        let task = Task { await m.previewCandidate("/m/b.mov") }
+        try await Task.sleep(nanoseconds: 50_000_000)
+        let back = await m.previewCandidate(nil)
+        XCTAssertTrue(back)
+        let stale = await task.value
+        XCTAssertFalse(stale, "古い測定結果は捨てる")
+        XCTAssertEqual(try m.project.encoded(), before)
+        XCTAssertNil(m.candidateSession?.selectedPath)
+    }
+
+    func testSessionGenerationSurvivesAddCandidateFiles() async throws {
+        let m = model()
+        XCTAssertTrue(m.openCandidateSwap())
+        _ = await m.previewCandidate("/m/b.mov")
+        let g = m.candidateSession?.generation
+        XCTAssertEqual(g, 1)
+        _ = m.addCandidateFiles([URL(fileURLWithPath: "/m/zzz.mov")])
+        XCTAssertEqual(m.candidateSession?.generation, g)
+    }
+
     func testCancelRestoresAndRegistersNothing() async throws {
         let m = model()
         let before = try m.project.encoded()

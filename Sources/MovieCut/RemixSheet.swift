@@ -24,7 +24,12 @@ struct RemixSheet: View {
         return RemixParams(targetDuration: t, crossfadeDuration: crossfade)
     }
 
+    /// 目標の尺の上限(秒)。これを超える入力では計画を作らない
+    private static let maxTarget: Double = 3600
+    private var targetTooLong: Bool { (target ?? 0) > Self.maxTarget }
+
     private var planResult: Result<RemixPlan, RemixError>? {
+        guard !targetTooLong else { return nil }
         guard let s = scan, let p = params, sourceDuration > 0 else { return nil }
         return Remix.plan(duration: sourceDuration, candidates: s.candidates, params: p, usedFallback: s.usedFallback)
     }
@@ -62,6 +67,9 @@ struct RemixSheet: View {
                 Text(String(format: "%.2f", crossfade)).monospacedDigit()
             }
             Group {
+                if targetTooLong {
+                    Text(L10n.t("目標の尺は 3600 秒までです")).foregroundStyle(.red)
+                } else {
                 switch planResult {
                 case .success(let p):
                     Text(String(format: L10n.t("出来上がり: 約 %.1f 秒 / %d 区間 / つなぎ目 %d か所"), p.totalDuration, p.segments.count, max(0, p.segments.count - 1)))
@@ -69,6 +77,7 @@ struct RemixSheet: View {
                     Text(e.message).foregroundStyle(.red)
                 case nil:
                     Text(L10n.t("目標の尺を入力してください。")).foregroundStyle(.secondary)
+                }
                 }
             }
             .font(.callout)

@@ -109,6 +109,12 @@ final class RemixTests: XCTestCase {
                        .failure(.cannotReachTarget), "大きく外れる計画は作らない")
     }
 
+    func testPlanHugeTargetFailsWithoutHanging() {
+        let r = Remix.plan(duration: 180, candidates: beats(every: 0.5, duration: 180), params: RemixParams(targetDuration: 1e9), usedFallback: false)
+        guard case .failure = r else { return XCTFail("巨大な目標は失敗するはず") }
+    }
+
+
     func testPlanRejectsUnsupportedClip() {
         var fast = audioClip(id: "a", start: 0, duration: 20)
         fast.speed = 2

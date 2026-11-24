@@ -170,11 +170,18 @@ public enum Remix {
         var cycle = 0
         var accum = 0.0
         while true {
-            for ph in phraseList { virtual.append(VItem(seg: ph, cycle: cycle)); accum += ph.length }
+            for ph in phraseList {
+                // 巨大な目標で固まらないよう、2 周目以降は仮想列が上限を超えたら足さない
+                if cycle > 0, virtual.count >= 4_000 { break }
+                virtual.append(VItem(seg: ph, cycle: cycle)); accum += ph.length
+            }
             cycle += 1
             if target < duration - 1e-9 || accum >= target + maxPhrase { break }
-            if cycle > 10_000 { break }
+            if cycle >= 1_000 || virtual.count >= 4_000 { break }
         }
+
+        // 上限で打ち切った仮想列の合計が目標に届かないなら、探索せずに失敗にする
+        guard accum >= target - tolerance - 1e-9 else { return .failure(.cannotReachTarget) }
 
         // ビームサーチの状態
         struct State {
