@@ -164,6 +164,7 @@ struct AppCommands: Commands {
                 MenuItemView(spec: AppMenuSpec.dictionaryItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.scriptTableItem(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.dialogueSuggestionsItem(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.aiRoughCutItem(s), perform: run)
                 Divider()
                 MenuItemView(spec: AppMenuSpec.saveItemTemplateItem(s), perform: run)
                 Menu(L10n.t("アイテムテンプレートを適用")) { items(AppMenuSpec.itemTemplateApplyItems(s), run) }
