@@ -127,4 +127,15 @@ final class AutomationExportTests: XCTestCase {
         let size = try FileManager.default.attributesOfItem(atPath: out.path)[.size] as? Int
         XCTAssertGreaterThan(size ?? 0, 0)
     }
+
+    func testOutputURLStaysInsideFolder() {
+        for name in ["../evil", "a/b", "..", ".", "/", "..\\x", "   "] {
+            let url = AutomationProjectFile.outputURL(folder: tmp, name: name)
+            XCTAssertEqual(url.deletingLastPathComponent().standardizedFileURL.path, tmp.standardizedFileURL.path, name)
+        }
+        XCTAssertEqual(AutomationProjectFile.outputURL(folder: tmp, name: "..").lastPathComponent,
+                       "名称未設定." + ProjectFileExtension.current)
+        XCTAssertEqual(AutomationProjectFile.outputURL(folder: tmp, name: "私の動画").lastPathComponent,
+                       "私の動画." + ProjectFileExtension.current)
+    }
 }

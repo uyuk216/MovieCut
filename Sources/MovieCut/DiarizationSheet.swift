@@ -100,10 +100,12 @@ struct DiarizationSheet: View {
         }
         .padding(16)
         .frame(width: 680)
-        .task { await load() }
+        .task(id: useWhisper) { await load() }   // 認識方式が変わったら同じ経路で認識し直す(前の実行は取り消される)
     }
 
     private func load() async {
+        // 方式を切り替えた直後は前の結果を捨てて「実行中」に戻す
+        run = nil; diarized = []; failure = nil; note = nil
         do {
             let r = try await model.runDiarization(transcriber: useWhisper ? WhisperTranscriber() : SpeechFrameworkTranscriber(),
                                                    maxSpeakers: maxSpeakers)
@@ -128,6 +130,7 @@ struct DiarizationSheet: View {
     }
 
     private static func time(_ t: Double) -> String {
+        let t = t.isFinite ? max(0, t) : 0   // 非有限の秒で Int() がトラップしないように
         let m = Int(t) / 60, s = t - Double(m * 60)
         return String(format: "%d:%04.1f", m, s)
     }

@@ -8,6 +8,7 @@ struct RollSlipSheet: View {
     let kind: Kind
     @State private var framesText = "1"
     @State private var failed = false
+    @State private var failureReason: String?
 
     enum Kind { case roll, slip, slide, splitEdit }
 
@@ -52,6 +53,7 @@ struct RollSlipSheet: View {
                 Text(L10n.t("コマ")).foregroundStyle(.secondary)
                 if failed { Text(L10n.t("整数で入れてください")).font(.caption).foregroundStyle(.red) }
             }
+            if let r = failureReason { Text(L10n.t(r)).font(.caption).foregroundStyle(.red) }
             Text(L10n.t("素材の範囲を超える分は手前で止まります。ロックされたクリップは編集できません。"))
                 .font(.caption).foregroundStyle(.secondary)
             HStack {
@@ -72,12 +74,15 @@ struct RollSlipSheet: View {
         let n = framesText.replacingOccurrences(of: "−", with: "-").trimmingCharacters(in: .whitespaces)
         guard let f = Int(n) else { failed = true; return }
         failed = false
+        let ok: Bool
         switch kind {
-        case .roll: _ = model.rollSelected(frames: f)
-        case .slip: _ = model.slipSelected(frames: f)
-        case .slide: _ = model.slideSelected(frames: f)
-        case .splitEdit: _ = model.splitEditSelected(frames: f)
+        case .roll: ok = model.rollSelected(frames: f)
+        case .slip: ok = model.slipSelected(frames: f)
+        case .slide: ok = model.slideSelected(frames: f)
+        case .splitEdit: ok = model.splitEditSelected(frames: f)
         }
-        close()
+        // 失敗したらシートを開いたまま理由を出す(無言で閉じない)
+        if ok { failureReason = nil; close() }
+        else { failureReason = "編集できませんでした。ロックされている、素材の範囲の端にいる、動かす量が 0、または隣のクリップがありません。" }
     }
 }

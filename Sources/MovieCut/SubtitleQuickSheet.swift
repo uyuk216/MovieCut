@@ -7,6 +7,7 @@ struct SubtitleQuickSheet: View {
     @State private var text = ""
     @State private var durationText = "3"
     @State private var failed = false
+    @State private var failureReason: String?
 
     private var editing: Bool { model.subtitleSheetTargetId != nil }
     private var canCommit: Bool { SubtitleQuickAdd.cleanedText(text) != nil }
@@ -31,6 +32,7 @@ struct SubtitleQuickSheet: View {
             if !canCommit {
                 Text(L10n.t("文が空のときは追加できません")).font(.caption).foregroundStyle(.secondary)
             }
+            if let r = failureReason { Text(L10n.t(r)).font(.caption).foregroundStyle(.red) }
             HStack {
                 Spacer()
                 Button(L10n.t("キャンセル")) { model.showSubtitleSheet = false; model.subtitleSheetTargetId = nil }
@@ -53,6 +55,14 @@ struct SubtitleQuickSheet: View {
         let normalized = durationText.replacingOccurrences(of: ",", with: ".").trimmingCharacters(in: .whitespaces)
         guard let d = Double(normalized), d.isFinite else { failed = true; return }
         failed = false
-        model.commitSubtitleSheet(text: text, duration: d)
+        if model.commitSubtitleSheet(text: text, duration: d) { failureReason = nil; return }
+        // 失敗の理由を判別できる範囲で出す
+        if model.isLocked { failureReason = "ロック中のため編集できません" }
+        else if SubtitleQuickAdd.cleanedText(text) == nil { failureReason = "文が空のときは追加できません" }
+        else if let id = model.subtitleSheetTargetId {
+            if LayerEditing.isLockedClip(id, in: model.project) { failureReason = "ロックされた字幕は直せません" }
+            else if !model.project.allClips.contains(where: { $0.id == id }) { failureReason = "直す対象の字幕クリップが見つかりません" }
+            else { failureReason = "字幕を直せませんでした" }
+        } else { failureReason = "字幕を追加できませんでした" }
     }
 }

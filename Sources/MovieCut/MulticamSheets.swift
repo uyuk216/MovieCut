@@ -18,6 +18,8 @@ struct MulticamCreateSheet: View {
     @State private var measured: [String: Double?] = [:]
     @State private var texts: [String: String] = [:]
     @State private var failed = false
+    /// 手で書き換えた欄(測定結果で上書きしない)
+    @State private var edited: Set<String> = []
 
     private var angles: [Clip] { Multicam.candidates(in: model.project, ids: model.multicamCreateIds) ?? [] }
 
@@ -35,7 +37,7 @@ struct MulticamCreateSheet: View {
                     if i == 0 {
                         Text(L10n.t("基準")).foregroundStyle(.secondary)
                     } else {
-                        TextField("0", text: Binding(get: { texts[c.id] ?? "0" }, set: { texts[c.id] = $0 })).textFieldStyle(.roundedBorder).frame(width: 70)
+                        TextField("0", text: Binding(get: { texts[c.id] ?? "0" }, set: { texts[c.id] = $0; edited.insert(c.id) })).textFieldStyle(.roundedBorder).frame(width: 70)
                         Text(L10n.t("秒")).foregroundStyle(.secondary)
                         status(c.id)
                     }
@@ -63,11 +65,19 @@ struct MulticamCreateSheet: View {
     private func measure() async {
         let result = await model.measureMulticamLags(ids: model.multicamCreateIds)
         measured = result
-        for (id, v) in result { texts[id] = Self.format(v ?? 0) }
+        for (id, v) in result {
+            // 手入力済みの欄、測定失敗(nil)の欄は変えない
+            if edited.contains(id) { continue }
+            if let v { texts[id] = Self.format(v) }
+        }
         measuring = false
     }
 
     static func format(_ v: Double) -> String { String(format: "%g", (v * 100).rounded() / 100) }
+
+    /// ずれの上限(秒)。Core 側に上限が無いので ±1 時間に収める。
+    static let maxLag: Double = 3600
+    static func clampLag(_ v: Double) -> Double { min(max(v, -maxLag), maxLag) }
 
     private func commit() {
         var lags: [String: Double] = [:]
@@ -75,7 +85,7 @@ struct MulticamCreateSheet: View {
             let raw = (texts[c.id] ?? "0").replacingOccurrences(of: "−", with: "-").trimmingCharacters(in: .whitespaces)
             guard let v = Double(raw), v.isFinite else { failed = true; return }
             // 測れた値はそのまま(丸めない)、手で直したときだけ入力の値を使う
-            if let m = measured[c.id], let mv = m, texts[c.id] == Self.format(mv) { lags[c.id] = mv } else { lags[c.id] = v }
+            if let m = measured[c.id], let mv = m, texts[c.id] == Self.format(mv) { lags[c.id] = Self.clampLag(mv) } else { lags[c.id] = Self.clampLag(v) }
         }
         failed = false
         _ = model.createMulticam(ids: model.multicamCreateIds, localLags: lags)
@@ -115,7 +125,7 @@ struct MulticamSwitchSheet: View {
                         Button { _ = model.multicamCut(angle: i, groupId: g.id) } label: {
                             VStack { Text("\(i + 1)").font(.title2.bold()); Text(a.name).font(.caption2) }.frame(width: 62, height: 44)
                         }
-                        .keyboardShortcut(KeyEquivalent(Swift.Character(String(i + 1))), modifiers: [])
+                        .modifier(AngleKeyModifier(index: i))
                     }
                 }
                 if let r = g.range, model.currentTime < r.lowerBound || model.currentTime >= r.upperBound {
@@ -126,5 +136,13 @@ struct MulticamSwitchSheet: View {
             HStack { Spacer(); Button(L10n.t("閉じる")) { model.showMulticamSwitchSheet = false }.keyboardShortcut(.cancelAction) }
         }
         .padding(16)
+    }
+}
+
+/// 1〜9 番目のアングルだけ数字キーを割り当てる(10 個目以降は付けない)。
+private struct AngleKeyModifier: ViewModifier {
+    let index: Int
+    func body(content: Content) -> some View {
+        if index < 9 { content.keyboardShortcut(KeyEquivalent(Swift.Character(String(index + 1))), modifiers: []) } else { content }
     }
 }
