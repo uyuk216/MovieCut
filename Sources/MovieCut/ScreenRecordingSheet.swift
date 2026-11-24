@@ -68,6 +68,8 @@ struct ScreenRecordingSheet: View {
         }
         .padding(20)
         .frame(width: 460)
+        // 準備中・収録中・停止処理中に閉じると、収録ファイルが無言で消えてしまうため閉じさせない
+        .interactiveDismissDisabled(controller.machine.isActive)
         .onAppear {
             controller.refreshPermission()
             if controller.permissionGranted { Task { await controller.refreshTargets() } }
