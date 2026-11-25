@@ -17,7 +17,7 @@ extension ProjectModel {
             statusText = "顔ぼかしを付けられるクリップがありませんでした(映像・画像・複合が対象です)"
             return 0
         }
-        edit("顔ぼかしを一括で付ける") { _ = FaceBlurBulk.apply(to: &$0) }
+        guard edit("顔ぼかしを一括で付ける", { _ = FaceBlurBulk.apply(to: &$0) }) else { return 0 }   // ロック等で断られたら成功表示しない
         statusText = "\(changed) 個のクリップに顔ぼかしを付けました"
         return changed
     }
@@ -32,7 +32,7 @@ extension ProjectModel {
             statusText = "顔ぼかしが付いているクリップがありませんでした"
             return 0
         }
-        edit("顔ぼかしを一括で外す") { _ = FaceBlurBulk.removeAll(from: &$0) }
+        guard edit("顔ぼかしを一括で外す", { _ = FaceBlurBulk.removeAll(from: &$0) }) else { return 0 }
         statusText = "\(changed) 個のクリップから顔ぼかしを外しました"
         return changed
     }
