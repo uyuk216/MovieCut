@@ -16,7 +16,7 @@ public enum Chapters {
 
     /// `m:ss`(1 時間以上は `h:mm:ss`)。秒は切り捨て。
     public static func timecode(_ t: Double) -> String {
-        let s = Int((t.isFinite ? max(0, t) : 0).rounded(.down))
+        let s = Int(min(1e12, t.isFinite ? max(0, t) : 0).rounded(.down))
         let h = s / 3600, m = s / 60 % 60, sec = s % 60
         return h > 0 ? String(format: "%d:%02d:%02d", h, m, sec) : String(format: "%d:%02d", m, sec)
     }
@@ -37,7 +37,7 @@ public enum Chapters {
         }
         guard !markers.isEmpty else { return Result(text: "", count: 0, warnings: ["マーカーがありません。再生位置にマーカーを追加してください"]) }
         // 負・非有限の時刻は 0 に寄せる(Int 変換で落ちたり、0:00 が重なったりしないように)
-        var items = MarkerEditing.sorted(markers).map { (time: $0.time.isFinite ? max(0, $0.time) : 0, title: title($0.name)) }
+        var items = MarkerEditing.sorted(markers).map { (time: $0.time.isFinite ? min(1e12, max(0, $0.time)) : 0, title: title($0.name)) }
         var warnings: [String] = []
         if Int(items[0].time.rounded(.down)) != 0 {
             items.insert((0, introTitle), at: 0)

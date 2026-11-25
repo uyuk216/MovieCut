@@ -42,3 +42,16 @@ final class ChapterColorTests: XCTestCase {
         XCTAssertTrue(r.warnings.contains { $0.contains("3 つ以上") })
     }
 }
+
+/// 極端に大きい有限の時刻でも Int 変換で落ちない。
+final class ChapterExtremeTimeTests: XCTestCase {
+    func testTimecodeSurvivesHugeFiniteTime() {
+        XCTAssertEqual(Chapters.timecode(1e30), Chapters.timecode(1e12))
+        XCTAssertEqual(Chapters.timecode(-1e30), "0:00")
+    }
+
+    func testMakeSurvivesHugeFiniteMarkerTime() {
+        let r = Chapters.make(from: [Marker(time: 1e30, name: "遠い")])
+        XCTAssertEqual(r.count, 2)
+    }
+}
