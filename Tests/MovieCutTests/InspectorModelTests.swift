@@ -306,6 +306,21 @@ final class InspectorModelTests: XCTestCase {
         XCTAssertEqual(m.statusText, ProjectModel.lockedNotice)
     }
 
+    func testVoiceEditsOnLockedClipAreRefusedWithoutSynthesizing() async {
+        let (m, _, marisa) = await modelWithVoices()
+        var p = m.project
+        let loc = ClipEditing.locate("v0", in: p)!
+        p.tracks[loc.track].clips[loc.index].locked = true
+        m.project = p
+        let before = m.project
+        let t1 = await m.setVoiceText("変えたい", clipId: "v0")
+        let t2 = await m.setVoiceCharacter(marisa, clipId: "v0")
+        let t3 = await m.regenerateVoice(clipId: "v0")
+        XCTAssertFalse(t1 || t2 || t3, "ロックされたセリフの編集は断られ、成功扱いにしない")
+        XCTAssertEqual(m.project, before)
+        XCTAssertFalse(m.effectiveUndoManager.canUndo)
+    }
+
     func testCannotDeleteLastCharacter() {
         let m = makeModel()
         m.project.characters = [m.project.characters[0]]

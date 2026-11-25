@@ -177,6 +177,7 @@ extension ProjectModel {
     @discardableResult
     func resynthesizeVoice(clipId: String, name: String, message: String = "音声を作り直しています…", _ change: (inout Clip) -> Void) async -> Bool {
         guard !isLocked, let before = clip(clipId), before.type == .voice else { return false }
+        if LayerEditing.isLockedClip(clipId, in: project) { statusText = Self.lockedNotice; return false }   // ロック中は音声を作らず、成功扱いにしない
         flushCoalesced()
         var trial = project
         guard let loc = ClipEditing.locate(clipId, in: trial) else { return false }
@@ -184,8 +185,7 @@ extension ProjectModel {
         var c = trial.tracks[loc.track].clips[loc.index]
         // キャラが見つからなければ作り直さず、編集だけ反映する(renderer.js regenerateVoice と同じ)
         guard trial.characters.contains(where: { $0.id == (c.charId ?? "") }) else {
-            edit(name) { $0 = trial }
-            return true
+            return edit(name) { $0 = trial }
         }
         playback.pause()
         busyMessage = message
@@ -199,10 +199,10 @@ extension ProjectModel {
         }
         let result = c
         var shifted = 0
-        edit(name) { p in
+        guard edit(name, { p in
             if let l = ClipEditing.locate(clipId, in: p) { p.tracks[l.track].clips[l.index] = result }
             shifted = applyVoiceRipple(&p, changed: [clipId])
-        }
+        }) else { return false }
         statusText = shifted > 0 ? "後ろの \(shifted) 個のクリップを、尺の変化に合わせてずらしました" : ""
         return true
     }
