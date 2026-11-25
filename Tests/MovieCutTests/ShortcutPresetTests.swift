@@ -61,6 +61,20 @@ final class ShortcutPresetTests: XCTestCase {
         XCTAssertEqual(store.menuOverride(for: "test-export")?.display, "⇧⌘E")
     }
 
+    func testPresetRemovesOtherCommandsHoldingTheSameKey() {
+        let store = ShortcutStore(defaults: defaults)
+        store.setPlainOverride(.init(keyCode: 8, display: "C"), for: .delete)               // プリセットの「分割 = C」と衝突
+        store.setMenuOverride(MenuShortcut(key: "k", modifiers: [.command]), for: "test-export")   // プリセットの「⌘K = 分割」と衝突
+        store.applyPremierePreset()
+        XCTAssertNil(store.plainOverride(for: .delete), "同じキーを持つ他コマンドの上書きは外れる")
+        XCTAssertEqual(store.plainOverride(for: .split)?.keyCode, 8)
+        XCTAssertNil(store.menuOverride(for: "test-export"), "同じショートカットを持つ他項目の上書きは外れる")
+        XCTAssertEqual(store.menuOverride(for: ShortcutStore.id(for: .split))?.display, "⌘K")
+        XCTAssertTrue(store.isPremierePresetApplied)
+        let keys = store.plainOverrides.values.map(\.keyCode)
+        XCTAssertEqual(keys.count, Set(keys).count, "通常キーの重複がない")
+    }
+
     func testRestorePrePresetBackup() {
         let store = ShortcutStore(defaults: defaults)
         store.setPlainOverride(.init(keyCode: 7, display: "X"), for: .playPause)

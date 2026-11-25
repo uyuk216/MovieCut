@@ -106,8 +106,17 @@ final class ShortcutStore: ObservableObject {
                                 plain: plainOverrides.mapValues { PlainEntry(keyCode: $0.keyCode, display: $0.display) })
             if let data = try? JSONEncoder().encode(backup) { defaults.set(data, forKey: Self.backupKey) }
         }
-        for p in Self.premierePlain { plainOverrides[String(describing: p.command)] = PlainBinding(keyCode: p.keyCode, display: p.display) }
-        for m in Self.premiereMenu { menuOverrides[Self.id(for: m.command)] = m.shortcut }
+        // setPlainOverride と同じ規則: 同じキー・同じショートカットを持つ他の項目の上書きは外す(重複させない)
+        for p in Self.premierePlain {
+            let id = String(describing: p.command)
+            plainOverrides[id] = PlainBinding(keyCode: p.keyCode, display: p.display)
+            for k in Array(plainOverrides.keys) where k != id && plainOverrides[k]?.keyCode == p.keyCode { plainOverrides.removeValue(forKey: k) }
+        }
+        for m in Self.premiereMenu {
+            let id = Self.id(for: m.command)
+            menuOverrides[id] = m.shortcut
+            for k in Array(menuOverrides.keys) where k != id && menuOverrides[k] == m.shortcut { menuOverrides.removeValue(forKey: k) }
+        }
         save()
     }
 
