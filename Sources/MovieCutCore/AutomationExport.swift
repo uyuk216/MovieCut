@@ -150,11 +150,29 @@ public enum AutomationExport {
 public enum AutomationProjectFile {
     /// フォルダと名前(拡張子なしでもよい)から出力先を決める。拡張子は現行の書き込み形式に合わせる。
     public static func outputURL(folder: URL, name: String) -> URL {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let base = trimmed.isEmpty ? "名称未設定" : trimmed
         let ext = ProjectFileExtension.current
+        let url = candidateURL(folder: folder, base: sanitizedBaseName(name), ext: ext)
+        // 最終確認: 親フォルダが指定フォルダと一致しなければ既定名で作り直す
+        if url.deletingLastPathComponent().standardizedFileURL.path == folder.standardizedFileURL.path { return url }
+        return candidateURL(folder: folder, base: defaultBaseName, ext: ext)
+    }
+
+    private static let defaultBaseName = "名称未設定"
+
+    private static func candidateURL(folder: URL, base: String, ext: String) -> URL {
         if (base as NSString).pathExtension.lowercased() == ext { return folder.appendingPathComponent(base) }
         return folder.appendingPathComponent(base).appendingPathExtension(ext)
+    }
+
+    /// 名前を無害化する: パス区切り(/ と \)と制御文字は「_」に置き換え、空・ドットだけの名前は既定名に落とす。
+    static func sanitizedBaseName(_ name: String) -> String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        var replaced = ""
+        for s in trimmed.unicodeScalars {
+            replaced.unicodeScalars.append((s == "/" || s == "\\" || s.value < 0x20) ? "_" : s)
+        }
+        if replaced.isEmpty || replaced.allSatisfy({ $0 == "." }) { return defaultBaseName }
+        return replaced
     }
 
     /// 空のプロジェクトを作って保存し、保存先を返す。同名がある場合は上書きしない(理由つきで失敗)。

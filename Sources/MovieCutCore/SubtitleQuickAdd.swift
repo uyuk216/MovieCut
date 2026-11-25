@@ -61,7 +61,16 @@ public enum SubtitleQuickAdd {
             // ロックされたレイヤー・クリップの字幕は直さない
             guard !p.tracks[ti].isLocked, !p.tracks[ti].clips[ci].isClipLocked else { return nil }
             p.tracks[ti].clips[ci].text = body
-            if let d = duration { p.tracks[ti].clips[ci].duration = clampDuration(d) }
+            if let d = duration {
+                var len = clampDuration(d)
+                // 同じレイヤーの次のクリップの頭を超えて延ばさない(重なり防止)
+                let me = p.tracks[ti].clips[ci].start
+                let nextStart = p.tracks[ti].clips.enumerated()
+                    .filter { $0.offset != ci && $0.element.start > me + 1e-9 }
+                    .map { $0.element.start }.min()
+                if let n = nextStart, n - me > 1e-9 { len = min(len, n - me) }
+                p.tracks[ti].clips[ci].duration = len
+            }
             return p
         }
         return nil

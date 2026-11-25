@@ -84,6 +84,8 @@ public enum ScriptTable {
             var clip = project.tracks[ti].clips[ci]
             guard clip.type == .voice else { return false }
             let before = clip
+            // 読み上げ文が変わったら、古い文に合わせた VOICEVOX アクセントは捨てる(字幕・キャラだけの変更では残す)
+            if text != before.text { clip.voicevoxAccent = nil }
             clip.text = text
             // 字幕文が読み上げ文と同じなら書かない(nil)。空文字は「字幕なし」としてそのまま残す
             let body = ExpressionTag.body(text)

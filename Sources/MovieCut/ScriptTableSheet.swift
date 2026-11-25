@@ -9,6 +9,7 @@ struct ScriptTableSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var rows: [Row] = []
     @State private var loaded = false
+    @State private var notice: String?
 
     struct Row: Identifiable {
         let clipId: String
@@ -75,6 +76,7 @@ struct ScriptTableSheet: View {
                 }
                 .frame(minHeight: 260)
             }
+            if let n = notice { Text(L10n.t(n)).font(MCDesign.Font.subheadline).foregroundStyle(.red) }
             HStack {
                 Text(String(format: L10n.t("%d 行"), rows.count)).font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary)
                 Button(L10n.t("AIでセリフ案…")) { model.openDialogueSuggestionsFromScriptTable() }
@@ -94,7 +96,16 @@ struct ScriptTableSheet: View {
     }
 
     private func save() {
-        _ = model.commitScriptTable(rows.map(\.voiceLine))
+        // セリフを空にした行は当てられない。開いたまま知らせる(ほかの行は反映済み)
+        let empty = rows.filter { $0.spoken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.count
+        let applied = model.commitScriptTable(rows.map(\.voiceLine))
+        if model.isLocked {
+            notice = "ロック中のため保存できませんでした"; return
+        }
+        if empty > 0 {
+            notice = "セリフが空の \(empty) 行は反映されませんでした(反映できた行: \(applied))。セリフを入れるか、キャンセルで閉じてください。"
+            return
+        }
         model.showScriptTableSheet = false
         dismiss()
     }

@@ -158,7 +158,7 @@ struct EaseCurveEditor: View {
 }
 
 /// 曲線の数値欄(Return・フォーカスが外れたときに確定)。
-private struct CurveNumField: View {
+struct CurveNumField: View {
     let value: Double
     let onCommit: (Double) -> Void
     @State private var text = ""
@@ -176,8 +176,14 @@ private struct CurveNumField: View {
             .onAppear { text = NumField.format(value, decimals: 3) }
     }
 
+    /// 表示(小数3桁丸め)のままなら確定しない(フォーカス外れで丸め値が入るのを防ぐ)。
+    static func shouldCommit(text: String, current: Double) -> Bool {
+        text != NumField.format(current, decimals: 3)
+    }
+
     private func commit() {
-        if let v = Double(text.trimmingCharacters(in: .whitespaces)), v.isFinite { onCommit(v) }
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        if Self.shouldCommit(text: trimmed, current: value), let v = Double(trimmed), v.isFinite { onCommit(v) }
         text = NumField.format(value, decimals: 3)
     }
 }

@@ -63,6 +63,26 @@ final class ScriptTableTests: XCTestCase {
         XCTAssertNotNil(clip.src)
     }
 
+    func testApplyChangingSpokenTextClearsVoicevoxAccent() {
+        var p = sampleProject()
+        let id = p.tracks[0].clips[0].id
+        p.tracks[0].clips[0].voicevoxAccent = [VoicevoxAccentPhrase(moras: [], accent: 1)]
+        var lines = ScriptTable.lines(in: p)
+        lines[lines.firstIndex { $0.clipId == id }!].spoken = "別の文"
+        XCTAssertEqual(ScriptTable.apply(lines, to: &p), 1)
+        XCTAssertNil(p.allClips.first { $0.id == id }!.voicevoxAccent)
+    }
+
+    func testApplySubtitleOnlyChangeKeepsVoicevoxAccent() {
+        var p = sampleProject()
+        let id = p.tracks[0].clips[0].id
+        p.tracks[0].clips[0].voicevoxAccent = [VoicevoxAccentPhrase(moras: [], accent: 1)]
+        var lines = ScriptTable.lines(in: p)
+        lines[lines.firstIndex { $0.clipId == id }!].subtitle = "字幕だけ"
+        XCTAssertEqual(ScriptTable.apply(lines, to: &p), 1)
+        XCTAssertNotNil(p.allClips.first { $0.id == id }!.voicevoxAccent)
+    }
+
     func testApplySubtitleSameAsSpokenClearsSubtitleText() {
         var p = sampleProject()
         var lines = ScriptTable.lines(in: p)

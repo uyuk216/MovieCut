@@ -56,11 +56,14 @@ final class ExportProjectScriptCommand: NSScriptCommand {
         Task.detached { [self] in
             do {
                 let output = try await AutomationExport.run(request)
-                resumeExecution(withResult: NSURL(fileURLWithPath: output.path))
+                await MainActor.run { resumeExecution(withResult: NSURL(fileURLWithPath: output.path)) }
             } catch {
-                scriptErrorNumber = -1
-                scriptErrorString = error.localizedDescription
-                resumeExecution(withResult: nil)
+                let message = error.localizedDescription
+                await MainActor.run {
+                    scriptErrorNumber = -1
+                    scriptErrorString = message
+                    resumeExecution(withResult: nil)
+                }
             }
         }
         return nil

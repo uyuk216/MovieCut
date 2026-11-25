@@ -5,7 +5,15 @@ import MovieCutCore
 /// 「試聴」で順に聞き比べ、「これだけ残す」で他のテイクを取り除く(1 回の Undo)。数字は開いたとき背景で測る。
 struct TakeCompareSheet: View {
     @ObservedObject var model: ProjectModel
+    /// 測定結果は clip.id だけでなく内容(長さ・素材・開始位置など)の鍵で覚える(再合成・トリム後に古い数値を出さない)。
     @State private var metrics: [String: TakeCompare.Metrics] = [:]
+    /// 測定が終わったが結果が得られなかった鍵(「測定中…」のままにしない)。
+    @State private var unmeasurable: Set<String> = []
+
+    /// クリップ内容を表す測定結果の鍵。
+    static func metricsKey(_ c: Clip) -> String {
+        "\(c.id)|\(c.src ?? "")|\(c.start)|\(c.duration)|\(c.offset)|\(c.srcDuration ?? -1)|\(c.speed ?? 1)"
+    }
 
     private var groups: [TakeCompare.Group] { model.takeGroups }
 
@@ -37,7 +45,7 @@ struct TakeCompareSheet: View {
         }
         .padding(20)
         .frame(width: 760)
-        .task(id: groups.flatMap { $0.takes.map(\.clipId) }) { await measure() }
+        .task(id: groups.flatMap { $0.takes.compactMap { model.clip($0.clipId).map(Self.metricsKey) } }) { await measure() }
         .onDisappear { model.stopTakePlayback() }
     }
 
@@ -55,8 +63,11 @@ struct TakeCompareSheet: View {
                     Text(String(format: L10n.t("%.2f 秒"), t.start)).monospacedDigit().foregroundStyle(.secondary).frame(width: 70, alignment: .trailing)
                     Text(String(format: L10n.t("長さ %.2f"), t.duration)).monospacedDigit().frame(width: 80, alignment: .trailing)
                         .foregroundStyle(abs(t.duration - shortest) < 1e-6 ? Color.green : Color.primary)
-                    if let m = metrics[t.clipId] {
+                    let key = model.clip(t.clipId).map(Self.metricsKey)
+                    if let key, let m = metrics[key] {
                         Text(Self.metricText(m)).monospacedDigit().font(.caption).foregroundStyle(.secondary)
+                    } else if let key, unmeasurable.contains(key) {
+                        Text(L10n.t("測れませんでした")).font(.caption).foregroundStyle(.tertiary)
                     } else {
                         Text(L10n.t("測定中…")).font(.caption).foregroundStyle(.tertiary)
                     }
@@ -78,10 +89,12 @@ struct TakeCompareSheet: View {
 
     private func measure() async {
         let clips = groups.flatMap(\.takes).compactMap { model.clip($0.clipId) }
-        for c in clips where metrics[c.id] == nil {
+        for c in clips {
+            let key = Self.metricsKey(c)
+            if metrics[key] != nil || unmeasurable.contains(key) { continue }
             let m = await Task.detached(priority: .utility) { TakeCompare.metrics(of: c) }.value
-            if Task.isCancelled { return }
-            if let m { metrics[c.id] = m }
+            if Task.isCancelled { return }   // シートを閉じた/対象が変わったら反映しない
+            if let m { metrics[key] = m } else { unmeasurable.insert(key) }
         }
     }
 }

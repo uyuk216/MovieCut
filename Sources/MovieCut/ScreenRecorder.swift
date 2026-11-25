@@ -63,6 +63,8 @@ final class ScreenRecordingController: ObservableObject {
     private let permissionRequest: () -> Bool
     private var startedAt: Date?
     private var timerTask: Task<Void, Never>?
+    /// 準備中(engine.start の完了待ち)にシートが閉じられた印。開始が済んでも収録へ進めず取り消す。
+    private var startCancelled = false
 
     init(engine: any ScreenRecordingEngine = ScreenCaptureKitEngine(),
          permissionCheck: @escaping () -> Bool = { ScreenCapturePermission.isGranted() },
@@ -132,6 +134,7 @@ final class ScreenRecordingController: ObservableObject {
 
     func startRecording() async {
         guard machine.canStart else { return }
+        startCancelled = false
         error = nil
         finishedURL = nil
         refreshPermission()
@@ -160,14 +163,21 @@ final class ScreenRecordingController: ObservableObject {
                 FileManager.default.fileExists(atPath: $0.path)
             }
             try await engine.start(settings: settings.clampedToDisplay, outputURL: url)
+            if startCancelled {
+                // 準備中に閉じられた。収録へは進まず、始まってしまったキャプチャを止める
+                await engine.cancel()
+                return
+            }
             machine.transition(to: .recording)
             startedAt = Date()
             elapsed = 0
             startTimer()
         } catch let e as ScreenRecordingError {
+            guard !startCancelled else { return }   // 閉じられた後の失敗は、利用者に見せない(状態は idle に戻済み)
             machine.transition(to: .failed)
             error = e
         } catch {
+            guard !startCancelled else { return }
             machine.transition(to: .failed)
             self.error = .captureFailed("収録を始められませんでした: \(error.localizedDescription)")
         }
@@ -193,9 +203,11 @@ final class ScreenRecordingController: ObservableObject {
     /// シートを閉じるときの後片付け(収録中なら取り消す)。
     func cancelIfNeeded() async {
         guard machine.isActive else { return }
+        startCancelled = true
         stopTimer()
         await engine.cancel()
         machine.reset()
+        error = nil
     }
 
     /// 終わった/失敗した状態から、もう一度始められる状態へ。
@@ -232,7 +244,19 @@ final class ScreenCaptureKitEngine: NSObject, ScreenRecordingEngine, SCStreamDel
     private var stream: SCStream?
     private var writer: RecordingFileWriter?
     private var outputURL: URL?
-    private var streamError: Error?
+    /// `streamError` と `cancelled` は、デリゲートのキュー・メイン・呼び出し側の別スレッドから触るためロックで守る。
+    private let stateLock = NSLock()
+    private var _streamError: Error?
+    private var _cancelled = false
+    private var streamError: Error? {
+        get { stateLock.lock(); defer { stateLock.unlock() }; return _streamError }
+        set { stateLock.lock(); defer { stateLock.unlock() }; _streamError = newValue }
+    }
+    /// 開始の最中に `cancel()` が呼ばれたか(startCapture の完了を待たずに取り消された印)。
+    private var cancelled: Bool {
+        get { stateLock.lock(); defer { stateLock.unlock() }; return _cancelled }
+        set { stateLock.lock(); defer { stateLock.unlock() }; _cancelled = newValue }
+    }
 
     func loadTargets() async throws -> ScreenRecordingTargets {
         let content: SCShareableContent
@@ -262,6 +286,7 @@ final class ScreenCaptureKitEngine: NSObject, ScreenRecordingEngine, SCStreamDel
 
     func start(settings: ScreenRecordingSettings, outputURL: URL) async throws {
         guard stream == nil else { throw ScreenRecordingError.alreadyRunning }
+        cancelled = false
         if content == nil { _ = try await loadTargets() }
         guard let content else { throw ScreenRecordingError.noTargetAvailable }
 
@@ -317,6 +342,8 @@ final class ScreenCaptureKitEngine: NSObject, ScreenRecordingEngine, SCStreamDel
         streamError = nil
 
         let stream = SCStream(filter: filter, configuration: config, delegate: self)
+        // startCapture の完了を待つ間に cancel() が来ても止められるよう、先に保持しておく
+        self.stream = stream
         do {
             try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: writer.queue)
             if settings.includeSystemAudio {
@@ -324,10 +351,20 @@ final class ScreenCaptureKitEngine: NSObject, ScreenRecordingEngine, SCStreamDel
             }
             try await stream.startCapture()
         } catch {
-            self.writer = nil
+            if self.stream === stream { self.stream = nil }
+            if self.writer === writer { self.writer = nil }
             throw ScreenRecordingError.captureFailed("収録を始められませんでした: \(error.localizedDescription)")
         }
-        self.stream = stream
+        if cancelled {
+            // 準備中に取り消された。開始が済んだ分を止めて、できかけのファイルも消す
+            try? await stream.stopCapture()
+            await writer.cancel()
+            try? FileManager.default.removeItem(at: outputURL)
+            if self.stream === stream { self.stream = nil }
+            if self.writer === writer { self.writer = nil }
+            self.outputURL = nil
+            throw ScreenRecordingError.captureFailed("収録の準備中に取り消されました")
+        }
     }
 
     func stop() async throws -> URL {
@@ -339,13 +376,15 @@ final class ScreenCaptureKitEngine: NSObject, ScreenRecordingEngine, SCStreamDel
         self.stream = nil
         self.writer = nil
         try await writer.finish()
+        // ファイルは正常に閉じられた。途中でストリームが止まっていても、書けた分は返す(記録だけ残す)
         if let streamError {
-            throw ScreenRecordingError.captureFailed("収録が途中で止まりました: \(streamError.localizedDescription)")
+            NSLog("screen recording stream stopped with error: %@", streamError.localizedDescription)
         }
         return outputURL
     }
 
     func cancel() async {
+        cancelled = true
         if let stream { try? await stream.stopCapture() }
         stream = nil
         if let writer, let outputURL = self.outputURL {
@@ -390,6 +429,8 @@ final class RecordingFileWriter {
     private let audioInput: AVAssetWriterInput?
     private var started = false
     private var failed: Error?
+    /// 最後に書いた映像サンプルの時刻。静止画面では映像が止まり音声だけが続くため、終了時刻をここに揃える。
+    private var lastVideoPTS: CMTime?
 
     init(outputURL: URL, width: Int, height: Int, includeAudio: Bool) throws {
         writer = try AVAssetWriter(outputURL: outputURL, fileType: .mov)
@@ -430,7 +471,11 @@ final class RecordingFileWriter {
             guard failed == nil else { return }
             beginIfNeeded(at: buffer.presentationTimeStamp)
             guard started, writer.status == .writing, videoInput.isReadyForMoreMediaData else { return }
-            if !videoInput.append(buffer), let e = writer.error { failed = e }
+            if videoInput.append(buffer) {
+                lastVideoPTS = buffer.presentationTimeStamp
+            } else if let e = writer.error {
+                failed = e
+            }
         }
     }
 
@@ -446,6 +491,8 @@ final class RecordingFileWriter {
         let done = await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
             queue.async { [self] in
                 guard started, writer.status == .writing else { c.resume(); return }
+                // 音声が映像より長くならないよう、セッションの終わりを最後の映像に揃える
+                if let lastVideoPTS { writer.endSession(atSourceTime: lastVideoPTS) }
                 videoInput.markAsFinished()
                 audioInput?.markAsFinished()
                 writer.finishWriting { c.resume() }

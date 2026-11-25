@@ -30,6 +30,28 @@ final class PlatformIntegrationAppTests: XCTestCase {
         func cancel() async { cancelCount += 1 }
     }
 
+    /// start が外から解放されるまで終わらない偽のエンジン(準備中にシートが閉じられる競合の再現用)。
+    final class SlowStartEngine: ScreenRecordingEngine {
+        private var gate: CheckedContinuation<Void, Never>?
+        private(set) var startEntered = false
+        private(set) var cancelCount = 0
+        var startError: Error?
+
+        func loadTargets() async throws -> ScreenRecordingTargets {
+            ScreenRecordingTargets(
+                displays: [ScreenCaptureTarget(kind: .display, displayID: 7, title: "ディスプレイ 7", displayWidth: 1920, displayHeight: 1080)],
+                windows: [])
+        }
+        func start(settings: ScreenRecordingSettings, outputURL: URL) async throws {
+            startEntered = true
+            await withCheckedContinuation { gate = $0 }
+            if let startError { throw startError }
+        }
+        func stop() async throws -> URL { URL(fileURLWithPath: "/tmp/x.mov") }
+        func cancel() async { cancelCount += 1 }
+        func releaseStart() { gate?.resume(); gate = nil }
+    }
+
     @MainActor
     private func makeController(engine: FakeEngine, granted: Bool) -> ScreenRecordingController {
         ScreenRecordingController(engine: engine, permissionCheck: { granted }, permissionRequest: { granted })
@@ -46,6 +68,41 @@ final class PlatformIntegrationAppTests: XCTestCase {
         XCTAssertEqual(c.phase, .failed)
         XCTAssertEqual(c.error, .permissionDenied)
         XCTAssertEqual(engine.startCount, 0)   // 許可が無いときはエンジンに触らない
+    }
+
+    @MainActor
+    func testCancelDuringPreparingDoesNotEnterRecording() async {
+        let engine = SlowStartEngine()
+        let c = ScreenRecordingController(engine: engine, permissionCheck: { true }, permissionRequest: { true })
+        await c.refreshTargets()
+        let starting = Task { @MainActor in await c.startRecording() }
+        while !engine.startEntered { await Task.yield() }
+        XCTAssertEqual(c.phase, .preparing)
+
+        await c.cancelIfNeeded()   // 準備中にシートが閉じられた
+        XCTAssertEqual(c.phase, .idle)
+        let cancelsBefore = engine.cancelCount
+
+        engine.releaseStart()      // そのあと開始が完了する
+        await starting.value
+        XCTAssertEqual(c.phase, .idle)                          // 収録へ進まない
+        XCTAssertEqual(engine.cancelCount, cancelsBefore + 1)   // 始まったキャプチャをもう一度止める
+        XCTAssertNil(c.error)
+    }
+
+    @MainActor
+    func testCancelDuringPreparingHidesLateStartFailure() async {
+        let engine = SlowStartEngine()
+        engine.startError = ScreenRecordingError.captureFailed("準備中に取り消されました")
+        let c = ScreenRecordingController(engine: engine, permissionCheck: { true }, permissionRequest: { true })
+        await c.refreshTargets()
+        let starting = Task { @MainActor in await c.startRecording() }
+        while !engine.startEntered { await Task.yield() }
+        await c.cancelIfNeeded()
+        engine.releaseStart()
+        await starting.value
+        XCTAssertEqual(c.phase, .idle)
+        XCTAssertNil(c.error)   // 古い error が残らない
     }
 
     @MainActor

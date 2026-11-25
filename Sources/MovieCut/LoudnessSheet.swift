@@ -69,9 +69,12 @@ struct LoudnessSheet: View {
     private func measure() async {
         let snapshot = model.project
         do {
+            // シートを閉じる(.task の取り消し)と待つ側は抜ける。取り消し後は結果を反映しない。
             let r = try await Task.detached(priority: .userInitiated) { try LoudnessAnalysis.measure(project: snapshot, vst3Provider: AppServices.vst3EffectProvider) }.value
+            if Task.isCancelled { return }
             state = r.map { .done($0) } ?? .noAudio
         } catch {
+            if Task.isCancelled { return }
             state = .failed(error.localizedDescription)
         }
     }

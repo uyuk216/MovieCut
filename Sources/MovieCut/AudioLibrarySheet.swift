@@ -514,11 +514,17 @@ struct AudioLibrarySheet: View {
 
     private func saveMetadata(for s: MediaBrowser.Item) {
         let kws = editKeywords.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
-        let note = editNote.trimmingCharacters(in: .whitespacesAndNewlines)
+        let note = Self.normalizedNote(editNote)
         model.updateMediaMetadata(for: s.url.path, keywords: kws,
                                   rating: editRating < 0 ? nil : editRating,
-                                  note: note.isEmpty ? nil : editNote,
+                                  note: note,
                                   label: editLabel.isEmpty ? nil : editLabel)
+    }
+
+    /// メモの保存値: 前後の空白を除き、空なら nil。
+    static func normalizedNote(_ raw: String) -> String? {
+        let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return t.isEmpty ? nil : t
     }
 
     private func clearMetadata(for s: MediaBrowser.Item) {
@@ -570,6 +576,7 @@ struct AudioLibrarySheet: View {
 
     /// 選んだ素材を再生ヘッドに置く(`addMedia` → `ClipEditing.place`。1 回の取り消し)。
     private func add(_ e: MediaBrowser.Item) {
+        guard !e.unreadable else { return }   // ダブルクリック経路でも読めない素材は置かない
         Task { _ = await Self.addToTimeline(url: e.url, model: model) }
     }
 
@@ -596,7 +603,7 @@ struct AudioLibrarySheet: View {
     }
 
     static func durationText(_ s: Double) -> String {
-        let total = Int((s).rounded())
+        let total = s.isFinite ? Int(min(max(s, 0), 86_400 * 365).rounded()) : 0   // 非有限・巨大値で Int() がトラップしないように
         return String(format: "%d:%02d", total / 60, total % 60)
     }
 

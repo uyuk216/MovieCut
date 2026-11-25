@@ -10,6 +10,8 @@ struct CandidateSession: Equatable {
     var extra: [String] = []
     /// いま仮に反映している候補(nil = 元の素材)
     var selectedPath: String?
+    /// previewCandidate の呼び出しごとに進む世代。測定中に別の選択があったら古い結果を捨てるために使う
+    var generation: Int = 0
 }
 
 extension ProjectModel {
@@ -43,6 +45,9 @@ extension ProjectModel {
     @discardableResult
     func previewCandidate(_ path: String?) async -> Bool {
         guard var s = candidateSession, let base = gestureBase else { return false }
+        s.generation += 1
+        let myGeneration = s.generation
+        candidateSession = s
         guard let path else {
             s.selectedPath = nil
             candidateSession = s
@@ -55,7 +60,8 @@ extension ProjectModel {
         let cand = CandidateSwap.Candidate(path: path, kind: kind)
         let dur: Double? = kind == .image ? nil : await candidateProbe(URL(fileURLWithPath: path), kind)
         // 測っている間に閉じられた・別の候補が選ばれたときは捨てる
-        guard candidateSession?.clipId == s.clipId, gestureBase != nil else { return false }
+        guard candidateSession?.clipId == s.clipId, candidateSession?.generation == myGeneration, gestureBase != nil else { return false }
+        s = candidateSession ?? s
         guard var p = CandidateSwap.swap(in: base, clipId: s.clipId, to: cand, sourceDuration: dur) else { return false }
         UnusedMedia.register([path], in: &p)
         s.selectedPath = path
