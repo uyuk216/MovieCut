@@ -112,7 +112,8 @@ public struct ValueRef: Codable, Equatable, Sendable {
             // 先に表示桁で丸めてから分・秒へ分ける(丸めで秒が 60 になるときは分へ繰り上がる)。
             // 丸め方は表示側(printf の偶数丸め)とそろえる
             let scale = pow(10.0, Double(decimals))
-            let s = (max(0, v) * scale).rounded(.toNearestOrEven) / scale
+            let safe = v.isFinite ? min(max(v, 0), 1e12) : 0   // 極端な値でも整数変換で落ちない
+            let s = (safe * scale).rounded(.toNearestOrEven) / scale
             let m = Int(s / 60)
             let rest = s - Double(m * 60)
             let width = decimals == 0 ? 2 : 3 + decimals
