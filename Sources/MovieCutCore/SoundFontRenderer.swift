@@ -19,7 +19,9 @@ public enum SoundFontRenderer {
     public static func renderSamples(_ file: MidiFileData, soundFont: SoundFont) -> [Float] {
         let sr = Double(MidiImporter.sampleRate)
         let total = file.duration + MidiImporter.tail
-        let n = min(MidiImporter.maxSamples, Int((total * sr).rounded()))
+        // 防御: 非有限の総尺でも Int 変換で落とさない(簡易シンセ renderSamples と同じ)
+        let nd = (total * sr).rounded()
+        let n = nd.isFinite ? min(MidiImporter.maxSamples, Int(nd)) : MidiImporter.maxSamples
         guard n > 0 else { return [] }
         var out = [Double](repeating: 0, count: n)
         var noteSampleBudget = MidiImporter.maxNoteSamples
@@ -28,11 +30,14 @@ public enum SoundFontRenderer {
             guard noteSampleBudget > 0 else { break }
             guard let (region, header) = soundFont.region(bank: note.bank, program: note.program,
                                                            key: note.pitch, velocity: note.velocity) else { continue }
+            let sd = (note.start * sr).rounded()
+            guard sd.isFinite, sd >= 0, sd < Double(n), note.duration.isFinite else { continue }
             let voice = Voice(region: region, header: header, note: note)
-            let start = Int((note.start * sr).rounded())
-            guard start >= 0, start < n else { continue }
+            let start = Int(sd)
             // 声の長さの上限: ノート長 + リリース。ループ無しならサンプルの残り長でも止まる。
-            let planned = Int(((note.duration + voice.releaseSeconds + 0.05) * sr).rounded())
+            let pd = ((note.duration + voice.releaseSeconds + 0.05) * sr).rounded()
+            guard pd.isFinite else { continue }
+            let planned = Int(min(pd, Double(n)))
             let allowed = min(n - start, planned, noteSampleBudget)
             guard allowed > 0 else { continue }
             noteSampleBudget -= allowed
