@@ -16,7 +16,9 @@ public final class RenderAssets {
     private var visemeCache: [String: [Viseme]?] = [:]
     private var missingEnvelopes: Set<String> = []
     private var generators: [String: AVAssetImageGenerator] = [:]
-    private var missingVideos: Set<String> = []
+    /// 読めなかった動画 → そのときのファイルの指紋(更新日時+大きさ。無ければ空)。同じ指紋のあいだだけ「見つからない」扱いにし、
+    /// 差し替え・再リンクで中身が変わったら読み直す(恒久的に黒にしない)。
+    private var missingVideos: [String: String] = [:]
     /// パス → 最初のコマが出る時刻(映像が遅れて始まるファイルの先頭クランプ用)。
     private var firstFrameTimes: [String: Double] = [:]
     private var exportMode = false
@@ -458,7 +460,7 @@ public final class RenderAssets {
     private func videoFrameUncounted(path: String, time: Double, reverse: Bool, exact: Bool) -> CGImage? {
         lock.lock()
         let src = sourcePathLocked(path)     // プロキシを読むのはプレビューだけ
-        if exportMode, reverse, !missingVideos.contains(src) {
+        if exportMode, reverse, !isMissingVideoLocked(src) {
             var rev = reversers[src]
             if rev == nil {
                 rev = ReverseVideoFrames(url: URL(fileURLWithPath: src)) { [unowned self] t in self.generatorFrame(path: src, time: t, exact: true) }
@@ -467,7 +469,7 @@ public final class RenderAssets {
             lock.unlock()
             return rev?.frame(at: time)
         }
-        if exportMode, !missingVideos.contains(src) {
+        if exportMode, !isMissingVideoLocked(src) {
             var seq = sequentials[src]
             if seq == nil {
                 let scale = previewSession ? sessionVideoScale : 1
@@ -481,10 +483,27 @@ public final class RenderAssets {
         return generatorFrame(path: src, time: time, exact: exact || reverse)
     }
 
+    private static func fileSignature(_ path: String) -> String {
+        guard let a = try? FileManager.default.attributesOfItem(atPath: path) else { return "" }
+        let m = (a[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+        return "\(m)/\((a[.size] as? NSNumber)?.int64Value ?? -1)"
+    }
+
+    /// lock を持った状態で呼ぶ。読めなかった記録があり、ファイルが記録時から変わっていなければ true。変わっていたら記録を消して false。
+    private func isMissingVideoLocked(_ path: String) -> Bool {
+        guard let sig = missingVideos[path] else { return false }
+        if Self.fileSignature(path) == sig { return true }
+        missingVideos[path] = nil
+        // 読めなかったときの generator(古い asset を抱えている)も捨てて、作り直す
+        for k in generators.keys where k == path || k.hasPrefix(path + "\u{0}") { generators[k] = nil }
+        firstFrameTimes[path] = nil
+        return false
+    }
+
     /// AVAssetImageGenerator で任意時刻のフレームを取る(正確・低速)。
     func generatorFrame(path: String, time: Double, exact: Bool = false) -> CGImage? {
         lock.lock()
-        if missingVideos.contains(path) { lock.unlock(); return nil }
+        if isMissingVideoLocked(path) { lock.unlock(); return nil }
         // プレビュー再生中だけ縮小。キーに印を足して、等倍・exact の generator と混ざらないようにする
         let scale = previewSession ? sessionVideoScale : 1
         let shrink = scale < 1
@@ -518,7 +537,7 @@ public final class RenderAssets {
         if first > 0 { clamped = max(clamped, first + 0.001) }
         let t = CMTime(seconds: clamped, preferredTimescale: 600)
         if let img = try? g.copyCGImage(at: t, actualTime: nil) { return img }
-        lock.lock(); missingVideos.insert(path); lock.unlock()
+        lock.lock(); missingVideos[path] = Self.fileSignature(path); lock.unlock()
         return nil
     }
 

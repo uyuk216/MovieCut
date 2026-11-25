@@ -126,3 +126,21 @@ final class ValueTextCompoundTimeTests: XCTestCase {
         XCTAssertEqual(ValueRef(clipId: "a", format: "time", decimals: 1).format(75.25), "01:15.2", "端数の丸めは表示側の偶数丸めにそろう")
     }
 }
+
+/// 極端な有限値・非有限値でも整数変換で落ちない(堅牢化。通常の値の表示は変えない)。
+final class ExtremeTimeFormatTests: XCTestCase {
+    func testSourceUsageClockSurvivesExtremeValues() {
+        for v in [-1e30, 1e30, -Double.infinity, Double.infinity, Double.nan] {
+            _ = SourceUsage.clock(v)
+        }
+        XCTAssertEqual(SourceUsage.clock(-1e30), "00:00")
+        XCTAssertEqual(SourceUsage.clock(75), "01:15")
+    }
+
+    func testValueRefTimeFormatSurvivesExtremeValues() {
+        let r = ValueRef(clipId: "a", param: "start", format: "time", decimals: 1)
+        for v in [-1e30, 1e30, Double.infinity, Double.nan] { _ = r.format(v) }
+        XCTAssertEqual(r.format(-1e30), "00:00.0")
+        XCTAssertEqual(r.format(65.25), "01:05.2")
+    }
+}

@@ -289,6 +289,38 @@ final class InspectorModelTests: XCTestCase {
         XCTAssertEqual(m.character(marisa)?.name, "キャラ2")
     }
 
+    func testDeleteCharacterIsRefusedWhenItsVoiceClipIsLocked() async {
+        let (m, reimu, _) = await modelWithVoices()
+        var p = m.project
+        let loc = ClipEditing.locate("v0", in: p)!
+        p.tracks[loc.track].clips[loc.index].locked = true
+        m.project = p
+        m.selectedClipId = "v2"
+        m.selectCharacter(reimu)
+        m.selectedClipId = "v2"
+        let before = m.project
+        XCTAssertFalse(m.deleteCharacter(reimu), "ロックされたセリフを消す編集は断られ、成功扱いにしない")
+        XCTAssertEqual(m.project, before)
+        XCTAssertEqual(m.selectedClipId, "v2", "断られたら選択も動かさない")
+        XCTAssertEqual(m.selectedCharId, reimu)
+        XCTAssertEqual(m.statusText, ProjectModel.lockedNotice)
+    }
+
+    func testVoiceEditsOnLockedClipAreRefusedWithoutSynthesizing() async {
+        let (m, _, marisa) = await modelWithVoices()
+        var p = m.project
+        let loc = ClipEditing.locate("v0", in: p)!
+        p.tracks[loc.track].clips[loc.index].locked = true
+        m.project = p
+        let before = m.project
+        let t1 = await m.setVoiceText("変えたい", clipId: "v0")
+        let t2 = await m.setVoiceCharacter(marisa, clipId: "v0")
+        let t3 = await m.regenerateVoice(clipId: "v0")
+        XCTAssertFalse(t1 || t2 || t3, "ロックされたセリフの編集は断られ、成功扱いにしない")
+        XCTAssertEqual(m.project, before)
+        XCTAssertFalse(m.effectiveUndoManager.canUndo)
+    }
+
     func testCannotDeleteLastCharacter() {
         let m = makeModel()
         m.project.characters = [m.project.characters[0]]
@@ -380,6 +412,19 @@ final class InspectorModelTests: XCTestCase {
         XCTAssertEqual(failed, 0)
         XCTAssertEqual(m.project, before)
         XCTAssertFalse(m.effectiveUndoManager.canUndo)
+    }
+
+    func testRegenerateAllVoicesSkipsLockedClipsAndReportsActualCount() async {
+        let (m, reimu, _) = await modelWithVoices()
+        var p = m.project
+        let loc = ClipEditing.locate("v0", in: p)!
+        p.tracks[loc.track].clips[loc.index].locked = true
+        m.project = p
+        let before = m.project
+        let n = await m.regenerateAllVoices(charId: reimu)
+        XCTAssertEqual(n, 1, "ロックされたセリフは作り直さず、数にも入れない")
+        XCTAssertEqual(m.clip("v0"), before.allClips.first { $0.id == "v0" })
+        XCTAssertNotEqual(m.clip("v2")?.src, before.allClips.first { $0.id == "v2" }?.src)
     }
 
     func testTestSpeakUsesCharacterSettingsAndReportsErrors() async {

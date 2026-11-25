@@ -1,4 +1,5 @@
 import XCTest
+import AVFoundation
 import CoreGraphics
 import ImageIO
 import UniformTypeIdentifiers
@@ -150,5 +151,40 @@ final class RenderAssetsBudgetTests: XCTestCase {
         XCTAssertEqual(half.width, 50); XCTAssertEqual(half.height, 50)
         let tiny = SequentialVideoFrames.downscaled(img, scale: 0.001)
         XCTAssertEqual(tiny.width, 1); XCTAssertEqual(tiny.height, 1)
+    }
+}
+
+/// 読めなかった動画が、差し替え・再リンク後も恒久的に「見つからない」のままにならない。
+final class RenderAssetsMissingVideoRetryTests: XCTestCase {
+    private func writeVideo(_ url: URL) async throws {
+        try? FileManager.default.removeItem(at: url)
+        let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
+        let input = AVAssetWriterInput(mediaType: .video, outputSettings: [AVVideoCodecKey: AVVideoCodecType.h264, AVVideoWidthKey: 64, AVVideoHeightKey: 64])
+        let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input, sourcePixelBufferAttributes: [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+            kCVPixelBufferWidthKey as String: 64, kCVPixelBufferHeightKey as String: 64])
+        writer.add(input)
+        XCTAssertTrue(writer.startWriting())
+        writer.startSession(atSourceTime: .zero)
+        for i in 0..<30 {
+            while !input.isReadyForMoreMediaData { try await Task.sleep(nanoseconds: 2_000_000) }
+            var pb: CVPixelBuffer?
+            CVPixelBufferPoolCreatePixelBuffer(nil, try XCTUnwrap(adaptor.pixelBufferPool), &pb)
+            adaptor.append(try XCTUnwrap(pb), withPresentationTime: CMTime(value: CMTimeValue(i), timescale: 30))
+        }
+        input.markAsFinished()
+        await writer.finishWriting()
+        XCTAssertEqual(writer.status, .completed)
+    }
+
+    func testVideoBecomesReadableAfterBeingReplaced() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mc-missing-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("v.mp4")
+        let assets = RenderAssets()
+        XCTAssertNil(assets.generatorFrame(path: url.path, time: 0.1), "まだ無いので読めない")
+        try await writeVideo(url)
+        XCTAssertNotNil(assets.generatorFrame(path: url.path, time: 0.1), "同じ場所に動画が置かれたら読めるはず(恒久的に黒にしない)")
     }
 }

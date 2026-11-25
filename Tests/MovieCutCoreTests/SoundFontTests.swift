@@ -201,6 +201,22 @@ final class SoundFontTests: XCTestCase {
         XCTAssertEqual(Array(wav.prefix(4)), Array("RIFF".utf8))
     }
 
+    /// 非有限の総尺・ノート時刻でも落ちない(簡易シンセ renderSamples と同じ防御)。
+    func testSoundFontRenderSurvivesNonFiniteTimes() throws {
+        let sf = try SoundFontParser.parse(defaultSF2())
+        let base = try MidiParser.parse(noteMIDI())
+        var d = base; d.duration = .nan
+        XCTAssertLessThanOrEqual(SoundFontRenderer.renderSamples(d, soundFont: sf).count, MidiImporter.maxSamples)
+        var inf = base; inf.duration = .infinity
+        XCTAssertLessThanOrEqual(SoundFontRenderer.renderSamples(inf, soundFont: sf).count, MidiImporter.maxSamples)
+        var s = base; s.notes[0].start = .nan
+        XCTAssertNoThrow(SoundFontRenderer.renderSamples(s, soundFont: sf))
+        var l = base; l.notes[0].duration = .infinity
+        XCTAssertNoThrow(SoundFontRenderer.renderSamples(l, soundFont: sf))
+        var n = base; n.notes[0].duration = .nan
+        XCTAssertNoThrow(SoundFontRenderer.renderSamples(n, soundFont: sf))
+    }
+
     func testSoundFontProgramChangeSelectsPreset() throws {
         let sf = try SoundFontParser.parse(defaultSF2())
         let withPC = try MidiParser.parse(noteMIDI(prefix: vlq(0) + [0xc0, 1]))
