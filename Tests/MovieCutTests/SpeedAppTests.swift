@@ -111,6 +111,19 @@ final class SpeedAppTests: XCTestCase {
         XCTAssertEqual(m.clip("w")!.start, 12)
     }
 
+    func testFreezeFrameOnLockedLayerIsRefusedWithoutSuccessNotice() {
+        let m = makeModel()
+        m.selectedClipId = "v"
+        m.currentTime = 4
+        m.edit("lock") { $0.tracks[1].locked = true }
+        let before = m.project
+        m.statusText = ""
+        XCTAssertFalse(m.freezeFrameSelected())
+        XCTAssertEqual(m.project, before)
+        XCTAssertEqual(m.selectedClipId, "v", "存在しない静止画IDを選ばない")
+        XCTAssertEqual(m.statusText, ProjectModel.lockedNotice)
+    }
+
     func testFreezeFrameThroughModel() {
         let m = makeModel()
         m.selectedClipId = "v"
