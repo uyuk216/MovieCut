@@ -294,9 +294,7 @@ struct LeftPanel: View {
                 .font(.caption)
                 .padding(.bottom, 6)
             ZStack(alignment: .topLeading) {
-                TextEditor(text: $scriptText)
-                    .font(MCDesign.Font.body)
-                    .scrollContentBackground(.hidden)
+                PlainTextEditor(text: $scriptText, font: NSFont.systemFont(ofSize: MCDesign.FontSize.body))
                     .padding(4)
                     .background(MCDesign.Color.fieldBackground)
                     .clipShape(RoundedRectangle(cornerRadius: MCDesign.Radius.control))

@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import MovieCutCore
 
 /// 「読み辞書を編集…」: セリフの表記 → 読み(かな)の対応を、行ごとに編集する画面。
@@ -51,7 +52,7 @@ struct ReadingDictionarySheet: View {
             GroupBox {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("テキストから取り込む(1 行 1 件:「表記,読み」「表記=読み」)").font(MCDesign.Font.subheadline).foregroundStyle(MCDesign.Color.textSecondary)
-                    TextEditor(text: $importText).font(MCDesign.Font.monospaced(12)).frame(height: 54)
+                    PlainTextEditor(text: $importText, font: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)).frame(height: 54)
                     HStack {
                         Spacer()
                         Button("取り込む") { importFromText() }.disabled(importText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
