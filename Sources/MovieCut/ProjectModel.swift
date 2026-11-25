@@ -327,6 +327,8 @@ final class ProjectModel: ObservableObject {
     @Published var showScriptTableSheet = false
     /// AIでセリフ案を作る(W3-08)のシート。
     @Published var showDialogueSuggestionSheet = false
+    /// AIでラフカットを作る(第 1 版)のシート。
+    @Published var showAIRoughCutSheet = false
     /// クリップ ▸ 話者分離…(W3-27)のシート。
     @Published var showDiarizationSheet = false
     /// 同じセリフのテイク比較シート(表示の状態)と、試聴の出口・鳴らしているテイクの id
@@ -424,6 +426,9 @@ final class ProjectModel: ObservableObject {
     /// AIテキスト生成(W3-08)の画面部品(テストで差し替える)と、生成中のキャンセル。
     var textGenUI = TextGenUI()
     var textGenCancel: (() -> Void)?
+    /// AIラフカット(第 1 版)の画面部品(テストで差し替える)と、生成中のキャンセル。
+    var roughCutUI = RoughCutUI()
+    var roughCutCancel: (() -> Void)?
     /// 生成メディア(API)の画面部品(テストで差し替える)と、生成中のキャンセル。
     var genMediaUI = GenMediaUI()
     var genMediaCancel: (() -> Void)?

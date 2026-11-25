@@ -102,6 +102,7 @@ struct ContentView: View {
         .sheet(isPresented: $model.showSceneListSheet) { SceneListSheet(model: model) }
         .sheet(isPresented: $model.showScriptTableSheet) { ScriptTableSheet(model: model) }
         .sheet(isPresented: $model.showDialogueSuggestionSheet) { DialogueSuggestionSheet(model: model) }
+        .sheet(isPresented: $model.showAIRoughCutSheet) { AIRoughCutSheet(model: model) }
         .sheet(isPresented: $model.showDiarizationSheet) { DiarizationSheet(model: model) }
         .sheet(isPresented: Binding(get: { model.candidateSession != nil }, set: { if !$0 { model.cancelCandidateSwap() } })) { CandidateSwapSheet(model: model) }
         .sheet(isPresented: $model.showSubclipSheet) { SubclipBatchSheet(model: model) }
