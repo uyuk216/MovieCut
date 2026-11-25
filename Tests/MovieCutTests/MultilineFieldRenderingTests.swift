@@ -156,4 +156,22 @@ final class PlainTextEditorRenderingTests: XCTestCase {
         }
         XCTAssertEqual(hits, [], "TextEditor が残っている")
     }
+
+    /// Sources に素の NSTextView の生成が残っていないこと(PlainRenderingTextView 経由へ統一済み)。
+    func testNoPlainNSTextViewCreationLeftInSources() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let dir = root.appendingPathComponent("Sources")
+        let en = try XCTUnwrap(FileManager.default.enumerator(at: dir, includingPropertiesForKeys: nil))
+        var hits: [String] = []
+        for case let url as URL in en where url.pathExtension == "swift" {
+            if url.lastPathComponent == "PlainTextEditor.swift" { continue }
+            let src = try String(contentsOf: url, encoding: .utf8)
+            for (i, line) in src.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
+                let t = line.trimmingCharacters(in: .whitespaces)
+                if t.hasPrefix("//") { continue }
+                if t.contains("NSTextView(") || t.contains("NSTextView.init") { hits.append("\(url.lastPathComponent):\(i + 1)") }
+            }
+        }
+        XCTAssertEqual(hits, [], "素の NSTextView の生成が残っている")
+    }
 }
