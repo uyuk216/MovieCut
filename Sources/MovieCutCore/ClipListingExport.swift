@@ -11,7 +11,14 @@ public enum ClipListingExport {
 
     /// 1 行ぶんの値(書き出し形式に関係なく同じ並び)。
     public static func cells(_ e: TimelineQuery.ListEntry) -> [String] {
-        [e.trackName, e.label, seconds(e.start), seconds(e.duration), e.source ?? ""]
+        [formulaSafe(e.trackName), formulaSafe(e.label), seconds(e.start), seconds(e.duration), formulaSafe(e.source ?? "")]
+    }
+
+    /// 表計算ソフトで先頭の = + - @ が数式として解釈されないよう、文字セルの先頭に ' を付ける
+    /// (一覧は書き出し専用で読み戻しは無い。時刻の数値セルには使わない)。
+    static func formulaSafe(_ s: String) -> String {
+        guard let f = s.unicodeScalars.first, "=+-@".unicodeScalars.contains(f) else { return s }
+        return "'" + s
     }
 
     /// タブ区切り(見出し行つき)。セルの中のタブ・改行は空白にする(列がずれないように)。

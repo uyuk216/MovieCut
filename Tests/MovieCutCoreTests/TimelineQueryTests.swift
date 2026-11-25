@@ -208,6 +208,19 @@ final class ClipListingExportTests: XCTestCase {
         XCTAssertFalse(out.contains("\"上\""), "引用符が要らないセルは囲まない")
     }
 
+    /// 表計算ソフトで開いたとき、先頭が = + - @ のセルが数式として実行されないよう、文字セルの先頭に ' を付ける。
+    /// (使用クリップ一覧には読み戻しが無く、時刻の数値セルは対象外)
+    func testTextCellsStartingWithFormulaCharsAreNeutralized() {
+        for lead in ["=", "+", "-", "@"] {
+            let out = ClipListingExport.csv([entry("\(lead)SUM(A1)", layer: "\(lead)層", source: "\(lead)x")])
+            XCTAssertTrue(out.hasSuffix("'\(lead)層,'\(lead)SUM(A1),1.500,2.000,'\(lead)x\r\n"), out)
+            let tsv = ClipListingExport.tsv([entry("\(lead)SUM(A1)")])
+            XCTAssertTrue(tsv.contains("\t'\(lead)SUM(A1)\t"), tsv)
+        }
+        XCTAssertTrue(ClipListingExport.csv([entry("普通")]).hasSuffix("上,普通,1.500,2.000,\r\n"))
+        XCTAssertTrue(ClipListingExport.csv([entry("t", start: -1)]).contains(",-1.000,"), "数値セルは変えない")
+    }
+
     func testEmptySourceIsEmptyCell() {
         let out = ClipListingExport.csv([entry("t", source: nil)])
         XCTAssertTrue(out.hasSuffix("上,t,1.500,2.000,\r\n"))
