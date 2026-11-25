@@ -186,3 +186,41 @@ final class FFmpegExportTests: XCTestCase {
         }
     }
 }
+
+// MARK: - ffmpeg 実行まわり(標準エラー末尾の取りこぼし・起動前キャンセル)
+
+final class FFmpegRunnerTests: XCTestCase {
+    /// 終了直前に出た標準エラーも、失敗メッセージの末尾に残る(終了通知で読み取りを止める前に読み切る)。
+    func testFailureKeepsFinalStderrChunk() async throws {
+        for i in 0..<60 {
+            do {
+                try await FFmpegVideoExporter.runFFmpeg(URL(fileURLWithPath: "/bin/sh"),
+                                                        arguments: ["-c", "echo FINAL-ERROR-\(i) >&2; exit 1"], duration: 1) { _ in }
+                XCTFail("失敗するはず")
+            } catch FFmpegExportError.ffmpegFailed(let msg) {
+                XCTAssertTrue(msg.contains("FINAL-ERROR-\(i)"), "回 \(i): 末尾の標準エラーが欠けた: \(msg)")
+            }
+        }
+    }
+
+    /// 開始前にキャンセル済みなら、プロセスを起動せずすぐ CancellationError で戻る。
+    func testAlreadyCancelledTaskDoesNotLaunchProcess() async {
+        let marker = FileManager.default.temporaryDirectory.appendingPathComponent("moviecut-cancel-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: marker) }
+        let task = Task { () -> Bool in
+            // キャンセルされるまで待ってから実行する
+            while !Task.isCancelled { try? await Task.sleep(nanoseconds: 1_000_000) }
+            do {
+                try await FFmpegVideoExporter.runFFmpeg(URL(fileURLWithPath: "/bin/sh"),
+                                                        arguments: ["-c", "touch '\(marker.path)'; sleep 3"], duration: 1) { _ in }
+            } catch is CancellationError { return true } catch { return false }
+            return false
+        }
+        task.cancel()
+        let t0 = Date()
+        let cancelled = await task.value
+        XCTAssertTrue(cancelled)
+        XCTAssertLessThan(Date().timeIntervalSince(t0), 2, "起動前キャンセルなのに実行し続けた")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: marker.path), "起動前キャンセルなのにプロセスが起動した")
+    }
+}

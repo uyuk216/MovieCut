@@ -384,7 +384,12 @@ public enum FFmpegVideoExporter {
                         cont.resume(throwing: FFmpegExportError.img2webpFailed(errBuffer.tail))
                     }
                 }
-                do { try proc.run() } catch { cont.resume(throwing: FFmpegExportError.img2webpFailed(error.localizedDescription)) }
+                do {
+                    guard try box.launch(proc) else {
+                        errPipe.fileHandleForReading.readabilityHandler = nil
+                        cont.resume(throwing: CancellationError()); return
+                    }
+                } catch { cont.resume(throwing: FFmpegExportError.img2webpFailed(error.localizedDescription)) }
             }
         } onCancel: {
             box.cancel()
@@ -392,7 +397,7 @@ public enum FFmpegVideoExporter {
     }
 
     /// ffmpeg を実行し、`-progress` の `out_time_ms` から進み具合を出す。失敗時は標準エラーの末尾つきで投げる。
-    private static func runFFmpeg(_ ffmpeg: URL, arguments: [String], duration: Double, progress: @escaping (Double) -> Void) async throws {
+    static func runFFmpeg(_ ffmpeg: URL, arguments: [String], duration: Double, progress: @escaping (Double) -> Void) async throws {
         let box = ProcessBox()
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
@@ -427,7 +432,14 @@ public enum FFmpegVideoExporter {
                         cont.resume(throwing: FFmpegExportError.ffmpegFailed(errBuffer.tail))
                     }
                 }
-                do { try proc.run() } catch { cont.resume(throwing: FFmpegExportError.ffmpegFailed(error.localizedDescription)) }
+                do {
+                    // 起動前にキャンセル済みなら起動しない(終了通知を待たずここで戻る)
+                    guard try box.launch(proc) else {
+                        errPipe.fileHandleForReading.readabilityHandler = nil
+                        outPipe.fileHandleForReading.readabilityHandler = nil
+                        cont.resume(throwing: CancellationError()); return
+                    }
+                } catch { cont.resume(throwing: FFmpegExportError.ffmpegFailed(error.localizedDescription)) }
             }
         } onCancel: {
             box.cancel()
@@ -439,9 +451,20 @@ public enum FFmpegVideoExporter {
         var process: Process?
         private var _cancelled = false
         var cancelled: Bool { lock.withLock { _cancelled } }
+        private var launched = false
         func cancel() {
-            lock.withLock { _cancelled = true }
-            process?.terminate()
+            // 未起動のプロセスに terminate を呼ぶと例外になるので、起動済みのときだけ止める
+            let p: Process? = lock.withLock { _cancelled = true; return launched ? process : nil }
+            p?.terminate()
+        }
+        /// キャンセル済みなら起動せず false。起動の判定とキャンセルを同じ鍵の中で行う(間に割り込まれない)。
+        func launch(_ proc: Process) throws -> Bool {
+            try lock.withLock {
+                if _cancelled { return false }
+                try proc.run()
+                launched = true
+                return true
+            }
         }
     }
 
