@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import MovieCutCore
 
 /// クリップ ▸ 範囲を指定してサブクリップを一括作成…: 1 行に「素材 範囲, 範囲…」を書くと、再生位置から順に並べる。
@@ -14,8 +15,7 @@ struct SubclipBatchSheet: View {
             Text(L10n.t("サブクリップを一括作成")).font(MCDesign.Font.title3.bold())
             Text(L10n.t("1 行に「素材 範囲」を書きます。例: intro.mov 0:05-0:12, 0:30-0:41。範囲だけの行は直前の素材の続き。# で始まる行は注釈。"))
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            TextEditor(text: $text)
-                .font(MCDesign.Font.monospaced(13))
+            PlainTextEditor(text: $text, font: NSFont.monospacedSystemFont(ofSize: 13, weight: .regular))
                 .frame(minHeight: 160)
                 .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.secondary.opacity(0.4)))
             summary

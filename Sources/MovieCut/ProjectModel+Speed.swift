@@ -75,7 +75,7 @@ extension ProjectModel {
     func freezeFrameSelected() -> Bool {
         guard !isLocked, let id = selectedClipId, let r = SpeedEditing.freezeFrame(in: project, clipId: id, at: currentTime) else { return false }
         flushCoalesced()
-        edit("フリーズフレーム") { $0 = r.project }
+        guard edit("フリーズフレーム", { $0 = r.project }) else { return false }   // ロックで断られたら成功表示も選択もしない
         selectedClipId = r.freezeId
         statusText = "フリーズフレームを入れました（\(Int(ClipTiming.freezeLength)) 秒）"
         return true

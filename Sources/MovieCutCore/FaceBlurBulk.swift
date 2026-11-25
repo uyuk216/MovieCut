@@ -70,10 +70,12 @@ public enum FaceBlurBulk {
     }
 
     /// プロジェクトの全トラック(複合クリップの中も再帰)へ一括付与し、変えたクリップ数を返す。
+    /// ロックされたレイヤー・クリップ(その中身も)は触らず、数にも入れない。
     @discardableResult
     public static func apply(to project: inout Project, options: Options = Options()) -> Int {
         var changed = 0
         for ti in project.tracks.indices {
+            if project.tracks[ti].isLocked { continue }
             changed += apply(to: &project.tracks[ti].clips, options: options)
         }
         return changed
@@ -81,22 +83,23 @@ public enum FaceBlurBulk {
 
     static func apply(to clips: inout [Clip], options: Options) -> Int {
         var changed = 0
-        for ci in clips.indices {
+        for ci in clips.indices where !clips[ci].isClipLocked {
             if apply(to: &clips[ci], options: options) { changed += 1 }
-            // 複合クリップの中身にも付ける
+            // 複合クリップの中身にも付ける(中のロックは中のレイヤー・クリップごとに見る)
             if var nested = clips[ci].tracks {
-                for ti in nested.indices { changed += apply(to: &nested[ti].clips, options: options) }
+                for ti in nested.indices where !nested[ti].isLocked { changed += apply(to: &nested[ti].clips, options: options) }
                 clips[ci].tracks = nested
             }
         }
         return changed
     }
 
-    /// プロジェクト全体から顔ぼかしを一括で外し、外したクリップ数を返す。
+    /// プロジェクト全体から顔ぼかしを一括で外し、外したクリップ数を返す。ロックされたレイヤー・クリップ(その中身も)は触らない。
     @discardableResult
     public static func removeAll(from project: inout Project) -> Int {
         var changed = 0
         for ti in project.tracks.indices {
+            if project.tracks[ti].isLocked { continue }
             changed += removeAll(from: &project.tracks[ti].clips)
         }
         return changed
@@ -104,7 +107,7 @@ public enum FaceBlurBulk {
 
     static func removeAll(from clips: inout [Clip]) -> Int {
         var changed = 0
-        for ci in clips.indices {
+        for ci in clips.indices where !clips[ci].isClipLocked {
             let before = clips[ci].effects.count
             // エフェクト番号がずれるため、キーフレームの付け替えは EffectEditing.remove を使う
             var idx = clips[ci].effects.count - 1
@@ -116,7 +119,7 @@ public enum FaceBlurBulk {
             }
             if clips[ci].effects.count != before { changed += 1 }
             if var nested = clips[ci].tracks {
-                for ti in nested.indices { changed += removeAll(from: &nested[ti].clips) }
+                for ti in nested.indices where !nested[ti].isLocked { changed += removeAll(from: &nested[ti].clips) }
                 clips[ci].tracks = nested
             }
         }

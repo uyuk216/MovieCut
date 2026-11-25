@@ -62,7 +62,7 @@ public enum CandidateSwap {
                 if room < c.duration { c.duration = max(ClipEditing.minDuration, room) }
             }
         } else {
-            c.srcDuration = clip.srcDuration
+            c.srcDuration = nil   // 測れないとき、古い素材の長さは残さない(画像と同じ)
         }
         return c
     }

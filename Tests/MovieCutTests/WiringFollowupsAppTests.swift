@@ -63,6 +63,21 @@ final class WiringFollowupsAppTests: XCTestCase {
         XCTAssertEqual(FaceBlurBulk.count(in: m.project), 2, "解除の Undo で戻る")
     }
 
+    func testFaceBlurModelFunctionsSkipLockedAndReportActualCount() {
+        var p = Project.new()
+        p.tracks[0].clips = [clip("a", .image, start: 0, dur: 2)]
+        p.tracks[1].clips = [clip("b", .image, start: 0, dur: 2)]
+        p.tracks[1].locked = true
+        let m = ProjectModel(project: p)
+        m.notices = OneTimeNotices()
+        XCTAssertEqual(m.applyFaceBlurToAll(), 1, "ロックされたレイヤーの分は数えない")
+        XCTAssertFalse(FaceBlurBulk.hasFaceBlur(m.clip("b")!))
+        XCTAssertTrue(FaceBlurBulk.hasFaceBlur(m.clip("a")!))
+        XCTAssertEqual(m.statusText, "1 個のクリップに顔ぼかしを付けました")
+        XCTAssertEqual(m.removeAllFaceBlur(), 1)
+        XCTAssertEqual(m.statusText, "1 個のクリップから顔ぼかしを外しました")
+    }
+
     func testFaceBlurModelFunctionsReportZeroWhenNoTargets() {
         var p = Project.new()
         p.tracks[0].clips = [clip("t", .text, start: 0, dur: 2)]

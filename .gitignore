@@ -12,3 +12,6 @@ review-receipts/
 node_modules/
 dist/
 vendor/
+
+# ローカル設定(実URLなど。コミットしない)
+Scripts/local.env

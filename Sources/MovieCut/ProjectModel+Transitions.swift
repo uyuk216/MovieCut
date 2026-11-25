@@ -135,7 +135,7 @@ extension ProjectModel {
         guard !isLocked, let c = selectedClip else { return false }
         switch TransitionEditing.crossfade(in: project, clipId: c.id) {
         case .applied(let p, let secs, _):
-            edit("クロスフェードにする") { $0 = p }
+            guard edit("クロスフェードにする", { $0 = p }) else { return false }   // ロックで断られたら成功表示しない
             statusText = "クロスフェードにしました（\(String(format: "%.2f", secs)) 秒）"
             return true
         case .notSupported:
@@ -154,7 +154,7 @@ extension ProjectModel {
         guard !isLocked, let c = selectedClip else { return false }
         switch TransitionEditing.overlapCrossfade(in: project, clipId: c.id) {
         case .applied(let p, let secs, let shifted):
-            edit("重ねてクロスフェード") { $0 = p }
+            guard edit("重ねてクロスフェード", { $0 = p }) else { return false }
             statusText = shifted > 0
                 ? "クリップを \(String(format: "%.2f", shifted)) 秒前へずらして重ね、クロスフェードにしました（\(String(format: "%.2f", secs)) 秒）"
                 : "クロスフェードにしました（\(String(format: "%.2f", secs)) 秒）"

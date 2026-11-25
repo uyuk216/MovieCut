@@ -133,6 +133,17 @@ final class TransitionAppTests: XCTestCase {
         XCTAssertEqual(undoSteps(m), 3)
     }
 
+    func testCrossfadeOnLockedLayerIsRefusedWithoutSuccessNotice() {
+        let m = makeModel()
+        m.selectedClipId = "v"
+        m.edit("lock") { $0.tracks[1].locked = true }
+        let before = m.project
+        m.statusText = ""
+        XCTAssertFalse(m.crossfadeSelected())
+        XCTAssertEqual(m.project, before)
+        XCTAssertEqual(m.statusText, ProjectModel.lockedNotice)
+    }
+
     func testCrossfadeSetsFadeInAndExplainsWhenThereIsNoOverlap() {
         let m = makeModel()
         m.selectedClipId = "v"                                    // 2〜8(レイヤー2)が a(0〜4・レイヤー1)の上に 2 秒重なる

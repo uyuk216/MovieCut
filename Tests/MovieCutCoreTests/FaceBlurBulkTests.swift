@@ -25,6 +25,25 @@ final class FaceBlurBulkTests: XCTestCase {
         XCTAssertEqual(e.value("strength"), 0.6); XCTAssertEqual(e.value("mode"), 0); XCTAssertEqual(e.value("size"), 38)
     }
 
+    func testApplyAndRemoveSkipLockedLayersClipsAndTheirContents() {
+        var locked = clip(.image); locked.locked = true
+        var compoundLocked = clip(.compound); compoundLocked.locked = true
+        var inner = Track(name: "in"); inner.clips = [clip(.image)]; compoundLocked.tracks = [inner]
+        var p = project(with: [clip(.image), locked, compoundLocked])
+        var lockedTrack = Track(name: "L2"); lockedTrack.locked = true; lockedTrack.clips = [clip(.image)]
+        p.tracks.append(lockedTrack)
+        XCTAssertEqual(FaceBlurBulk.apply(to: &p), 1, "ロックされたものは数えない")
+        XCTAssertEqual(FaceBlurBulk.count(in: p), 1)
+        XCTAssertFalse(FaceBlurBulk.hasFaceBlur(p.tracks[0].clips[1]))
+        XCTAssertFalse(FaceBlurBulk.hasFaceBlur(p.tracks[0].clips[2].tracks![0].clips[0]), "ロックされた複合の中身も触らない")
+        XCTAssertFalse(FaceBlurBulk.hasFaceBlur(p.tracks[1].clips[0]))
+        // 解除も同様: ロック側に手で付けておいても外さない
+        p.tracks[0].clips[1].effects = [FaceBlurBulk.makeEffect(.init())]
+        p.tracks[1].clips[0].effects = [FaceBlurBulk.makeEffect(.init())]
+        XCTAssertEqual(FaceBlurBulk.removeAll(from: &p), 1)
+        XCTAssertEqual(FaceBlurBulk.count(in: p), 2)
+    }
+
     func testIncludeAllSupportedTypesAlsoCoversTextAndTachie() {
         var p = project(with: [clip(.text), clip(.tachie), clip(.audio)])
         var opt = FaceBlurBulk.Options(); opt.includeAllSupportedTypes = true

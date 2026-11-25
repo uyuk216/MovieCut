@@ -108,6 +108,22 @@ final class ScriptTableTests: XCTestCase {
         XCTAssertEqual(ScriptTable.apply(ScriptTable.lines(in: p), to: &p), 0)
     }
 
+    func testApplySkipsLockedLayerAndLockedClipAndDoesNotCountThem() {
+        var p = sampleProject()
+        p.tracks[0].clips[1].locked = true                    // start 順の先頭ではなく配列 2 番目(start 0)
+        var other = Track(name: "ロック"); other.locked = true
+        var v = Clip(); v.type = .voice; v.text = "ろっく"; v.start = 9; v.duration = 1; v.src = "/v.wav"
+        other.clips = [v]; p.tracks.append(other)
+        let before = p
+        var lines = ScriptTable.lines(in: p)
+        for i in lines.indices { lines[i].spoken = "変更" + lines[i].spoken }
+        XCTAssertEqual(lines.count, 4)
+        XCTAssertEqual(ScriptTable.apply(lines, to: &p), 2, "ロックでない 2 行だけ")
+        XCTAssertEqual(p.tracks[0].clips[1], before.tracks[0].clips[1])
+        XCTAssertEqual(p.tracks[2], before.tracks[2])
+        XCTAssertEqual(p.tracks[0].clips[0].text, "変更あと")
+    }
+
     func testApplyDoesNotTouchNonVoiceClips() {
         var p = sampleProject()
         let img = p.tracks[1].clips[0]

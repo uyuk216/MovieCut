@@ -11,7 +11,7 @@ enum AIDialogs {
         let sv = NSScrollView(frame: NSRect(x: 0, y: 0, width: 520, height: height))
         sv.hasVerticalScroller = true
         sv.borderType = .bezelBorder
-        let tv = NSTextView(frame: sv.bounds)
+        let tv = PlainRenderingTextView(frame: sv.bounds)
         tv.isEditable = editable
         tv.isRichText = false
         tv.font = .systemFont(ofSize: 12)

@@ -110,3 +110,68 @@ final class MultilineFieldRenderingTests: XCTestCase {
                           "入力欄の文字がフォントスムージングで描かれている(被覆率 \(fieldCoverage)、有り \(onCoverage) / 無し \(offCoverage))")
     }
 }
+
+/// 共通部品 PlainTextEditor(台本・サブクリップ一括・字幕クイック・読み辞書の取り込み欄)の回帰。
+@MainActor
+final class PlainTextEditorRenderingTests: XCTestCase {
+    func testPlainTextEditorUsesPlainRenderingTextViewWithGivenFont() throws {
+        for font in [NSFont.systemFont(ofSize: 13), NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)] {
+            var text = "台本\nabc"
+            let binding = Binding(get: { text }, set: { text = $0 })
+            let host = NSHostingView(rootView: PlainTextEditor(text: binding, font: font).frame(width: 300, height: 100))
+            host.frame = NSRect(x: 0, y: 0, width: 300, height: 100)
+            let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: true)
+            window.contentView = host
+            host.layoutSubtreeIfNeeded()
+            RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+            func find(_ v: NSView) -> PlainRenderingTextView? {
+                if let t = v as? PlainRenderingTextView { return t }
+                for s in v.subviews { if let t = find(s) { return t } }
+                return nil
+            }
+            let tv = try XCTUnwrap(find(host))
+            XCTAssertEqual(tv.string, "台本\nabc")
+            // 先頭が日本語だと tv.font は代替フォントになるため、英数字の位置の属性で見る
+            let used = tv.textStorage?.attribute(.font, at: 4, effectiveRange: nil) as? NSFont
+            XCTAssertEqual(used?.fontName, font.fontName)
+            XCTAssertEqual(used?.pointSize, font.pointSize)
+            XCTAssertTrue(tv.allowsUndo)
+            XCTAssertFalse(tv.drawsBackground)
+        }
+    }
+
+    /// Sources に素の TextEditor(複数行入力欄)が残っていないこと(スムージング描画へ統一済み)。
+    func testNoPlainTextEditorLeftInSources() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let dir = root.appendingPathComponent("Sources")
+        let en = try XCTUnwrap(FileManager.default.enumerator(at: dir, includingPropertiesForKeys: nil))
+        var hits: [String] = []
+        for case let url as URL in en where url.pathExtension == "swift" {
+            let src = try String(contentsOf: url, encoding: .utf8)
+            for (i, line) in src.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
+                let t = line.trimmingCharacters(in: .whitespaces)
+                if t.hasPrefix("//") || t.hasPrefix("///") { continue }
+                if t.contains("TextEditor(") && !t.contains("PlainTextEditor(") { hits.append("\(url.lastPathComponent):\(i + 1)") }
+            }
+        }
+        XCTAssertEqual(hits, [], "TextEditor が残っている")
+    }
+
+    /// Sources に素の NSTextView の生成が残っていないこと(PlainRenderingTextView 経由へ統一済み)。
+    func testNoPlainNSTextViewCreationLeftInSources() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let dir = root.appendingPathComponent("Sources")
+        let en = try XCTUnwrap(FileManager.default.enumerator(at: dir, includingPropertiesForKeys: nil))
+        var hits: [String] = []
+        for case let url as URL in en where url.pathExtension == "swift" {
+            if url.lastPathComponent == "PlainTextEditor.swift" { continue }
+            let src = try String(contentsOf: url, encoding: .utf8)
+            for (i, line) in src.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
+                let t = line.trimmingCharacters(in: .whitespaces)
+                if t.hasPrefix("//") { continue }
+                if t.contains("NSTextView(") || t.contains("NSTextView.init") { hits.append("\(url.lastPathComponent):\(i + 1)") }
+            }
+        }
+        XCTAssertEqual(hits, [], "素の NSTextView の生成が残っている")
+    }
+}

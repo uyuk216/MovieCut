@@ -50,7 +50,8 @@ final class CandidateSwapTests: XCTestCase {
         var ramp = video(); ramp.speedRamp = [SpeedKey(t: 0, v: 1), SpeedKey(t: 6, v: 2)]
         XCTAssertEqual(CandidateSwap.swapped(ramp, to: .init(path: "/m/b.mov", kind: .video), sourceDuration: 1)?.duration, 6, "速度ランプは長さを変えない")
         XCTAssertEqual(CandidateSwap.swapped(c, to: .init(path: "/m/b.mov", kind: .video), sourceDuration: 0.001)?.duration, ClipEditing.minDuration)
-        XCTAssertEqual(CandidateSwap.swapped(c, to: .init(path: "/m/b.mov", kind: .video), sourceDuration: nil)?.srcDuration, 20, "測れなければ元の値のまま")
+        let unmeasured = CandidateSwap.swapped(c, to: .init(path: "/m/b.mov", kind: .video), sourceDuration: nil)
+        XCTAssertNotNil(unmeasured); XCTAssertNil(unmeasured?.srcDuration, "測れなければ古い素材の長さを残さない(画像と同じ nil)")
     }
 
     func testImageSwapClearsSrcDurationAndRefusals() throws {

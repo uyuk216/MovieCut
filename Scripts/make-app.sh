@@ -8,6 +8,7 @@
 #                     未設定ならプレースホルダが入り、アプリはアップデートの確認を始めない(秘密鍵はこのスクリプトでは扱わない)。
 #   --dry-run: 何もビルドせず、やることを表示し、仮のバンドルで個人情報の検査だけ試す(build/ には触らない)。
 set -euo pipefail
+source "$(dirname "$0")/feed-url.sh"
 cd "$(dirname "$0")/.."
 VERSION=0.2.2
 APP_NAME="Movie Cut"
@@ -90,7 +91,8 @@ if [ "$EDITION" = public ]; then
   mkdir -p "$APP/Contents/Frameworks"
   ditto "$BIN/Sparkle.framework" "$APP/Contents/Frameworks/Sparkle.framework"
   install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP/Contents/MacOS/MovieCut"
-  SPARKLE_PLIST="  <key>SUFeedURL</key><string>https://github.com/uyuk216/MovieCut/releases/latest/download/appcast.xml</string>
+  FEED_URL="$(resolve_feed_url)" || exit 1
+  SPARKLE_PLIST="  <key>SUFeedURL</key><string>${FEED_URL}</string>
   <key>SUEnableAutomaticChecks</key><true/>
   <key>SUScheduledCheckInterval</key><integer>86400</integer>
   <key>SUPublicEDKey</key><string>${SPARKLE_KEY}</string>"

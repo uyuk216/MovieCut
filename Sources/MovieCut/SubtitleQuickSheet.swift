@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import MovieCutCore
 
 /// 「字幕を追加…」のシート(複数行の文と長さ。既定 3 秒)。文字クリップを選んでいたときは、その文と長さを直す。
@@ -17,8 +18,7 @@ struct SubtitleQuickSheet: View {
             Text(editing ? "字幕を編集" : "字幕を追加").font(.headline)
             Text(editing ? "選んでいる文字クリップの文と長さを直します。" : "再生位置から、字幕レイヤーに入れます。改行で複数行にできます。")
                 .font(.caption).foregroundStyle(.secondary)
-            TextEditor(text: $text)
-                .font(.body)
+            PlainTextEditor(text: $text, font: NSFont.preferredFont(forTextStyle: .body))
                 .frame(width: 380, height: 110)
                 .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.secondary.opacity(0.3)))
             HStack {
