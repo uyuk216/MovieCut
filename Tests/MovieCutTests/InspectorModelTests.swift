@@ -382,6 +382,19 @@ final class InspectorModelTests: XCTestCase {
         XCTAssertFalse(m.effectiveUndoManager.canUndo)
     }
 
+    func testRegenerateAllVoicesSkipsLockedClipsAndReportsActualCount() async {
+        let (m, reimu, _) = await modelWithVoices()
+        var p = m.project
+        let loc = ClipEditing.locate("v0", in: p)!
+        p.tracks[loc.track].clips[loc.index].locked = true
+        m.project = p
+        let before = m.project
+        let n = await m.regenerateAllVoices(charId: reimu)
+        XCTAssertEqual(n, 1, "ロックされたセリフは作り直さず、数にも入れない")
+        XCTAssertEqual(m.clip("v0"), before.allClips.first { $0.id == "v0" })
+        XCTAssertNotEqual(m.clip("v2")?.src, before.allClips.first { $0.id == "v2" }?.src)
+    }
+
     func testTestSpeakUsesCharacterSettingsAndReportsErrors() async {
         let m = makeModel()
         var played: [URL] = []

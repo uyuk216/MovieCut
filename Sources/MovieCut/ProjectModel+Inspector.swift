@@ -245,7 +245,7 @@ extension ProjectModel {
     @discardableResult
     func regenerateAllVoices(charId: String) async -> Int {
         guard !isLocked, character(charId) != nil else { return 0 }
-        let ids = CharacterEditing.voiceClips(of: charId, in: project).map(\.id)
+        let ids = CharacterEditing.voiceClips(of: charId, in: project).map(\.id).filter { !LayerEditing.isLockedClip($0, in: project) }   // ロックされたセリフは作り直さない(数にも入れない)
         guard !ids.isEmpty else { return 0 }
         flushCoalesced()
         playback.pause()
@@ -268,12 +268,12 @@ extension ProjectModel {
             return 0
         }
         var shifted = 0
-        edit("全セリフの作り直し") { p in
+        guard edit("全セリフの作り直し", { p in
             for (id, c) in results {
                 if let l = ClipEditing.locate(id, in: p) { p.tracks[l.track].clips[l.index] = c }
             }
             shifted = applyVoiceRipple(&p, changed: Set(results.keys))
-        }
+        }) else { return 0 }   // ロック(複合の中など)で断られたら成功表示しない
         statusText = "\(results.count) 個のセリフの音声を作り直しました" + (shifted > 0 ? "(後ろの \(shifted) 個のクリップをずらしました)" : "")
         return results.count
     }
