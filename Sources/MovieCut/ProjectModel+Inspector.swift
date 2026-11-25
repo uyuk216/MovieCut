@@ -443,7 +443,7 @@ extension ProjectModel {
         flushCoalesced()
         playback.pause()
         let removed = Set(r.removedClipIds)
-        edit("キャラクターの削除") { $0 = r.project }
+        guard edit("キャラクターの削除", { $0 = r.project }) else { return false }   // ロックされたセリフを含むなどで断られたら、選択も動かさず成功扱いにしない
         if let c = selectedClipId, removed.contains(c) { selectedClipId = nil }
         selectedCharId = project.characters.first?.id
         pendingDeleteCharId = nil
