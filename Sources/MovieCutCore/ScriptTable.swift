@@ -66,7 +66,7 @@ public enum ScriptTable {
     }
 
     /// 行の編集をプロジェクトへ当てる。当てた行数を返す。
-    /// 当てない行: 対象が無い・ボイスでない・読み上げ文が空・何も変わっていない。
+    /// 当てない行: 対象が無い・ボイスでない・読み上げ文が空・何も変わっていない・ロックされたレイヤー/クリップ(数にも入れない)。
     /// キャラは、プロジェクトに実在する id のときだけ差し替える(消えたキャラへの付け替えで落とさない)。
     @discardableResult
     public static func apply(_ lines: [VoiceLine], to project: inout Project) -> Int {
@@ -81,6 +81,7 @@ public enum ScriptTable {
         guard !ExpressionTag.body(text).trimmingCharacters(in: .whitespaces).isEmpty else { return false }
         for ti in project.tracks.indices {
             guard let ci = project.tracks[ti].clips.firstIndex(where: { $0.id == line.clipId }) else { continue }
+            guard !project.tracks[ti].isLocked, !project.tracks[ti].clips[ci].isClipLocked else { return false }
             var clip = project.tracks[ti].clips[ci]
             guard clip.type == .voice else { return false }
             let before = clip
