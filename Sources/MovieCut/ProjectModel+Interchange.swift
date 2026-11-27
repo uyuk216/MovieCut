@@ -116,6 +116,57 @@ extension ProjectModel {
         FilePanelPresenter.shared.present(panel, window: window, completion: run)
     }
 
+    // MARK: OTIO 書き出し・読み込み
+
+    func chooseAndExportOtio() {
+        guard canExport else { return }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [UTType(filenameExtension: "otio") ?? .data]
+        panel.nameFieldStringValue = documentName + ".otio"
+        panel.canCreateDirectories = true
+        panel.title = L10n.t("OTIO で書き出す")
+        panel.message = L10n.t("OpenTimelineIO(.otio, JSON)として書き出します。対応できない要素は、書き出し後に一覧でお知らせします。")
+
+        let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
+            guard resp == .OK, let picked = panel.url, let self else { return }
+            let url = picked.pathExtension.lowercased() == "otio" ? picked : picked.appendingPathExtension("otio")
+            do {
+                let report = try OtioExporter.write(project: self.project, to: url, name: self.documentName)
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+                self.showInterchangeReport(title: "OTIO で書き出しました", lines: report.summaryLines, hasLoss: report.hasLoss)
+            } catch {
+                let alert = NSAlert(error: error)
+                if let w = self.window { alert.beginSheetModal(for: w) } else { alert.runModal() }
+            }
+        }
+        FilePanelPresenter.shared.present(panel, window: window, completion: run)
+    }
+
+    /// 開くパネルで .otio を選び、今のプロジェクトを置き換える(1 回の Undo で戻せる)。
+    func chooseAndImportOtio() {
+        guard !isLocked else { return }
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [UTType(filenameExtension: "otio") ?? .data]
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = false
+        panel.title = L10n.t("OTIO を読み込む")
+        panel.message = L10n.t("OpenTimelineIO(.otio)を読み込み、今のプロジェクトをその内容に置き換えます(取り消しで戻せます)。対応できない要素は、読み込み後に一覧でお知らせします。")
+
+        let run: (NSApplication.ModalResponse) -> Void = { [weak self] resp in
+            guard resp == .OK, let url = panel.url, let self else { return }
+            do {
+                let out = try OtioImporter.read(from: url)
+                self.applyRoot(out.project, name: "OTIO を読み込む")
+                self.showInterchangeReport(title: "OTIO を読み込みました", lines: out.report.summaryLines, hasLoss: out.report.hasLoss)
+            } catch {
+                let alert = NSAlert(error: error)
+                if let w = self.window { alert.beginSheetModal(for: w) } else { alert.runModal() }
+            }
+        }
+        FilePanelPresenter.shared.present(panel, window: window, completion: run)
+    }
+
     // MARK: レポート表示(共通)
 
     private func showInterchangeReport(title: String, lines: [String], hasLoss: Bool) {

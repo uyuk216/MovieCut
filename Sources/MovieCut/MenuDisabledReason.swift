@@ -16,7 +16,7 @@ extension AppMenuSpec {
         if s.isLocked { return "書き出し中・音声生成中は使えません" }
         switch spec.command {
         case .export, .exportPreset, .exportCustomPreset, .saveCustomPreset, .exportStill, .exportSequence,
-             .exportThumbnail, .exportThumbnailCandidates, .exportGIF, .exportAPNG, .exportYmmp, .exportWebVideo, .exportPngWav, .exportExo, .exportFcpXml, .exportEdl, .exportPluginFormat, .queueExport, .measureLoudness:
+             .exportThumbnail, .exportThumbnailCandidates, .exportGIF, .exportAPNG, .exportYmmp, .exportWebVideo, .exportPngWav, .exportExo, .exportFcpXml, .exportEdl, .exportOtio, .exportPluginFormat, .queueExport, .measureLoudness:
             return "書き出せるクリップがありません"
         case .rangeIn, .rangeOut: return "書き出し範囲を指定できる状態ではありません"
         case .rangeDelete, .rangeRippleDelete: return s.canMarkRange ? "先にイン点・アウト点で範囲を指定してください" : "書き出し範囲を指定できる状態ではありません"
