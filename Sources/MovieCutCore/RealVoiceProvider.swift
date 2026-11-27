@@ -55,6 +55,8 @@ public final class RealVoiceProvider: VoicevoxAccentProviding {
         } else {
             url = try await aquestalk.synthesize(text: text, voice: character.voice, speed: character.speed)
             lock.withLock { _ = enginesUsed.insert(usingFallback ? "say" : "aquestalk") }
+            // 速度適用後(キャッシュ済み)の WAV の包絡から口形タイミングを推定する(ベストエフォート)
+            Self.scheduleEnvelopeSidecar(wavURL: url, text: text)
         }
         return VoiceResult(url: url, duration: try wavDuration(url))
     }
@@ -69,6 +71,19 @@ public final class RealVoiceProvider: VoicevoxAccentProviding {
     @discardableResult
     static func scheduleSidecar(_ operation: @escaping @Sendable () async -> Void) -> Task<Void, Never> {
         Task.detached { await operation() }
+    }
+
+    /// 音声の包絡から推定した口形タイミングをサイドカーへ保存する処理をスケジュールする(AquesTalk / COEIROINK / SHAREVOX 用)。
+    /// 既に有効なサイドカーがあれば何もしない。失敗しても従来の推定(読みの長さ)に戻るだけ。
+    static func scheduleEnvelopeSidecar(wavURL: URL, text: String) {
+        let sidecar = VoicevoxMora.sidecarURL(forWav: wavURL.path)
+        sidecarLock.lock()
+        guard sidecarInFlight.insert(sidecar.path).inserted else { sidecarLock.unlock(); return }
+        sidecarLock.unlock()
+        scheduleSidecar {
+            defer { sidecarLock.lock(); sidecarInFlight.remove(sidecar.path); sidecarLock.unlock() }
+            AudioMoraTiming.writeSidecar(wav: wavURL, text: text)
+        }
     }
 
     /// VOICEVOX のモーラタイミングをサイドカーへ保存する処理をスケジュールする(合成本体からは await しない)。

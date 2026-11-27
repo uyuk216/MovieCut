@@ -148,6 +148,7 @@ public final class AquesTalkPluginProvider: VoiceProvider {
     public func synthesize(character: Character, text: String, in directory: URL) async throws -> VoiceResult {
         let url = try await synthesizer.synthesize(text: text, voice: character.voice, speed: character.speed)
         lock.withLock { _ = enginesUsed.insert(usingFallback ? "say" : "aquestalk") }
+        RealVoiceProvider.scheduleEnvelopeSidecar(wavURL: url, text: text)
         return VoiceResult(url: url, duration: try RealVoiceProvider.duration(of: url))
     }
 }
