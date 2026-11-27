@@ -124,9 +124,14 @@ public struct Renderer {
 
     /// クリップのエフェクトを解決する。プロバイダが空なら従来の resolve を builtin で包んだものと完全一致する。
     func resolvedEffects(_ c: Clip, atClipTime r: Double) -> [ResolvedClipEffect] {
-        guard c.hasActiveEffects || c.hasActivePluginEffect(effectIDs: pluginEffectIDs) else { return [] }
-        if pluginEffectProviders.isEmpty { return EffectPipeline.resolve(c, atClipTime: r).map { .builtin($0) } }
-        return EffectPipeline.resolveAll(c, atClipTime: r, pluginProviders: pluginEffectProviders)
+        // 入力色空間が Rec.709 以外なら、他のエフェクトより先に作業空間(Rec.709)へ変換する。Rec.709(nil)は従来と完全に同じ道
+        let cs = c.inputColorSpace.flatMap { $0 == .rec709 ? nil : $0 }
+        var head: [ResolvedClipEffect] = cs.map { [.colorSpace($0)] } ?? []
+        // グレーディングノード: 入力色空間の変換の後、カード式エフェクトの前に順番に評価する。ノードが無ければ空で、従来と完全に同じ
+        head += c.resolvedGradeNodes()
+        guard c.hasActiveEffects || c.hasActivePluginEffect(effectIDs: pluginEffectIDs) else { return head }
+        if pluginEffectProviders.isEmpty { return head + EffectPipeline.resolve(c, atClipTime: r).map { .builtin($0) } }
+        return head + EffectPipeline.resolveAll(c, atClipTime: r, pluginProviders: pluginEffectProviders)
     }
 
     public func renderImage(t: Double) -> CGImage? {
@@ -296,7 +301,7 @@ public struct Renderer {
     func drawClipStack(_ c: Clip, pose: ClipPose, mask: TransitionMask?, t: Double, ctx: CGContext, W: Double, H: Double, layerSourceOver: Bool) {
         // 複合クリップで、キャンバスいっぱいに・効果なし・不透明度 100% なら、中身を親の画面に直接描く(中間の画像を作らない)。
         // 直接描くので、まとめる前のクリップを描いたときと画素が完全に一致する
-        if (c.type == .compound || c.type == .scene), mask == nil, c.mask == nil, c.objectMask == nil, c.hslMask == nil, c.blendMode == nil, pose.isFullCanvasCompound, (c.crop?.isEmpty ?? true), !c.flipHOrDefault, !c.flipVOrDefault, pose.skew == 0, !c.hasActiveEffects, !c.hasActiveWarp(at: t - c.start), !c.hasActivePluginEffect(effectIDs: pluginEffectIDs), pose.pixelate < 2, pose.feather <= 0.01, let child = nestedRenderer(c) {
+        if (c.type == .compound || c.type == .scene), mask == nil, c.mask == nil, c.objectMask == nil, c.hslMask == nil, c.blendMode == nil, pose.isFullCanvasCompound, (c.crop?.isEmpty ?? true), !c.flipHOrDefault, !c.flipVOrDefault, pose.skew == 0, !c.hasActiveEffects, !c.hasActiveGradeNodes, !c.hasActiveWarp(at: t - c.start), !c.hasActivePluginEffect(effectIDs: pluginEffectIDs), pose.pixelate < 2, pose.feather <= 0.01, let child = nestedRenderer(c) {
             ctx.saveGState()
             child.drawFrame(t: t - c.start + c.offset, into: ctx)
             ctx.restoreGState()
