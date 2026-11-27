@@ -154,4 +154,61 @@ final class ProxyWorkflowAppTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: external.path), "外部のプロキシは消えない")
         XCTAssertFalse(m.deleteGeneratedProxy(source: src.path), "もう無い")
     }
+
+    // MARK: プロジェクト内プロキシ(M-06/M-07)
+
+    private func legacyProxy(for src: URL, in dir: URL) throws -> URL {
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let u = try XCTUnwrap(ProxyStore.proxyURL(for: src, directory: dir))
+        try Data("gen".utf8).write(to: u)
+        return u
+    }
+
+    func testUnsavedUsesAppSideThenFirstSaveCopiesIntoProjectAndRecords() throws {
+        let src = scratch.appendingPathComponent("src.mp4")
+        try Data("src".utf8).write(to: src)
+        let appDir = scratch.appendingPathComponent("app", isDirectory: true)
+        let legacy = try legacyProxy(for: src, in: appDir)
+        ProxySettings.set(true)
+
+        let m = ProjectModel(project: projectWithVideo(src.path))
+        m.proxyDirectory = appDir
+        m.fileURL = nil                                  // 開いた直後の最初の設定(未保存)
+        XCTAssertEqual(m.proxyGenerationDirectory, appDir, "未保存は暫定でアプリ側")
+        XCTAssertEqual(m.generatedProxy(for: src.path)?.location, .app)
+
+        let projDir = scratch.appendingPathComponent("Proj", isDirectory: true)
+        try FileManager.default.createDirectory(at: projDir, withIntermediateDirectories: true)
+        m.fileURL = projDir.appendingPathComponent("p.mcpjc")   // 最初の保存
+        XCTAssertEqual(m.generatedProxy(for: src.path)?.location, .project)
+        XCTAssertNotNil(m.rootProject.proxyAssets[src.path])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: legacy.path), "アプリ側は消さない")
+        XCTAssertEqual(m.proxyGenerationDirectory, ProxyAssets.directory(projectDir: projDir))
+
+        m.installPreviewProxies()
+        XCTAssertTrue(m.assets.sourcePath(for: src.path).hasPrefix(projDir.path) || m.assets.sourcePath(for: src.path).contains("/Proj/proxies/"))
+        m.assets.beginExportMode()
+        XCTAssertEqual(m.assets.sourcePath(for: src.path), src.path, "書き出しは原本")
+        m.assets.endExportMode()
+
+        // 管理: プロジェクト内プロキシを消すと記録も外れ、アプリ側の従来プロキシが残る
+        XCTAssertTrue(m.deleteGeneratedProxy(source: src.path))
+        XCTAssertNil(m.rootProject.proxyAssets[src.path])
+    }
+
+    func testOpeningSavedProjectDoesNotCopyOrDirty() throws {
+        let src = scratch.appendingPathComponent("src.mp4")
+        try Data("src".utf8).write(to: src)
+        let appDir = scratch.appendingPathComponent("app", isDirectory: true)
+        _ = try legacyProxy(for: src, in: appDir)
+        let projDir = scratch.appendingPathComponent("Proj", isDirectory: true)
+        try FileManager.default.createDirectory(at: projDir, withIntermediateDirectories: true)
+        let m = ProjectModel(project: projectWithVideo(src.path))
+        m.proxyDirectory = appDir
+        m.fileURL = projDir.appendingPathComponent("p.mcpjc")   // 開いたときの最初の設定
+        XCTAssertTrue(m.rootProject.proxyAssets.isEmpty, "開いただけでは取り込まない(書類を汚さない)")
+        XCTAssertEqual(m.generatedProxy(for: src.path)?.location, .app, "従来どおりアプリ側のキーで引ける")
+        XCTAssertEqual(m.adoptGeneratedProxies(), 1, "管理シートの操作で取り込める")
+        XCTAssertEqual(m.generatedProxy(for: src.path)?.location, .project)
+    }
 }

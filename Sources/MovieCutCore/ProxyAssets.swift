@@ -79,15 +79,17 @@ public enum ProxyAssets {
         return (q, removed)
     }
 
-    /// アプリ側(従来・暫定置き場)の生成プロキシを、プロジェクトフォルダへ「コピー」して記録する。元のアプリ側ファイルは消さない(後方互換・他の書類が使っているかもしれない)。
-    /// 既にプロジェクト側に記録がある素材は飛ばす。戻り値は記録したコピーと取り込んだ件数。
-    public static func adoptLegacy(_ p: Project, sources: [String], projectDir: URL, legacyDirectory: URL) -> (project: Project, adopted: Int) {
+    /// アプリ側(従来・暫定置き場)、または保存前のフォルダ(`from`。名前を付けて保存したとき)の生成プロキシを、プロジェクトフォルダへ「コピー」して記録する。
+    /// 元のファイルは消さない(後方互換・他の書類が使っているかもしれない)。既にプロジェクト側で引ける素材は飛ばす。戻り値は記録したコピーと取り込んだ件数。
+    public static func adoptLegacy(_ p: Project, sources: [String], projectDir: URL, legacyDirectory: URL,
+                                   from: URL? = nil) -> (project: Project, adopted: Int) {
         var q = p
         var n = 0
         let fm = FileManager.default
         for src in sources {
             if locate(source: src, in: q, projectDir: projectDir, legacyDirectory: legacyDirectory)?.location == .project { continue }
-            guard let legacy = ProxyStore.existingProxy(for: URL(fileURLWithPath: src), directory: legacyDirectory) else { continue }
+            guard let found = locate(source: src, in: q, projectDir: from, legacyDirectory: legacyDirectory) else { continue }
+            let legacy = found.url
             let dest = directory(projectDir: projectDir).appendingPathComponent(legacy.lastPathComponent)
             do {
                 try fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)

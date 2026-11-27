@@ -395,7 +395,10 @@ final class ProjectModel: ObservableObject {
 
     /// 保存先(ドキュメントから渡される。無題なら nil)。フォルダは保存の写し(主スレッド以外から読む)にも渡す。
     var fileURL: URL? {
-        didSet { mirror.setFolder(fileURL?.deletingLastPathComponent().path) }
+        didSet {
+            mirror.setFolder(fileURL?.deletingLastPathComponent().path)
+            proxyFolderDidChange(from: oldValue)
+        }
     }
     /// 開いたときの「欠けた素材」案内を出したか(書類ごとに 1 回だけ)。
     var offeredMissingMediaOnOpen = false
@@ -438,6 +441,8 @@ final class ProjectModel: ObservableObject {
     var proxyCancel: (() -> Void)?
     /// プロキシを置く場所(テストでは一時フォルダに差し替える)。作成・解決・削除はすべてこれを使う。
     var proxyDirectory: URL = ProxyStore.defaultDirectory()
+    /// `fileURL` を一度でも設定したか(開いた直後の最初の設定と、あとの保存・名前を付けて保存を区別する)。
+    var fileURLInitialized = false
     var imageGenCancel: (() -> Void)?
     var voiceProviderFactory: (Project) -> VoiceProvider = { project in PluginVoiceRoutingProvider(host: AppServices.makePluginHost(for: project), fallback: RealVoiceProvider(project: project, engine: AppServices.engine)) }
     /// タイムラインの「全体表示」(タイムラインのビューが差し込む)。

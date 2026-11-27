@@ -128,8 +128,12 @@ extension ProjectModel {
                 folder = parent.appendingPathComponent("\(name) パッケージ \(n)", isDirectory: true)
                 n += 1
             }
-            let plan = MediaPackage.plan(self.savedProject, size: { p in
+            let saved = self.savedProject
+            let curFolder = self.projectFolderURL, legacy = self.proxyDirectory
+            let plan = MediaPackage.plan(saved, size: { p in
                 (try? fm.attributesOfItem(atPath: p)[.size] as? NSNumber)?.int64Value
+            }, proxyFile: { src in
+                ProxyAssets.locate(source: src, in: saved, projectDir: curFolder, legacyDirectory: legacy)?.url
             })
             do {
                 try MediaPackage.write(plan, to: folder, projectName: name)
