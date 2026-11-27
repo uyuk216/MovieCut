@@ -520,6 +520,8 @@ public struct Clip: Codable, Equatable, Identifiable {
     /// シーンクリップの参照先(type が scene のときだけ。`Project.scenes` の `SceneDefinition.id`)。無いときは書かない。
     /// `offset` はシーン内時刻の窓の頭(複合クリップと同じ扱い)。参照先が無い・循環する場合は描画も音声も出ない。
     public var sceneId: String? = nil
+    /// マルチカムクリップの情報(アングル一覧・有効アングル・音声アングル。`MulticamClipInfo`)。クリップ自体は普通の動画クリップで、
+    /// `src`/`offset`/`srcDuration` は常に有効アングルから導出した具体値を持つ(描画・書き出しは新しい経路なし)。無いときはファイルに書かない。
     /// 形のマスク(キャンバスの矩形・楕円。省いたときは何もしない)。
     public var mask: ClipMask? = nil
     /// メッシュ変形(格子の制御点をずらす変形。`MeshPuppet`)。無いとき・全点が元の位置のときは描画不変。設定したときだけ書く。

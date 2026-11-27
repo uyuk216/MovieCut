@@ -20,13 +20,24 @@ struct MulticamCreateSheet: View {
     @State private var failed = false
     /// 手で書き換えた欄(測定結果で上書きしない)
     @State private var edited: Set<String> = []
+    /// true = マルチカムクリップとして 1 つのクリップに置く(既定)。false = 従来のグループ方式。
+    @State private var placeAsClip = true
 
     private var angles: [Clip] { Multicam.candidates(in: model.project, ids: model.multicamCreateIds) ?? [] }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(L10n.t("マルチカメラを作る")).font(.headline)
-            Text(L10n.t("選んだ映像を、いちばん先頭のクリップ(カメラ1)の音に合わせます。音はカメラ1のものを使い、ほかのカメラの元のクリップは無音になります。"))
+            Text(L10n.t("選んだ映像を、いちばん先頭のクリップ(カメラ1)の音に合わせます。音は既定でカメラ1のものを使います。"))
+                .font(.caption).foregroundStyle(.secondary)
+                .frame(width: 440, alignment: .leading).fixedSize(horizontal: false, vertical: true)
+            Picker(L10n.t("置き方"), selection: $placeAsClip) {
+                Text(L10n.t("マルチカムクリップとして配置")).tag(true)
+                Text(L10n.t("グループ(従来の切り替え方式)")).tag(false)
+            }.pickerStyle(.radioGroup)
+            Text(placeAsClip
+                 ? L10n.t("カメラ1の位置に 1 つのクリップとして置きます。ほかの元クリップはタイムラインから外れ、アングルとしてクリップの中に入ります。インスペクタや 1〜9 キーでアングルを切り替えられます。")
+                 : L10n.t("新しいレイヤーに切り替えの結果を置きます。元のクリップはそのまま残り、カメラ1以外は無音になります。「マルチカメラ切替…」で切り替えます。"))
                 .font(.caption).foregroundStyle(.secondary)
                 .frame(width: 440, alignment: .leading).fixedSize(horizontal: false, vertical: true)
             if measuring { HStack { ProgressView().controlSize(.small); Text(L10n.t("音を比べています…")).font(.caption) } }
@@ -88,7 +99,8 @@ struct MulticamCreateSheet: View {
             if let m = measured[c.id], let mv = m, texts[c.id] == Self.format(mv) { lags[c.id] = Self.clampLag(mv) } else { lags[c.id] = Self.clampLag(v) }
         }
         failed = false
-        _ = model.createMulticam(ids: model.multicamCreateIds, localLags: lags)
+        if placeAsClip { _ = model.createMulticamClip(ids: model.multicamCreateIds, localLags: lags) }
+        else { _ = model.createMulticam(ids: model.multicamCreateIds, localLags: lags) }
         model.showMulticamCreateSheet = false
     }
 }
@@ -144,5 +156,58 @@ private struct AngleKeyModifier: ViewModifier {
     let index: Int
     func body(content: Content) -> some View {
         if index < 9 { content.keyboardShortcut(KeyEquivalent(Swift.Character(String(index + 1))), modifiers: []) } else { content }
+    }
+}
+
+/// インスペクタの「マルチカム」: マルチカムクリップの有効アングル(映像)と音声アングルを選ぶ。
+/// 映像はクリップ全体のアングルを変える(再生位置で分けて切り替えるときは 1〜9 キー / クリップ ▸ アングルに切り替え)。
+struct MulticamClipSection: View {
+    @ObservedObject var model: ProjectModel
+    let clip: Clip
+
+    var body: some View {
+        if let info = clip.multicam {
+            VStack(alignment: .leading, spacing: 6) {
+                InspectorSection(title: L10n.t("マルチカム"))
+                Picker(L10n.t("映像のアングル"), selection: Binding(get: { info.activeAngle }, set: { i in
+                    model.selectedClipId = clip.id
+                    _ = model.multicamClipCut(angle: i, atPlayhead: false)
+                })) {
+                    ForEach(Array(info.angles.enumerated()), id: \.offset) { i, a in Text("\(i + 1). \(a.name)").tag(i) }
+                }
+                Picker(L10n.t("音声のアングル"), selection: Binding(get: { info.audioAngle }, set: { i in
+                    model.selectedClipId = clip.id
+                    _ = model.setMulticamAudioAngle(i)
+                })) {
+                    ForEach(Array(info.angles.enumerated()), id: \.offset) { i, a in
+                        Text("\(i + 1). \(a.name)\(i == 0 ? L10n.t("(基準)") : "")").tag(i)
+                    }
+                }
+                Text(L10n.t("再生位置から切り替えるには 1〜9 キー(再生中も効きます)。切り替えは再生位置で分割され、1 回ずつ元に戻せます。"))
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                if info.angles.count > 0 { AngleGrid(info: info, clipId: clip.id, model: model) }
+            }
+        }
+    }
+}
+
+/// 全アングルの一覧(ボタン): 押すとそのアングルに(再生位置から)切り替える。映像の同時プレビューではなく、番号つきの切り替えボタン。
+private struct AngleGrid: View {
+    let info: MulticamClipInfo
+    let clipId: String
+    @ObservedObject var model: ProjectModel
+    var body: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.fixed(56), spacing: 6), count: 4), alignment: .leading, spacing: 6) {
+            ForEach(Array(info.angles.enumerated()), id: \.offset) { i, a in
+                Button {
+                    model.selectedClipId = clipId
+                    _ = model.multicamClipCut(angle: i, atPlayhead: true)
+                } label: {
+                    VStack { Text("\(i + 1)").font(.headline); Text(a.name).font(.caption2).lineLimit(1) }
+                        .frame(width: 52, height: 38)
+                        .background(i == info.activeAngle ? Color.accentColor.opacity(0.25) : Color.clear)
+                }
+            }
+        }
     }
 }
