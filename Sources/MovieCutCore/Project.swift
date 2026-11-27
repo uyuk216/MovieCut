@@ -522,7 +522,6 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var sceneId: String? = nil
     /// マルチカムクリップの情報(アングル一覧・有効アングル・音声アングル。`MulticamClipInfo`)。クリップ自体は普通の動画クリップで、
     /// `src`/`offset`/`srcDuration` は常に有効アングルから導出した具体値を持つ(描画・書き出しは新しい経路なし)。無いときはファイルに書かない。
-    public var multicam: MulticamClipInfo? = nil
     /// 形のマスク(キャンバスの矩形・楕円。省いたときは何もしない)。
     public var mask: ClipMask? = nil
     /// メッシュ変形(格子の制御点をずらす変形。`MeshPuppet`)。無いとき・全点が元の位置のときは描画不変。設定したときだけ書く。
@@ -576,7 +575,7 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var hslMask: HSLMask? = nil
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["id", "type", "voicevoxAccent", "subtitleText", "tachieId", "mouthDrive", "speakingOnly", "followsProjectEnd", "playsAnimation", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "bokehShape", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "frameFlow", "audioFx", "pan", "channelMode", "textStyle", "textAnim", "bubble", "counter", "valueRef", "duck", "visualizer", "stabilize", "stabilizeRoll", "tracks", "sceneId", "multicam", "mask", "meshWarp", "puppetWarp", "blendMode", "group", "ruby", "figure", "note", "locked", "muted", "disabled", "treatAsVoice", "audioCategory", "tracking", "objectMask", "hslMask", "inputColorSpace", "gradeNodes"]
+    static let knownKeys: Set<String> = ["id", "type", "voicevoxAccent", "subtitleText", "tachieId", "mouthDrive", "speakingOnly", "followsProjectEnd", "playsAnimation", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "bokehShape", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "frameFlow", "audioFx", "pan", "channelMode", "textStyle", "textAnim", "bubble", "counter", "valueRef", "duck", "visualizer", "stabilize", "stabilizeRoll", "tracks", "sceneId", "mask", "meshWarp", "puppetWarp", "blendMode", "group", "ruby", "figure", "note", "locked", "muted", "disabled", "treatAsVoice", "audioCategory", "tracking", "objectMask", "hslMask", "inputColorSpace", "gradeNodes"]
 
     public init() {}
 
@@ -777,10 +776,6 @@ public struct Clip: Codable, Equatable, Identifiable {
         // シーンクリップの参照先: 型が違って読めなければ捨てずに書き戻す
         sceneId = l.string("sceneId")
         if sceneId == nil, let raw: JSONValue = l.value("sceneId") { extra["sceneId"] = raw }
-        // マルチカムクリップ: 読めない・不正な形は捨てずにそのまま書き戻す(普通の複合クリップとして扱う)
-        if let raw: JSONValue = l.value("multicam") {
-            if let v: MulticamClipInfo = l.value("multicam"), v.isValid { multicam = v } else { extra["multicam"] = raw }
-        }
         note = l.string("note").flatMap { Clip.cleanNote($0) }
         if let raw: JSONValue = l.value("locked") {
             if l.bool("locked") == true { locked = true } else { extra["locked"] = raw }   // true 以外は捨てずに書き戻す
@@ -952,7 +947,6 @@ public struct Clip: Codable, Equatable, Identifiable {
         if playsAnimation == true { try c.encode(true, forKey: AnyKey("playsAnimation")) }
         if let t = tracks { try c.encode(t, forKey: AnyKey("tracks")) }
         try c.encodeIfPresent(sceneId, forKey: AnyKey("sceneId"))
-        try c.encodeIfPresent(multicam, forKey: AnyKey("multicam"))
         try c.encodeIfPresent(mask, forKey: AnyKey("mask"))
         if let g = gradeNodes, !g.isEmpty { try c.encode(g, forKey: AnyKey("gradeNodes")) }
         if let cs = inputColorSpace, cs != .rec709 { try c.encode(cs.rawValue, forKey: AnyKey("inputColorSpace")) }

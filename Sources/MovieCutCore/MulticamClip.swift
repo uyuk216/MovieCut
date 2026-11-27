@@ -176,3 +176,24 @@ public extension Multicam {
         return x
     }
 }
+
+
+public extension Clip {
+    /// マルチカムクリップの情報。実体は `extra["multicam"]`(JSON のまま)に持つ。
+    /// - `Clip` の格納プロパティを増やさない: `Clip` は描画の再帰で大量にコピーされ、1 フィールド増えるだけで深い描画(KitchenSink)のスタックが溢れたため。
+    /// - 旧版が開いても `extra` として書き戻すので、情報が消えない。読めない・不正な形(`isValid` を満たさない)は nil(`extra` には残る)。
+    var multicam: MulticamClipInfo? {
+        get {
+            guard let raw = extra["multicam"], let data = try? JSONEncoder().encode(raw),
+                  let v = try? JSONDecoder().decode(MulticamClipInfo.self, from: data), v.isValid else { return nil }
+            return v
+        }
+        set {
+            if let v = newValue, let data = try? JSONEncoder().encode(v), let raw = try? JSONDecoder().decode(JSONValue.self, from: data) {
+                extra["multicam"] = raw
+            } else {
+                extra["multicam"] = nil
+            }
+        }
+    }
+}
