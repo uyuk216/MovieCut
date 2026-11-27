@@ -277,6 +277,7 @@ public final class CoeiroinkV2Provider: VoiceProvider {
     /// 音量はキャラに項目が無いため既定 1、間の倍率(pauseLengthScale)は v2 の 1 リクエスト合成に無いため渡さない。
     func synthesizeAvailable(character: Character, text: String) async throws -> VoiceResult {
         let url = try await client.synthesize(text: text, styleId: character.speaker ?? Self.defaultStyleId, speed: character.speed, pitch: character.pitch, intonation: character.intonation, prePhonemeLength: character.prePhonemeLength, postPhonemeLength: character.postPhonemeLength)
+        RealVoiceProvider.scheduleEnvelopeSidecar(wavURL: url, text: text)
         return VoiceResult(url: url, duration: try WavFile.duration(of: url))
     }
 }

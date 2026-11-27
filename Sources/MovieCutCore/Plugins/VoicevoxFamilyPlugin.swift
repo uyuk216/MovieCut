@@ -229,6 +229,7 @@ public final class VoicevoxFamilyPluginProvider: VoicevoxAccentProviding {
             throw VoiceError.message("\(spec.displayName) に接続できません。\(spec.displayName) をインストールして起動するか、インスペクタでこのキャラの音声エンジンを切り替えてください(既定の接続先 \(spec.defaultBaseURL))。")
         }
         let url = try await client.synthesize(text: text, speaker: character.speaker ?? 3, speed: character.speed, pitch: character.pitch, intonation: character.intonation, prePhonemeLength: character.prePhonemeLength, postPhonemeLength: character.postPhonemeLength, pauseLengthScale: character.pauseLengthScale, accentPhrases: accentPhrases)
+        RealVoiceProvider.scheduleEnvelopeSidecar(wavURL: url, text: text)
         return VoiceResult(url: url, duration: try WavFile.duration(of: url))
     }
 }
