@@ -12,6 +12,14 @@ public struct MediaHint: Codable, Equatable {
     public init(relative: String? = nil, size: Int64? = nil) { self.relative = relative; self.size = size }
 }
 
+/// 生成プロキシの記録(プロジェクト内資産)。`file` はプロジェクトファイルのフォルダからの相対パス(例 "proxies/ab12….mp4")。
+/// `sourceSize` は作ったときの原本のバイト数。原本が手元にあって大きさが違えば、古いプロキシとして使わない。
+public struct ProxyAsset: Codable, Equatable, Sendable {
+    public var file: String
+    public var sourceSize: Int64?
+    public init(file: String, sourceSize: Int64? = nil) { self.file = file; self.sourceSize = sourceSize }
+}
+
 public struct Project: Codable, Equatable {
     public var width: Int = 1920
     public var height: Int = 1080
@@ -41,6 +49,8 @@ public struct Project: Codable, Equatable {
     public var mediaFingerprints: [String: MediaFingerprint] = [:]
     /// 外部プロキシの関連付け(キー=元の素材のパス、値=外部プロキシのパス)。プレビュー専用で、書き出しは常に原本。設定したときだけ書く(空なら従来のファイルと完全一致)。
     public var proxyLinks: [String: String] = [:]
+    /// 生成プロキシの所在(キー=元の素材のパス)。プロジェクトフォルダ内の相対パスで持つので、フォルダごと移動・共有しても引ける(仕様01 M-06/M-07)。空なら書かない。
+    public var proxyAssets: [String: ProxyAsset] = [:]
     /// 取り込んだ素材のパス(順番どおり)。クリップを消しても残り、「未使用の素材」で整理する。空のときは書かない。
     public var mediaPool: [String] = []
     /// 素材のメタデータ(キーは素材の参照文字列 Clip.src / mediaPool の値)。キーワード・評価・メモ・ラベル色を持つ。
@@ -80,7 +90,7 @@ public struct Project: Codable, Equatable {
     /// 知らないキー(保持して書き戻す)
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["formatVersion", "scriptText", "width", "height", "fps", "bg", "codec", "voicevoxUrl", "aquestalkCommand", "characters", "tracks", "markers", "reviewComments", "rangeIn", "rangeOut", "mediaHints", "mediaFingerprints", "proxyLinks", "mediaPool", "mediaMetadata", "smartCollections", "targetTrackId", "multicams", "tachies", "readingDictionary", "subtitleY", "scenes", "camera"]
+    static let knownKeys: Set<String> = ["formatVersion", "scriptText", "width", "height", "fps", "bg", "codec", "voicevoxUrl", "aquestalkCommand", "characters", "tracks", "markers", "reviewComments", "rangeIn", "rangeOut", "mediaHints", "mediaFingerprints", "proxyLinks", "proxyAssets", "mediaPool", "mediaMetadata", "smartCollections", "targetTrackId", "multicams", "tachies", "readingDictionary", "subtitleY", "scenes", "camera"]
 
     public init() {}
 
@@ -105,6 +115,7 @@ public struct Project: Codable, Equatable {
         mediaHints = l.value("mediaHints") ?? [:]
         mediaFingerprints = l.value("mediaFingerprints") ?? [:]
         proxyLinks = l.value("proxyLinks") ?? [:]
+        proxyAssets = l.value("proxyAssets") ?? [:]
         mediaPool = l.value("mediaPool") ?? []
         mediaMetadata = (l.value("mediaMetadata") ?? [:]).filter { !$0.value.isEmpty }
         smartCollections = l.value("smartCollections") ?? []
@@ -153,6 +164,7 @@ public struct Project: Codable, Equatable {
         if !mediaHints.isEmpty { try c.encode(mediaHints, forKey: AnyKey("mediaHints")) }
         if !mediaFingerprints.isEmpty { try c.encode(mediaFingerprints, forKey: AnyKey("mediaFingerprints")) }
         if !proxyLinks.isEmpty { try c.encode(proxyLinks, forKey: AnyKey("proxyLinks")) }
+        if !proxyAssets.isEmpty { try c.encode(proxyAssets, forKey: AnyKey("proxyAssets")) }
         if !mediaPool.isEmpty { try c.encode(mediaPool, forKey: AnyKey("mediaPool")) }
         let effectiveMediaMetadata = mediaMetadata.filter { !$0.value.isEmpty }
         if !effectiveMediaMetadata.isEmpty { try c.encode(effectiveMediaMetadata, forKey: AnyKey("mediaMetadata")) }

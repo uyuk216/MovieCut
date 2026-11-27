@@ -14,8 +14,56 @@ extension ProjectModel {
         let mirror = self.mirror
         let dir = proxyDirectory
         assets.setPreviewProxies(ProxySettings.enabled()) { path in
-            ProxyLinks.resolve(for: path, in: mirror.get(), directory: dir)
+            ProxyLinks.resolve(for: path, in: mirror.get(), directory: dir,
+                               projectDir: mirror.projectFolder.map { URL(fileURLWithPath: $0, isDirectory: true) })
         }
+    }
+
+    /// プロジェクトファイルのフォルダ(未保存は nil)。生成プロキシはこの下の `proxies/` に置く(仕様01 M-06/M-07)。
+    var projectFolderURL: URL? { fileURL?.deletingLastPathComponent() }
+
+    /// 生成プロキシの作り先。保存済みならプロジェクトの `proxies/`、未保存なら従来のアプリ側(暫定置き場。保存時にコピーして取り込む)。
+    var proxyGenerationDirectory: URL {
+        projectFolderURL.map { ProxyAssets.directory(projectDir: $0) } ?? proxyDirectory
+    }
+
+    /// 作ったプロキシがプロジェクトの置き場にあれば、書類に記録する(未保存・アプリ側に作ったものは記録しない)。
+    private func recordGeneratedProxies(for paths: [String]) {
+        guard let folder = projectFolderURL else { return }
+        let dir = ProxyAssets.directory(projectDir: folder)
+        var root = rootProject
+        for src in paths {
+            guard let px = ProxyStore.existingProxy(for: URL(fileURLWithPath: src), directory: dir),
+                  let q = ProxyAssets.recording(root, source: src, proxy: px, projectDir: folder) else { continue }
+            if q.proxyAssets[src] != root.proxyAssets[src] { root = q }
+        }
+        if root != rootProject { applyRoot(root, name: "プロキシの記録") }
+    }
+
+    /// 名前を付けて保存・最初の保存でフォルダが変わったとき、生成プロキシを新しいフォルダへコピーして記録する(元は消さない)。
+    /// 開いただけのとき(最初の設定)は何もしない。
+    func proxyFolderDidChange(from old: URL?) {
+        let wasInit = fileURLInitialized
+        fileURLInitialized = true
+        guard wasInit, let folder = projectFolderURL, folder.standardizedFileURL != old?.deletingLastPathComponent().standardizedFileURL else { return }
+        let n = adoptGeneratedProxies(from: old?.deletingLastPathComponent())
+        if n > 0 { statusText = "生成したプロキシ \(n) 件をプロジェクトフォルダへ取り込みました" }
+    }
+
+    /// アプリ側(または前のフォルダ)の生成プロキシを、今のプロジェクトフォルダへコピーして記録する。取り込んだ件数を返す。
+    @discardableResult
+    func adoptGeneratedProxies(from old: URL? = nil) -> Int {
+        guard let folder = projectFolderURL else { return 0 }
+        let r = ProxyAssets.adoptLegacy(rootProject, sources: videoSourcePaths, projectDir: folder, legacyDirectory: proxyDirectory, from: old)
+        guard r.adopted > 0 else { return 0 }
+        applyRoot(r.project, name: "プロキシの取り込み")
+        installPreviewProxies()
+        return r.adopted
+    }
+
+    /// 素材の生成済みプロキシ(所在つき)。
+    func generatedProxy(for source: String) -> GeneratedProxy? {
+        ProxyAssets.locate(source: source, in: rootProject, projectDir: projectFolderURL, legacyDirectory: proxyDirectory)
     }
 
     /// 出力 ▸ プロキシを作成。素材ごとに順に作る(作成済みは飛ばす)。作成中は編集をロックする(書き出しと同じ)。
@@ -33,12 +81,13 @@ extension ProjectModel {
     private func makeProxies(paths: [String]) {
         guard !isLocked else { return }
         busyMessage = "プロキシを作っています 0/\(paths.count)"
-        let dir = proxyDirectory
+        let dir = proxyGenerationDirectory
         let task = Task { [weak self] () -> ProxyBatchResult in
             defer {
                 Task { @MainActor [weak self] in
                     self?.proxyCancel = nil
                     self?.busyMessage = nil
+                    self?.recordGeneratedProxies(for: paths)
                     self?.installPreviewProxies()
                 }
             }
@@ -69,7 +118,8 @@ extension ProjectModel {
     /// 失敗は数えるだけで騒がない。1 件でも作れたら、プレビューへ付け直して件数を知らせる。
     func autoCreateProxiesIfNeeded(forVideoPaths paths: [String]) {
         guard ProxySettings.autoCreateEnabled(), !paths.isEmpty else { return }
-        let dir = proxyDirectory
+        let dir = proxyGenerationDirectory
+        let legacyDir = proxyDirectory
         let job = Task.detached(priority: .utility) { () -> Int in
             var made = 0
             for path in paths {
@@ -77,7 +127,8 @@ extension ProjectModel {
                 let size = await ProxyStore.displayedSize(source: url)
                 let decision = ProxyAutoCreate.decide(
                     enabled: true, isVideo: true,
-                    hasExistingProxy: ProxyStore.existingProxy(for: url, directory: dir) != nil,
+                    hasExistingProxy: ProxyStore.existingProxy(for: url, directory: dir) != nil
+                        || ProxyStore.existingProxy(for: url, directory: legacyDir) != nil,
                     displayedShortSide: size.map { min($0.width, $0.height) })
                 guard decision == .create else { continue }
                 if (try? await ProxyStore.make(source: url, directory: dir)) != nil { made += 1 }
@@ -87,6 +138,7 @@ extension ProjectModel {
         Task { [weak self] in
             let made = await job.value
             guard made > 0 else { return }
+            self?.recordGeneratedProxies(for: paths)
             self?.installPreviewProxies()
             self?.statusText = "プロキシを自動で \(made) 件作りました"
         }
@@ -129,10 +181,16 @@ extension ProjectModel {
         return ok
     }
 
-    /// 生成済みのプロキシを消す。外部の関連付けのファイルは消さない。
+    /// 生成済みのプロキシを消す(プロジェクト内のものは記録も外す。アプリ側のものはそのファイルだけ)。外部の関連付けのファイルは消さない。
     @discardableResult
     func deleteGeneratedProxy(source: String) -> Bool {
-        let ok = ProxyStore.deleteProxy(for: URL(fileURLWithPath: source), directory: proxyDirectory)
+        var ok = false
+        if let folder = projectFolderURL, rootProject.proxyAssets[source] != nil {
+            let r = ProxyAssets.removeProject(source: source, from: rootProject, projectDir: folder)
+            if r.project != rootProject { applyRoot(r.project, name: "プロキシの削除") }
+            ok = r.removed
+        }
+        if !ok { ok = ProxyStore.deleteProxy(for: URL(fileURLWithPath: source), directory: proxyDirectory) }
         installPreviewProxies()
         statusText = ok ? "生成したプロキシを消しました" : "消すプロキシがありません"
         return ok
@@ -140,14 +198,21 @@ extension ProjectModel {
 
     /// この書類の素材の生成済みプロキシを全部消す(外部の関連付けのファイルは消さない)。消せた件数を返す。
     func deleteGeneratedProxiesForProject() -> Int {
-        let n = ProxyStore.deleteProxies(for: videoSourcePaths.map { URL(fileURLWithPath: $0) }, directory: proxyDirectory)
-        installPreviewProxies()
+        var n = 0
+        for src in videoSourcePaths {
+            // プロジェクト側とアプリ側の両方にあれば、1 件ずつ 2 回で両方消える
+            var removed = false
+            for _ in 0..<2 where generatedProxy(for: src) != nil {
+                if deleteGeneratedProxy(source: src) { removed = true } else { break }
+            }
+            if removed { n += 1 }
+        }
         statusText = "生成したプロキシを \(n) 件消しました"
         return n
     }
 
     /// 素材の今のプロキシの状態(外部リンク・生成済み・なし)。
     func proxyStatus(for source: String) -> ProxyStatus {
-        ProxyLinks.status(for: source, in: rootProject, directory: proxyDirectory)
+        ProxyLinks.status(for: source, in: rootProject, directory: proxyDirectory, projectDir: projectFolderURL)
     }
 }

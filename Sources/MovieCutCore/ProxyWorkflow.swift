@@ -75,17 +75,20 @@ public enum ProxyLinks {
 
     public static func linkedProxy(for source: String, in p: Project) -> String? { p.proxyLinks[source] }
 
-    /// 外部リンク(ファイルが実在するとき)を優先し、無ければ生成済み。リンク先が消えていれば生成済みに落ちる(プレビューを壊さない)。
+    /// 外部リンク(ファイルが実在するとき)を優先し、無ければ生成済み(プロジェクト内の記録 → 従来のアプリ側)。
+    /// リンク先が消えていれば生成済みに落ちる(プレビューを壊さない)。`directory` は従来のアプリ側(暫定置き場)、`projectDir` はプロジェクトファイルのフォルダ(未保存は nil)。
     public static func status(for source: String, in p: Project, directory: URL = ProxyStore.defaultDirectory(),
+                              projectDir: URL? = nil,
                               fileExists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }) -> ProxyStatus {
         if let link = p.proxyLinks[source], fileExists(link) { return .external(link) }
-        if let gen = ProxyStore.existingProxy(for: URL(fileURLWithPath: source), directory: directory) { return .generated(gen.path) }
+        if let gen = ProxyAssets.locate(source: source, in: p, projectDir: projectDir, legacyDirectory: directory) { return .generated(gen.url.path) }
         return .none
     }
 
     public static func resolve(for source: String, in p: Project, directory: URL = ProxyStore.defaultDirectory(),
+                               projectDir: URL? = nil,
                                fileExists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }) -> String? {
-        switch status(for: source, in: p, directory: directory, fileExists: fileExists) {
+        switch status(for: source, in: p, directory: directory, projectDir: projectDir, fileExists: fileExists) {
         case .external(let s), .generated(let s): return s
         case .none: return nil
         }

@@ -12,6 +12,7 @@ struct ProxyManagementSheet: View {
     var body: some View {
         let items = ProxySources.collect(in: model.rootProject)
         let generatedCount = items.filter { hasGenerated($0.path) }.count
+        let legacyCount = items.filter { model.generatedProxy(for: $0.path)?.location == .app }.count
         VStack(alignment: .leading, spacing: MCDesign.Spacing.m) {
             HStack {
                 Text(L10n.t("プロキシの管理")).font(MCDesign.Font.title3.bold())
@@ -19,6 +20,10 @@ struct ProxyManagementSheet: View {
                 Text(String(format: L10n.t("%d 件"), items.count)).foregroundStyle(MCDesign.Color.secondaryLabel).monospacedDigit()
             }
             Text(L10n.t("プロキシはプレビューを軽くするための映像です。書き出しは常に元の素材を使います。"))
+                .font(MCDesign.Font.caption).foregroundStyle(MCDesign.Color.secondaryLabel)
+            Text(model.projectFolderURL == nil
+                 ? L10n.t("この書類は未保存です。作ったプロキシは一時的にアプリ側に置き、保存するとプロジェクトフォルダの proxies/ へコピーします。")
+                 : L10n.t("作ったプロキシはプロジェクトフォルダの proxies/ に置き、書類に記録します。フォルダごと移動・共有できます。"))
                 .font(MCDesign.Font.caption).foregroundStyle(MCDesign.Color.secondaryLabel)
             if items.isEmpty {
                 InspectorGuideCard(symbol: "film", heading: L10n.t("映像の素材がありません"),
@@ -32,6 +37,9 @@ struct ProxyManagementSheet: View {
                 .help(L10n.t("既定はオフです。オンにすると、大きい映像を取り込んだときに背景でプロキシを作ります。"))
                 .onChange(of: autoCreate) { _, on in ProxySettings.setAutoCreate(on) }
             HStack {
+                Button(L10n.t("アプリ側のプロキシを取り込む")) { _ = model.adoptGeneratedProxies() }
+                    .disabled(model.isLocked || model.projectFolderURL == nil || legacyCount == 0)
+                    .help(L10n.t("アプリ側にある生成済みプロキシを、プロジェクトフォルダの proxies/ へコピーして記録します。元のファイルは残ります。"))
                 Button(L10n.t("すべて削除")) { _ = model.deleteGeneratedProxiesForProject() }
                     .disabled(model.isLocked || generatedCount == 0)
                     .help(L10n.t("この書類の生成済みプロキシを消します。元の素材と外部のプロキシのファイルは消えません。"))
@@ -46,7 +54,8 @@ struct ProxyManagementSheet: View {
     private func row(_ item: ProxySourceInfo) -> some View {
         let status = model.proxyStatus(for: item.path)
         let linked = model.rootProject.proxyLinks[item.path] != nil
-        let generated = generatedURL(item.path)
+        let generatedInfo = model.generatedProxy(for: item.path)
+        let generated = generatedInfo?.url
         return HStack(alignment: .center, spacing: MCDesign.Spacing.m) {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: MCDesign.Spacing.xs) {
@@ -59,7 +68,7 @@ struct ProxyManagementSheet: View {
                 }
                 Text(item.path).font(MCDesign.Font.caption).foregroundStyle(MCDesign.Color.secondaryLabel)
                     .lineLimit(1).truncationMode(.middle)
-                Text(statusLabel(status, generated: generated))
+                Text(statusLabel(status, generated: generated, location: generatedInfo?.location))
                     .font(MCDesign.Font.caption).foregroundStyle(MCDesign.Color.secondaryLabel)
             }
             Spacer()
@@ -88,21 +97,18 @@ struct ProxyManagementSheet: View {
         return out
     }
 
-    private func generatedURL(_ source: String) -> URL? {
-        ProxyStore.existingProxy(for: URL(fileURLWithPath: source), directory: model.proxyDirectory)
-    }
-
-    private func hasGenerated(_ source: String) -> Bool { generatedURL(source) != nil }
+    private func hasGenerated(_ source: String) -> Bool { model.generatedProxy(for: source) != nil }
 
     /// 状態の文字: 外部を使っているならその名前、無ければ生成済み(サイズ付き)か未作成。
-    private func statusLabel(_ status: ProxyStatus, generated: URL?) -> String {
+    private func statusLabel(_ status: ProxyStatus, generated: URL?, location: ProxyLocation?) -> String {
         switch status {
         case .external(let path):
             return L10n.t("外部プロキシを使用中") + ": " + URL(fileURLWithPath: path).lastPathComponent
         case .generated, .none:
             guard let u = generated else { return L10n.t("未作成") }
             let bytes = ((try? FileManager.default.attributesOfItem(atPath: u.path))?[.size] as? NSNumber)?.int64Value ?? 0
-            return L10n.t("生成済み") + "（" + ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file) + "）"
+            let place = location == .project ? L10n.t("プロジェクト内") : L10n.t("アプリ側")
+            return L10n.t("生成済み") + "（" + ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file) + "・" + place + ": " + u.path + "）"
         }
     }
 

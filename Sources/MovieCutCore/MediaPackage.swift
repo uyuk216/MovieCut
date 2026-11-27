@@ -18,13 +18,15 @@ public enum MediaPackage {
     /// 素材の参照を集めて計画を立てる。同じ元のパスは 1 回だけコピーし、同名の別ファイルには番号を付ける。
     /// `size` は各素材のバイト数(読めなければ nil)。`exists` でコピー元の有無を判定する。
     public static func plan(_ project: Project, exists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) },
-                            size: (String) -> Int64? = { _ in nil }) -> Plan {
+                            size: (String) -> Int64? = { _ in nil },
+                            proxyFile: (String) -> URL? = { _ in nil }) -> Plan {
         var p = project
         var copies: [Plan.Copy] = []
         var skipped: [String] = []
         var mapping: [String: String] = [:]     // 元のパス → パッケージ内の相対パス
         var usedNames: Set<String> = []
         var hints: [String: MediaHint] = [:]
+        var assets: [String: ProxyAsset] = [:]
 
         func destination(for src: String) -> String {
             if let d = mapping[src] { return d }
@@ -55,6 +57,12 @@ public enum MediaPackage {
                             if mapping[src] == rel, !copies.contains(where: { $0.from == src }) {
                                 copies.append(Plan.Copy(from: src, to: rel))
                                 hints[src] = MediaHint(relative: rel, size: size(src))
+                                // 生成プロキシもプロジェクト資産として同梱する(`proxies/`)。原本が無くて同梱しない素材には付けない
+                                if let px = proxyFile(src), exists(px.path) {
+                                    let prel = "\(ProxyAssets.folderName)/\(px.lastPathComponent)"
+                                    if !copies.contains(where: { $0.to == prel }) { copies.append(Plan.Copy(from: px.path, to: prel)) }
+                                    assets[rel] = ProxyAsset(file: prel, sourceSize: size(src))
+                                }
                             }
                             tracks[ti].clips[ci].src = rel
                         }
@@ -70,6 +78,7 @@ public enum MediaPackage {
         walk(&p.tracks)
         for si in p.scenes.indices { walk(&p.scenes[si].tracks) }
         p.mediaHints = hints
+        p.proxyAssets = assets
         // フィンガープリントと素材プールも、パッケージ後のパスへ付け替える
         var fps: [String: MediaFingerprint] = [:]
         for (k, v) in p.mediaFingerprints { fps[mapping[k] ?? k] = v }
