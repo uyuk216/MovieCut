@@ -59,7 +59,7 @@ public enum OtioExporter {
     public struct Report: Equatable {
         /// 書けたクリップ数。
         public var clipCount: Int = 0
-        /// 書けなかったクリップ(タイムライン上は Gap にして位置を保つ)。
+        /// 書けなかったクリップ。
         public var dropped: [Dropped] = []
         /// クリップは書いたが、OTIO に表せず落ちた機能の件数(エフェクト・トランジション・キーフレーム等)。
         public var droppedFeatures: [String: Int] = [:]
@@ -105,7 +105,7 @@ public enum OtioExporter {
                 if clip.type == .video || clip.type == .image { visual.append(clip) }
                 else if clip.type == .audio { audio.append(clip) }
                 else {
-                    report.dropped.append(Dropped(label: label(clip), reason: "OTIO で表せないクリップ(\(clip.type.rawValue))のため、空き(Gap)にしました"))
+                    report.dropped.append(Dropped(label: label(clip), reason: "OTIO で表せないクリップ(\(clip.type.rawValue))のため書きません(位置は前後の空き=Gap で保たれます)"))
                     droppedClipTypes[clip.type.rawValue, default: 0] += 1
                 }
             }

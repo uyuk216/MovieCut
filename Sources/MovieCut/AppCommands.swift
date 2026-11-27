@@ -63,6 +63,7 @@ struct AppCommands: Commands {
         CommandGroup(replacing: .printItem) {
             MenuSection { s, run in
                 items(AppMenuSpec.file(s), run)
+                MenuItemView(spec: AppMenuSpec.otioImport(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.subtitleImport(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.mediaRelink(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.unusedMediaItem(s), perform: run)
@@ -288,6 +289,7 @@ struct AppCommands: Commands {
                 MenuItemView(spec: AppMenuSpec.exoExport(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.fcpXmlExport(s), perform: run)
                 MenuItemView(spec: AppMenuSpec.edlExport(s), perform: run)
+                MenuItemView(spec: AppMenuSpec.otioExport(s), perform: run)
                 Menu(L10n.t("プラグイン形式で書き出す")) {
                     if s.pluginExportFormats.isEmpty {
                         Text(L10n.t("プラグイン形式はありません"))

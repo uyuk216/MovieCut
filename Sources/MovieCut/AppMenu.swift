@@ -7,7 +7,7 @@ enum MenuCommand: Hashable {
     case checkForUpdates
     // ヘルプ ▸ システムレポートを書き出す…(診断情報の zip。ショートカットは持たない)
     case systemReport
-    case addMedia, screenRecord, importPSD, importSVG, importMIDI, importImageSequence, importRigFolder, importRigPSD, export, exportPreset(ExportPreset), exportCustomPreset(String), saveCustomPreset, importFcpXml, importPrproj
+    case addMedia, screenRecord, importPSD, importSVG, importMIDI, importImageSequence, importRigFolder, importRigPSD, export, exportPreset(ExportPreset), exportCustomPreset(String), saveCustomPreset, importFcpXml, importPrproj, importOtio
     // 字幕(B3)とチャプター
     case importSubtitles, exportSubtitles, generateSubtitles, copyChapters, copyChaptersColor(MarkerColor)
     // 字幕を AI で翻訳して SRT に書き出す(ショートカットは持たない)
@@ -85,7 +85,7 @@ enum MenuCommand: Hashable {
     // 出力 ▸ 連番PNG+WAVで書き出す… / exo形式(.exo)で書き出す…(ショートカットは持たない)
     case exportPngWav, exportExo
     // 出力 ▸ FCP XML形式(.xml)で書き出す… / EDL形式(.edl)で書き出す…(ショートカットは持たない)
-    case exportFcpXml, exportEdl
+    case exportFcpXml, exportEdl, exportOtio
     // 出力 ▸ プラグイン形式で書き出す ▸ 形式(形式識別子。F-1 配線。ショートカットは持たない)
     case exportPluginFormat(String)
     // 出力 ▸ 書き出しキュー(今の設定の MP4 を積む / キューを表示)と、ファイル ▸ 素材ブラウザ(ショートカットは持たない)
@@ -924,6 +924,14 @@ enum AppMenuSpec {
         MenuItemSpec(command: .exportEdl, title: "EDL形式(.edl)で書き出す…", shortcut: nil, enabled: s.canEdit && s.canExport, checked: nil, hint: "CMX 3600 のカットリスト")
     }
 
+    static func otioImport(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .importOtio, title: "OTIO を読み込む…", shortcut: nil, enabled: s.canEdit, checked: nil, hint: "OpenTimelineIO(.otio)のタイムラインを取り込む")
+    }
+
+    static func otioExport(_ s: MenuState) -> MenuItemSpec {
+        MenuItemSpec(command: .exportOtio, title: "OTIO で書き出す…", shortcut: nil, enabled: s.canEdit && s.canExport, checked: nil, hint: "OpenTimelineIO(.otio)。Resolve 等とやり取り")
+    }
+
     /// 出力 ▸ プラグイン形式で書き出す ▸ 各形式(F-1。登録済みプラグインが提供する形式だけが並ぶ)。
     static func pluginExportItems(_ s: MenuState) -> [MenuItemSpec] {
         s.pluginExportFormats.map {
@@ -1698,7 +1706,7 @@ enum AppMenuSpec {
 
     /// 私たちが足す項目すべて(重複するショートカットが無いかの確認用)。
     static func all(_ s: MenuState) -> [MenuItemSpec] {
-        [about, checkForUpdates, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), textGenerationSettingsItem(s), imageGenerationSettingsItem(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s), apngExport(s), ymmpExport(s), webVideoExport(s), pngWavExport(s), exoExport(s), fcpXmlExport(s), edlExport(s)] + pluginExportItems(s) + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), trackMixerItem(s), clipListItem(s), noteListItem(s)] + scriptStoryboardItems(s) + scriptCSVItems(s) + [makeProxies(s), manageProxiesItem(s)] + [] + clipMenu(s).flatMap { $0 } + multicamItems(s) + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + pluginEffectItems(s) + effectPresetItems(s) + effectActions(s) + faceBlurItems(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textVerticalItem(s), textPerCharItem(s), textCounterItem(s), dictionaryItem(s), scriptTableItem(s), dialogueSuggestionsItem(s), aiRoughCutItem(s), saveItemTemplateItem(s)] + itemTemplateApplyItems(s) + itemTemplateCreateItems(s) + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [sceneSplitItem(s), silenceCutItem(s)] + rangeDeleteItems(s) + [audioAutoSyncItem(s), beatMarkersItem(s), remixItem(s), scaleDuplicateItem(s), beatPlaceItem(s), fillerCutItem(s), transcriptEditItem(s), speakerDiarizationItem(s), lutLoadItem(s), colorTransferItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
+        [about, checkForUpdates, settings(s), videoSettings(s)] + file(s) + recentItems(s) + [recentClear(s), welcomeToggle(s)] + mediaSubtitleItems(s) + chapterColorItems(s) + [ aiScript(s), aiSettings(s), textGenerationSettingsItem(s), imageGenerationSettingsItem(s), aiChapters(s), aiTitles(s), exportCurrent(s)] + rangeItems(s) + imageExportItems(s) + [gifExport(s), apngExport(s), ymmpExport(s), webVideoExport(s), pngWavExport(s), exoExport(s), fcpXmlExport(s), edlExport(s), otioExport(s), otioImport(s)] + pluginExportItems(s) + exportPresets(s, custom: CustomExportPresetStore.load(from: CustomExportPresetStore.defaultURL())) + exportQueueItems(s) + [loudnessItem(s), trackMixerItem(s), clipListItem(s), noteListItem(s)] + scriptStoryboardItems(s) + scriptCSVItems(s) + [makeProxies(s), manageProxiesItem(s)] + [] + clipMenu(s).flatMap { $0 } + multicamItems(s) + keyframeItems(s) + animationItems(s) + transitionKindItems(s, edge: .in) + transitionKindItems(s, edge: .out) + transitionActions(s) + transitionQuick(s) + effectKindItems(s) + pluginEffectItems(s) + effectPresetItems(s) + effectActions(s) + faceBlurItems(s) + textStyleItems(s) + textStyleAllItems(s) + textAnimItems(s) + [textVerticalItem(s), textPerCharItem(s), textCounterItem(s), dictionaryItem(s), scriptTableItem(s), dialogueSuggestionsItem(s), aiRoughCutItem(s), saveItemTemplateItem(s)] + itemTemplateApplyItems(s) + itemTemplateCreateItems(s) + pipItems(s) + speedItems(s) + [freezeFrameItem(s)] + audioItems(s) + [sceneSplitItem(s), silenceCutItem(s)] + rangeDeleteItems(s) + [audioAutoSyncItem(s), beatMarkersItem(s), remixItem(s), scaleDuplicateItem(s), beatPlaceItem(s), fillerCutItem(s), transcriptEditItem(s), speakerDiarizationItem(s), lutLoadItem(s), colorTransferItem(s), autoWhiteBalanceItem(s)] + editAdd(s) + clipboardItems(s) + [findReplace(s)] + layerItems(s) + [layerDeleteItem(s)] + layerHeightItems(s) + playback(s) + trimLoopWidthItems(s)
             + gotoEnds(s) + gotoNeighbours(s) + [gotoTime(s)] + markerItems(s) + markerColorItems(s) + markerList(s) + reviewCommentItems(s) + reviewCommentList(s)
             + zoom(s) + resolutions(s) + recentResolutions(s) + [customResolution(s), swapResolution(s)] + fpsItems(s) + recentFpsItems(s) + [customFps(s)] + codecItems(s) + backgroundItems(s)
             + dockPanels(s) + dockLayouts(s) + previewBackgroundItems(s) + previewTierItems(s) + [previewGuidesVisibilityItem(s)] + guideItems(s) + [previewSnapItem(s), previewProxy(s), proxyAutoCreateItem(s), fullScreen(s)] + help.flatMap { $0 }
@@ -1758,6 +1766,7 @@ enum AppMenu {
             case .importPSD: m.chooseAndImportPSD()
             case .importFcpXml: m.chooseAndImportFcpXml()
             case .importPrproj: m.chooseAndImportPrproj()
+            case .importOtio: m.chooseAndImportOtio()
             case .importSVG: m.chooseAndImportSVG()
             case .importMIDI: m.chooseAndImportMIDI()
             case .importImageSequence: m.chooseAndImportImageSequence()
@@ -1849,6 +1858,7 @@ enum AppMenu {
             case .exportExo: m.chooseAndExportExo()
             case .exportFcpXml: m.chooseAndExportFcpXml()
             case .exportEdl: m.chooseAndExportEdl()
+            case .exportOtio: m.chooseAndExportOtio()
             case .exportPluginFormat(let id): m.chooseAndExportPluginFormat(id)
             case .queueExport: m.chooseAndQueueExport()
             case .showExportQueue: m.showExportQueueSheet = true

@@ -22,6 +22,8 @@ enum L10nTable {
         "レビューコメントがありません": "No review comments",
         "FCP XML形式(.xml)で書き出す…": "Export as FCP XML (.xml)…",
         "EDL形式(.edl)で書き出す…": "Export as EDL (.edl)…",
+        "OTIO で書き出す…": "Export as OTIO…",
+        "OTIO を読み込む…": "Import OTIO…",
         "FCP XMLを読み込む…": "Import FCP XML…",
         "Premiere 等とタイムラインをやり取り": "Exchange timelines with Premiere and others",
         "CMX 3600 のカットリスト": "CMX 3600 cut list",
