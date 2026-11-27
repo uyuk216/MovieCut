@@ -164,6 +164,13 @@ public enum MediaRelinker {
         var hs: [String: MediaHint] = [:]
         for (k, v) in p.mediaHints { hs[mapping[k] ?? k] = v }
         p.mediaHints = hs
+        // 生成プロキシの記録・外部プロキシの関連付けも、新しい素材のパスへ付け替える(プロキシ自体は動かさない)
+        var pa: [String: ProxyAsset] = [:]
+        for (k, v) in p.proxyAssets { pa[mapping[k] ?? k] = v }
+        p.proxyAssets = pa
+        var pl: [String: String] = [:]
+        for (k, v) in p.proxyLinks { pl[mapping[k] ?? k] = v }
+        p.proxyLinks = pl
         return p
     }
 
