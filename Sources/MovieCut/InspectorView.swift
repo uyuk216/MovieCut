@@ -1322,7 +1322,19 @@ struct ClipInspector: View {
         slider("不透明度", .opacity, step: 0.01, format: Self.pct)
         slider("ぼかし（px）", .blur, step: 1, format: Self.px)
         InspectorField(label: L10n.t("合成方法")) { blendPicker(c) }
+        if c.type == .video {
+            InspectorField(label: L10n.t("入力色空間")) { inputColorSpacePicker(c) }
         }
+        }
+    }
+
+    /// 映像クリップの入力色空間(Log・HLG・Rec.2020 を Rec.709 の作業空間へ変換して描く)。未設定 = Rec.709(従来どおり)。
+    private func inputColorSpacePicker(_ c: Clip) -> some View {
+        Picker("", selection: Binding(get: { c.inputColorSpace ?? .rec709 },
+                                      set: { v in model.setClipProperty(\.inputColorSpace, to: v == .rec709 ? nil : v, name: "入力色空間の変更", clipId: clipId) })) {
+            ForEach(InputColorSpace.allCases, id: \.rawValue) { s in Text(L10n.t(s.displayName)).tag(s) }
+        }
+        .help(L10n.t("撮影時の色空間を選ぶと、Rec.709 の作業空間へ変換して表示・書き出しします（HDR 書き出しは対象外）"))
     }
 
     /// 下のレイヤーとの合成方法(ブレンドモード)。未設定 = 通常。

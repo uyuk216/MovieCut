@@ -124,9 +124,12 @@ public struct Renderer {
 
     /// クリップのエフェクトを解決する。プロバイダが空なら従来の resolve を builtin で包んだものと完全一致する。
     func resolvedEffects(_ c: Clip, atClipTime r: Double) -> [ResolvedClipEffect] {
-        guard c.hasActiveEffects || c.hasActivePluginEffect(effectIDs: pluginEffectIDs) else { return [] }
-        if pluginEffectProviders.isEmpty { return EffectPipeline.resolve(c, atClipTime: r).map { .builtin($0) } }
-        return EffectPipeline.resolveAll(c, atClipTime: r, pluginProviders: pluginEffectProviders)
+        // 入力色空間が Rec.709 以外なら、他のエフェクトより先に作業空間(Rec.709)へ変換する。Rec.709(nil)は従来と完全に同じ道
+        let cs = c.inputColorSpace.flatMap { $0 == .rec709 ? nil : $0 }
+        let head: [ResolvedClipEffect] = cs.map { [.colorSpace($0)] } ?? []
+        guard c.hasActiveEffects || c.hasActivePluginEffect(effectIDs: pluginEffectIDs) else { return head }
+        if pluginEffectProviders.isEmpty { return head + EffectPipeline.resolve(c, atClipTime: r).map { .builtin($0) } }
+        return head + EffectPipeline.resolveAll(c, atClipTime: r, pluginProviders: pluginEffectProviders)
     }
 
     public func renderImage(t: Double) -> CGImage? {

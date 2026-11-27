@@ -17,6 +17,8 @@ public struct ResolvedEffect: Equatable, Sendable {
 public enum ResolvedClipEffect: Equatable, Sendable {
     case builtin(ResolvedEffect)
     case plugin(ResolvedPluginEffect)
+    /// 入力色空間 → 作業空間(Rec.709)の変換(33^3 の 3D LUT に焼いて適用)。`ColorManagement`。
+    case colorSpace(InputColorSpace)
 }
 
 /// エフェクトを CIFilter の連なりにして画像にかける(UI にも Undo にも依存しない純粋な処理)。
@@ -198,6 +200,8 @@ public enum EffectPipeline {
             switch e {
             case .builtin(let b):
                 img = applyOne(b, img, rect: rect, bounds: bounds, scale: scale, faces: faces)
+            case .colorSpace(let cs):
+                img = ColorManagement.apply(img, from: cs)
             case .plugin(let p):
                 guard let provider = pluginProviders.first(where: { $0.descriptor(forEffectID: p.effectID) != nil }),
                       let out = provider.apply(effectID: p.effectID, image: img, values: p.values, color: p.color, bounds: bounds, scale: scale) else { continue }
