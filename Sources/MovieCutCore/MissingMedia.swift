@@ -82,6 +82,16 @@ public enum MissingMedia {
                             still += 1
                         }
                     }
+                    // マルチカムクリップの、使っていないアングルの素材も同じ場所へ直す(有効アングルが切り替わったとき欠けないように)
+                    if var info = tracks[ti].clips[ci].multicam {
+                        for ai in info.angles.indices {
+                            if let src = info.angles[ai].clip.src, !src.isEmpty, !exists(src),
+                               let new = findReplacement(for: src, hint: project.mediaHints[src], candidates: candidates, projectDir: projectDir, exists: exists) {
+                                info.angles[ai].clip.src = new
+                            }
+                        }
+                        tracks[ti].clips[ci].multicam = info
+                    }
                     if tracks[ti].clips[ci].type == .compound, var kids = tracks[ti].clips[ci].tracks {
                         process(&kids)
                         tracks[ti].clips[ci].tracks = kids

@@ -227,7 +227,7 @@ public enum CompoundEditing {
                     flatten(window(kt.clips, from: c.offset, duration: c.duration), base: abs, stack: stack.union([c.id]), scenes: scenes, mix: mix.multiplied(by: TrackMix.of(kt)), into: &out)
                 }
             } else {
-                var x = c
+                var x = Multicam.audioResolved(c)   // マルチカムクリップは音声アングルの素材から鳴らす(それ以外は c のまま)
                 if let b = base { x.start = grid(b + c.start) }
                 out.append((clip: x, mix: mix))
             }
