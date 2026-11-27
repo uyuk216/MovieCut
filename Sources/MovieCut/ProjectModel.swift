@@ -673,6 +673,12 @@ final class ProjectModel: ObservableObject {
             .rippleHead: { [weak self] in guard let m = self, !m.isLocked, m.isDocumentKeyWindow else { return false }; return m.rippleTrimSelectedToPlayhead(edge: .head) },
             .rippleTail: { [weak self] in guard let m = self, !m.isLocked, m.isDocumentKeyWindow else { return false }; return m.rippleTrimSelectedToPlayhead(edge: .tail) },
         ]
+        // 数字キー 1〜9: マルチカムクリップを選んでいる(または再生位置にある)とき、その位置からアングルを切り替える(再生中も効く)
+        keyRouter.angleKeyHandler = { [weak self] i in
+            guard let m = self, !m.isLocked, m.isDocumentKeyWindow, let c = m.multicamClipTarget, i < Multicam.angleCount(c) else { return false }
+            m.multicamClipCut(angle: i, atPlayhead: true)
+            return true
+        }
         keyRouter.install()
         playback.warmUp()
     }

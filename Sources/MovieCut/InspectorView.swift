@@ -592,6 +592,7 @@ struct ClipInspector: View {
                     ClipNoteField(model: model, clipId: clipId, note: c.note ?? "").id(clipId)
                 }
                 disclose("group", "グループ", hideHeader: true) { groupSection(c) }
+                MulticamClipSection(model: model, clip: c)
                 TrackingSection(model: model, clip: c)
                 if c.type == .voice { disclose("voice", "セリフ") { voiceSections(c) } }
                 if c.type == .text { disclose("text", "文字", hideHeader: true) { textSections(c) } }

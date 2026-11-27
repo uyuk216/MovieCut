@@ -80,6 +80,10 @@ extension ProjectModel {
     func multicamCut(angle: Int, groupId: String? = nil) -> Bool {
         guard !isLocked else { return false }
         let t = currentTime
+        // マルチカムクリップを選んでいる、または(グループが無くて)再生位置にマルチカムクリップがあるときは、クリップのほうを切り替える
+        if groupId == nil, selectedMulticamClip != nil || (Multicam.activeGroup(in: project, at: t) == nil && multicamClipTarget != nil) {
+            return multicamClipCut(angle: angle, atPlayhead: true)
+        }
         guard let g = groupId.flatMap({ id in project.multicams.first { $0.id == id } }) ?? Multicam.activeGroup(in: project, at: t) else {
             statusText = "再生位置にマルチカメラのグループがありません"
             return false
@@ -96,5 +100,73 @@ extension ProjectModel {
         case .invalid: statusText = "切り替えられません"
         }
         return false
+    }
+
+    // MARK: マルチカムクリップ(タイムライン上の 1 クリップ。計算は Core の `Multicam` の `placeClip` / `setActiveAngle` / `setAudioAngle`)
+
+    /// 選んでいる 1 つのクリップがマルチカムクリップならそれ。
+    var selectedMulticamClip: Clip? {
+        guard selectedClipIDs.count <= 1, let c = selectedClip, c.multicam != nil else { return nil }
+        return c
+    }
+
+    /// 1〜9 キーなどの切り替え対象: 再生位置が選択中のマルチカムクリップの中ならそれ、そうでなければ再生位置に重なるマルチカムクリップ(上のレイヤー優先)、
+    /// それも無ければ選択中のマルチカムクリップ(停止中にクリップ全体を変える)。
+    var multicamClipTarget: Clip? {
+        let t = currentTime
+        if let s = selectedMulticamClip, t >= s.start, t < s.start + s.duration { return s }
+        return Multicam.clip(at: t, in: project) ?? selectedMulticamClip
+    }
+
+    /// メニュー・キーの対象にできるアングル数(グループがあればグループ、なければマルチカムクリップ)。
+    var multicamCutAngleCount: Int {
+        if selectedMulticamClip == nil, let g = activeMulticam { return g.angles.count }
+        return multicamClipTarget.map { Multicam.angleCount($0) } ?? 0
+    }
+
+    static let multicamClipCreateUndoName = "マルチカムクリップを作る"
+
+    /// 選んだ映像クリップを 1 つのマルチカムクリップにして置く(基準のクリップの位置に。ほかの元クリップは外れてアングルになる)。1 回の Undo。
+    @discardableResult
+    func createMulticamClip(ids: Set<String>, localLags: [String: Double]) -> Bool {
+        guard !isLocked else { return false }
+        switch Multicam.placeClip(in: project, ids: ids, localLags: localLags) {
+        case .placed(let p, let id):
+            let ok = edit(Self.multicamClipCreateUndoName) { $0 = p }
+            if ok {
+                selectedClipId = id
+                statusText = "マルチカムクリップを置きました。インスペクタの「マルチカム」か 1〜9 キーでアングルを切り替えます"
+            }
+            return ok
+        case .locked: statusText = Self.lockedNotice
+        case .invalid: statusText = Multicam.selectionHint
+        }
+        return false
+    }
+
+    /// マルチカムクリップの有効アングルを切り替える。`atPlayhead` が true なら再生位置で分割して右側だけ(再生位置がクリップの外・端ならクリップ全体)。
+    /// 対象は選択中のマルチカムクリップ、なければ再生位置のもの。1 回の Undo。変わらなければ何も登録しない。
+    @discardableResult
+    func multicamClipCut(angle: Int, atPlayhead: Bool) -> Bool {
+        guard !isLocked, let c = multicamClipTarget else { return false }
+        switch Multicam.setActiveAngle(in: project, clipId: c.id, angle: angle, at: atPlayhead ? currentTime : nil) {
+        case .cut(let p):
+            let name = c.multicam?.angles.indices.contains(angle) == true ? c.multicam!.angles[angle].name : "\(angle + 1)"
+            let ok = edit(String(format: L10n.t("アングル%dに切り替え"), angle + 1)) { $0 = p }
+            if ok { statusText = String(format: L10n.t("%@ に切り替えました"), name) }
+            return ok
+        case .unchanged: statusText = "すでにその角度です"
+        case .locked: statusText = Self.lockedNotice
+        case .noFootage: statusText = "そのカメラの映像が、この区間にありません(同期のずれを確認してください)"
+        case .invalid: statusText = "切り替えられません"
+        }
+        return false
+    }
+
+    /// 選択中のマルチカムクリップの音声アングルを変える(映像は変えない)。1 回の Undo。
+    @discardableResult
+    func setMulticamAudioAngle(_ angle: Int) -> Bool {
+        guard !isLocked, let p = Multicam.setAudioAngle(in: project, ids: selectedClipIDs, angle: angle) else { return false }
+        return edit("音声アングルを変更") { $0 = p }
     }
 }

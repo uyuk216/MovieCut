@@ -571,7 +571,7 @@ struct MenuState: Equatable {
         rippleAllLayers = m.rippleTrimAllLayers
         canMulticamCreate = m.canMulticamCreate
         hasMulticam = !m.project.multicams.isEmpty
-        multicamAngleCount = m.activeMulticam?.angles.count ?? 0
+        multicamAngleCount = m.multicamCutAngleCount
         resolutionKey = m.resolutionKey
         fps = m.project.fps
         recentResolutions = RecentCustoms.resolutions().items

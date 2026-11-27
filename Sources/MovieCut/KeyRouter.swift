@@ -79,6 +79,11 @@ final class KeyRouter {
         return charactersIgnoringModifiers == "=" || charactersIgnoringModifiers == "+" || characters == "+"
     }
 
+    /// 数字キー 1〜9(上の段)のキーコード → アングルの番号(0 始まり)。
+    static let angleKeyCodes: [UInt16: Int] = [18: 0, 19: 1, 20: 2, 21: 3, 23: 4, 22: 5, 26: 6, 28: 7, 25: 8]
+    /// 数字キー 1〜9 の処理(マルチカムクリップのアングル切り替え)。true を返すとキーを消費する。他のコマンドに割り当て済みのキーは奪わない。
+    var angleKeyHandler: ((Int) -> Bool)?
+
     /// コマンドごとの処理。true を返すとキーを消費する。
     var handlers: [KeyCommand: () -> Bool] = [:]
     /// このルーターが受け持つウィンドウ(第二画面も含められる)。
@@ -112,6 +117,11 @@ final class KeyRouter {
     /// テストしやすいよう、イベントから切り離した入口。
     @discardableResult
     func dispatch(keyCode: UInt16, modifiers: NSEvent.ModifierFlags, firstResponder: NSResponder?, isRepeat: Bool = false) -> Bool {
+        if let idx = Self.angleKeyCodes[keyCode], let ah = angleKeyHandler,
+           !Self.hasBlockingModifier(modifiers), !modifiers.contains(.shift), !Self.isTextInput(firstResponder),
+           Self.effectiveKeyMap(store: Self.shortcutStore)[keyCode] == nil {
+            return ah(idx)
+        }
         guard let cmd = Self.command(keyCode: keyCode, modifiers: modifiers, firstResponder: firstResponder),
               let h = handlers[cmd] else { return false }
         // Space の長押しで再生/停止が連打されないようにする(矢印のコマ送りは長押しで続ける)

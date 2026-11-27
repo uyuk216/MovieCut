@@ -2224,6 +2224,16 @@ final class TimelineCanvas: NSView {
         add("グループにする", enabled: m.selectedClipIDs.count >= 2) { m.groupSelectedClips() }
         add(m.selectionGroupAllDisabled ? "グループを有効にする" : "グループを無効にする", enabled: m.selectionHasGroup) { m.toggleGroupDisabledSelected() }
         add("グループを解除", enabled: m.selectionHasGroup) { m.ungroupSelectedClips() }
+        if let c = m.selectedMulticamClip, let info = c.multicam {
+            menu.addItem(.separator())
+            for (i, a) in info.angles.enumerated() {
+                add("アングル \(i + 1) に切り替え(\(a.name))" + (i == info.activeAngle ? " ✓" : "")) { m.multicamClipCut(angle: i, atPlayhead: true) }
+            }
+            for (i, a) in info.angles.enumerated() where i != info.audioAngle {
+                add("音声をアングル \(i + 1) にする(\(a.name))") { m.setMulticamAudioAngle(i) }
+            }
+            menu.addItem(.separator())
+        }
         add("複製", enabled: !m.selectedClipIDs.isEmpty) { m.duplicateSelected() }
         add("削除", enabled: !m.selectedClipIDs.isEmpty) { m.deleteSelected() }
         add("すき間を詰めて削除", enabled: !m.selectedClipIDs.isEmpty) { m.rippleDeleteSelected() }
