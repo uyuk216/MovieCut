@@ -1136,6 +1136,7 @@ struct ClipInspector: View {
             Text(L10n.t("エフェクトはありません")).font(MCDesign.Font.callout).foregroundStyle(.secondary)
         }
         ForEach(0..<c.effects.count, id: \.self) { effectCard(c, $0) }
+        GradeNodesSection(model: model, clip: c)
         HStack(spacing: 8) {
             Menu {
                 ForEach(EffectKind.allCases, id: \.rawValue) { k in Button(k.label) { model.addEffect(k, clipId: clipId) } }

@@ -530,6 +530,8 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var blendMode: ClipBlendMode? = nil
     /// 入力色空間(撮影ガンマ・色域。`InputColorSpace`)。無いとき(nil)は Rec.709 で、描画は従来と完全に同じ。Rec.709 以外のときだけ書く。
     public var inputColorSpace: InputColorSpace? = nil
+    /// グレーディングノードの直列リスト(`GradeNode`)。無い・空のときはノード無しで、描画は従来と完全に同じ。ノードがあるときだけ書く。
+    public var gradeNodes: [GradeNode]? = nil
     /// グループ ID(同じ値のクリップをまとめて扱う。`ClipGrouping`)。無いときはグループ無し。設定したときだけ書く。
     public var group: String? = nil
     /// ルビ(ふりがな)。`text` の中の親文字と読みの対応(`RubyText`)。空のときはファイルに書かない。
@@ -571,7 +573,7 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var hslMask: HSLMask? = nil
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["id", "type", "voicevoxAccent", "subtitleText", "tachieId", "mouthDrive", "speakingOnly", "followsProjectEnd", "playsAnimation", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "bokehShape", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "frameFlow", "audioFx", "pan", "channelMode", "textStyle", "textAnim", "bubble", "counter", "valueRef", "duck", "visualizer", "stabilize", "stabilizeRoll", "tracks", "sceneId", "mask", "meshWarp", "puppetWarp", "blendMode", "group", "ruby", "figure", "note", "locked", "muted", "disabled", "treatAsVoice", "audioCategory", "tracking", "objectMask", "hslMask", "inputColorSpace"]
+    static let knownKeys: Set<String> = ["id", "type", "voicevoxAccent", "subtitleText", "tachieId", "mouthDrive", "speakingOnly", "followsProjectEnd", "playsAnimation", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "bokehShape", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "frameFlow", "audioFx", "pan", "channelMode", "textStyle", "textAnim", "bubble", "counter", "valueRef", "duck", "visualizer", "stabilize", "stabilizeRoll", "tracks", "sceneId", "mask", "meshWarp", "puppetWarp", "blendMode", "group", "ruby", "figure", "note", "locked", "muted", "disabled", "treatAsVoice", "audioCategory", "tracking", "objectMask", "hslMask", "inputColorSpace", "gradeNodes"]
 
     public init() {}
 
@@ -750,6 +752,10 @@ public struct Clip: Codable, Equatable, Identifiable {
         // 入力色空間: 知らない値は捨てずにそのまま書き戻す(Rec.709 は書かない)
         if let raw: JSONValue = l.value("inputColorSpace") {
             if let name: String = l.value("inputColorSpace"), let v = InputColorSpace(rawValue: name) { inputColorSpace = v == .rec709 ? nil : v } else { extra["inputColorSpace"] = raw }
+        }
+        // グレーディングノード: 読めない形は捨てずにそのまま書き戻す(空配列は nil)
+        if let raw: JSONValue = l.value("gradeNodes") {
+            if let v: [GradeNode] = l.value("gradeNodes") { gradeNodes = v.isEmpty ? nil : v } else { extra["gradeNodes"] = raw }
         }
         if let raw: JSONValue = l.value("mask") {
             if let v: ClipMask = l.value("mask") { mask = v } else { extra["mask"] = raw }
@@ -940,6 +946,7 @@ public struct Clip: Codable, Equatable, Identifiable {
         if let t = tracks { try c.encode(t, forKey: AnyKey("tracks")) }
         try c.encodeIfPresent(sceneId, forKey: AnyKey("sceneId"))
         try c.encodeIfPresent(mask, forKey: AnyKey("mask"))
+        if let g = gradeNodes, !g.isEmpty { try c.encode(g, forKey: AnyKey("gradeNodes")) }
         if let cs = inputColorSpace, cs != .rec709 { try c.encode(cs.rawValue, forKey: AnyKey("inputColorSpace")) }
         try c.encodeIfPresent(meshWarp, forKey: AnyKey("meshWarp"))
         try c.encodeIfPresent(puppetWarp, forKey: AnyKey("puppetWarp"))
