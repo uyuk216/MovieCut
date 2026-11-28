@@ -39,13 +39,13 @@ public struct VoicevoxClient {
     /// 送信先の検査(ローカル以外は、設定で許可したホストだけ)。
     public func validatedBaseURL() throws -> URL { try policy.validate(baseURL) }
 
-    private func url(_ path: String) throws -> URL {
+    func url(_ path: String) throws -> URL {
         try policy.validate(baseURL)
         guard let u = URL(string: baseURL + path) else { throw VoiceError.message("VOICEVOX の URL が正しくありません: \(baseURL)") }
         return u
     }
 
-    private func send(_ req: URLRequest, _ what: String) async throws -> Data {
+    func send(_ req: URLRequest, _ what: String) async throws -> Data {
         let (data, resp) = try await session.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(code) else { throw VoiceError.http(what, code) }

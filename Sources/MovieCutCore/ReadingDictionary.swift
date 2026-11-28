@@ -10,16 +10,44 @@ import Foundation
 //   音声の作り直しは読み上げ文から合成するので、辞書をあとから変えても既存クリップの読みは勝手に変わらない。
 // - 字幕は元の表記のまま(読み上げ文と字幕文が分かれる)。字幕文が別に指定されている行はそちらが優先。
 
+/// 品詞(VOICEVOX user_dict の word_type と同じ値)。
+public enum ReadingPartOfSpeech: String, Codable, CaseIterable, Sendable {
+    case properNoun = "PROPER_NOUN"
+    case commonNoun = "COMMON_NOUN"
+    case verb = "VERB"
+    case adjective = "ADJECTIVE"
+    case suffix = "SUFFIX"
+
+    public var label: String {
+        switch self {
+        case .properNoun: return "固有名詞"
+        case .commonNoun: return "普通名詞"
+        case .verb: return "動詞"
+        case .adjective: return "形容詞"
+        case .suffix: return "接尾辞"
+        }
+    }
+}
+
 /// 読み辞書の 1 件(表記 → 読み)。
 public struct ReadingEntry: Codable, Equatable, Sendable {
     /// 置き換える表記(例: 「相棒」)。
     public var word: String
     /// 読み(例: 「あいぼう」)。
     public var reading: String
+    /// アクセント型(VOICEVOX user_dict の accent_type。0=平板、n=n モーラ目の後で下がる)。nil なら未指定(同期時は 0)。
+    public var accentType: Int?
+    /// 品詞(VOICEVOX user_dict の word_type)。nil なら未指定(同期時は固有名詞)。
+    public var partOfSpeech: ReadingPartOfSpeech?
+    /// 優先度(VOICEVOX user_dict の priority、0〜10)。nil なら未指定(同期時は 5)。
+    public var priority: Int?
 
-    public init(word: String, reading: String) {
+    public init(word: String, reading: String, accentType: Int? = nil, partOfSpeech: ReadingPartOfSpeech? = nil, priority: Int? = nil) {
         self.word = word
         self.reading = reading
+        self.accentType = accentType
+        self.partOfSpeech = partOfSpeech
+        self.priority = priority
     }
 }
 
