@@ -86,6 +86,16 @@ struct AudioFxPanel: View {
                     get: { c.audioFx?.spectralDenoiseOn ?? false },
                     set: { on in model.setAudioFx({ _ = AudioFxEditing.setDenoiseSpectral(&$0, on) }, name: ProjectModel.denoiseUndoName, clipId: clipId) }))
                     .help(L10n.t("いちばん静かな 0.5 秒をノイズとみなし、周波数ごとにノイズだけを減らします（声の最中のノイズにも効く。書き出しは少し時間がかかります）。静かな所が無いクリップでは効きが弱くなります"))
+                Toggle(L10n.t("反響除去"), isOn: Binding(
+                    get: { (c.audioFx?.dereverbStrength ?? 0) > 0 },
+                    set: { on in model.setAudioFx({ _ = AudioFxEditing.setDereverb(&$0, on ? AudioFxEditing.defaultDereverb : 0) }, name: ProjectModel.dereverbUndoName, clipId: clipId) }))
+                    .help(L10n.t("部屋の残響（直接音のあとに遅れて続く響き）を減らします。ノイズ除去のあとにかかります。学習型ではない簡易処理なので、強い残響・音楽・持続音では不自然になることがあります"))
+                if (c.audioFx?.dereverbStrength ?? 0) > 0 {
+                    fxSlider("反響除去の強さ", value: c.audioFx?.dereverbStrength ?? 0, range: 0.01...1, step: 0.01,
+                             format: { "\(Int(($0 * 100).rounded()))%" }, undo: ProjectModel.dereverbUndoName) {
+                        _ = AudioFxEditing.setDereverb(&$0, $1)
+                    }
+                }
                 fxSlider("ノイズゲート", value: c.audioFx?.gateDb ?? AudioFx.gateRange.lowerBound - 1, range: (AudioFx.gateRange.lowerBound - 1)...AudioFx.gateRange.upperBound, step: 1,
                          format: { $0 < AudioFx.gateRange.lowerBound ? "なし" : String(format: L10n.t("−%.0f dB 以下を消す"), abs($0)) }, undo: ProjectModel.gateUndoName) {
                     _ = AudioFxEditing.setGate(&$0, $1 < AudioFx.gateRange.lowerBound ? nil : $1)
