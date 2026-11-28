@@ -304,7 +304,7 @@ public struct Renderer {
     func drawClipStack(_ c: Clip, pose: ClipPose, mask: TransitionMask?, t: Double, ctx: CGContext, W: Double, H: Double, layerSourceOver: Bool) {
         // 複合クリップで、キャンバスいっぱいに・効果なし・不透明度 100% なら、中身を親の画面に直接描く(中間の画像を作らない)。
         // 直接描くので、まとめる前のクリップを描いたときと画素が完全に一致する
-        if (c.type == .compound || c.type == .scene), mask == nil, c.mask == nil, c.objectMask == nil, c.hslMask == nil, c.blendMode == nil, pose.isFullCanvasCompound, (c.crop?.isEmpty ?? true), !c.flipHOrDefault, !c.flipVOrDefault, pose.skew == 0, !c.hasActiveEffects, !c.hasActiveGradeNodes, !c.hasActiveWarp(at: t - c.start), !c.hasActivePluginEffect(effectIDs: pluginEffectIDs), pose.pixelate < 2, pose.feather <= 0.01, let child = nestedRenderer(c) {
+        if (c.type == .compound || c.type == .scene), mask == nil, c.mask == nil, c.objectMask == nil, c.hslMask == nil, c.blendMode == nil, pose.isFullCanvasCompound, (c.crop?.isEmpty ?? true), !c.flipHOrDefault, !c.flipVOrDefault, pose.skew == 0, !c.hasActiveEffects, !c.hasActiveGradeNodes, (c.inputColorSpace ?? .rec709) == .rec709, !c.hasActiveWarp(at: t - c.start), !c.hasActivePluginEffect(effectIDs: pluginEffectIDs), pose.pixelate < 2, pose.feather <= 0.01, let child = nestedRenderer(c) {
             ctx.saveGState()
             child.drawFrame(t: t - c.start + c.offset, into: ctx)
             ctx.restoreGState()
