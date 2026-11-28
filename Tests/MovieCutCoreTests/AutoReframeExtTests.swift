@@ -304,4 +304,27 @@ final class AutoReframeExtTests: XCTestCase {
         XCTAssertLessThan(maxStep, 0.05, "x が 1 サンプルで \(maxStep) 跳んだ")
         XCTAssertLessThan(try XCTUnwrap(p.centers.last), 0.5, "抜けた後に右へ張り付いた")
     }
+
+    /// 1 人だけの小さい被写体(幅 0.04)が 0.25/秒(1 コマ 0.05)で歩き続けても、毎コマ「検出なし」にならず窓が追う。
+    func testPrimaryZoomFollowsSmallFastSubject() throws {
+        var o = ReframeOptions(); o.aspect = .portrait4x5; o.zoomEnabled = true; o.zoomMin = 1; o.zoomMax = 1
+        let x0 = 0.2, speed = 0.25, d = 0.04
+        let s = series(2.4) { t in [box(x0 + speed * t, 0.5, d, d)] }
+        let p = try XCTUnwrap(AutoReframe.plan(samples: s, sourceWidth: 1920, sourceHeight: 1080, options: o))
+        let xEnd = x0 + speed * (s.last!.t)
+        let c = try XCTUnwrap(p.centers.last), half = p.windowWidth / 2
+        XCTAssertLessThan(abs(c - xEnd), half, "最後に被写体 \(xEnd) が窓 \(c)±\(half) の外へ出た")
+        XCTAssertGreaterThan(c, 0.45, "窓が先頭の枠に固定された: \(c)")
+    }
+
+    /// 2 人のうち左が途中で退場し右だけが残ったら、持ち越しをやめて右へ対象が移る。
+    func testPrimaryZoomRecapturesRemainingSubjectAfterExit() throws {
+        var o = ReframeOptions(); o.aspect = .portrait4x5; o.zoomEnabled = true; o.zoomMin = 1; o.zoomMax = 1
+        let s = series(10) { t in
+            let left = box(0.2, 0.5, 0.1, 0.2), right = box(0.8, 0.5, 0.1, 0.198)
+            return t < 3.0 ? [left, right] : [right]    // t=3.0 から左が退場
+        }
+        let p = try XCTUnwrap(AutoReframe.plan(samples: s, sourceWidth: 1920, sourceHeight: 1080, options: o))
+        XCTAssertGreaterThan(try XCTUnwrap(p.centers.last), 0.5, "退場後も窓が空いた場所に固定された")
+    }
 }
