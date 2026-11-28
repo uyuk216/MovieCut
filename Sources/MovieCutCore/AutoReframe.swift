@@ -188,15 +188,28 @@ public enum AutoReframe {
     /// みなさないと、対象だけ検出が抜けたコマで遠くの被写体へ面積に関係なく乗り換え、クランプ境界が跳ぶ。
     public static let primaryLostDistanceRatio = 1.0
 
+    /// 「検出なし」とみなす距離の絶対的な下限(素材幅に対する割合)。しきい値は `max(前の対象の幅 × 比, この値)`。
+    /// 幅 0.04 の小さい被写体が普通に歩く(0.25/秒 = 5Hz で 1 コマ 0.05)と、幅だけのしきい値では毎コマ「遠い」になり追えない。
+    /// ズームで小さい被写体へ寄る使い方ほど効く。1 サンプルで素材幅の 1 割は、普通の歩行・走りより速く、別の被写体とは区別できる目安。
+    public static let primaryLostMinDistance = 0.1
+
+    /// 対象の検出なしが連続してこのコマ数に達したコマで、持ち越しをやめて最大面積の枠を新しい対象にする。
+    /// 3 コマ = 0.6 秒(5Hz)。1〜2 コマの抜けは持ち越して跳ばず、本当に退場した対象に窓が固定され続けるのを防ぐ。
+    public static let primaryLostMaxSamples = 3
+
     /// primary の見切れ防止対象を、前コマの対象に最も近い枠で追い、面積比が `primarySwitchRatio` 以上の別の枠が出たときだけ乗り換える。
-    /// `previous` が nil(先頭)のときは最大面積の枠。最も近い枠でも遠い(`primaryLostDistanceRatio`)ときは、対象の検出なしとして nil。
-    static func holdPrimary(_ rects: [CGRect], previous: CGRect?) -> CGRect? {
+    /// `previous` が nil(先頭)のときは最大面積の枠。最も近い枠でも遠い(`max(幅 × primaryLostDistanceRatio, primaryLostMinDistance)`)ときは、対象の検出なしとして nil。
+    /// `lostSamples`(直前までの連続した検出なしのコマ数)に、このコマを足して `primaryLostMaxSamples` に達したら、持ち越さず最大面積の枠で再捕捉する。
+    static func holdPrimary(_ rects: [CGRect], previous: CGRect?, lostSamples: Int = 0) -> CGRect? {
         let rs = valid(rects)
         guard let largest = rs.max(by: { $0.width * $0.height < $1.width * $1.height }) else { return nil }
         guard let prev = previous else { return largest }
         func dist(_ r: CGRect) -> CGFloat { hypot(r.midX - prev.midX, r.midY - prev.midY) }
         let current = rs.min { dist($0) < dist($1) }!
-        if dist(current) > prev.width * CGFloat(primaryLostDistanceRatio) { return nil }
+        let lostDistance = max(prev.width * CGFloat(primaryLostDistanceRatio), CGFloat(primaryLostMinDistance))
+        if dist(current) > lostDistance {
+            return lostSamples + 1 >= primaryLostMaxSamples ? largest : nil
+        }
         let ca = current.width * current.height, la = largest.width * largest.height
         return la >= ca * CGFloat(primarySwitchRatio) ? largest : current
     }
@@ -249,16 +262,19 @@ public enum AutoReframe {
         var rawX: [Double] = [], rawY: [Double] = [], rawSize: [Double] = []
         var boxes: [CGRect?] = []
         var lastX = 0.5, lastY = 0.5, lastSize: Double? = nil
+        var lostSamples = 0            // primary で対象の検出なしが続いたコマ数
         var heldMain: CGRect? = nil    // primary の見切れ防止対象(検出が抜けたコマは直前を持ち越す)
         for s in samples {
             var f = focus(s.rects, mode: options.subjectMode)
             var boxOut = f?.box
             if options.subjectMode == .primary, f != nil {
-                if let m = holdPrimary(s.rects, previous: heldMain) {
+                if let m = holdPrimary(s.rects, previous: heldMain, lostSamples: lostSamples) {
+                    lostSamples = 0
                     heldMain = m
                     f?.box = m
                     boxOut = m
                 } else {
+                    lostSamples += 1
                     boxOut = heldMain    // 対象の検出が抜けたコマ: heldMain は持ち越し、見切れ防止も直前の対象で続ける(外すと前後のクランプ済みコマとの差で x が跳ぶ)
                 }
             }
