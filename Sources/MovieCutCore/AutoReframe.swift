@@ -183,14 +183,20 @@ public enum AutoReframe {
     /// 1.25 は検出枠の揺れ(1 割前後)より大きく、本当に主役が変わる差(大きく寄る・離れる)よりは小さい目安。
     public static let primarySwitchRatio = 1.25
 
+    /// primary で、前コマの対象に最も近い枠でも中心の距離が「前の対象の幅 × この値」を超えたら、対象の検出が抜けたコマとみなす。
+    /// 5Hz のサンプルで対象が 1 コマに自分の幅以上動くことはまずなく、これを超える枠は別の被写体とみなしてよい。
+    /// みなさないと、対象だけ検出が抜けたコマで遠くの被写体へ面積に関係なく乗り換え、クランプ境界が跳ぶ。
+    public static let primaryLostDistanceRatio = 1.0
+
     /// primary の見切れ防止対象を、前コマの対象に最も近い枠で追い、面積比が `primarySwitchRatio` 以上の別の枠が出たときだけ乗り換える。
-    /// `previous` が nil(先頭)のときは最大面積の枠。
+    /// `previous` が nil(先頭)のときは最大面積の枠。最も近い枠でも遠い(`primaryLostDistanceRatio`)ときは、対象の検出なしとして nil。
     static func holdPrimary(_ rects: [CGRect], previous: CGRect?) -> CGRect? {
         let rs = valid(rects)
         guard let largest = rs.max(by: { $0.width * $0.height < $1.width * $1.height }) else { return nil }
         guard let prev = previous else { return largest }
         func dist(_ r: CGRect) -> CGFloat { hypot(r.midX - prev.midX, r.midY - prev.midY) }
         let current = rs.min { dist($0) < dist($1) }!
+        if dist(current) > prev.width * CGFloat(primaryLostDistanceRatio) { return nil }
         let ca = current.width * current.height, la = largest.width * largest.height
         return la >= ca * CGFloat(primarySwitchRatio) ? largest : current
     }
@@ -246,14 +252,20 @@ public enum AutoReframe {
         var heldMain: CGRect? = nil    // primary の見切れ防止対象(検出が抜けたコマは直前を持ち越す)
         for s in samples {
             var f = focus(s.rects, mode: options.subjectMode)
-            if options.subjectMode == .primary, f != nil, let m = holdPrimary(s.rects, previous: heldMain) {
-                heldMain = m
-                f?.box = m
+            var boxOut = f?.box
+            if options.subjectMode == .primary, f != nil {
+                if let m = holdPrimary(s.rects, previous: heldMain) {
+                    heldMain = m
+                    f?.box = m
+                    boxOut = m
+                } else {
+                    boxOut = heldMain    // 対象の検出が抜けたコマ: heldMain は持ち越し、見切れ防止も直前の対象で続ける(外すと前後のクランプ済みコマとの差で x が跳ぶ)
+                }
             }
             if let f { lastX = f.cx; lastY = f.cy; lastSize = f.size }
             rawX.append(lastX); rawY.append(lastY)
             rawSize.append(lastSize ?? 0)
-            boxes.append(f?.box)
+            boxes.append(boxOut)
         }
 
         // ズーム: 被写体が大きい(近い)時を基準 1 倍にして、小さい(遠い)ほど寄る
