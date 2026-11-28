@@ -167,7 +167,9 @@ public enum AutoReframe {
         case .primary:
             var total = 0.0, sx = 0.0, sy = 0.0
             for r in rs { let a = Double(r.width * r.height); total += a; sx += a * Double(r.midX); sy += a * Double(r.midY) }
-            return Focus(cx: sx / total, cy: sy / total, size: total.squareRoot(), box: union)
+            // 見切れ防止の対象は主被写体(最大面積)。中心は従来どおり全矩形の面積重み付き平均
+            let main = rs.max { $0.width * $0.height < $1.width * $1.height }!
+            return Focus(cx: sx / total, cy: sy / total, size: total.squareRoot(), box: main)
         case .largest:
             let r = rs.max { $0.width * $0.height < $1.width * $1.height }!
             return Focus(cx: Double(r.midX), cy: Double(r.midY), size: Double(r.width * r.height).squareRoot(), box: r)
@@ -204,7 +206,8 @@ public enum AutoReframe {
         let W = canvasWidth ?? (options.aspect == .portrait9x16 ? portraitWidth : Double(size.w))
         let H = canvasHeight ?? (options.aspect == .portrait9x16 ? portraitHeight : Double(size.h))
         guard !samples.isEmpty, w0 > 0, h0 > 0, W > 0, H > 0 else { return nil }
-        let sameRatio = abs((w0 / h0) - (W / H)) < 1e-9
+        // キャンバス寸法の偶数丸め(最大 1 画素)で比率がずれても同じ比とみなす
+        let sameRatio = abs((w0 / h0) - (W / H)) / (W / H) <= 1.5 / min(W, H)
         // 従来(9:16・ズームなし)は、横長の素材でだけ作る。縦長・同じ比は nil
         if options.aspect == .portrait9x16 && !options.zoomEnabled && w0 / h0 <= W / H + 1e-9 { return nil }
         if sameRatio && !options.zoomEnabled { return nil }
@@ -243,13 +246,25 @@ public enum AutoReframe {
                 zooms = smooth(raw, dt: dt, tau: options.zoomSmoothingSeconds).map { min(max($0, zMin), zMax) }
             }
         }
-        // 全員が入る窓: 枠が窓に収まる範囲までしか寄らない
-        if options.subjectMode == .group {
-            for i in 0..<n {
-                guard let b = boxes[i] else { continue }
-                let limit = min(windowWidth / (Double(b.width) * 1.05), windowHeight / (Double(b.height) * 1.05))
-                zooms[i] = max(1, min(zooms[i], limit))
+        // 全員が入る窓: 枠が窓に収まる範囲までしか寄らない。
+        // 上限は検出の抜けたコマも直前(先頭は最初に見つかった)の枠で求め、人数の増減で段差が出ないよう
+        // 「前後 2r コマの最小 → 幅 r の移動平均を 2 回」で滑らかにする(結果は元の上限を超えない)。
+        if options.subjectMode == .group, let firstBox = boxes.compactMap({ $0 }).first {
+            var held = firstBox
+            let limits: [Double] = boxes.map { b in
+                if let b { held = b }
+                return min(windowWidth / (Double(held.width) * 1.05), windowHeight / (Double(held.height) * 1.05))
             }
+            let r = max(1, Int((options.zoomSmoothingSeconds * sampleRate / 3).rounded()))
+            let eroded = limits.indices.map { i in limits[max(0, i - 2 * r)...min(n - 1, i + 2 * r)].min()! }
+            func box(_ v: [Double]) -> [Double] {
+                v.indices.map { i in
+                    let w = v[max(0, i - r)...min(n - 1, i + r)]
+                    return w.reduce(0, +) / Double(w.count)
+                }
+            }
+            let smoothLimit = box(box(eroded))
+            for i in 0..<n { zooms[i] = max(1, min(zooms[i], smoothLimit[i])) }
         }
 
         let smoothX = smooth(rawX, dt: dt, tau: tau)
@@ -264,12 +279,16 @@ public enum AutoReframe {
             var cx = smoothX[i], cy = options.followY ? smoothY[i] : 0.5
             if let b = boxes[i] {
                 // 被写体の枠が窓から出ないように寄せる(入りきらない大きさなら何もしない)
+                // 余白 m は枠が窓の 90% 以下のときだけ取り、90〜100% の帯は窓いっぱいで囲む(収まるなら必ず入る)
                 let m = 0.1
-                if options.followY, Double(b.height) <= 2 * hh * (1 - m) {
-                    cy = min(max(cy, Double(b.maxY) - hh * (1 - m)), Double(b.minY) + hh * (1 - m))
+                func room(_ half: Double, _ len: Double) -> Double? {
+                    len <= 2 * half * (1 - m) ? half * (1 - m) : (len <= 2 * half ? half : nil)
                 }
-                if keepX, Double(b.width) <= 2 * hw * (1 - m) {
-                    cx = min(max(cx, Double(b.maxX) - hw * (1 - m)), Double(b.minX) + hw * (1 - m))
+                if options.followY, let r = room(hh, Double(b.height)) {
+                    cy = min(max(cy, Double(b.maxY) - r), Double(b.minY) + r)
+                }
+                if keepX, let r = room(hw, Double(b.width)) {
+                    cx = min(max(cx, Double(b.maxX) - r), Double(b.minX) + r)
                 }
             }
             cx = min(max(cx, hw), 1 - hw)

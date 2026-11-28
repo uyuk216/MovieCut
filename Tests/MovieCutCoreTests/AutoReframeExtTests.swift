@@ -188,4 +188,91 @@ final class AutoReframeExtTests: XCTestCase {
         XCTAssertEqual(c.keyframes["y"]?.count, s.count)
         XCTAssertEqual(c.keyframes["scale"]?.count, s.count)
     }
+
+    // MARK: Opus チェック指摘の回帰テスト
+
+    /// 指摘1: 全員が入る窓は、被写体が動いても(平滑化の遅れがあっても)枠を窓に入れ続ける。ズームなし・枠が窓の90〜100%の帯。
+    func testGroupWindowKeepsMovingBoxInsideWhenItFitsBand() throws {
+        var o = ReframeOptions(); o.aspect = .portrait4x5; o.subjectMode = .group
+        let s = series(2) { t in [box(0.25 + 0.15 * t, 0.5, 0.18, 0.1), box(0.25 + 0.15 * t + 0.24, 0.5, 0.18, 0.1)] }   // 枠の幅 0.42(窓 0.45 の93%)
+        let p = try XCTUnwrap(AutoReframe.plan(samples: s, sourceWidth: 1920, sourceHeight: 1080, options: o))
+        for (i, smp) in s.enumerated() {
+            let u = smp.rects.dropFirst().reduce(smp.rects[0]) { $0.union($1) }
+            let hw = p.windowWidth / 2
+            XCTAssertLessThanOrEqual(p.centers[i] - hw, Double(u.minX) + 1e-9, "左が見切れ i=\(i)")
+            XCTAssertGreaterThanOrEqual(p.centers[i] + hw, Double(u.maxX) - 1e-9, "右が見切れ i=\(i)")
+        }
+    }
+
+    /// 指摘1(ズームあり): 上限いっぱいまで寄っても、動く被写体が窓から出ない。
+    func testGroupZoomKeepsMovingBoxInside() throws {
+        var o = ReframeOptions(); o.aspect = .portrait4x5; o.subjectMode = .group; o.zoomEnabled = true; o.zoomMax = 2
+        let s = series(2) { t in [box(0.25 + 0.15 * t, 0.5, 0.18, 0.1), box(0.25 + 0.15 * t + 0.24, 0.5, 0.18, 0.1)] }
+        let p = try XCTUnwrap(AutoReframe.plan(samples: s, sourceWidth: 1920, sourceHeight: 1080, options: o))
+        for (i, smp) in s.enumerated() {
+            let u = smp.rects.dropFirst().reduce(smp.rects[0]) { $0.union($1) }
+            let hw = p.windowWidth / p.zooms[i] / 2
+            XCTAssertLessThanOrEqual(p.centers[i] - hw, Double(u.minX) + 1e-9, "左が見切れ i=\(i)")
+            XCTAssertGreaterThanOrEqual(p.centers[i] + hw, Double(u.maxX) - 1e-9, "右が見切れ i=\(i)")
+        }
+    }
+
+    /// 指摘2: 検出人数が変わっても scale のキーに段差が出ない(上限も滑らかに効く)。
+    func testGroupZoomLimitDoesNotStepWhenCountChanges() throws {
+        var o = ReframeOptions(); o.aspect = .portrait4x5; o.subjectMode = .group; o.zoomEnabled = true
+        let two = [box(0.45, 0.5, 0.06, 0.15), box(0.55, 0.5, 0.06, 0.15)]
+        let three = two + [box(0.78, 0.5, 0.06, 0.15)]
+        let s = series(12) { t in t < 6 ? two : three }
+        let p = try XCTUnwrap(AutoReframe.plan(samples: s, sourceWidth: 1920, sourceHeight: 1080, options: o))
+        XCTAssertFalse(p.scaleKeys.isEmpty)
+        let steps = zip(p.scaleKeys.dropFirst(), p.scaleKeys).map { abs($0.v - $1.v) }
+        XCTAssertLessThan(steps.max() ?? 0, 0.25, "scale キーが跳んでいる: \(steps.max() ?? 0)")
+        // 上限そのものは守る(3人側は全員が窓に入る)
+        let u = three.dropFirst().reduce(three[0]) { $0.union($1) }
+        XCTAssertLessThanOrEqual(Double(u.width) * p.zooms.last!, p.windowWidth + 1e-9)
+    }
+
+    /// 指摘3: 検出が抜けたコマにも直前の枠でズーム上限がかかり、寄りすぎ・跳ねが起きない。
+    func testGroupZoomLimitAppliesOnFramesWithoutDetection() throws {
+        var o = ReframeOptions(); o.aspect = .portrait4x5; o.subjectMode = .group; o.zoomEnabled = true
+        let big = box(0.5, 0.5, 0.1, 0.5), flat = box(0.5, 0.5, 0.38, 0.05)     // flat の上限は 0.45/(0.38×1.05)≈1.13
+        var s = series(12) { t in t < 8 ? [big] : [flat] }
+        let miss = 50                                                          // t = 10.0
+        s[miss] = SubjectSample(t: s[miss].t, rects: [])
+        let p = try XCTUnwrap(AutoReframe.plan(samples: s, sourceWidth: 1920, sourceHeight: 1080, options: o))
+        let limit = 0.45 / (0.38 * 1.05)
+        XCTAssertLessThanOrEqual(p.zooms[miss], limit + 1e-6, "抜けたコマが寄りすぎ")
+        XCTAssertLessThan(abs(p.zooms[miss] - p.zooms[miss - 1]), 0.1)
+        XCTAssertLessThan(abs(p.zooms[miss] - p.zooms[miss + 1]), 0.1)
+    }
+
+    /// 指摘4: 偶数丸めで比率がわずかにずれても、「元の比率・ズームなし」は計画を作らない。
+    func testOriginalAspectWithEvenRoundingIsNoOp() {
+        let s = series(2) { _ in [box(0.5, 0.5, 0.1, 0.2)] }
+        var o = ReframeOptions(); o.aspect = .original
+        XCTAssertTrue(ReframeAspect.original.canvas(sourceWidth: 1280, sourceHeight: 534) == (1920, 802))
+        XCTAssertNil(AutoReframe.plan(samples: s, sourceWidth: 1280, sourceHeight: 534, options: o))
+        XCTAssertNil(AutoReframe.plan(samples: s, sourceWidth: 1920, sourceHeight: 1080, options: o))
+        // ズームありなら作る
+        o.zoomEnabled = true
+        XCTAssertNotNil(AutoReframe.plan(samples: s, sourceWidth: 1280, sourceHeight: 534, options: o))
+        // 本当に比率が違えば(16:9 の素材を 4:5)作る
+        o.zoomEnabled = false; o.aspect = .portrait4x5
+        XCTAssertNotNil(AutoReframe.plan(samples: s, sourceWidth: 1280, sourceHeight: 534, options: o))
+    }
+
+    /// 指摘5(作業決定): primary + ズームの見切れ防止は主被写体(最大面積)だけを対象にし、離れた小さい被写体には引っぱられない。
+    func testPrimaryZoomKeepsLargestBoxInsideNotUnion() throws {
+        var o = ReframeOptions(); o.aspect = .portrait4x5; o.zoomEnabled = true; o.zoomMin = 1; o.zoomMax = 1
+        let s = series(2) { t in [box(0.15 + 0.3 * t, 0.5, 0.2, 0.4), box(0.95, 0.5, 0.02, 0.04)] }
+        let p = try XCTUnwrap(AutoReframe.plan(samples: s, sourceWidth: 1920, sourceHeight: 1080, options: o))
+        let hw = p.windowWidth / 2
+        for (i, smp) in s.enumerated() {
+            let m = smp.rects[0]
+            XCTAssertLessThanOrEqual(p.centers[i] - hw, Double(m.minX) + 1e-9, "主被写体が見切れ i=\(i)")
+            XCTAssertGreaterThanOrEqual(p.centers[i] + hw, Double(m.maxX) - 1e-9, "主被写体が見切れ i=\(i)")
+        }
+        let f = try XCTUnwrap(AutoReframe.focus(s[0].rects, mode: .primary))
+        XCTAssertEqual(f.box, s[0].rects[0])
+    }
 }
