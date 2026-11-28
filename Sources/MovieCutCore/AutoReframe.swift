@@ -178,6 +178,23 @@ public enum AutoReframe {
         }
     }
 
+    /// primary の見切れ防止対象を切り替える面積比。別の被写体の面積が現在の対象の 1.25 倍以上になったときだけ切り替える。
+    /// 面積が数%違う2人で最大が入れ替わるたびに対象が変わり、平滑化済みの中心とのクランプ差で窓が跳ぶのを防ぐ。
+    /// 1.25 は検出枠の揺れ(1 割前後)より大きく、本当に主役が変わる差(大きく寄る・離れる)よりは小さい目安。
+    public static let primarySwitchRatio = 1.25
+
+    /// primary の見切れ防止対象を、前コマの対象に最も近い枠で追い、面積比が `primarySwitchRatio` 以上の別の枠が出たときだけ乗り換える。
+    /// `previous` が nil(先頭)のときは最大面積の枠。
+    static func holdPrimary(_ rects: [CGRect], previous: CGRect?) -> CGRect? {
+        let rs = valid(rects)
+        guard let largest = rs.max(by: { $0.width * $0.height < $1.width * $1.height }) else { return nil }
+        guard let prev = previous else { return largest }
+        func dist(_ r: CGRect) -> CGFloat { hypot(r.midX - prev.midX, r.midY - prev.midY) }
+        let current = rs.min { dist($0) < dist($1) }!
+        let ca = current.width * current.height, la = largest.width * largest.height
+        return la >= ca * CGFloat(primarySwitchRatio) ? largest : current
+    }
+
     /// 等間隔の列を、前から後ろへ・後ろから前へ、一次の低域通過で 2 回かける(位相のずれが出ない平滑化)。`tau` は時定数(秒)。
     public static func smooth(_ v: [Double], dt: Double, tau: Double) -> [Double] {
         guard v.count > 1, tau > 0, dt > 0 else { return v }
@@ -226,8 +243,13 @@ public enum AutoReframe {
         var rawX: [Double] = [], rawY: [Double] = [], rawSize: [Double] = []
         var boxes: [CGRect?] = []
         var lastX = 0.5, lastY = 0.5, lastSize: Double? = nil
+        var heldMain: CGRect? = nil    // primary の見切れ防止対象(検出が抜けたコマは直前を持ち越す)
         for s in samples {
-            let f = focus(s.rects, mode: options.subjectMode)
+            var f = focus(s.rects, mode: options.subjectMode)
+            if options.subjectMode == .primary, f != nil, let m = holdPrimary(s.rects, previous: heldMain) {
+                heldMain = m
+                f?.box = m
+            }
             if let f { lastX = f.cx; lastY = f.cy; lastSize = f.size }
             rawX.append(lastX); rawY.append(lastY)
             rawSize.append(lastSize ?? 0)

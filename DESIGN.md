@@ -453,6 +453,7 @@ text: text,fontSize,color,outline,font; voice: charId,text,subtitle,fontSize,fon
     - `zoomEnabled`(既定 false)、`zoomMin`(既定 1.0、1 未満にはしない)、`zoomMax`(既定 1.6)、`zoomSmoothingSeconds`(既定 1.5 秒): 被写体の大きさ(矩形の面積の平方根)の上位 10% 点を基準 1 倍とし、小さくなる(遠ざかる)ほど寄る(倍率 = 基準 ÷ 現在の大きさ)。平滑化したあと [下限, 上限] に収め、`scale` のキーフレームに書く。窓はズーム分だけ小さくなり、窓の中心はその内側に収める。
     - 計画の追加項目(`Plan`): `yKeys` / `centersY` / `windowHeight` / `scaleKeys` / `zooms` / `canvasWidth` / `canvasHeight`。`apply` は `x`、(あれば)`y`・`scale` のキーを書き、無ければ外す。
     - crop 設定クリップは従来どおり対象外(`canAutoReframe`)。理由: Renderer は crop 後の絵を fit(元の寸法で計算)で中央に置くため、被写体の矩形を crop 内の座標へ直し、窓の計算を「crop 後の寸法 × 元の fit」で行う必要がある。既存テスト `testCanAutoReframeRejectsAudioAndCropped` が crop 不可を期待しているので、解消は統括判断待ち(Core 側の計画式の拡張だけで済む見込み)。
+    - primary + ズームの見切れ防止対象はヒステリシスで保持する(`holdPrimary`)。前コマの対象に最も近い枠を同一とみなし、別の枠の面積が対象の `primarySwitchRatio`(1.25)倍以上になったときだけ乗り換える。1.25 は検出枠の揺れより大きく、主役が本当に変わる差よりは小さい目安。検出が抜けたコマは直前の対象を持ち越す。largest モードの切替は従来どおり。
     - テスト: `AutoReframeExtTests`(従来一致・アスペクト別の窓と寸法・y 追従のクランプと見切れ防止・縦のほうがゆっくり・ズームの上下限と向き・ズームの揺れ・複数被写体の窓選択・全員が入る窓・apply)、`AutoReframeOptionsAppTests`(1:1 でキャンバス反映・1 回の Undo)。
   - テスト: `AutoReframeTests`(偽の検出器。動く被写体を窓が追う・窓が素材の内側・キーが窓の中心を示す・キャンバスの縁に空きがない・平滑化でジッターが半分以下・縦長では計画なし・適用・画像 1 枚の検出は 1 回)、`AutoReframeAppTests`(メニューの項目・1 回の Undo で解像度も戻る・対象外の判定)。
 - **未確認**: 実機での検出の質(Vision の顔・注目領域の当たり)、1 分を超える素材での検出の時間(5 コマ/秒の Vision 呼び出し)、マスクの見た目の細部(プレビュー上の縁)、カラーホイールの見た目の好み(数値の強さは目安)。
