@@ -749,14 +749,25 @@ public enum AudioMixer {
     private static func openItem(_ it: Item, remapDir: URL) throws -> PCMSource? {
         guard let raw = try openItemRaw(it, remapDir: remapDir) else { return nil }
         // ノイズ除去(強): いちばん静かな 0.5 秒からノイズの型を作り、入力にスペクトルゲートをかける(音程・速度の変更のあと、EQ などの前)
-        guard let fx = it.fx, fx.spectralDenoiseOn else { return raw }
+        guard let fx = it.fx else { return raw }
+        var src: PCMSource = raw
+        var limited = false
         let frames = it.endFrame - it.startFrame
-        let profile = SpectralDenoise.estimateProfile(open: {
-            guard let s = try? openItemRaw(it, remapDir: remapDir) else { return nil }
-            return LimitedSource(s, frames: frames)
-        }, sampleRate: mixSampleRate)
-        guard let profile else { return raw }   // 短すぎる・読めない: そのまま
-        return SpectralDenoiseSource(inner: LimitedSource(raw, frames: frames), profile: profile, strength: fx.denoiseStrength)
+        if fx.spectralDenoiseOn {
+            let profile = SpectralDenoise.estimateProfile(open: {
+                guard let s = try? openItemRaw(it, remapDir: remapDir) else { return nil }
+                return LimitedSource(s, frames: frames)
+            }, sampleRate: mixSampleRate)
+            if let profile {   // 短すぎる・読めない: そのまま
+                src = SpectralDenoiseSource(inner: LimitedSource(raw, frames: frames), profile: profile, strength: fx.denoiseStrength)
+                limited = true
+            }
+        }
+        // 反響除去: ノイズ除去のあと(ノイズを残響の尾と取り違えないため)。強さ 0 なら何も挟まない
+        if fx.dereverbStrength > 0 {
+            src = Dereverb.makeSource(inner: limited ? src : LimitedSource(raw, frames: frames), strength: fx.dereverbStrength, sampleRate: mixSampleRate)
+        }
+        return src
     }
 
     /// 先頭から frames フレームだけ読ませる(ミキサーが使う範囲に揃える)。

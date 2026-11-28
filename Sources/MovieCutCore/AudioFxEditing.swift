@@ -236,6 +236,18 @@ public enum AudioFxEditing {
         }
     }
 
+    // MARK: 反響除去
+
+    /// 強さ 0〜1(小数 2 桁)。0 は未設定に戻して書かない。変わらなければ false。
+    @discardableResult
+    public static func setDereverb(_ c: inout Clip, _ v: Double) -> Bool {
+        let x = (AudioFx.clampDereverb(v) * 100).rounded() / 100
+        return edit(&c) { fx in fx.dereverb = x > 0 ? x : nil }
+    }
+
+    /// 既定の強さ(反響除去をオンにするとき)。
+    public static let defaultDereverb = 0.5
+
     /// 既定の強さ(ノイズ除去を初めて入れるとき)。
     public static let defaultDenoise = 0.5
 

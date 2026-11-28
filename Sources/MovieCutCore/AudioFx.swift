@@ -4,7 +4,7 @@ import Foundation
 
 /// クリップの音声エフェクト(イコライザー・コンプレッサー・リバーブ・ノーマライズ)。
 /// どれも optional で、1 つも無ければ `audioFx` ごとファイルに書かない。知らないキーは `extra` に残して書き戻す。
-/// 処理の順番は 速度(AudioRemap)→ ノイズ除去 → ノイズゲート → EQ → コンプレッサー → リバーブ → ディレイ → 拡張エフェクト → リミッター → ノーマライズ → 音量(キーフレーム)→ フェード → パン → ミックス。
+/// 処理の順番は 速度(AudioRemap)→ ノイズ除去 → 反響除去 → ノイズゲート → EQ → コンプレッサー → リバーブ → ディレイ → 拡張エフェクト → リミッター → ノーマライズ → 音量(キーフレーム)→ フェード → パン → ミックス。
 public struct AudioFx: Codable, Equatable, Sendable {
     public var eq: EQ?
     public var compressor: Compressor?
@@ -14,6 +14,12 @@ public struct AudioFx: Codable, Equatable, Sendable {
     public var denoise: Double?
     /// ノイズ除去を「強(スペクトル)」にする。true のときだけ書く(未設定 = 簡易)。強さが 0 のときは意味を持たない。
     public var denoiseSpectral: Bool?
+    /// 反響除去の強さ(0〜1)。0 と未設定は同じ(書かない)。ノイズ除去のあと・ノイズゲートの前に入力側でかける(`Dereverb.swift`)。
+    /// 保存は `extra["dereverb"]`(Clip を大きくすると Debug の描画テストがスタック溢れで落ちるため、専用のフィールドを持たない)。
+    public var dereverb: Double? {
+        get { if case .number(let v)? = extra["dereverb"] { return v }; return nil }
+        set { extra["dereverb"] = (newValue?.isFinite ?? false) ? .number(newValue!) : nil }
+    }
     /// 音程(半音、−24〜+24。小数部がセント。0.01 半音 = 1 セント刻み)。0 と未設定は同じ(書かない)。音の高さだけを変え、長さは変えない。
     public var pitch: Double?
     /// ノイズゲートのしきい値(dBFS、−80〜−20)。これより小さい音を閉じて消す。未設定 = ゲートなし。
@@ -32,7 +38,8 @@ public struct AudioFx: Codable, Equatable, Sendable {
 
     static let knownKeys: Set<String> = ["eq", "compressor", "reverb", "normalize", "denoise", "denoiseSpectral", "pitch", "gate", "limiter", "delay", "extended", "vst3"]
 
-    public init(eq: EQ? = nil, compressor: Compressor? = nil, reverb: Reverb? = nil, normalize: Normalize? = nil, denoise: Double? = nil, pitch: Double? = nil, gate: Double? = nil, limiter: Double? = nil, delay: Delay? = nil, extended: Extended? = nil, vst3: [VST3Slot]? = nil) {
+    public init(eq: EQ? = nil, compressor: Compressor? = nil, reverb: Reverb? = nil, normalize: Normalize? = nil, denoise: Double? = nil, pitch: Double? = nil, gate: Double? = nil, limiter: Double? = nil, delay: Delay? = nil, extended: Extended? = nil, vst3: [VST3Slot]? = nil, dereverb: Double? = nil) {
+        self.dereverb = dereverb
         self.eq = eq; self.compressor = compressor; self.reverb = reverb; self.normalize = normalize; self.denoise = denoise; self.pitch = pitch
         self.gate = gate; self.limiter = limiter; self.delay = delay; self.extended = extended; self.vst3 = vst3
     }
@@ -52,7 +59,7 @@ public struct AudioFx: Codable, Equatable, Sendable {
     }
 
     /// 何も入っていない(ファイルに書かない)。
-    public var isEmpty: Bool { eq == nil && compressor == nil && reverb == nil && normalize == nil && denoiseStrength == 0 && pitchSemitones == 0 && gateDb == nil && limiterDb == nil && delay == nil && (extended?.isEmpty ?? true) && (vst3?.isEmpty ?? true) && extra.isEmpty }
+    public var isEmpty: Bool { eq == nil && compressor == nil && reverb == nil && normalize == nil && denoiseStrength == 0 && dereverbStrength == 0 && pitchSemitones == 0 && gateDb == nil && limiterDb == nil && delay == nil && (extended?.isEmpty ?? true) && (vst3?.isEmpty ?? true) && extra.isEmpty }
 
     /// 音程の半音数(−24〜+24 に収めた値。有限でなければ 0)。0 でないときだけ音程を変える。
     public var pitchSemitones: Double { Self.clampPitch(pitch) }
@@ -82,12 +89,19 @@ public struct AudioFx: Codable, Equatable, Sendable {
         return min(max(v, 0), 1)
     }
 
+    /// 反響除去の強さ(0〜1に収めた値)。効くのは 0 より大きいとき。
+    public var dereverbStrength: Double { Self.clampDereverb(dereverb) }
+    public static func clampDereverb(_ v: Double?) -> Double {
+        guard let v, v.isFinite else { return 0 }
+        return min(max(v, 0), 1)
+    }
+
     /// スペクトルゲート(強)が効く(ノイズ除去が入っていて、強にしてある)。
     public var spectralDenoiseOn: Bool { denoiseSpectral == true && denoiseStrength > 0 }
 
     /// 実際に音を変えるものが 1 つでもある。
     public var isActive: Bool {
-        (eq?.isActive ?? false) || (compressor?.isActive ?? false) || (reverb?.isActive ?? false) || (normalize?.isActive ?? false) || denoiseStrength > 0 || pitchSemitones != 0 || gateDb != nil || limiterDb != nil || (delay?.isActive ?? false) || (extended?.isActive ?? false)
+        (eq?.isActive ?? false) || (compressor?.isActive ?? false) || (reverb?.isActive ?? false) || (normalize?.isActive ?? false) || denoiseStrength > 0 || dereverbStrength > 0 || pitchSemitones != 0 || gateDb != nil || limiterDb != nil || (delay?.isActive ?? false) || (extended?.isActive ?? false)
     }
 
     /// EQ・コンプレッサー・リバーブ・ノイズ除去・ゲート・リミッター・ディレイのどれかが効く(ノーマライズだけのときは false)。
@@ -101,6 +115,7 @@ public struct AudioFx: Codable, Equatable, Sendable {
         if let r = reverb, r.isActive { parts.append("rev=\(r.mix),\(r.sizeOrDefault.rawValue)") }
         if let n = normalize, n.isActive { parts.append("norm=\(n.targetDb),\(n.modeOrDefault.rawValue)") }
         if denoiseStrength > 0 { parts.append("dn=\(denoiseStrength)" + (spectralDenoiseOn ? ",spectral" : "")) }
+        if dereverbStrength > 0 { parts.append("dereverb=\(dereverbStrength)") }
         if pitchSemitones != 0 { parts.append("pitch=\(pitchSemitones)") }
         if let g = gateDb { parts.append("gate=\(g)") }
         if let l = limiterDb { parts.append("lim=\(l)") }
