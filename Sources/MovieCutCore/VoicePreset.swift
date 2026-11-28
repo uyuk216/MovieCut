@@ -13,6 +13,12 @@ public struct VoicePreset: Equatable, Identifiable {
     public var intonation: Double?
     /// 読み込んで範囲に収めるだけ。キャラクターには音量の項目が無いので、適用では使わない。
     public var volume: Double?
+
+    public init(id: String, name: String, note: String? = nil, engine: String, voice: String? = nil, speaker: Int? = nil,
+                speed: Double? = nil, pitch: Double? = nil, intonation: Double? = nil, volume: Double? = nil) {
+        self.id = id; self.name = name; self.note = note; self.engine = engine; self.voice = voice; self.speaker = speaker
+        self.speed = speed; self.pitch = pitch; self.intonation = intonation; self.volume = volume
+    }
 }
 
 /// おすすめ音声設定の一覧(配布用 JSON)。形式は docs/おすすめ音声設定の配布.md。
@@ -24,6 +30,7 @@ public struct VoicePresetCatalog: Equatable {
     public static let supportedSchemaVersion = 1
 
     public var presets: [VoicePreset]
+    public init(presets: [VoicePreset]) { self.presets = presets }
 
     public enum Failure: Error, Equatable, LocalizedError {
         case tooLarge
