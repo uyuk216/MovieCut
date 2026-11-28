@@ -1964,7 +1964,7 @@ enum AppMenu {
             case .audioClear: m.clearAudioFxSelected()
             case .audioDuckToggle: m.toggleDuckSelected()
             case .stabilizeToggle: m.toggleStabilizeSelected()
-            case .autoReframe: m.autoReframeSelected()
+            case .autoReframe: m.openReframeSheet()
             case .motionTrack: m.trackMotionSelected()
             case .groupClips: m.groupSelectedClips()
             case .ungroupClips: m.ungroupSelectedClips()
