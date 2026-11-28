@@ -289,4 +289,19 @@ final class AutoReframeExtTests: XCTestCase {
         for i in 1..<p.centers.count { maxStep = max(maxStep, abs(p.centers[i] - p.centers[i - 1])) }
         XCTAssertLessThan(maxStep, 0.05, "x が 1 サンプルで \(maxStep) 跳んだ")
     }
+
+    /// 追跡中の対象(左)の検出だけが 1 コマ抜けても、遠くの別の被写体(右)へ乗り換えず、x が跳ばず、抜けた後も左のまま。
+    func testPrimaryZoomDoesNotJumpWhenTrackedSubjectDropsOneSample() throws {
+        var o = ReframeOptions(); o.aspect = .portrait4x5; o.zoomEnabled = true; o.zoomMin = 1; o.zoomMax = 1
+        let s = series(10) { t in
+            let leftBigger = Int(t) % 2 == 0
+            let left = box(0.2, 0.5, 0.1, leftBigger ? 0.204 : 0.2), right = box(0.8, 0.5, 0.1, leftBigger ? 0.2 : 0.204)
+            return abs(t - 3.0) < 1e-9 ? [right] : [left, right]    // t=3.0 の 1 サンプルだけ左が抜ける
+        }
+        let p = try XCTUnwrap(AutoReframe.plan(samples: s, sourceWidth: 1920, sourceHeight: 1080, options: o))
+        var maxStep = 0.0
+        for i in 1..<p.centers.count { maxStep = max(maxStep, abs(p.centers[i] - p.centers[i - 1])) }
+        XCTAssertLessThan(maxStep, 0.05, "x が 1 サンプルで \(maxStep) 跳んだ")
+        XCTAssertLessThan(try XCTUnwrap(p.centers.last), 0.5, "抜けた後に右へ張り付いた")
+    }
 }
