@@ -92,11 +92,17 @@ struct VoicePresetSheet: View {
 
     private func loadFromFile() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.json]
+        panel.allowedContentTypes = [.json, SharedPresetSection.contentType]
         panel.allowsMultipleSelection = false
         panel.title = "おすすめ音声設定のファイルを選ぶ"
         guard FilePanelPresenter.shared.runModal(panel) == .OK, let url = panel.url else { return }
         do {
+            if url.pathExtension.lowercased() == SharedPresetFormat.fileExtension {
+                // 共有ファイル(.mcpreset): 音声プリセットだけを受け付ける
+                let shared = try SharedPresetFormat.read(from: url)
+                guard case .voicePreset(let vp) = shared.content else { message = "音声プリセットの共有ファイルではありません(種別: \(shared.kind.label))。"; return }
+                show(VoicePresetCatalog(presets: [vp])); return
+            }
             let data = try InputLimits.readFile(url, limit: VoicePresetCatalog.maxBytes, what: "おすすめ音声設定のファイル")
             show(try VoicePresetCatalog.decode(data))
         } catch let e as LocalizedError { message = e.errorDescription }

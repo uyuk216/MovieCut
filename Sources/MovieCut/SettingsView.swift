@@ -268,6 +268,7 @@ struct SettingsContent: View {
                     .accessibilityIdentifier(Section.fontScaleID)
                 }.padding(MCDesign.Spacing.s)
             }
+            SharedPresetSection(model: model)
             GroupBox(L10n.t("VOICEVOX（互換エンジンも可）")) {
                 VStack(alignment: .leading, spacing: MCDesign.Spacing.xs) {
                     TextField("エンジンのURL", text: $draft.voicevoxUrl)
