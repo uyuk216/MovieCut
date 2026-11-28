@@ -245,12 +245,32 @@ enum SpectralDenoise {
 
 // MARK: - ストリーム版(ミキサーが読む)
 
+/// 左右 1 フレーム(fftSize 点)を受けて、窓を掛けた逆 FFT の結果(重ねて足す前)を outL / outR に作る STFT 処理器。
+/// ノイズ除去(左右別々)と反響除去(左右でゲインを共有)が同じ重ね合わせの枠(`SpectralDenoiseSource`)を使う。
+protocol StereoFrameProcessor: AnyObject {
+    var outL: [Float] { get }
+    var outR: [Float] { get }
+    func process(left: UnsafePointer<Float>, right: UnsafePointer<Float>)
+}
+
+/// ノイズ除去: 左右それぞれの `ChannelProcessor`。
+final class IndependentFrameProcessor: StereoFrameProcessor {
+    let chL: SpectralDenoise.ChannelProcessor, chR: SpectralDenoise.ChannelProcessor
+    init(profile: SpectralDenoise.Profile, params: SpectralDenoise.Params) {
+        chL = SpectralDenoise.ChannelProcessor(profile: profile, params: params)
+        chR = SpectralDenoise.ChannelProcessor(profile: profile, params: params)
+    }
+    var outL: [Float] { chL.out }
+    var outR: [Float] { chR.out }
+    func process(left: UnsafePointer<Float>, right: UnsafePointer<Float>) { chL.process(left); chR.process(right) }
+}
+
 /// 入力を先読みしながら STFT をかけ、遅れなしの位置(入力と同じ長さ・同じ位置)で返す PCMSource。
 /// フレームの始まりは −(N−H) から H ずつ。フレーム s を処理し終えると、s + H より前のサンプルが確定する。
 final class SpectralDenoiseSource: PCMSource {
     private let inner: PCMSource
     private let n = SpectralDenoise.fftSize, h = SpectralDenoise.hop
-    private let chL: SpectralDenoise.ChannelProcessor, chR: SpectralDenoise.ChannelProcessor
+    private let proc: StereoFrameProcessor
     // 入力: 絶対位置 inBase から
     private var inL: [Float] = [], inR: [Float] = []
     private var inBase = 0
@@ -264,11 +284,13 @@ final class SpectralDenoiseSource: PCMSource {
     private let tmpL: UnsafeMutablePointer<Float>, tmpR: UnsafeMutablePointer<Float>
     private static let block = 4096
 
-    init(inner: PCMSource, profile: SpectralDenoise.Profile, strength: Double) {
+    convenience init(inner: PCMSource, profile: SpectralDenoise.Profile, strength: Double) {
+        self.init(inner: inner, processor: IndependentFrameProcessor(profile: profile, params: SpectralDenoise.Params(strength: strength)))
+    }
+
+    init(inner: PCMSource, processor: StereoFrameProcessor) {
         self.inner = inner
-        let params = SpectralDenoise.Params(strength: strength)
-        chL = SpectralDenoise.ChannelProcessor(profile: profile, params: params)
-        chR = SpectralDenoise.ChannelProcessor(profile: profile, params: params)
+        proc = processor
         nextStart = -(SpectralDenoise.fftSize - SpectralDenoise.hop)
         outBase = nextStart
         scratchL = [Float](repeating: 0, count: SpectralDenoise.fftSize)
@@ -297,8 +319,8 @@ final class SpectralDenoiseSource: PCMSource {
             let a = nextStart + i - inBase
             if a >= 0 && a < inL.count { scratchL[i] = inL[a]; scratchR[i] = inR[a] } else { scratchL[i] = 0; scratchR[i] = 0 }
         }
-        scratchL.withUnsafeBufferPointer { chL.process($0.baseAddress!) }
-        scratchR.withUnsafeBufferPointer { chR.process($0.baseAddress!) }
+        scratchL.withUnsafeBufferPointer { lp in scratchR.withUnsafeBufferPointer { rp in proc.process(left: lp.baseAddress!, right: rp.baseAddress!) } }
+        let oL = proc.outL, oR = proc.outR
         // 足し込み先を確保
         let need = nextStart + n - outBase
         if accL.count < need {
@@ -307,7 +329,7 @@ final class SpectralDenoiseSource: PCMSource {
         }
         let o = nextStart - outBase
         let norm = SpectralDenoise.overlapNorm
-        for i in 0..<n { accL[o + i] += chL.out[i] * norm; accR[o + i] += chR.out[i] * norm }
+        for i in 0..<n { accL[o + i] += oL[i] * norm; accR[o + i] += oR[i] * norm }
         nextStart += h
     }
 
