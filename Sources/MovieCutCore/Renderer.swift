@@ -104,6 +104,9 @@ public struct Renderer {
     /// プレビュー用。素材が見つからない画像・動画を、黙って飛ばさず「メディアが見つかりません」の札で描く。
     /// 既定 false(書き出しは従来どおり。書き出し前の確認で止める)。
     public var missingMediaPlaceholder = false
+    /// true のとき、除去モードのマスク(インペインティング)をフル解像度で処理する(書き出し用)。
+    /// false(既定・プレビュー)は長辺 640px へ縮小して埋めた絵を拡大して使う。
+    public var inpaintFullResolution = false
     var compoundStack: [String] = []
     var drawsBackground = true
     var drawsPortraits = true
@@ -899,7 +902,7 @@ public struct Renderer {
         var ci = EffectPipeline.apply(CIImage(cgImage: snapImg), effects: fx, bounds: localBounds, scale: resScale, faces: faces, pluginProviders: pluginEffectProviders)
         if blurSigma > 0 { ci = ci.applyingGaussianBlur(sigma: blurSigma) }
         if let m = c.mask { ci = ShapeMask.apply(ci, mask: m, canvasWidth: W, canvasHeight: H, originX: work.minX, originY: work.minY) }
-        if let om = c.objectMask { ci = ObjectMaskRenderer.apply(ci, objectMask: om, at: t - c.start, canvasWidth: W, canvasHeight: H, originX: work.minX, originY: work.minY) }
+        if let om = c.objectMask { ci = ObjectMaskRenderer.apply(ci, objectMask: om, at: t - c.start, canvasWidth: W, canvasHeight: H, originX: work.minX, originY: work.minY, inpaintMaxSide: inpaintFullResolution ? nil : 640) }
         // HSL マスク: 形・オブジェクトに続けてかける(全部あれば全部かかる)。重みはエフェクト前の画素(`snapImg`)の色から作る。
         // プレビュー表示のときは切り抜かず、選択範囲の確認表示に差し替える。
         if let hm = c.hslMask {

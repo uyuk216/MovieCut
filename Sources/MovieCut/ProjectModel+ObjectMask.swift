@@ -61,6 +61,13 @@ extension ProjectModel {
         }
     }
 
+    /// 人物(自動)で作成する。クリック不要: 種コマで人物セグメンテーションを行い、人物全体を 1 つの対象にして追跡する。
+    /// `keepPerson` が true なら人物だけ残し(外が透明)、false なら人物だけ消す(中が透明。`invert` と同じ作法)。
+    func createPersonObjectMask(clipId: String? = nil, keepPerson: Bool) {
+        guard let id = clipId ?? selectedClipId else { return }
+        runObjectMaskCreation(clipId: id, detector: VisionPersonSegmentationDetector(), invertOverride: !keepPerson) { $0.first }
+    }
+
     /// プレビューのクリック指定を待つ状態にする。次のプレビューのクリックが種になる。
     func armObjectMaskPicking(clipId: String) {
         guard !isLocked, objectMaskProgress == nil, let c = clip(clipId), canCreateObjectMask(c) else { return }
@@ -82,7 +89,8 @@ extension ProjectModel {
 
     // MARK: 作成の実行(進捗・キャンセル対応)
 
-    private func runObjectMaskCreation(clipId: String, pick: @escaping ([ForegroundInstance]) -> ForegroundInstance?) {
+    private func runObjectMaskCreation(clipId: String, detector: any ForegroundInstanceDetecting = VisionForegroundInstanceDetector(),
+                                       invertOverride: Bool? = nil, pick: @escaping ([ForegroundInstance]) -> ForegroundInstance?) {
         guard !isLocked, objectMaskProgress == nil, let clip = clip(clipId) else { return }
         guard canCreateObjectMask(clip) else {
             errorTitle = "オブジェクトマスクを作成できません"
@@ -106,7 +114,7 @@ extension ProjectModel {
                 }
                 // 種コマで対象を選ぶ
                 guard let frame = renderer.trackingFrame(of: clip, at: clip.start + seedTime),
-                      let instances = try? VisionForegroundInstanceDetector().instances(for: frame),
+                      let instances = try? detector.instances(for: frame),
                       let picked = pick(instances) else { return (nil, false) }
                 let seedPNG = ObjectMaskImage.cropped(picked.mask, toNormalized: picked.rect)
                     .flatMap { ObjectMaskImage.pngBase64(of: $0) }
@@ -138,7 +146,7 @@ extension ProjectModel {
                                                            seedRect: picked.rect, seedMaskBase64: seedPNG,
                                                            track: track,
                                                            feather: previous?.feather ?? 0,
-                                                           invert: previous?.invert ?? false) else { return (nil, false) }
+                                                           invert: invertOverride ?? previous?.invert ?? false) else { return (nil, false) }
                 // 1 秒ごとの再検出: 追跡矩形に一番合う対象の輪郭を、その時刻のサンプルへ付け足す
                 if clip.duration >= 1 {
                     var t = 0.0
@@ -147,7 +155,7 @@ extension ProjectModel {
                         if session.isCancelled { return (nil, true) }
                         if abs(t - seedTime) < 0.5 { continue }
                         guard let f = renderer.trackingFrame(of: clip, at: clip.start + t),
-                              let found = try? VisionForegroundInstanceDetector().instances(for: f),
+                              let found = try? detector.instances(for: f),
                               let rect = om.rect(at: t),
                               let idx = ObjectMaskPropagation.pickInstance(overlapping: rect, instances: found.map(\.rect)),
                               let crop = ObjectMaskImage.cropped(found[idx].mask, toNormalized: found[idx].rect),

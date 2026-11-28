@@ -64,12 +64,15 @@ public struct ObjectMask: Codable, Equatable, Sendable {
     public var feather: Double
     /// true で外を残し、中を透明にする。
     public var invert: Bool
+    /// true で「領域を除去(周囲で埋める)」。対象の領域を `Inpainting` で周囲の絵から埋め、透明にはしない。
+    /// 除去のときは `invert` を使わない(対象そのものを埋める)。
+    public var removal: Bool
     /// サンプル列(時刻順)。
     public var samples: [ObjectMaskSample]
 
     public init(sourceClipId: String, seedTime: Double = 0, seedRect: TrackRect,
                 seedMask: String? = nil, feather: Double = 0, invert: Bool = false,
-                samples: [ObjectMaskSample] = []) {
+                samples: [ObjectMaskSample] = [], removal: Bool = false) {
         self.sourceClipId = sourceClipId
         self.seedTime = seedTime.isFinite ? max(0, seedTime) : 0
         self.seedRect = seedRect
@@ -77,6 +80,7 @@ public struct ObjectMask: Codable, Equatable, Sendable {
         self.feather = ClipMask.clampUnit(feather)
         self.invert = invert
         self.samples = samples
+        self.removal = removal
     }
 
     /// 検出の無い区間をまたいで補間してよい最大の間隔(秒)。`ObjectTrack.maxGap` と同じ。
@@ -137,10 +141,10 @@ public struct ObjectMask: Codable, Equatable, Sendable {
 
     // MARK: ファイル形式(ClipMask と同じ作法)
 
-    enum CodingKeys: String, CodingKey { case sourceClipId, seedTime, seedRect, seedMask, feather, invert, samples }
+    enum CodingKeys: String, CodingKey { case sourceClipId, seedTime, seedRect, seedMask, feather, invert, samples, removal }
     /// 知らないキー(新しい版が書いた項目)。そのまま書き戻す。
     public var extra: [String: JSONValue] = [:]
-    static let knownKeys: Set<String> = ["sourceClipId", "seedTime", "seedRect", "seedMask", "feather", "invert", "samples"]
+    static let knownKeys: Set<String> = ["sourceClipId", "seedTime", "seedRect", "seedMask", "feather", "invert", "samples", "removal"]
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -151,6 +155,7 @@ public struct ObjectMask: Codable, Equatable, Sendable {
         feather = (try? c.decodeIfPresent(Double.self, forKey: .feather)) ?? 0
         invert = (try? c.decodeIfPresent(Bool.self, forKey: .invert)) ?? false
         samples = (try? c.decodeIfPresent([ObjectMaskSample].self, forKey: .samples)) ?? []
+        removal = (try? c.decodeIfPresent(Bool.self, forKey: .removal)) ?? false
         // init の整え(範囲外の値の丸め)を効かせる
         let fixed = ObjectMask(sourceClipId: sourceClipId, seedTime: seedTime, seedRect: seedRect,
                                seedMask: seedMask, feather: feather, invert: invert, samples: samples)
@@ -168,6 +173,7 @@ public struct ObjectMask: Codable, Equatable, Sendable {
         if feather > 0 { try c.encode(feather, forKey: AnyKey("feather")) }
         if invert { try c.encode(true, forKey: AnyKey("invert")) }
         try c.encode(samples, forKey: AnyKey("samples"))
+        if removal { try c.encode(true, forKey: AnyKey("removal")) }
     }
 }
 
@@ -305,6 +311,31 @@ public enum ObjectMaskImage {
                          w: Double(maxX - minX + 1) / Double(w), h: Double(maxY - minY + 1) / Double(h))
     }
 
+    /// `boundingRect(ofMask:)` の上下を正しくした版: 表示どおりの画像の白い画素の外接矩形(左上原点)。
+    /// 既存の `boundingRect(ofMask:)` はバッファの 1 行目を画像の下端として読むため、上下が逆の画像で
+    /// 正しく測れる(既存テストの画像がその前提で作られている)。実写の Vision マスクを測るのはこちら。
+    public static func boundingRectUpright(ofMask image: CGImage, threshold: UInt8 = 127) -> TrackRect? {
+        let w = image.width, h = image.height
+        guard w > 0, h > 0 else { return nil }
+        var px = [UInt8](repeating: 0, count: w * h)
+        guard let ctx = CGContext(data: &px, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w,
+                                  space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue) else { return nil }
+        ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))   // 1 行目 = 画像の上端
+        var minX = w, minY = h, maxX = -1, maxY = -1
+        for y in 0..<h {
+            let row = y * w
+            for x in 0..<w where px[row + x] > threshold {
+                if x < minX { minX = x }
+                if x > maxX { maxX = x }
+                if y < minY { minY = y }
+                if y > maxY { maxY = y }
+            }
+        }
+        guard maxX >= 0 else { return nil }
+        return TrackRect(x: Double(minX) / Double(w), y: Double(minY) / Double(h),
+                         w: Double(maxX - minX + 1) / Double(w), h: Double(maxY - minY + 1) / Double(h))
+    }
+
     /// 正規化矩形(左上原点)で画像を切り抜く。範囲が画像の外なら nil。
     public static func cropped(_ image: CGImage, toNormalized rect: TrackRect) -> CGImage? {
         let w = Double(image.width), h = Double(image.height)
@@ -335,7 +366,8 @@ public enum ObjectMaskRenderer {
 
     /// キャンバス(左下原点の CI 座標)いっぱいの、白(残す)と黒(消す)のマスク。
     /// 時刻 t で対象が見つからなければ nil(呼び出し側は何もしない)。
-    public static func canvasImage(_ om: ObjectMask, at t: Double, width W: Double, height H: Double) -> CIImage? {
+    /// `ignoreInvert` は除去モード用(対象そのものの領域を得る)。
+    public static func canvasImage(_ om: ObjectMask, at t: Double, width W: Double, height H: Double, ignoreInvert: Bool = false) -> CIImage? {
         guard let rect = om.rect(at: t) else { return nil }
         let canvas = CGRect(x: 0, y: 0, width: W, height: H)
         let rx = rect.x * W, ry = H - (rect.y + rect.h) * H   // 左下原点の矩形の左下
@@ -358,7 +390,7 @@ public enum ObjectMaskRenderer {
         let sigma = om.feather * min(rw, rh) * 0.25
         if sigma > 0.01 { shape = shape.applyingGaussianBlur(sigma: sigma) }
         var out = shape.composited(over: CIImage(color: .black).cropped(to: canvas)).cropped(to: canvas)
-        if om.invert { out = out.applyingFilter("CIColorInvert") }
+        if om.invert && !ignoreInvert { out = out.applyingFilter("CIColorInvert") }
         return out
     }
 
@@ -366,7 +398,14 @@ public enum ObjectMaskRenderer {
     /// 時刻 t で対象が無ければ画像をそのまま返す。
     public static func apply(_ img: CIImage, objectMask om: ObjectMask, at t: Double,
                              canvasWidth W: Double, canvasHeight H: Double,
-                             originX: Double, originY: Double) -> CIImage {
+                             originX: Double, originY: Double, inpaintMaxSide: Int? = 640) -> CIImage {
+        if om.removal {
+            // 除去: 対象の領域を周囲の絵で埋める(透明にはしない)。見つからない時刻は何もしない
+            guard let region = canvasImage(om, at: t, width: W, height: H, ignoreInvert: true) else { return img }
+            let ext = img.extent
+            let local = region.transformed(by: CGAffineTransform(translationX: -originX, y: -(H - originY - ext.height)))
+            return Inpainting.apply(img, holeMask: local.cropped(to: ext), maxSide: inpaintMaxSide)
+        }
         guard let canvasMask = canvasImage(om, at: t, width: W, height: H) else { return img }
         let ext = img.extent
         let local = canvasMask.transformed(by: CGAffineTransform(translationX: -originX, y: -(H - originY - ext.height)))

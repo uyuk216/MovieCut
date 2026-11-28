@@ -30,6 +30,12 @@ struct ObjectMaskSection: View {
                         model.setObjectMaskField(clipId: clip.id) { $0.invert = on }
                     }))
                     .toggleStyle(.checkbox)
+                    .disabled(om.removal)
+                    Toggle(L10n.t("領域を除去（周囲で埋める）"), isOn: Binding(get: { om.removal }, set: { on in
+                        model.setObjectMaskField(clipId: clip.id) { $0.removal = on }
+                    }))
+                    .toggleStyle(.checkbox)
+                    .help(L10n.t("対象の領域を周囲の絵で埋めて消します。大きな領域や複雑な背景では不自然になります"))
                     HStack(spacing: 8) {
                         Button(L10n.t("作り直す")) { model.createObjectMaskFromSeedRect(clipId: clip.id) }
                             .help(L10n.t("指定した範囲で対象を選び直し、追跡をやり直します"))
@@ -50,6 +56,13 @@ struct ObjectMaskSection: View {
                         Button(L10n.t("クリック指定をやめる")) { model.cancelObjectMaskPicking() }
                             .controlSize(.small)
                     } else {
+                        HStack(spacing: 8) {
+                            Button(L10n.t("人物（自動）で残す")) { model.createPersonObjectMask(clipId: clip.id, keepPerson: true) }
+                                .help(L10n.t("クリック不要。画面内の人物を自動で選び、人物だけ残します"))
+                            Button(L10n.t("人物（自動）を消す")) { model.createPersonObjectMask(clipId: clip.id, keepPerson: false) }
+                                .help(L10n.t("クリック不要。画面内の人物を自動で選び、人物だけ透明にします"))
+                        }
+                        .controlSize(.small)
                         HStack(spacing: 8) {
                             Button(L10n.t("プレビューでクリックして指定")) { model.armObjectMaskPicking(clipId: clip.id) }
                             Button(L10n.t("指定した範囲で作成")) { model.createObjectMaskFromSeedRect(clipId: clip.id) }
