@@ -10,6 +10,9 @@ import MovieCutCore
 ///   組み立て列はドラッグとボタン(上へ/下へ/先頭へ/末尾へ)で並べ替えられる。
 /// - 単語で組み立てる: Paper Edit の単語版。単語を押した順に組み立て列へ入れ、単語の
 ///   区間だけを並べたクリップ列を配置する。並べ替えの作法は文の組み立てと同じ。
+/// - 台本と連動: 台本(文の一覧)とタイムラインを双方向につなぐ。台本で文を削除・並べ替えるとタイムラインのクリップが
+///   取り除かれ・並び直り、タイムライン側の分割・削除・移動は台本の状態(対応済み / 一部のみ / 対応なし)に追随する。
+///   速度変更・逆再生・速度ランプのクリップは対象外。計算は Core の `TranscriptScripting`、Undo は操作 1 回につき 1 回。
 /// 閉じると認識は止まる(`.task` のキャンセル)。
 struct TranscriptEditSheet: View {
     @ObservedObject var model: ProjectModel
@@ -26,8 +29,12 @@ struct TranscriptEditSheet: View {
     @State private var wordSelection: Set<TranscriptWordEdit.Selection> = []
     // 単語の組み立て用の状態(文の組み立て列とは混ぜない)。押した順がそのまま並びになる。
     @State private var wordPaperOrder: [TranscriptWordEdit.Selection] = []
+    // 台本と連動用の状態。シートを開いた時点のクリップの素材(最初の文を削除してクリップが消えても台本を引ける)
+    @State private var scriptSrc: String?
+    @State private var retextingId: String?
+    @State private var retextDraft = ""
 
-    enum Mode { case remove, word, paper, wordPaper }
+    enum Mode { case remove, word, paper, wordPaper, script }
     enum PaperDestination { case timeline, scene }
 
     private var clipId: String? { model.transcriptEditClipId }
@@ -43,11 +50,14 @@ struct TranscriptEditSheet: View {
                 Text(L10n.t("単語を取り除く")).tag(Mode.word)
                 Text(L10n.t("選んだ文で組み立てる")).tag(Mode.paper)
                 Text(L10n.t("単語で組み立てる")).tag(Mode.wordPaper)
+                Text(L10n.t("台本と連動")).tag(Mode.script)
             }
             .pickerStyle(.segmented)
             .labelsHidden()
             Group {
-                if let f = found {
+                if mode == .script {
+                    scriptPane
+                } else if let f = found {
                     if f.isEmpty {
                         Text(L10n.t("文は見つかりませんでした。"))
                     } else {
@@ -114,7 +124,7 @@ struct TranscriptEditSheet: View {
                 }
             }
             .font(.callout)
-            if mode == .remove || mode == .word {
+            if mode == .remove || mode == .word || mode == .script {
                 Toggle(L10n.t("後ろを詰める"), isOn: $ripple).toggleStyle(.checkbox)
             } else {
                 VStack(alignment: .leading, spacing: 6) {
@@ -135,9 +145,11 @@ struct TranscriptEditSheet: View {
             }
             HStack {
                 Spacer()
-                Button(L10n.t("キャンセル")) { model.showTranscriptEditSheet = false }
+                Button(mode == .script ? L10n.t("閉じる") : L10n.t("キャンセル")) { model.showTranscriptEditSheet = false }
                     .keyboardShortcut(.cancelAction)
-                if mode == .remove {
+                if mode == .script {
+                    EmptyView()   // 台本と連動は操作のたびに反映される(確定ボタンは無い)
+                } else if mode == .remove {
                     Button(removedCount > 0 ? String(format: L10n.t("%d 文を取り除く"), removedCount) : L10n.t("取り除く")) { commit() }
                         .buttonStyle(.borderedProminent)
                         .keyboardShortcut(.defaultAction)
@@ -163,6 +175,86 @@ struct TranscriptEditSheet: View {
         .padding(20)
         .frame(width: 520)
         .task { await scan() }
+        .onAppear { scriptSrc = clipId.flatMap { model.clip($0)?.src } }
+    }
+
+    // MARK: 台本と連動
+
+    private var currentScript: TranscriptScript? {
+        scriptSrc.flatMap { TranscriptScripting.script(forSrc: $0, in: model.project) }
+    }
+
+    /// 台本と連動モード: 台本があれば行の一覧(状態・削除・並べ替え・戻す・打ち直し)、無ければ連動の開始。
+    /// 行は `model.project` から毎回再計算するので、タイムライン側の操作や Undo もそのまま映る。
+    @ViewBuilder
+    private var scriptPane: some View {
+        if let sc = currentScript {
+            let rows = TranscriptScripting.rows(of: sc, in: model.project)
+            Text(L10n.t("台本の削除・並べ替えはタイムラインに反映されます。タイムラインの変更も台本に映ります。"))
+            Text(L10n.t("速度変更・逆再生・速度ランプのクリップは対象外です。文字の打ち直しは台本の文字だけが変わります(音声は変わりません)。"))
+                .foregroundStyle(.secondary).font(.caption)
+            List {
+                ForEach(rows, id: \.sentence.id) { row in scriptRow(row, scriptId: sc.id) }
+                    .onMove { from, to in model.reorderScriptSentences(scriptId: sc.id, fromOffsets: from, toOffset: to) }
+            }
+            .listStyle(.plain)
+            .frame(height: 260)
+            HStack {
+                Spacer()
+                Button(L10n.t("連動をやめる")) { model.unlinkTranscriptScript(scriptId: sc.id) }
+            }
+        } else if let f = found, !f.isEmpty {
+            Text(L10n.t("クリップを文の頭で切り分けて、台本と連動させます(長さと位置は変わりません)。速度変更・逆再生・速度ランプのクリップは対象外です。"))
+            Button(String(format: L10n.t("%d 文で連動を始める"), f.count)) {
+                if let id = clipId, model.linkTranscriptScript(clipId: id, sentences: f) { scriptSrc = model.clip(id)?.src ?? scriptSrc }
+            }
+            .buttonStyle(.borderedProminent)
+        } else if let e = failure {
+            Text(e).foregroundStyle(.red)
+        } else if found == nil {
+            HStack(spacing: 6) { ProgressView().controlSize(.small); Text(L10n.t("音声を文字にしています…")) }
+        } else {
+            Text(L10n.t("文は見つかりませんでした。"))
+        }
+    }
+
+    @ViewBuilder
+    private func scriptRow(_ row: TranscriptScripting.Row, scriptId: String) -> some View {
+        let sid = row.sentence.id
+        HStack {
+            if retextingId == sid {
+                TextField("", text: $retextDraft, onCommit: {
+                    model.retextScriptSentence(scriptId: scriptId, sentenceId: sid, text: retextDraft)
+                    retextingId = nil
+                })
+                Button(L10n.t("確定")) {
+                    model.retextScriptSentence(scriptId: scriptId, sentenceId: sid, text: retextDraft)
+                    retextingId = nil
+                }
+                Button(L10n.t("やめる")) { retextingId = nil }
+            } else {
+                Text(row.sentence.text)
+                    .lineLimit(1)
+                    .foregroundStyle(row.coverage == .unlinked ? .secondary : .primary)
+                    .strikethrough(row.coverage == .unlinked)
+                Spacer()
+                Text(scriptBadge(row.coverage)).font(.caption).foregroundStyle(row.coverage == .linked ? Color.secondary : Color.orange)
+                Button(L10n.t("打ち直し")) { retextDraft = row.sentence.text; retextingId = sid }
+                if row.coverage == .unlinked {
+                    Button(L10n.t("戻す")) { model.restoreScriptSentence(scriptId: scriptId, sentenceId: sid) }
+                } else {
+                    Button(L10n.t("削除")) { model.deleteScriptSentence(scriptId: scriptId, sentenceId: sid, ripple: ripple) }
+                }
+            }
+        }
+    }
+
+    private func scriptBadge(_ c: TranscriptScripting.Coverage) -> String {
+        switch c {
+        case .linked: return L10n.t("対応済み")
+        case .partial: return L10n.t("一部のみ")
+        case .unlinked: return L10n.t("対応なし")
+        }
     }
 
     /// 単語モードの行: 単語の時刻がある文は単語ごとのチェック、無い文はその旨の注記つきで文だけ出す。

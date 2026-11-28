@@ -71,6 +71,9 @@ public struct Project: Codable, Equatable {
     /// (`ClipType.scene` + `Clip.sceneId`)から参照され、複数箇所で再利用できる。空のときはファイルに書かない
     /// (シーンを使わない既存プロジェクトは従来と完全一致)。定義は `SceneDefinition` / 編集計算は `SceneEditing`(SceneNesting.swift)。
     public var scenes: [SceneDefinition] = []
+    /// 台本(文字起こし)とタイムラインの双方向編集の対応(`TranscriptScript`)。空のときはファイルに書かない
+    /// (使っていないプロジェクトは従来と完全一致)。クリップ側の対応は `Clip.scriptSentenceId`。
+    public var transcriptScripts: [TranscriptScript] = []
     /// ボイス字幕の表示位置(画面の高さに対する割合)。未設定 = 従来の 0.88。設定したときだけ書く。
     public var subtitleY: Double? = nil
     /// 字幕位置の既定値(従来ハードコードされていた値)。
@@ -90,7 +93,7 @@ public struct Project: Codable, Equatable {
     /// 知らないキー(保持して書き戻す)
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["formatVersion", "scriptText", "width", "height", "fps", "bg", "codec", "voicevoxUrl", "aquestalkCommand", "characters", "tracks", "markers", "reviewComments", "rangeIn", "rangeOut", "mediaHints", "mediaFingerprints", "proxyLinks", "proxyAssets", "mediaPool", "mediaMetadata", "smartCollections", "targetTrackId", "multicams", "tachies", "readingDictionary", "subtitleY", "scenes", "camera"]
+    static let knownKeys: Set<String> = ["formatVersion", "scriptText", "width", "height", "fps", "bg", "codec", "voicevoxUrl", "aquestalkCommand", "characters", "tracks", "markers", "reviewComments", "rangeIn", "rangeOut", "mediaHints", "mediaFingerprints", "proxyLinks", "proxyAssets", "mediaPool", "mediaMetadata", "smartCollections", "targetTrackId", "multicams", "tachies", "readingDictionary", "subtitleY", "scenes", "camera", "transcriptScripts"]
 
     public init() {}
 
@@ -124,6 +127,7 @@ public struct Project: Codable, Equatable {
         tachies = l.value("tachies") ?? []
         readingDictionary = l.value("readingDictionary") ?? []
         scenes = l.value("scenes") ?? []
+        transcriptScripts = l.value("transcriptScripts") ?? []
         subtitleY = l.double("subtitleY")
         camera = l.value("camera")
         scriptText = l.string("scriptText") ?? ""
@@ -139,6 +143,7 @@ public struct Project: Codable, Equatable {
         if readingDictionary.isEmpty, let raw: JSONValue = l.value("readingDictionary"), raw != .array([]) { extra["readingDictionary"] = raw }
         if scenes.isEmpty, let raw: JSONValue = l.value("scenes"), raw != .array([]) { extra["scenes"] = raw }
         if reviewComments.isEmpty, let raw: JSONValue = l.value("reviewComments"), raw != .array([]) { extra["reviewComments"] = raw }
+        if transcriptScripts.isEmpty, let raw: JSONValue = l.value("transcriptScripts"), raw != .array([]) { extra["transcriptScripts"] = raw }
         if scriptText.isEmpty, let raw: JSONValue = l.value("scriptText"), raw != .string("") { extra["scriptText"] = raw }
     }
 
@@ -174,6 +179,7 @@ public struct Project: Codable, Equatable {
         if !tachies.isEmpty { try c.encode(tachies, forKey: AnyKey("tachies")) }
         if !readingDictionary.isEmpty { try c.encode(readingDictionary, forKey: AnyKey("readingDictionary")) }
         if !scenes.isEmpty { try c.encode(scenes, forKey: AnyKey("scenes")) }
+        if !transcriptScripts.isEmpty { try c.encode(transcriptScripts, forKey: AnyKey("transcriptScripts")) }
         try c.encodeIfPresent(subtitleY, forKey: AnyKey("subtitleY"))
         if let cam = camera, !cam.isDefault { try c.encode(cam, forKey: AnyKey("camera")) }
         if !scriptText.isEmpty { try c.encode(scriptText, forKey: AnyKey("scriptText")) }
@@ -548,6 +554,12 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var gradeNodes: [GradeNode]? = nil
     /// グループ ID(同じ値のクリップをまとめて扱う。`ClipGrouping`)。無いときはグループ無し。設定したときだけ書く。
     public var group: String? = nil
+    /// 台本の文との対応(`ScriptSentence.id`。`TranscriptScripting`)。無いときは台本と連動していない。設定したときだけ書く。
+    /// (`Clip` の大きさを増やさないよう、保存先は `extra["scriptSentenceId"]`。キーは既知としては扱わず、未知キーの保持と同じ経路で読み書きする。)
+    public var scriptSentenceId: String? {
+        get { if case .string(let v)? = extra["scriptSentenceId"] { return v } else { return nil } }
+        set { extra["scriptSentenceId"] = newValue.map { .string($0) } }
+    }
     /// ルビ(ふりがな)。`text` の中の親文字と読みの対応(`RubyText`)。空のときはファイルに書かない。
     public var ruby: [RubySpan] = []
     /// 図形の見た目(shape クリップ)。無いときは既定。設定した項目だけ書く。
