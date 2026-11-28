@@ -555,7 +555,11 @@ public struct Clip: Codable, Equatable, Identifiable {
     /// グループ ID(同じ値のクリップをまとめて扱う。`ClipGrouping`)。無いときはグループ無し。設定したときだけ書く。
     public var group: String? = nil
     /// 台本の文との対応(`ScriptSentence.id`。`TranscriptScripting`)。無いときは台本と連動していない。設定したときだけ書く。
-    public var scriptSentenceId: String? = nil
+    /// (`Clip` の大きさを増やさないよう、保存先は `extra["scriptSentenceId"]`。キーは既知としては扱わず、未知キーの保持と同じ経路で読み書きする。)
+    public var scriptSentenceId: String? {
+        get { if case .string(let v)? = extra["scriptSentenceId"] { return v } else { return nil } }
+        set { extra["scriptSentenceId"] = newValue.map { .string($0) } }
+    }
     /// ルビ(ふりがな)。`text` の中の親文字と読みの対応(`RubyText`)。空のときはファイルに書かない。
     public var ruby: [RubySpan] = []
     /// 図形の見た目(shape クリップ)。無いときは既定。設定した項目だけ書く。
@@ -595,7 +599,7 @@ public struct Clip: Codable, Equatable, Identifiable {
     public var hslMask: HSLMask? = nil
     public var extra: [String: JSONValue] = [:]
 
-    static let knownKeys: Set<String> = ["id", "type", "voicevoxAccent", "subtitleText", "tachieId", "mouthDrive", "speakingOnly", "followsProjectEnd", "playsAnimation", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "bokehShape", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "frameFlow", "audioFx", "pan", "channelMode", "textStyle", "textAnim", "bubble", "counter", "valueRef", "duck", "visualizer", "stabilize", "stabilizeRoll", "tracks", "sceneId", "mask", "meshWarp", "puppetWarp", "blendMode", "group", "scriptSentenceId", "ruby", "figure", "note", "locked", "muted", "disabled", "treatAsVoice", "audioCategory", "tracking", "objectMask", "hslMask", "inputColorSpace", "gradeNodes"]
+    static let knownKeys: Set<String> = ["id", "type", "voicevoxAccent", "subtitleText", "tachieId", "mouthDrive", "speakingOnly", "followsProjectEnd", "playsAnimation", "start", "duration", "offset", "src", "srcDuration", "x", "y", "scale", "opacity", "volume", "blur", "text", "fontSize", "color", "outline", "font", "charId", "subtitle", "w", "h", "strength", "shape", "blurMode", "bokehShape", "mosaicSize", "rotation", "flipH", "flipV", "crop", "keyframes", "transitionIn", "transitionOut", "effects", "fadeIn", "fadeOut", "fadeCurve", "speed", "reverse", "keepPitch", "freeze", "speedRamp", "frameBlend", "frameFlow", "audioFx", "pan", "channelMode", "textStyle", "textAnim", "bubble", "counter", "valueRef", "duck", "visualizer", "stabilize", "stabilizeRoll", "tracks", "sceneId", "mask", "meshWarp", "puppetWarp", "blendMode", "group", "ruby", "figure", "note", "locked", "muted", "disabled", "treatAsVoice", "audioCategory", "tracking", "objectMask", "hslMask", "inputColorSpace", "gradeNodes"]
 
     public init() {}
 
@@ -862,8 +866,6 @@ public struct Clip: Codable, Equatable, Identifiable {
         }
         group = l.string("group")
         if group == nil, let raw: JSONValue = l.value("group") { extra["group"] = raw }
-        scriptSentenceId = l.string("scriptSentenceId")
-        if scriptSentenceId == nil, let raw: JSONValue = l.value("scriptSentenceId") { extra["scriptSentenceId"] = raw }
         // ルビ: 読めない型の値は捨てずに書き戻す
         if let raw: JSONValue = l.value("ruby") {
             if let v: [RubySpan] = l.value("ruby") { ruby = v.filter { !$0.base.isEmpty && !$0.reading.isEmpty } } else { extra["ruby"] = raw }
@@ -976,7 +978,6 @@ public struct Clip: Codable, Equatable, Identifiable {
         try c.encodeIfPresent(puppetWarp, forKey: AnyKey("puppetWarp"))
         if let m = blendMode { try c.encode(m.rawValue, forKey: AnyKey("blendMode")) }
         try c.encodeIfPresent(group, forKey: AnyKey("group"))
-        try c.encodeIfPresent(scriptSentenceId, forKey: AnyKey("scriptSentenceId"))
         if !ruby.isEmpty { try c.encode(ruby, forKey: AnyKey("ruby")) }
         if let s = stabilize, s > 0 { try c.encode(min(s, 1), forKey: AnyKey("stabilize")) }
         if stabilizeRoll == true { try c.encode(true, forKey: AnyKey("stabilizeRoll")) }
