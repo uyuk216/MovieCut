@@ -327,4 +327,25 @@ final class AutoReframeExtTests: XCTestCase {
         let p = try XCTUnwrap(AutoReframe.plan(samples: s, sourceWidth: 1920, sourceHeight: 1080, options: o))
         XCTAssertGreaterThan(try XCTUnwrap(p.centers.last), 0.5, "退場後も窓が空いた場所に固定された")
     }
+
+    /// 【仕様として固定する特性テスト】幅 0.04 の 2 人が中心距離 0.08 で並ぶと、対象(左)の検出が 1 コマ抜けたとき
+    /// 「本人の移動」と「すぐ隣の別人」を区別できず、対象が右へ移って張り付く(`primaryLostMinDistance` = 0.1 の代償。DESIGN.md 参照)。
+    /// ただし窓の中心の移動は素材幅の 0.1 程度までで、大きくは跳ばない。この挙動を変えるときはこのテストも見直すこと。
+    func testCharacterization_PrimaryZoomSwitchesToAdjacentSmallSubjectWhenTrackedDropsOneSample() throws {
+        var o = ReframeOptions(); o.aspect = .portrait4x5; o.zoomEnabled = true; o.zoomMin = 1; o.zoomMax = 1
+        let s = series(10) { t in
+            let left = box(0.46, 0.5, 0.04, 0.04), right = box(0.54, 0.5, 0.04, 0.038)
+            return abs(t - 3.0) < 1e-9 ? [right] : [left, right]    // t=3.0 の 1 サンプルだけ左が抜ける
+        }
+        let p = try XCTUnwrap(AutoReframe.plan(samples: s, sourceWidth: 1920, sourceHeight: 1080, options: o))
+        var maxStep = 0.0
+        for i in 1..<p.centers.count { maxStep = max(maxStep, abs(p.centers[i] - p.centers[i - 1])) }
+        XCTAssertLessThanOrEqual(maxStep, 0.1, "窓の中心が 1 サンプルで \(maxStep) 跳んだ(仕様の上限は 0.1 程度)")
+        // 対象の乗り換えそのもの(窓の中心は全矩形の面積重み付き平均が主で、対象は見切れ防止のクランプにだけ効くため、中心の値には出にくい)
+        let left = box(0.46, 0.5, 0.04, 0.04), right = box(0.54, 0.5, 0.04, 0.038)
+        let moved = try XCTUnwrap(AutoReframe.holdPrimary([right], previous: left, lostSamples: 0), "隣の被写体が「近い」とみなされなくなった")
+        XCTAssertEqual(moved.midX, right.midX, accuracy: 1e-9, "検出が抜けたコマで隣(右)へ乗り換える仕様が変わった")
+        let stuck = try XCTUnwrap(AutoReframe.holdPrimary([left, right], previous: moved, lostSamples: 0))
+        XCTAssertEqual(stuck.midX, right.midX, accuracy: 1e-9, "戻っても面積差が 1.25 倍未満の間は隣(右)に張り付く仕様が変わった")
+    }
 }
