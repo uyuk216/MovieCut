@@ -167,7 +167,8 @@ public final class Exporter {
         rp.width = ew; rp.height = eh
         // 専用キューの中だけで使う(AVFoundation の部品は Sendable でないので、安全は呼び出し側の約束)
         if let vst3Provider { assets.setVST3Provider(vst3Provider) }
-        nonisolated(unsafe) let renderer = Renderer(project: rp, assets: assets, backend: renderBackend, pluginEffectProviders: pluginEffectProviders)
+        nonisolated(unsafe) var renderer = Renderer(project: rp, assets: assets, backend: renderBackend, pluginEffectProviders: pluginEffectProviders)
+        renderer.inpaintFullResolution = true   // 物体除去は書き出しでフル解像度(プレビューは縮小)
 
         // 先に音声をミックスする(一時ファイル)
         let mixURL = FileManager.default.temporaryDirectory.appendingPathComponent("moviecut-mix-\(UUID().uuidString).caf")

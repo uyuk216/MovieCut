@@ -602,6 +602,8 @@ enum L10nTable {
         "羽根（ぼかし）": "Feather (Blur)",
         "反転（中を透明にする）": "Invert (Make Inside Transparent)",
         "作り直す": "Recreate",
+        "領域を除去（周囲で埋める）": "Remove Region (Fill from Surroundings)",
+        "対象の領域を周囲の絵で埋めて消します。大きな領域や複雑な背景では不自然になります": "Fills the object's region from the surrounding picture. Looks unnatural for large regions or complex backgrounds",
         "人物（自動）で残す": "Keep Person (Auto)",
         "人物（自動）を消す": "Remove Person (Auto)",
         "クリック不要。画面内の人物を自動で選び、人物だけ残します": "No click needed. Automatically selects people in frame and keeps only them",
