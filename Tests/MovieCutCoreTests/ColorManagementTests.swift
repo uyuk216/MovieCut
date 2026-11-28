@@ -162,6 +162,41 @@ final class ColorManagementTests: XCTestCase {
         XCTAssertEqual(try frame(nil), try frame(.rec709))
     }
 
+    /// 実際に何かが描かれるクリップ(色付きの文字)で、Rec.709 以外なら出力が変わることを確かめる。
+    /// 画像クリップ(src 空)だと両方真っ黒で同値になり、変換が素通しでも通ってしまうため
+    private func textFrame(_ cs: InputColorSpace?) throws -> [UInt8] {
+        var c = Clip(); c.type = .text; c.start = 0; c.duration = 1; c.text = "■■■"; c.fontSize = 40; c.color = "#336699"; c.inputColorSpace = cs
+        var p = Project(); p.width = 64; p.height = 36
+        p.tracks = [{ var t = Track(name: "t"); t.clips = [c]; return t }()]
+        let img = try XCTUnwrap(Renderer(project: p, assets: RenderAssets()).renderImage(t: 0.5))
+        return Array(try XCTUnwrap(img.dataProvider?.data as Data?))
+    }
+
+    func testRenderActuallyChangesForNonRec709() throws {
+        let base = try textFrame(nil)
+        XCTAssertTrue(base.contains { $0 != 0 }, "比較に使う絵が真っ黒でないこと")
+        XCTAssertEqual(try textFrame(.rec709), base)
+        XCTAssertNotEqual(try textFrame(.sLog3), base)
+        XCTAssertNotEqual(try textFrame(.vLog), base)
+    }
+
+    /// 色空間つきの複合クリップは、直接描く速い道を通らず変換がかかる(UI からは設定できないが、モデルでは起こり得る)
+    func testCompoundWithColorSpaceIsConverted() throws {
+        func frame(_ cs: InputColorSpace?) throws -> [UInt8] {
+            var inner = Clip(); inner.type = .text; inner.start = 0; inner.duration = 1; inner.text = "■■■"; inner.fontSize = 40; inner.color = "#336699"
+            var comp = Clip(); comp.type = .compound; comp.start = 0; comp.duration = 1; comp.inputColorSpace = cs
+            comp.tracks = [{ var t = Track(name: "in"); t.clips = [inner]; return t }()]
+            var p = Project(); p.width = 64; p.height = 36
+            p.tracks = [{ var t = Track(name: "t"); t.clips = [comp]; return t }()]
+            let img = try XCTUnwrap(Renderer(project: p, assets: RenderAssets()).renderImage(t: 0.5))
+            return Array(try XCTUnwrap(img.dataProvider?.data as Data?))
+        }
+        let base = try frame(nil)
+        XCTAssertTrue(base.contains { $0 != 0 })
+        XCTAssertEqual(try frame(.rec709), base)
+        XCTAssertNotEqual(try frame(.sLog3), base)
+    }
+
     func testApplyIsNoOpForRec709() {
         let img = CIImage(color: CIColor(red: 0.3, green: 0.4, blue: 0.5)).cropped(to: CGRect(x: 0, y: 0, width: 4, height: 4))
         XCTAssertTrue(CM.apply(img, from: .rec709) === img)
