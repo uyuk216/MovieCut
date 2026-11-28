@@ -75,6 +75,7 @@ struct ContentView: View {
         .overlay { BusyOverlay(message: model.busyMessage, onCancel: model.transcribeCancel ?? model.aiCancel ?? model.proxyCancel ?? model.imageGenCancel) }
         .sheet(isPresented: $model.showResolutionSheet) { ResolutionSheet(model: model) }
         .sheet(isPresented: $model.showFpsSheet) { FrameRateSheet(model: model) }
+        .sheet(isPresented: $model.showReframeSheet) { ReframeSheet(model: model) }
         .sheet(isPresented: $model.showLoudnessSheet) { LoudnessSheet(model: model) }
         .sheet(isPresented: $model.showTrackMixerSheet) { TrackMixerSheet(model: model) }
         .sheet(isPresented: $model.showScopeSheet) { ScopeSheet(model: model) }

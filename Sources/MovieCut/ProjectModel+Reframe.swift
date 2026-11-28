@@ -2,17 +2,23 @@ import Foundation
 import MovieCutCore
 
 /// メニュー ▸ クリップ ▸ 縦動画に自動リフレーム。被写体の検出(Vision・裏で実行)から計画を作り、
-/// 出力を 1080×1920 に切り替えて、選んだクリップに x のキーフレームを入れる(1 回の Undo)。計算は MovieCutCore(`AutoReframe`)。
+/// 選んだ比率(既定 9:16 = 1080×1920)に切り替えて、選んだクリップに x(と y・scale)のキーフレームを入れる(1 回の Undo)。計算は MovieCutCore(`AutoReframe`)。
 extension ProjectModel {
     static let autoReframeUndoName = "縦動画に自動リフレーム"
     static let portraitResolution = (w: 1080, h: 1920)
+
+    /// メニューから: 設定のシートを開く(実行はシートの「リフレーム」から `autoReframeSelected(options:)`)。
+    func openReframeSheet() {
+        guard !isLocked, let id = selectedClipId, let c = clip(id), canAutoReframe(c) else { return }
+        showReframeSheet = true
+    }
 
     /// 選んでいるのが映像・画像で、切り抜き(crop)が無いときだけ使える。
     func canAutoReframe(_ c: Clip) -> Bool {
         (c.type == .video || c.type == .image) && c.src != nil && (c.crop?.isEmpty ?? true)
     }
 
-    func autoReframeSelected() {
+    func autoReframeSelected(options: ReframeOptions = ReframeOptions()) {
         guard !isLocked, let id = selectedClipId, let c = clip(id), canAutoReframe(c) else { return }
         let project = self.project
         let assets = self.assets
@@ -22,18 +28,18 @@ extension ProjectModel {
                 Renderer(project: project, assets: assets).reframeSamples(of: c, detector: VisionSubjectDetector())
             }.value
             guard let self, !self.isLocked, self.clip(id) != nil else { return }
-            guard let s = samples, let plan = AutoReframe.plan(samples: s.list, sourceWidth: s.w, sourceHeight: s.h) else {
-                self.errorTitle = "縦動画にできません"
-                self.errorMessage = "自動リフレームは、横長の映像・画像(16:9 など)で使えます。"
+            guard let s = samples, let plan = AutoReframe.plan(samples: s.list, sourceWidth: s.w, sourceHeight: s.h, options: options) else {
+                self.errorTitle = "リフレームできません"
+                self.errorMessage = "選んだ出力の比率より横長の映像・画像(16:9 を 9:16 にするなど)か、ズームをオンにしたときに使えます。"
                 return
             }
             self.applyAutoReframe(plan, clipId: id)
         }
     }
 
-    /// 出力を 1080×1920 にして、クリップに計画を書く。解像度が変わるときは他のクリップも同じ道(`scaledForResolution`)で合わせる。1 回の Undo。
+    /// 出力を計画のキャンバス(既定 1080×1920)にして、クリップに計画を書く。解像度が変わるときは他のクリップも同じ道(`scaledForResolution`)で合わせる。1 回の Undo。
     func applyAutoReframe(_ plan: AutoReframe.Plan, clipId: String) {
-        let (w, h) = Self.portraitResolution
+        let (w, h) = (plan.canvasWidth, plan.canvasHeight)
         edit(Self.autoReframeUndoName) { p in
             if p.width != w || p.height != h {
                 p = p.scaledForResolution(newWidth: w, newHeight: h)

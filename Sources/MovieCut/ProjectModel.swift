@@ -271,6 +271,8 @@ final class ProjectModel: ObservableObject {
     /// 「解像度を入力」「フレームレートを入力」のシート。
     @Published var showResolutionSheet = false
     @Published var showFpsSheet = false
+    /// クリップ ▸ 縦動画に自動リフレーム のオプションシート。
+    @Published var showReframeSheet = false
     /// 出力 ▸ ラウドネスを測る…(プロジェクトの音の全体を測って見せる)
     @Published var showLoudnessSheet = false
     @Published var showTrackMixerSheet = false
