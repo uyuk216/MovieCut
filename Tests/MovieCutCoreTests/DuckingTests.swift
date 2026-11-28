@@ -147,6 +147,39 @@ final class DuckingTests: XCTestCase {
         XCTAssertEqual(try mix(p, "c.caf"), off)
     }
 
+    /// 声として扱う音声クリップ(7 秒の区間 4〜7 秒)。duck を付けられる。
+    func voiceFlaggedAudioProject(voiceDuck: Duck?, bgmDuck: Duck?, withBgm: Bool) throws -> Project {
+        var p = try duckProject(duck: bgmDuck, withVoice: false)
+        if !withBgm { p.tracks[0].clips = [] }
+        var v = Clip(); v.type = .audio; v.src = try writeTone("voiceflag.wav", f: 1000, amp: 0.2, seconds: 3)
+        v.start = 4; v.duration = 3; v.srcDuration = 3; v.volume = 1
+        v.treatAsVoice = true; v.duck = voiceDuck
+        p.tracks[1].clips = [v]
+        return p
+    }
+
+    func testVoiceFlaggedClipWithDuckDoesNotDuckItself() throws {
+        // 「声として扱う」+ダッキングの両方オンでも、そのクリップ自身は下がらない
+        let off = try mix(voiceFlaggedAudioProject(voiceDuck: nil, bgmDuck: nil, withBgm: false), "vf-off.caf")
+        let on = try mix(voiceFlaggedAudioProject(voiceDuck: Duck(amount: -12), bgmDuck: nil, withBgm: false), "vf-on.caf")
+        XCTAssertEqual(on, off)
+        XCTAssertFalse(Clip.supportsDuck(try voiceFlaggedAudioProject(voiceDuck: nil, bgmDuck: nil, withBgm: false).tracks[1].clips[0]))
+    }
+
+    func testVoiceFlaggedClipStillDucksBgm() throws {
+        // 声指定のクリップの区間では、BGM は従来どおり amount だけ下がる(声指定クリップ側の duck 有無は無関係)
+        let seg: (Double, Double) -> Range<Int> = { Int($0 * 48000)..<Int($1 * 48000) }
+        let voiceOnly = try mix(voiceFlaggedAudioProject(voiceDuck: Duck(amount: -12), bgmDuck: nil, withBgm: false), "vf-voice.caf")
+        let plain = try mix(voiceFlaggedAudioProject(voiceDuck: Duck(amount: -12), bgmDuck: nil, withBgm: true), "vf-plain.caf")
+        let ducked = try mix(voiceFlaggedAudioProject(voiceDuck: Duck(amount: -12), bgmDuck: Duck(amount: -12, attack: 0.2, release: 0.5), withBgm: true), "vf-ducked.caf")
+        let r = seg(4.5, 6.5)
+        let bgmPlain = zip(plain[r], voiceOnly[r]).map { $0 - $1 }
+        let bgmDucked = zip(ducked[r], voiceOnly[r]).map { $0 - $1 }
+        XCTAssertEqual(dB(rms(bgmDucked[...])) - dB(rms(bgmPlain[...])), -12, accuracy: 0.3)
+        // 声の外は変わらない
+        XCTAssertEqual(ducked[seg(1, 3)].elementsEqual(plain[seg(1, 3)]), true)
+    }
+
     func testMuteAndSoloVoiceTrackRemovesDucking() throws {
         var p = try duckProject(duck: Duck(amount: -12))
         p.tracks[1].muted = true      // 声が鳴らないなら、BGM は下げない

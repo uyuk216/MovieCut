@@ -60,8 +60,8 @@ public extension Clip {
     var hasDuck: Bool { duck?.isActive ?? false }
     /// ダッキングの「声」の元になるクリップ: ボイスクリップ、または声として扱う指定をした音声クリップ。
     var isVoiceSource: Bool { type == .voice || (type == .audio && isTreatedAsVoice) }
-    /// ダッキングを設定できるクリップ(BGM などの音声クリップ。フリーズは無音)。
-    static func supportsDuck(_ c: Clip) -> Bool { c.type == .audio && !c.isFreeze }
+    /// ダッキングを設定できるクリップ(BGM などの音声クリップ。フリーズは無音)。声として扱う指定をしたクリップは「声を出す側」なので除く(自分の区間で自分が下がらないように)。
+    static func supportsDuck(_ c: Clip) -> Bool { c.type == .audio && !c.isFreeze && !c.isTreatedAsVoice }
 }
 
 // MARK: - 包絡線の計算
