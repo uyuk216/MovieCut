@@ -275,4 +275,18 @@ final class AutoReframeExtTests: XCTestCase {
         let f = try XCTUnwrap(AutoReframe.focus(s[0].rects, mode: .primary))
         XCTAssertEqual(f.box, s[0].rects[0])
     }
+
+    /// 新規1: primary + ズームで面積が近い2人の最大が入れ替わっても、見切れ防止の対象が揺れて x キーが跳ばない(ヒステリシス)。
+    func testPrimaryZoomDoesNotJumpWhenTwoSimilarSubjectsSwapLargest() throws {
+        var o = ReframeOptions(); o.aspect = .portrait4x5; o.zoomEnabled = true; o.zoomMin = 1; o.zoomMax = 1
+        // 面積が約 2% 差で、1 秒ごとに交互に最大になる
+        let s = series(10) { t in
+            let leftBigger = Int(t) % 2 == 0
+            return [box(0.2, 0.5, 0.1, leftBigger ? 0.204 : 0.2), box(0.8, 0.5, 0.1, leftBigger ? 0.2 : 0.204)]
+        }
+        let p = try XCTUnwrap(AutoReframe.plan(samples: s, sourceWidth: 1920, sourceHeight: 1080, options: o))
+        var maxStep = 0.0
+        for i in 1..<p.centers.count { maxStep = max(maxStep, abs(p.centers[i] - p.centers[i - 1])) }
+        XCTAssertLessThan(maxStep, 0.05, "x が 1 サンプルで \(maxStep) 跳んだ")
+    }
 }
