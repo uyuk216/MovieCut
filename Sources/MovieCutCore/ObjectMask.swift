@@ -305,6 +305,31 @@ public enum ObjectMaskImage {
                          w: Double(maxX - minX + 1) / Double(w), h: Double(maxY - minY + 1) / Double(h))
     }
 
+    /// `boundingRect(ofMask:)` の上下を正しくした版: 表示どおりの画像の白い画素の外接矩形(左上原点)。
+    /// 既存の `boundingRect(ofMask:)` はバッファの 1 行目を画像の下端として読むため、上下が逆の画像で
+    /// 正しく測れる(既存テストの画像がその前提で作られている)。実写の Vision マスクを測るのはこちら。
+    public static func boundingRectUpright(ofMask image: CGImage, threshold: UInt8 = 127) -> TrackRect? {
+        let w = image.width, h = image.height
+        guard w > 0, h > 0 else { return nil }
+        var px = [UInt8](repeating: 0, count: w * h)
+        guard let ctx = CGContext(data: &px, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w,
+                                  space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue) else { return nil }
+        ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))   // 1 行目 = 画像の上端
+        var minX = w, minY = h, maxX = -1, maxY = -1
+        for y in 0..<h {
+            let row = y * w
+            for x in 0..<w where px[row + x] > threshold {
+                if x < minX { minX = x }
+                if x > maxX { maxX = x }
+                if y < minY { minY = y }
+                if y > maxY { maxY = y }
+            }
+        }
+        guard maxX >= 0 else { return nil }
+        return TrackRect(x: Double(minX) / Double(w), y: Double(minY) / Double(h),
+                         w: Double(maxX - minX + 1) / Double(w), h: Double(maxY - minY + 1) / Double(h))
+    }
+
     /// 正規化矩形(左上原点)で画像を切り抜く。範囲が画像の外なら nil。
     public static func cropped(_ image: CGImage, toNormalized rect: TrackRect) -> CGImage? {
         let w = Double(image.width), h = Double(image.height)

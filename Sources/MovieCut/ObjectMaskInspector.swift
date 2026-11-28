@@ -51,6 +51,13 @@ struct ObjectMaskSection: View {
                             .controlSize(.small)
                     } else {
                         HStack(spacing: 8) {
+                            Button(L10n.t("人物（自動）で残す")) { model.createPersonObjectMask(clipId: clip.id, keepPerson: true) }
+                                .help(L10n.t("クリック不要。画面内の人物を自動で選び、人物だけ残します"))
+                            Button(L10n.t("人物（自動）を消す")) { model.createPersonObjectMask(clipId: clip.id, keepPerson: false) }
+                                .help(L10n.t("クリック不要。画面内の人物を自動で選び、人物だけ透明にします"))
+                        }
+                        .controlSize(.small)
+                        HStack(spacing: 8) {
                             Button(L10n.t("プレビューでクリックして指定")) { model.armObjectMaskPicking(clipId: clip.id) }
                             Button(L10n.t("指定した範囲で作成")) { model.createObjectMaskFromSeedRect(clipId: clip.id) }
                         }

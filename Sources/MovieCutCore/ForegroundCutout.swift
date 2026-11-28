@@ -111,3 +111,39 @@ public struct VisionForegroundInstanceDetector: ForegroundInstanceDetecting {
         return out
     }
 }
+
+// MARK: - 人物セグメンテーション(クリック不要の自動人物抜き)
+
+/// Vision の人物セグメンテーション(`VNGeneratePersonSegmentationRequest`、品質バランス型)による検出器。
+/// 画面内の人物すべてを 1 つのマスクにまとめ、1 つのインスタンスとして返す(人物が居なければ空)。
+/// 種マスクの輪郭の時間追従は、前景インスタンスと同じ矩形追跡(`ObjectTracking`)に乗せる。
+public struct VisionPersonSegmentationDetector: ForegroundInstanceDetecting {
+    public init() {}
+
+    public func instances(for image: CGImage) throws -> [ForegroundInstance] {
+        let request = VNGeneratePersonSegmentationRequest()
+        request.qualityLevel = .balanced
+        request.outputPixelFormat = kCVPixelFormatType_OneComponent8
+        let handler = VNImageRequestHandler(cgImage: image, options: [:])
+        try handler.perform([request])
+        guard let buffer = request.results?.first?.pixelBuffer else { return [] }
+        let ctx = CIContext(options: [.useSoftwareRenderer: false])
+        return PersonMaskInstance.make(from: CIImage(cvPixelBuffer: buffer), imageSize: CGSize(width: image.width, height: image.height), context: ctx)
+    }
+}
+
+public enum PersonMaskInstance {
+    /// 人物マスク(白 = 人物)を画像と同じ大きさへ引き伸ばし、グレースケールの 1 インスタンスにする。
+    /// 白い画素が無ければ空配列。Vision とは独立の純粋な後処理(合成マスクでテストできる)。
+    public static func make(from mask: CIImage, imageSize: CGSize, context: CIContext) -> [ForegroundInstance] {
+        let ext = mask.extent
+        guard ext.width >= 1, ext.height >= 1, imageSize.width >= 1, imageSize.height >= 1 else { return [] }
+        let scaled = mask
+            .transformed(by: CGAffineTransform(translationX: -ext.minX, y: -ext.minY))
+            .transformed(by: CGAffineTransform(scaleX: imageSize.width / ext.width, y: imageSize.height / ext.height))
+        guard let gray = CGColorSpace(name: CGColorSpace.linearGray) ?? CGColorSpace(name: CGColorSpace.genericGrayGamma2_2),
+              let cg = context.createCGImage(scaled, from: CGRect(origin: .zero, size: imageSize), format: .L8, colorSpace: gray),
+              let rect = ObjectMaskImage.boundingRectUpright(ofMask: cg) else { return [] }
+        return [ForegroundInstance(rect: rect, mask: cg)]
+    }
+}
